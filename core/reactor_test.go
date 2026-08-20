@@ -5,6 +5,7 @@ import (
 	"time"
 
 	u "github.com/bcicen/go-units"
+	"github.com/stretchr/testify/assert"
 )
 
 // With no Trip, the reactor settles to a positive ThermalPower
@@ -20,16 +21,10 @@ func TestReactor_RunningProducesRatedPower(t *testing.T) {
 	for i := 0; i < int(time.Second/TimeStep); i++ {
 		r = r.Step(true)
 	}
-	if !(r.ThermalPower > 0) {
-		t.Fatalf("want ThermalPower > 0 at running, got %v",
-			r.ThermalPower)
-	}
-	if !(r.ThermalPower <= CoreRatedThermalPower) {
-		t.Fatalf("want ThermalPower <= rated, got %v", r.ThermalPower)
-	}
-	if r.Trip == true {
-		t.Fatal("Trip should remain false")
-	}
+	assert.Positive(t, r.ThermalPower, "want ThermalPower > 0 at running")
+	assert.LessOrEqual(t, r.ThermalPower, CoreRatedThermalPower,
+		"want ThermalPower <= rated, got %v", r.ThermalPower)
+	assert.False(t, r.Trip, "Trip should remain false")
 }
 
 // Setting Trip drops ThermalPower below rated, into the decay-heat
@@ -49,15 +44,11 @@ func TestReactor_TripDropsPowerToDecayHeat(t *testing.T) {
 	for i := 0; i < int(2*time.Minute/TimeStep); i++ {
 		r = r.Step(true)
 	}
-	if !(r.ThermalPower < CoreRatedThermalPower) {
-		t.Fatalf("want ThermalPower < rated after trip, got %v",
-			r.ThermalPower)
-	}
+	assert.Less(t, r.ThermalPower, CoreRatedThermalPower,
+		"want ThermalPower < rated after trip, got %v", r.ThermalPower)
 	shutdownFloor := Watts(float64(CoreRatedThermalPower) * CoreDecayHeatShutdownFraction)
-	if !(r.ThermalPower <= shutdownFloor) {
-		t.Fatalf("want ThermalPower <= %v (shutdown level), got %v",
-			shutdownFloor, r.ThermalPower)
-	}
+	assert.LessOrEqual(t, r.ThermalPower, shutdownFloor,
+		"want ThermalPower <= %v (shutdown level), got %v", shutdownFloor, r.ThermalPower)
 }
 
 // A coolant outlet temperature above the design reference produces
@@ -76,10 +67,9 @@ func TestReactor_DopplerShiftsReactivityNegative(t *testing.T) {
 		ThermalPower: CoreRatedThermalPower,
 	}
 	hot = hot.Step(true)
-	if !(hot.Reactivity < ref.Reactivity) {
-		t.Fatalf("Doppler feedback: want hot.Reactivity < ref.Reactivity, got hot=%v ref=%v",
-			hot.Reactivity, ref.Reactivity)
-	}
+	assert.Less(t, hot.Reactivity, ref.Reactivity,
+		"Doppler feedback: want hot.Reactivity < ref.Reactivity, got hot=%v ref=%v",
+		hot.Reactivity, ref.Reactivity)
 }
 
 // Even with rods fully withdrawn and Trip asserted, decay heat
@@ -96,17 +86,13 @@ func TestReactor_TripWithRodsOutKeepsDecayHeatFloor(t *testing.T) {
 	for i := 0; i < int(5*time.Minute/TimeStep); i++ {
 		r = r.Step(true)
 	}
-	if !(r.ThermalPower > 0) {
-		t.Fatalf("want non-zero ThermalPower during decay, got %v",
-			r.ThermalPower)
-	}
+	assert.Positive(t, r.ThermalPower,
+		"want non-zero ThermalPower during decay, got %v", r.ThermalPower)
 	floor := Watts(float64(CoreRatedThermalPower) * CoreDecayHeatShutdownFraction)
 	// Allow some margin since the simplified power-defect model
 	// lifts the decay-heat floor slightly above the bare fraction.
-	if !(r.ThermalPower <= floor*2) {
-		t.Fatalf("want ThermalPower within 2x of shutdown level (%v), got %v",
-			floor, r.ThermalPower)
-	}
+	assert.LessOrEqual(t, r.ThermalPower, floor*2,
+		"want ThermalPower within 2x of shutdown level (%v), got %v", floor, r.ThermalPower)
 }
 
 // With Outlet at the design reference and ThermalPower=0, the
@@ -120,9 +106,10 @@ func TestReactor_OutletAtReferenceGivesZeroDoppler(t *testing.T) {
 		ThermalPower: 0,
 	}
 	r = r.Step(true)
-	if r.Reactivity > 1 || r.Reactivity < -1 {
-		t.Fatalf("want near-zero Reactivity, got %v", r.Reactivity)
-	}
+	assert.GreaterOrEqual(t, r.Reactivity, float32(-1),
+		"want near-zero Reactivity, got %v", r.Reactivity)
+	assert.LessOrEqual(t, r.Reactivity, float32(1),
+		"want near-zero Reactivity, got %v", r.Reactivity)
 }
 
 // With ThermalPower > 0 and RCP running, Outlet relaxes toward
@@ -142,10 +129,8 @@ func TestReactor_OutletTracksThermalPower(t *testing.T) {
 	}
 	// After 10 s of full power the outlet should still be near the
 	// design reference (within the model noise).
-	if r.Outlet.Float() < CoreReferenceOutletF-30 {
-		t.Fatalf("want Outlet near %v, got %v",
-			CoreReferenceOutletF, r.Outlet.Float())
-	}
+	assert.GreaterOrEqual(t, r.Outlet.Float(), CoreReferenceOutletF-30,
+		"want Outlet near %v, got %v", CoreReferenceOutletF, r.Outlet.Float())
 }
 
 // After a trip the Outlet temperature decays along with the core
@@ -167,10 +152,8 @@ func TestReactor_OutletDropsAfterTrip(t *testing.T) {
 	for i := 0; i < int(time.Minute/TimeStep); i++ {
 		r = r.Step(true)
 	}
-	if !(r.Outlet.Float() < start) {
-		t.Fatalf("want Outlet < %v after 1 min of decay, got %v",
-			start, r.Outlet.Float())
-	}
+	assert.Less(t, r.Outlet.Float(), start,
+		"want Outlet < %v after 1 min of decay, got %v", start, r.Outlet.Float())
 }
 
 // With RCP not running, Inlet temperature is preserved across steps
@@ -185,8 +168,6 @@ func TestReactor_InletFrozenWhenRCPOff(t *testing.T) {
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {
 		r = r.Step(false) // RCP off
 	}
-	if !(r.Inlet.Float() == 420) {
-		t.Fatalf("want Inlet frozen at 420°F with RCP off, got %v",
-			r.Inlet.Float())
-	}
+	assert.Equal(t, 420.0, r.Inlet.Float(),
+		"want Inlet frozen at 420°F with RCP off, got %v", r.Inlet.Float())
 }

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	u "github.com/bcicen/go-units"
+	"github.com/stretchr/testify/assert"
 )
 
 // With vacuum pumps running and no steam load, the condenser
@@ -21,13 +22,10 @@ func TestCondenser_VacuumPumpsRestoreVacuum(t *testing.T) {
 	for i := 0; i < int(5*time.Second/TimeStep); i++ {
 		c = c.Step(c.CirculatingWaterIn, true, true)
 	}
-	if !(c.Pressure < AtmosphericPressure) {
-		t.Fatalf("want condenser pressure below atmospheric, got %v", c.Pressure)
-	}
-	if !(c.Pressure <= CondenserDesignVacuum*2) {
-		t.Fatalf("want condenser near design vacuum (%v), got %v",
-			CondenserDesignVacuum, c.Pressure)
-	}
+	assert.Less(t, c.Pressure, AtmosphericPressure,
+		"want condenser pressure below atmospheric, got %v", c.Pressure)
+	assert.LessOrEqual(t, c.Pressure, CondenserDesignVacuum*2,
+		"want condenser near design vacuum (%v), got %v", CondenserDesignVacuum, c.Pressure)
 }
 
 // With the CW pumps off, the condenser loses its heat sink and
@@ -41,12 +39,10 @@ func TestCondenser_NoCWDegradesToAtmospheric(t *testing.T) {
 	for i := 0; i < int(30*time.Second/TimeStep); i++ {
 		c = c.Step(c.CirculatingWaterIn, true, false)
 	}
-	if !(c.Pressure > CondenserDesignVacuum*5) {
-		t.Fatalf("want pressure risen from vacuum, got %v", c.Pressure)
-	}
-	if !(c.Pressure < AtmosphericPressure*1.5) {
-		t.Fatalf("want pressure below 1.5× atmospheric, got %v", c.Pressure)
-	}
+	assert.Greater(t, c.Pressure, CondenserDesignVacuum*5,
+		"want pressure risen from vacuum, got %v", c.Pressure)
+	assert.Less(t, c.Pressure, AtmosphericPressure*1.5,
+		"want pressure below 1.5× atmospheric, got %v", c.Pressure)
 }
 
 // With a sustained steam dump into the condenser, the pressure
@@ -65,13 +61,9 @@ func TestCondenser_HighSteamLoadOpensDumpValve(t *testing.T) {
 	for i := 0; i < int(5*time.Second/TimeStep); i++ {
 		tb = tb.StepWithSteam(SteamGeneratorShellPressure, true)
 	}
-	if !(tb.Condenser.Pressure > SteamDumpOpenThreshold) {
-		t.Fatalf("want condenser pressure above dump threshold, got %v",
-			tb.Condenser.Pressure)
-	}
-	if tb.Turbine.DumpValve.Open == 0 {
-		t.Fatalf("want DumpValve open, got %v", tb.Turbine.DumpValve.Open)
-	}
+	assert.Greater(t, tb.Condenser.Pressure, SteamDumpOpenThreshold,
+		"want condenser pressure above dump threshold, got %v", tb.Condenser.Pressure)
+	assert.NotZero(t, tb.Turbine.DumpValve.Open, "want DumpValve open")
 }
 
 // Each step accumulates the previous step's CondensingRate into
@@ -91,13 +83,9 @@ func TestCondenser_LevelAccumulatesCondensingRate(t *testing.T) {
 	}
 	want := perStep * float64(steps)
 	got := c.Level.Float()
-	if !(got > 0) {
-		t.Fatalf("want Level > 0, got %v", got)
-	}
-	if got < want*0.9 || got > want*1.1 {
-		t.Fatalf("want Level ~%v after %d steps of %v, got %v",
-			want, steps, perStep, got)
-	}
+	assert.Positive(t, got, "want Level > 0")
+	assert.InDelta(t, want, got, want*0.1,
+		"want Level ~%v after %d steps of %v, got %v", want, steps, perStep, got)
 }
 
 // HotwellLevel accumulates condensed steam minus the condensate
@@ -120,8 +108,6 @@ func TestCondenser_HotwellAccumulates(t *testing.T) {
 		c.CondensingRate = u.NewValue(perStep, u.Gallon)
 		c = c.Step(c.CirculatingWaterIn, true, true)
 	}
-	if !(c.HotwellLevel.Float() > 0) {
-		t.Fatalf("want HotwellLevel > 0 after %d steps, got %v",
-			steps, c.HotwellLevel.Float())
-	}
+	assert.Positive(t, c.HotwellLevel.Float(),
+		"want HotwellLevel > 0 after %d steps, got %v", steps, c.HotwellLevel.Float())
 }

@@ -3,6 +3,8 @@ package core
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // When the reactor trips, Plant.Step must cascade the trip to the
@@ -27,14 +29,12 @@ func TestPlant_ReactorTripCascadesToTurbine(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.Trip = true
 	// Step past StopValveCloseDelay.
 	stepN(&p, int(100*time.Millisecond/TimeStep))
-	if !(p.TurbineBuilding.Turbine.StopValve.Open == 0) {
-		t.Fatalf("want StopValve.Open == 0 after reactor trip, got %v",
-			p.TurbineBuilding.Turbine.StopValve.Open)
-	}
-	if p.TurbineBuilding.Turbine.State != TurbineTripped {
-		t.Fatalf("want TurbineTripped after reactor trip, got %v",
-			p.TurbineBuilding.Turbine.State)
-	}
+	assert.Zero(t, p.TurbineBuilding.Turbine.StopValve.Open,
+		"want StopValve.Open == 0 after reactor trip, got %v",
+		p.TurbineBuilding.Turbine.StopValve.Open)
+	assert.Equal(t, TurbineTripped, p.TurbineBuilding.Turbine.State,
+		"want TurbineTripped after reactor trip, got %v",
+		p.TurbineBuilding.Turbine.State)
 }
 
 // With the reactor tripped, the condenser no longer receives full
@@ -57,10 +57,9 @@ func TestPlant_CondenserVacuumRecoversAfterTrip(t *testing.T) {
 			true,
 		)
 	}
-	if !(p.TurbineBuilding.Condenser.Pressure < AtmosphericPressure) {
-		t.Fatalf("want vacuum below atmospheric, got %v",
-			p.TurbineBuilding.Condenser.Pressure)
-	}
+	assert.Less(t, p.TurbineBuilding.Condenser.Pressure, AtmosphericPressure,
+		"want vacuum below atmospheric, got %v",
+		p.TurbineBuilding.Condenser.Pressure)
 }
 
 // When the main feed pump is stopped (representing no SG-side
@@ -78,10 +77,9 @@ func TestPlant_MinFlowRecirculationToDeaerator(t *testing.T) {
 	before := p.TurbineBuilding.HeaterDrainTank.Level.Float()
 	stepN(&p, int(2*time.Second/TimeStep))
 	after := p.TurbineBuilding.HeaterDrainTank.Level.Float()
-	if !(after > before) {
-		t.Fatalf("want HeaterDrainTank.Level to rise from min-flow recirculation, before=%v after=%v",
-			before, after)
-	}
+	assert.Greater(t, after, before,
+		"want HeaterDrainTank.Level to rise from min-flow recirculation, before=%v after=%v",
+		before, after)
 }
 
 // End-to-end: at full power the heater train should produce a
@@ -102,7 +100,5 @@ func TestPlant_HeaterTrainRaisesFeedwaterTemperature(t *testing.T) {
 	p.TurbineBuilding.HighPressureHeater.DrainValve = Valve{Open: 1.0}
 	stepN(&p, int(5*time.Second/TimeStep))
 	rise := p.TurbineBuilding.HighPressureHeater.TemperatureRise.Float()
-	if !(rise >= 0) {
-		t.Fatalf("want non-negative HP heater rise, got %v", rise)
-	}
+	assert.GreaterOrEqual(t, rise, 0.0, "want non-negative HP heater rise, got %v", rise)
 }

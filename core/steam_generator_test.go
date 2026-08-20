@@ -5,6 +5,7 @@ import (
 	"time"
 
 	u "github.com/bcicen/go-units"
+	"github.com/stretchr/testify/assert"
 )
 
 // Full-load HeatInput drives Pressure up toward SteamGeneratorShellPressure
@@ -18,13 +19,9 @@ func TestSteamGenerator_FullHeatInputRaisesPressure(t *testing.T) {
 	for i := 0; i < int(time.Second/TimeStep); i++ {
 		sg = sg.Step()
 	}
-	if !(sg.Pressure > 0) {
-		t.Fatalf("Pressure should rise with HeatInput, got %v", sg.Pressure)
-	}
-	if sg.Pressure > SteamGeneratorShellPressure {
-		t.Fatalf("Pressure overshot target: %v > %v",
-			sg.Pressure, SteamGeneratorShellPressure)
-	}
+	assert.Positive(t, sg.Pressure, "Pressure should rise with HeatInput")
+	assert.LessOrEqual(t, sg.Pressure, SteamGeneratorShellPressure,
+		"Pressure overshot target: %v > %v", sg.Pressure, SteamGeneratorShellPressure)
 }
 
 // With HeatInput == 0 and zero initial Pressure, no phantom steam
@@ -37,9 +34,7 @@ func TestSteamGenerator_NoHeatInputNoSteam(t *testing.T) {
 	for i := 0; i < int(time.Second/TimeStep); i++ {
 		sg = sg.Step()
 	}
-	if sg.Pressure != 0 {
-		t.Fatalf("Pressure should stay at 0 with no HeatInput, got %v", sg.Pressure)
-	}
+	assert.Zero(t, sg.Pressure, "Pressure should stay at 0 with no HeatInput")
 }
 
 // Sustained full HeatInput against a small Water inventory: Water
@@ -54,12 +49,9 @@ func TestSteamGenerator_WaterDepletionDecaysPressure(t *testing.T) {
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {
 		sg = sg.Step()
 	}
-	if sg.Water.Float() != 0 {
-		t.Fatalf("Water should be fully depleted, got %v", sg.Water.Float())
-	}
-	if !(sg.Pressure < SteamGeneratorShellPressure) {
-		t.Fatalf("Pressure should decay once Water is gone, got %v", sg.Pressure)
-	}
+	assert.Zero(t, sg.Water.Float(), "Water should be fully depleted")
+	assert.Less(t, sg.Pressure, SteamGeneratorShellPressure,
+		"Pressure should decay once Water is gone, got %v", sg.Pressure)
 }
 
 // A pressure above the design pressure is clamped — no run-away.
@@ -73,8 +65,6 @@ func TestSteamGenerator_PressureClampedAtDesign(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		sg = sg.Step()
 	}
-	if sg.Pressure > SteamGeneratorShellDesignPressure {
-		t.Fatalf("Pressure should be clamped at %v, got %v",
-			SteamGeneratorShellDesignPressure, sg.Pressure)
-	}
+	assert.LessOrEqual(t, sg.Pressure, SteamGeneratorShellDesignPressure,
+		"Pressure should be clamped at %v, got %v", SteamGeneratorShellDesignPressure, sg.Pressure)
 }

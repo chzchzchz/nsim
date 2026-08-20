@@ -5,6 +5,8 @@ import (
 	"time"
 
 	u "github.com/bcicen/go-units"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // enoughFuel returns a DieselGenerator with full day-tank fuel so the
@@ -31,15 +33,11 @@ func TestDieselStartSafetyInjection(t *testing.T) {
 	p.Outside.DieselGenerator.StartSignal = DieselStartSafetyInjection
 
 	stepN(&p, int(10*time.Second/TimeStep))
-	if p.Outside.DieselGenerator.State != DieselRunning {
-		t.Fatalf("want DieselRunning via SI, got %v", p.Outside.DieselGenerator.State)
-	}
+	assert.Equal(t, DieselRunning, p.Outside.DieselGenerator.State, "want DieselRunning via SI")
 
 	p.Outside.DieselGenerator.StartSignal = DieselStartNone
 	stepN(&p, int(30*time.Second/TimeStep))
-	if p.Outside.DieselGenerator.State != DieselOff {
-		t.Fatalf("want DieselOff after clearing signal, got %v", p.Outside.DieselGenerator.State)
-	}
+	assert.Equal(t, DieselOff, p.Outside.DieselGenerator.State, "want DieselOff after clearing signal")
 }
 
 // 10 s after the start signal, the generator side has built up to rated
@@ -54,18 +52,13 @@ func TestDieselGeneratorReachesRatedOutputIn10s(t *testing.T) {
 	stepN(&p, int(10*time.Second/TimeStep))
 
 	g := p.Outside.DieselGenerator.Generator
-	if !g.BreakerClosed {
-		t.Fatalf("want BreakerClosed after 10 s, got false")
-	}
-	if g.Voltage < DieselRatedVoltage*0.99 {
-		t.Fatalf("want Voltage ~= %v, got %v", DieselRatedVoltage, g.Voltage)
-	}
-	if g.Frequency < DieselRatedFrequency*0.99 {
-		t.Fatalf("want Frequency ~= %v, got %v", DieselRatedFrequency, g.Frequency)
-	}
-	if g.RealPower != DieselRatedkW {
-		t.Fatalf("want RealPower %v at full load, got %v", DieselRatedkW, g.RealPower)
-	}
+	assert.True(t, g.BreakerClosed, "want BreakerClosed after 10 s")
+	assert.GreaterOrEqual(t, g.Voltage, DieselRatedVoltage*0.99,
+		"want Voltage ~= %v, got %v", DieselRatedVoltage, g.Voltage)
+	assert.GreaterOrEqual(t, g.Frequency, DieselRatedFrequency*0.99,
+		"want Frequency ~= %v, got %v", DieselRatedFrequency, g.Frequency)
+	assert.Equal(t, DieselRatedkW, g.RealPower,
+		"want RealPower %v at full load, got %v", DieselRatedkW, g.RealPower)
 }
 
 // With offsite power unavailable, the ESF bus is energised by the diesel
@@ -76,22 +69,17 @@ func TestESFBusEnergizedByDiesel(t *testing.T) {
 	p.ServiceWaterPump.Running = true
 	p.Outside.DieselGenerator = enoughFuel()
 
-	if p.Electrical.ESFBusA.Energized {
-		t.Fatal("precondition: ESFBusA should start unenergized")
-	}
+	require.False(t, p.Electrical.ESFBusA.Energized, "precondition: ESFBusA should start unenergized")
 
 	p.Outside.DieselGenerator.StartSignal = DieselStartManual
 	stepN(&p, int(10*time.Second/TimeStep))
 
-	if !p.Electrical.ESFBusA.Energized {
-		t.Fatalf("want ESFBusA.energized=true after 10 s, got false (voltage=%v)", p.Electrical.ESFBusA.Voltage)
-	}
-	if p.Electrical.ESFBusA.Voltage < DieselRatedVoltage*0.99 {
-		t.Fatalf("want ESFBusA.voltage ~= %v, got %v", DieselRatedVoltage, p.Electrical.ESFBusA.Voltage)
-	}
-	if !p.Outside.MotorAFWPump.DriveReady {
-		t.Fatalf("want MotorAFWPump.DriveReady=true after ESFBusA energized, got false")
-	}
+	assert.True(t, p.Electrical.ESFBusA.Energized,
+		"want ESFBusA.energized=true after 10 s, got false (voltage=%v)", p.Electrical.ESFBusA.Voltage)
+	assert.GreaterOrEqual(t, p.Electrical.ESFBusA.Voltage, DieselRatedVoltage*0.99,
+		"want ESFBusA.voltage ~= %v, got %v", DieselRatedVoltage, p.Electrical.ESFBusA.Voltage)
+	assert.True(t, p.Outside.MotorAFWPump.DriveReady,
+		"want MotorAFWPump.DriveReady=true after ESFBusA energized, got false")
 }
 
 // With the diesel not running, the operator's intent (Running=true) is
@@ -104,21 +92,17 @@ func TestDieselAFWPumpGatedByDiesel(t *testing.T) {
 	p.Outside.DieselAFWPump.DriveSource = DriveDiesel
 
 	stepN(&p, 1)
-	if !p.Outside.DieselAFWPump.Running {
-		t.Fatal("want DieselAFWPump.Running preserved (operator intent) when diesel not ready")
-	}
-	if p.Outside.DieselAFWPump.DriveReady {
-		t.Fatal("want DieselAFWPump.DriveReady false before diesel start")
-	}
+	assert.True(t, p.Outside.DieselAFWPump.Running,
+		"want DieselAFWPump.Running preserved (operator intent) when diesel not ready")
+	assert.False(t, p.Outside.DieselAFWPump.DriveReady,
+		"want DieselAFWPump.DriveReady false before diesel start")
 
 	p.Outside.DieselGenerator.StartSignal = DieselStartManual
 	stepN(&p, int(10*time.Second/TimeStep))
-	if !p.Outside.DieselAFWPump.DriveReady {
-		t.Fatal("want DieselAFWPump.DriveReady true after diesel ReadyToLoad")
-	}
-	if !p.Outside.DieselAFWPump.Running {
-		t.Fatal("want DieselAFWPump.Running preserved once DriveReady")
-	}
+	assert.True(t, p.Outside.DieselAFWPump.DriveReady,
+		"want DieselAFWPump.DriveReady true after diesel ReadyToLoad")
+	assert.True(t, p.Outside.DieselAFWPump.Running,
+		"want DieselAFWPump.Running preserved once DriveReady")
 }
 
 // The turbine-driven AFW pump's DriveReady follows the SG steam
@@ -136,9 +120,8 @@ func TestTurbineAFWPumpGatedBySGVesselPressure(t *testing.T) {
 	p.Outside.TurbineAFWPump.Running = true
 	p.Outside.TurbineAFWPump.DriveSource = DriveSteam
 
-	if p.Outside.TurbineAFWPump.DriveReady {
-		t.Fatal("want TurbineAFWPump.DriveReady false before SG builds pressure")
-	}
+	require.False(t, p.Outside.TurbineAFWPump.DriveReady,
+		"want TurbineAFWPump.DriveReady false before SG builds pressure")
 
 	// Pin SG pressure above the trip threshold (SteamGeneratorShellPressure/100);
 	// the per-step SteamGenerator.Step only relaxes Pressure when
@@ -146,22 +129,18 @@ func TestTurbineAFWPumpGatedBySGVesselPressure(t *testing.T) {
 	// sticks for the duration of the first leg of the test.
 	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
 	stepN(&p, int(100*time.Millisecond/TimeStep))
-	if !(p.ReactorBuilding.SteamGenerator.Pressure > SteamGeneratorShellPressure/100) {
-		t.Fatalf("want SG pressure > 0 after SG pressure set, got %v",
-			p.ReactorBuilding.SteamGenerator.Pressure)
-	}
-	if !p.Outside.TurbineAFWPump.DriveReady {
-		t.Fatalf("want TurbineAFWPump.DriveReady true while SG has pressure, got false (sg.P=%v)",
-			p.ReactorBuilding.SteamGenerator.Pressure)
-	}
+	assert.Greater(t, p.ReactorBuilding.SteamGenerator.Pressure, SteamGeneratorShellPressure/100,
+		"want SG pressure > 0 after SG pressure set")
+	assert.True(t, p.Outside.TurbineAFWPump.DriveReady,
+		"want TurbineAFWPump.DriveReady true while SG has pressure, got false (sg.P=%v)",
+		p.ReactorBuilding.SteamGenerator.Pressure)
 
 	// Drop the SG pressure below the trip threshold (e.g. after the
 	// reactor trips and the SG inventory boils off); DriveReady
 	// must follow on the very next step.
 	p.ReactorBuilding.SteamGenerator.Pressure = 0
 	stepN(&p, 1)
-	if p.Outside.TurbineAFWPump.DriveReady {
-		t.Fatalf("want TurbineAFWPump.DriveReady false after SG pressure collapses, got true (sg.P=%v)",
-			p.ReactorBuilding.SteamGenerator.Pressure)
-	}
+	assert.False(t, p.Outside.TurbineAFWPump.DriveReady,
+		"want TurbineAFWPump.DriveReady false after SG pressure collapses, got true (sg.P=%v)",
+		p.ReactorBuilding.SteamGenerator.Pressure)
 }

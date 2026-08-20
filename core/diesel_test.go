@@ -5,6 +5,8 @@ import (
 	"time"
 
 	u "github.com/bcicen/go-units"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newDiesel(fuelGal float64) DieselGenerator {
@@ -36,22 +38,16 @@ func TestDiesel_FSM_StartAndReachReady(t *testing.T) {
 	p.Outside.DieselGenerator.StartSignal = DieselStartManual
 
 	stepN(&p, 1)
-	if p.Outside.DieselGenerator.State != DieselCranking {
-		t.Fatalf("after 1 step with start signal: want Cranking, got %v", p.Outside.DieselGenerator.State)
-	}
+	assert.Equal(t, DieselCranking, p.Outside.DieselGenerator.State,
+		"after 1 step with start signal")
 
 	// 10 s of simulated time —
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:48-49.
 	stepN(&p, int(10*time.Second/TimeStep))
-	if p.Outside.DieselGenerator.State != DieselRunning {
-		t.Fatalf("after 10 s: want Running, got %v", p.Outside.DieselGenerator.State)
-	}
-	if !p.Outside.DieselGenerator.ReadyToLoad {
-		t.Fatal("after 10 s: want ReadyToLoad true")
-	}
-	if p.Outside.DieselGenerator.Speed < DieselRatedSpeed {
-		t.Fatalf("after 10 s: want Speed >= %v, got %v", DieselRatedSpeed, p.Outside.DieselGenerator.Speed)
-	}
+	assert.Equal(t, DieselRunning, p.Outside.DieselGenerator.State, "after 10 s")
+	assert.True(t, p.Outside.DieselGenerator.ReadyToLoad, "after 10 s: want ReadyToLoad true")
+	assert.GreaterOrEqual(t, p.Outside.DieselGenerator.Speed, DieselRatedSpeed,
+		"after 10 s: want Speed >= %v, got %v", DieselRatedSpeed, p.Outside.DieselGenerator.Speed)
 }
 
 func TestDiesel_NoStartWithoutSignal(t *testing.T) {
@@ -59,12 +55,8 @@ func TestDiesel_NoStartWithoutSignal(t *testing.T) {
 	p.Outside.DieselGenerator = newDiesel(500)
 
 	stepN(&p, 1000)
-	if p.Outside.DieselGenerator.State != DieselOff {
-		t.Fatalf("without start signal: want Off, got %v", p.Outside.DieselGenerator.State)
-	}
-	if p.Outside.DieselGenerator.Speed != 0 {
-		t.Fatalf("without start signal: want Speed 0, got %v", p.Outside.DieselGenerator.Speed)
-	}
+	assert.Equal(t, DieselOff, p.Outside.DieselGenerator.State, "without start signal")
+	assert.Equal(t, RPM(0), p.Outside.DieselGenerator.Speed, "without start signal: want Speed 0, got %v", p.Outside.DieselGenerator.Speed)
 }
 
 func TestDiesel_FuelOnlyDecreasesWhileRunning(t *testing.T) {
@@ -74,9 +66,8 @@ func TestDiesel_FuelOnlyDecreasesWhileRunning(t *testing.T) {
 	levelAtRest := p.Outside.DieselGenerator.Fuel.Level.Float()
 
 	stepN(&p, 1000)
-	if got := p.Outside.DieselGenerator.Fuel.Level.Float(); got != levelAtRest {
-		t.Fatalf("at rest: fuel should not change, was %v now %v", levelAtRest, got)
-	}
+	assert.Equal(t, levelAtRest, p.Outside.DieselGenerator.Fuel.Level.Float(),
+		"at rest: fuel should not change, was %v now %v", levelAtRest, p.Outside.DieselGenerator.Fuel.Level.Float())
 
 	p.Outside.DieselGenerator.StartSignal = DieselStartManual
 	// Get to running.
@@ -84,9 +75,7 @@ func TestDiesel_FuelOnlyDecreasesWhileRunning(t *testing.T) {
 	before := p.Outside.DieselGenerator.Fuel.Level.Float()
 	stepN(&p, int(10*time.Second/TimeStep)) // 10 s running is plenty to observe fuel burn
 	after := p.Outside.DieselGenerator.Fuel.Level.Float()
-	if !(after < before) {
-		t.Fatalf("running: fuel must decrease, before %v after %v", before, after)
-	}
+	assert.Less(t, after, before, "running: fuel must decrease, before %v after %v", before, after)
 }
 
 func TestDiesel_TripsOnFuelExhaustion(t *testing.T) {
@@ -96,9 +85,7 @@ func TestDiesel_TripsOnFuelExhaustion(t *testing.T) {
 	p.Outside.DieselGenerator.StartSignal = DieselStartManual
 
 	stepN(&p, int(10*time.Second/TimeStep))
-	if p.Outside.DieselGenerator.State != DieselTripped {
-		t.Fatalf("want Tripped on fuel exhaustion, got %v", p.Outside.DieselGenerator.State)
-	}
+	assert.Equal(t, DieselTripped, p.Outside.DieselGenerator.State, "want Tripped on fuel exhaustion")
 }
 
 func TestDiesel_TripsOnCoolantOverTemp(t *testing.T) {
@@ -109,9 +96,7 @@ func TestDiesel_TripsOnCoolantOverTemp(t *testing.T) {
 
 	// Crank to running.
 	stepN(&p, int(10*time.Second/TimeStep))
-	if p.Outside.DieselGenerator.State != DieselRunning {
-		t.Fatalf("expected Running, got %v", p.Outside.DieselGenerator.State)
-	}
+	require.Equal(t, DieselRunning, p.Outside.DieselGenerator.State, "expected Running")
 
 	// Run with no service water; expect a coolant over-temperature
 	// trip. Break out of the loop once the trip latches — the
@@ -125,6 +110,6 @@ func TestDiesel_TripsOnCoolantOverTemp(t *testing.T) {
 			return
 		}
 	}
-	t.Fatalf("want Tripped on loss of cooling within %v, state=%v",
-		maxSim, p.Outside.DieselGenerator.State)
+	require.Failf(t, "want Tripped on loss of cooling within %v, state=%v",
+		"simulated %v, final state=%v", maxSim, p.Outside.DieselGenerator.State)
 }

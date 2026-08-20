@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	u "github.com/bcicen/go-units"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGraph_BuildsExpectedNodes(t *testing.T) {
@@ -13,14 +15,10 @@ func TestGraph_BuildsExpectedNodes(t *testing.T) {
 	g := p.BuildGraph()
 
 	for _, id := range []string{"RPV", "Pressurizer", "SG", "RCP", "Condenser", "CST", "DieselAFWPump"} {
-		if _, ok := g.Nodes[id]; !ok {
-			t.Errorf("missing node %q", id)
-		}
+		assert.Contains(t, g.Nodes, id, "missing node %q", id)
 	}
 	if _, ok := g.Nodes["RPV"]; ok {
-		if g.Nodes["RPV"].Kind != "ReactorPressureVessel" {
-			t.Errorf("RPV kind = %q, want ReactorPressureVessel", g.Nodes["RPV"].Kind)
-		}
+		assert.Equal(t, "ReactorPressureVessel", g.Nodes["RPV"].Kind)
 	}
 }
 
@@ -45,16 +43,14 @@ func TestGraph_BuildsExpectedEdges(t *testing.T) {
 		for k := range wantEdges {
 			missing = append(missing, k[0]+" -> "+k[1])
 		}
-		t.Errorf("missing edges: %s", strings.Join(missing, ", "))
+		assert.Fail(t, "missing edges: %s", strings.Join(missing, ", "))
 	}
 }
 
 func TestGraph_ExportDotRoundTrip(t *testing.T) {
 	p := MakePlant()
 	var buf bytes.Buffer
-	if err := p.ExportDot(&buf); err != nil {
-		t.Fatalf("ExportDot: %v", err)
-	}
+	require.NoError(t, p.ExportDot(&buf))
 	out := buf.String()
 	for _, expect := range []string{
 		"digraph plant",
@@ -63,9 +59,7 @@ func TestGraph_ExportDotRoundTrip(t *testing.T) {
 		`"RPV" -> "SG"`,
 		`"SG" -> "Condenser"`,
 	} {
-		if !strings.Contains(out, expect) {
-			t.Errorf("dot output missing %q\n--- output ---\n%s", expect, out)
-		}
+		assert.Contains(t, out, expect, "dot output missing %q", expect)
 	}
 }
 
@@ -91,9 +85,7 @@ func TestFluidFlow_ValveOpen_MovesWater(t *testing.T) {
 	p.Update()
 	afterSG := p.ReactorBuilding.SteamGenerator.Water.Float()
 
-	if !(afterSG < beforeSG) {
-		t.Fatalf("SG water did not drop: before %v after %v", beforeSG, afterSG)
-	}
+	assert.Less(t, afterSG, beforeSG, "SG water did not drop: before %v after %v", beforeSG, afterSG)
 }
 
 func TestFluidFlow_ValveClosed_NoMovement(t *testing.T) {
@@ -116,9 +108,8 @@ func TestFluidFlow_ValveClosed_NoMovement(t *testing.T) {
 	p.Update()
 	after := p.ReactorBuilding.SteamGenerator.Water.Float()
 	delta := after - before
-	if delta < -1 || delta > 1 {
-		t.Fatalf("SG water moved unexpectedly across a closed valve: before %v after %v (delta %v)", before, after, delta)
-	}
+	assert.GreaterOrEqual(t, delta, -1.0, "SG water moved unexpectedly across a closed valve: before %v after %v (delta %v)", before, after, delta)
+	assert.LessOrEqual(t, delta, 1.0, "SG water moved unexpectedly across a closed valve: before %v after %v (delta %v)", before, after, delta)
 }
 
 func TestFluidFlow_PumpRunning_DrivesFlowAlongEdge(t *testing.T) {
@@ -136,9 +127,7 @@ func TestFluidFlow_PumpRunning_DrivesFlowAlongEdge(t *testing.T) {
 		p.Update()
 	}
 	mid := p.Outside.CondensateStorageTank.Level.Float()
-	if mid != before {
-		t.Fatalf("pump off but CST level moved: %v -> %v", before, mid)
-	}
+	assert.Equal(t, before, mid, "pump off but CST level moved: %v -> %v", before, mid)
 
 	p.TurbineBuilding.CondensatePump.Running = true
 	for i := 0; i < 1000; i++ {
@@ -146,9 +135,7 @@ func TestFluidFlow_PumpRunning_DrivesFlowAlongEdge(t *testing.T) {
 		p.Update()
 	}
 	after := p.Outside.CondensateStorageTank.Level.Float()
-	if !(after < mid) {
-		t.Fatalf("pump on but CST level did not drop: %v -> %v", mid, after)
-	}
+	assert.Less(t, after, mid, "pump on but CST level did not drop: %v -> %v", mid, after)
 }
 
 func TestFluidFlow_ValveHalfOpen_HalvesFlow(t *testing.T) {
@@ -172,11 +159,8 @@ func TestFluidFlow_ValveHalfOpen_HalvesFlow(t *testing.T) {
 	}
 	full := run(1.0)
 	half := run(0.5)
-	if !(half > 0 && full > 0) {
-		t.Fatalf("want positive flow for both, got full=%v half=%v", full, half)
-	}
+	require.Positive(t, half, "want positive flow for half-open")
+	require.Positive(t, full, "want positive flow for full-open")
 	ratio := half / full
-	if ratio < 0.45 || ratio > 0.55 {
-		t.Fatalf("half-open / full-open ratio = %v, want ~0.5", ratio)
-	}
+	assert.InDelta(t, 0.5, ratio, 0.05, "half-open / full-open ratio = %v, want ~0.5", ratio)
 }

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	u "github.com/bcicen/go-units"
+	"github.com/stretchr/testify/assert"
 )
 
 // With the pressurizer under-filled and the bubble-driven pressure
@@ -28,12 +29,10 @@ func TestPressurizer_HeatersDrivePressureUp(t *testing.T) {
 	stepN(&p, int(time.Second/TimeStep))
 
 	after := p.ReactorBuilding.Pressurizer.Pressure
-	if !(after > before) {
-		t.Fatalf("Pressure should rise while HeatersOn: before %v after %v", before, after)
-	}
-	if after > PressurizerHeaterTarget {
-		t.Fatalf("Pressure overshot target: after %v target %v", after, PressurizerHeaterTarget)
-	}
+	assert.Greater(t, after, before,
+		"Pressure should rise while HeatersOn: before %v after %v", before, after)
+	assert.LessOrEqual(t, after, PressurizerHeaterTarget,
+		"Pressure overshot target: after %v target %v", after, PressurizerHeaterTarget)
 }
 
 // With the pressurizer over-pressurised and the spray valve open, the
@@ -55,12 +54,10 @@ func TestPressurizer_SprayDrivesPressureDown(t *testing.T) {
 	stepN(&p, int(time.Second/TimeStep))
 
 	after := p.ReactorBuilding.Pressurizer.Pressure
-	if !(after < before) {
-		t.Fatalf("Pressure should drop while SprayOpen: before %v after %v", before, after)
-	}
-	if after < PressurizerSprayMin {
-		t.Fatalf("Pressure dropped below spray min: after %v min %v", after, PressurizerSprayMin)
-	}
+	assert.Less(t, after, before,
+		"Pressure should drop while SprayOpen: before %v after %v", before, after)
+	assert.GreaterOrEqual(t, after, PressurizerSprayMin,
+		"Pressure dropped below spray min: after %v min %v", after, PressurizerSprayMin)
 }
 
 // A surge-line inflow (graph-driven, water level rises) shrinks the
@@ -82,13 +79,10 @@ func TestPressurizer_SurgeLineInflowDropsPressure(t *testing.T) {
 	stepN(&p, int(time.Second/TimeStep))
 
 	after := p.ReactorBuilding.Pressurizer.Pressure
-	if !(after < before) {
-		t.Fatalf("Pressure should drop as bubble shrinks: before %v after %v", before, after)
-	}
-	if !(p.ReactorBuilding.Pressurizer.Water.Float() > 800) {
-		t.Fatalf("Water should have risen via surge-line inflow, got %v",
-			p.ReactorBuilding.Pressurizer.Water.Float())
-	}
+	assert.Less(t, after, before,
+		"Pressure should drop as bubble shrinks: before %v after %v", before, after)
+	assert.Greater(t, p.ReactorBuilding.Pressurizer.Water.Float(), 800.0,
+		"Water should have risen via surge-line inflow")
 }
 
 // When pressure exceeds the PORV trip setpoint the valve opens.
@@ -100,8 +94,6 @@ func TestPressurizer_PORVOpensOverTrip(t *testing.T) {
 
 	stepN(&p, 1)
 
-	if p.ReactorBuilding.PORV.Open == 0 {
-		t.Fatalf("PORV should open over trip threshold, Open=%v",
-			p.ReactorBuilding.PORV.Open)
-	}
+	assert.NotZero(t, p.ReactorBuilding.PORV.Open,
+		"PORV should open over trip threshold, Open=%v", p.ReactorBuilding.PORV.Open)
 }
