@@ -1938,3 +1938,257 @@ const (
 	// heat exchanger (RCS outlet temp - CCW inlet temp, °F).
 	RHRSHXApproachTemp = 20.0
 )
+
+// Accumulator models one (or, in the simplified model, the combined
+// bank of) passive nitrogen-precharged water-storage tank(s) that
+// discharge into the RCS cold legs whenever RCS pressure falls
+// below the tank precharge pressure. The accumulators are passive:
+// no electrical train, no pump motion, no actuation delay.
+//
+// Spec justification:
+//   - "The accumulator tanks are passive components normally
+//     requiring no maintenance, and are located inside the
+//     containment to provide rapid injection of water following
+//     a LOCA."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:11-14
+//   - "Similarly, the accumulator discharge will begin
+//     automatically as the RCS pressure decreases below the
+//     accumulator tank pressure."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:31-33
+type Accumulator struct {
+	Part
+
+	// Pressure is the nitrogen precharge pressure inside the
+	// tank (psia). The tank discharges into the RCS cold leg
+	// whenever RCS pressure falls below this value.
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:31-33
+	Pressure Pressure
+
+	// Level is the remaining water volume (gal). Decreases at
+	// the discharge flow rate whenever Discharging is true.
+	Level Volume
+
+	// Capacity is the full water capacity of the tank (gal).
+	Capacity Volume
+
+	// Discharging is true while the accumulator is actively
+	// discharging into the RCS cold leg (i.e., RCS pressure
+	// has fallen below Pressure).
+	Discharging bool
+}
+
+// SISSuctionSource enumerates the suction alignment for the SIS
+// pumps (HHSI and RHR). During the injection phase both pumps draw
+// from the RWST; after the RWST low-level signal the pumps
+// re-align to containment-sump suction.
+//
+// Spec justification:
+//   - "The HHSI and RHR pumps are aligned to take suction directly
+//     from the RWST."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
+//   - "both the HHSI and RHR pumps for each subsystem take
+//     suction directly from one of the two containment sump
+//     recirculation lines."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:173-175
+type SISSuctionSource int
+
+const (
+	// SISSuctionRWST draws from the refueling water storage
+	// tank during the injection phase.
+	SISSuctionRWST SISSuctionSource = iota
+
+	// SISSuctionSump draws from the containment sump during
+	// the long-term recirculation phase.
+	SISSuctionSump
+)
+
+// SIS design constants (plans/p16_1.txt).
+//
+// Spec justification:
+//   - SIS subsystem architecture: "two high-head safety injection
+//     pumps, two RHR pumps, and four accumulators."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_094.txt:41-42
+//   - Accumulator passive role and precharge-driven discharge:
+//     "The accumulator tanks are passive components [...]" and
+//     "the accumulator discharge will begin automatically as the
+//     RCS pressure decreases below the accumulator tank pressure."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:11-14,
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:31-33
+//   - HHSI miniflow / deadheading prevention: "A continuous
+//     minimum flow path which does not require isolation during
+//     the injection phase is provided so that an inadvertent pump
+//     start will not result in the deadheading of the HHSI pump."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_096.txt:26-30
+//   - HHSI shutoff head: "will run on miniflow until the RCS
+//     pressure falls below the respective shutoff heads of the
+//     pumps."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:29-30
+//   - Recirculation switchover: "initiated automatically when the
+//     RWST level channels indicate an RWST level less than a
+//     low-level setpoint in conjunction with the initiation of the
+//     engineered safeguards actuation signal."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:56-60
+const (
+	// SISAccumulatorPrechargePressure is the nitrogen
+	// precharge pressure in each accumulator tank (psia).
+	// Discharge into the RCS cold leg begins when RCS pressure
+	// drops below this value.
+	SISAccumulatorPrechargePressure Pressure = 600.0
+
+	// SISAccumulatorCount is the number of accumulator tanks
+	// in the four-loop plant (one per RCS loop).
+	// "four accumulators."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_094.txt:42
+	SISAccumulatorCount = 4
+
+	// SISHHSIShutoffHead is the shutoff head of each HHSI pump
+	// (ft). Above this head the pump delivers zero flow; the
+	// HHSI pump starts and runs on miniflow until RCS pressure
+	// falls below this head.
+	// "run on miniflow until the RCS pressure falls below the
+	// respective shutoff heads of the pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:29-30
+	SISHHSIShutoffHead float64 = 2800.0
+
+	// SISHHSIMiniFlowFraction is the fraction of design flow
+	// that circulates through the minimum-flow path back to
+	// the RWST during the injection phase.
+	// "A continuous minimum flow path which does not require
+	// isolation during the injection phase is provided so that
+	// an inadvertent pump start will not result in the
+	// deadheading of the HHSI pump."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_096.txt:26-30
+	SISHHSIMiniFlowFraction = 0.15
+
+	// SISRWSTLowLevel is the RWST level (gal) below which the
+	// automatic recirculation switchover occurs. The spec
+	// describes it as a "low-level setpoint" in the level
+	// channels; the numerical value is not stated in the
+	// quoted pages and is chosen to be 10% of full RWST
+	// capacity.
+	// "indicate an RWST level less than a low-level setpoint"
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:56-57
+	SISRWSTLowLevel = 5000.0
+
+	// SISRWSTCapacity is the total borated-water capacity of
+	// the RWST (gal). The spec does not state a numeric
+	// capacity for the RWST; 50,000 gal is sized for a
+	// four-loop plant's injection-phase inventory. The EFWS
+	// primary-tank sizing language (13-hour hot standby, 5-hour
+	// cooldown) appears in
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:53-59,
+	// and the 48-hour alternate-supply capacity in
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:90-93,
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:9-12.
+	// Neither passage describes the RWST numerically.
+	SISRWSTCapacity = 50000.0
+
+	// SISRecirculationSwitchoverDelay is the response time for
+	// the protection logic to open the recirculation valves and
+	// close the HHSI pump miniflow isolation valves after the
+	// RWST low-level signal is generated (s). The spec
+	// describes the switchover as automatic; the value is
+	// sized for sub-second protection logic and is below
+	// physical-fluid transport timescales.
+	// "Protection logic is provided to automatically open the
+	// recirculation valve in each of the SIS subsystems when
+	// the above signals are generated."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:59-60
+	SISRecirculationSwitchoverDelay float64 = 2.0
+)
+
+// SISAccumulatorPerTankCapacity is the water capacity of one
+// accumulator tank (gal). Sized to 1,150 gal, typical of a
+// four-loop Westinghouse accumulator tank.
+var SISAccumulatorPerTankCapacity Volume = u.NewValue(1150, u.Gallon)
+
+// SISAccumulatorDischargeRate is the maximum flow rate at which
+// an accumulator tank discharges into the RCS cold leg (gal/s).
+// The spec does not state a numeric per-tank discharge rate; 230
+// gpm per tank is the typical Westinghouse four-loop accumulator
+// design.
+var SISAccumulatorDischargeRate Volume = u.NewValue(230.0/60.0, u.Gallon)
+
+// SISHHSIDesignFlow is the design discharge flow rate of each
+// HHSI pump (gal/s). 970 gpm is the typical rated flow for the
+// Westinghouse four-loop HHSI pump.
+var SISHHSIDesignFlow Volume = u.NewValue(970.0/60.0, u.Gallon)
+
+// SIS models the Safety Injection System's high-head injection
+// phase state: the passive accumulator bank, the HHSI pump running
+// flags, the active suction source, the RWST inventory, and the
+// derived injection flow rate into the RCS cold legs.
+//
+// Spec justification for the field set:
+//   - "The major components are two high-head safety injection
+//     pumps, two RHR pumps, and four accumulators."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_094.txt:41-42
+//   - "The receipt of the safety injection signal initiates the
+//     following emergency core cooling actions: The onsite
+//     emergency diesel generators are started. The HHSI pumps are
+//     started."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:109-118
+//   - "The HHSI and RHR pumps are aligned to take suction directly
+//     from the RWST."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
+//   - "initiated automatically when the RWST level channels
+//     indicate an RWST level less than a low-level setpoint in
+//     conjunction with the initiation of the engineered
+//     safeguards actuation signal."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:56-60
+type SIS struct {
+	Part
+
+	// Accumulator is the four-tank accumulator bank modelled as
+	// a single tank with four-fold per-tank capacity for the
+	// simplified injection model. Discharge begins automatically
+	// when RCS pressure drops below Pressure.
+	Accumulator Accumulator
+
+	// HHSIPumpRunning is the running state of the two HHSI
+	// pumps (the spec describes them as one pump per
+	// independent subsystem, both started by the safety-
+	// injection actuation signal). For this fidelity a single
+	// flag models both pumps.
+	HHSIPumpRunning bool
+
+	// HHSISuction is the active suction source for the HHSI
+	// pumps. SISSuctionRWST during the injection phase;
+	// SISSuctionSump after the RWST low-level switchover.
+	HHSISuction SISSuctionSource
+
+	// RWSTLevel is the remaining borated water volume in the
+	// refueling water storage tank (gal). The HHSI and RHR
+	// pumps both draw from this common suction source during
+	// the injection phase.
+	// "The HHSI and RHR pumps are aligned to take suction
+	// directly from the RWST."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
+	RWSTLevel Volume
+
+	// HHSIInjectionFlow is the per-second volume of borated
+	// water the HHSI pumps deliver into the RCS cold legs
+	// (gal/s). It is derived from HHSIPumpRunning, HHSISuction,
+	// and SISHHSIDesignFlow; SISHHSIMiniFlowFraction is routed
+	// back to the RWST via the miniflow path during the
+	// injection phase.
+	HHSIInjectionFlow Volume
+
+	// AccumulatorInjectionFlow is the per-second volume of
+	// borated water the accumulator bank delivers into the RCS
+	// cold legs (gal/s). It is non-zero only while the
+	// accumulator is actively discharging (RCS pressure below
+	// the precharge threshold and Level > 0).
+	AccumulatorInjectionFlow Volume
+
+	// SwitchoverTimer is the elapsed time since the RWST
+	// low-level setpoint was reached. It tracks the SISRecirculationSwitchoverDelay
+	// response window before the SISHHSISuction aligns to sump.
+	SwitchoverTimer time.Duration
+
+	// SwitchoverComplete is true once the recirculation
+	// switchover logic has fired. Latched true after the first
+	// switchover to prevent repeated toggling.
+	SwitchoverComplete bool
+}
+

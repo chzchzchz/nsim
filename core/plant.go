@@ -96,6 +96,34 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 		ret.SteamGenerator.HeatInput = rpv.ThermalPower
 	}
 	ret.SteamGenerator = ret.SteamGenerator.Step()
+
+	// SIS: passive accumulator discharge and HHSI pump
+	// injection. The accumulator discharges into the RCS cold
+	// legs whenever RCS pressure drops below the nitrogen
+	// precharge; the HHSI pumps deliver borated water from the
+	// RWST (or, after the low-level switchover, the containment
+	// sump).
+	//
+	// Spec justification:
+	//   - Accumulator passive discharge: "the accumulator
+	//     discharge will begin automatically as the RCS
+	//     pressure decreases below the accumulator tank
+	//     pressure."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:31-33
+	//   - HHSI pump start: "The receipt of the safety injection
+	//     signal initiates the following emergency core cooling
+	//     actions: [...] The HHSI pumps are started."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:109-118
+	//   - "This high flow is provided by the accumulators,
+	//     followed by the HHSI and RHR pumps, all discharging
+	//     into the cold legs of the RCS."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:20-23
+	//   - "The HHSI and RHR pumps are aligned to take suction
+	//     directly from the RWST."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
+	rcsPressureSIS := float64(ret.ReactorPressureVessel.Pressure)
+	ret.SafetyInjectionSystem = ret.SafetyInjectionSystem.Step(rcsPressureSIS)
+
 	return ret
 }
 
@@ -346,6 +374,30 @@ func (p *Plant) Step() {
 	p.Electrical.DieselGenB = &p.nextPlant.Outside.DieselGenerator
 
 	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step()
+
+	// SIS actuation: receipt of the safety-injection signal
+	// starts the HHSI pumps and aligns them to the RWST. The
+	// signal is the same DieselStartSafetyInjection that
+	// starts the diesel (the spec ties both actions to the
+	// same actuation event).
+	//
+	// Spec justification:
+	//   - "The receipt of the safety injection signal initiates
+	//     the following emergency core cooling actions: The
+	//     onsite emergency diesel generators are started. The
+	//     HHSI pumps are started."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:109-118
+	//   - "The HHSI and RHR pumps are aligned to take suction
+	//     directly from the RWST."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
+	if p.Outside.DieselGenerator.StartSignal == DieselStartSafetyInjection {
+		p.nextPlant.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = true
+		if p.nextPlant.ReactorBuilding.SafetyInjectionSystem.HHSISuction !=
+			SISSuctionSump {
+			p.nextPlant.ReactorBuilding.SafetyInjectionSystem.HHSISuction =
+				SISSuctionRWST
+		}
+	}
 
 	// Reactor-to-turbine trip cascade. The spec's protective feature
 	// list includes "Turbine trip following a reactor trip" (item 2)
@@ -635,6 +687,40 @@ func MakePlant() Plant {
 	p.ReactorBuilding.ResidualHeatRemovalSystem = RHRS{
 		TrainA: RHRSTrain{Pump: Pump{Running: false}},
 		TrainB: RHRSTrain{Pump: Pump{Running: false}},
+	}
+
+	// SIS defaults (plans/p16_1.txt). The accumulators are
+	// full and pressurised at construction; the HHSI pumps
+	// are off and aligned to RWST suction; the RWST is full.
+	// The model starts the HHSI pumps on the safety-injection
+	// actuation signal in Plant.Step.
+	//
+	// Spec justification:
+	//   - "The accumulator tanks are passive components
+	//     normally requiring no maintenance, and are located
+	//     inside the containment to provide rapid injection of
+	//     water following a LOCA."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:11-14
+	//   - "The HHSI and RHR pumps are aligned to take suction
+	//     directly from the RWST."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
+	p.ReactorBuilding.SafetyInjectionSystem = SIS{
+		Accumulator: Accumulator{
+			Pressure: SISAccumulatorPrechargePressure,
+			Level:    u.NewValue(
+				SISAccumulatorPerTankCapacity.Float()*
+					float64(SISAccumulatorCount),
+				u.Gallon,
+			),
+			Capacity: u.NewValue(
+				SISAccumulatorPerTankCapacity.Float()*
+					float64(SISAccumulatorCount),
+				u.Gallon,
+			),
+		},
+		HHSIPumpRunning: false,
+		HHSISuction:     SISSuctionRWST,
+		RWSTLevel:       u.NewValue(SISRWSTCapacity, u.Gallon),
 	}
 
 	// Reactor makeup control valve defaults: closed at startup

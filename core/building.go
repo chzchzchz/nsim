@@ -39,6 +39,36 @@ type ReactorBuilding struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
 	ResidualHeatRemovalSystem RHRS
 
+	// SafetyInjectionSystem models the high-head injection phase
+	// of the Emergency Core Cooling System. It bundles the
+	// passive accumulator bank (four tanks, one per RCS loop),
+	// the two HHSI pumps, the RWST suction alignment, and the
+	// automatic switchover to containment-sump recirculation.
+	//
+	// Spec justification:
+	//   - "The SIS consists of two independent and redundant
+	//     mechanical subsystems, each of which receives
+	//     electrical power from one of two separate and
+	//     redundant Class 1E electrical power trains, and each
+	//     of which receives an actuation signal from one of two
+	//     separate and redundant actuation trains. The major
+	//     components are two high-head safety injection pumps,
+	//     two RHR pumps, and four accumulators."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_094.txt:36-42
+	//   - "For large pipe ruptures, the RCS would be rapidly
+	//     depressurized and voided of coolant. [...] This high
+	//     flow is provided by the accumulators, followed by the
+	//     HHSI and RHR pumps, all discharging into the cold legs
+	//     of the RCS."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:16-23
+	//   - Recirculation switchover: "initiated automatically
+	//     when the RWST level channels indicate an RWST level
+	//     less than a low-level setpoint in conjunction with
+	//     the initiation of the engineered safeguards actuation
+	//     signal."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:56-60
+	SafetyInjectionSystem SIS
+
 	// ReactorMakeupControlValve is the operator-controlled
 	// makeup valve between the refueling-water storage tank
 	// and the volume control tank. Its Flow attribute is the
