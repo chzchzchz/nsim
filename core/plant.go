@@ -9,6 +9,19 @@ import (
 func (r *ReactorBuilding) Step() ReactorBuilding {
 	ret := *r
 	ret.Pressurizer = ret.Pressurizer.Step(&ret.PORV)
+	// Reactor makeup control valve: the operator sets Open
+	// (0..1); Flow is the per-step volume delivered to the
+	// VCT. Derived once per step so downstream consumers see
+	// a stable value.
+	//
+	// Spec: "Because of the influx of makeup water from the
+	// reactor makeup control system [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-6
+	ret.ReactorMakeupControlValve.Flow = u.NewValue(
+		ret.ReactorMakeupControlValve.Open*
+			ReactorMakeupDesignFlow.Float(),
+		u.Gallon,
+	)
 	// CVCS: charging, letdown, VCT level, and boron
 	// concentration. The CVCS boron's reactivity contribution
 	// is read by the RPV step below, so CVCS must run first.
@@ -21,9 +34,11 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	// determined by comparison of the measured Tc (cold leg
 	// temperature) with the programmed (function of power) Tc."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
+	letdownValveOpen := ret.ChemicalVolumeControlSystem.LetdownFlow.Float() > 0
 	ret.ChemicalVolumeControlSystem = ret.ChemicalVolumeControlSystem.Step(
 		ret.ReactorCoolantPump.Running,
-		0,
+		letdownValveOpen,
+		ret.ReactorMakeupControlValve.Flow,
 	)
 	// Propagate the CVCS boron concentration into the
 	// reactivity model. The RPV step reads
@@ -37,7 +52,49 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 		ret.ChemicalVolumeControlSystem.BoronConcentration
 	rpv := ret.ReactorPressureVessel.Step(ret.ReactorCoolantPump.Running)
 	ret.ReactorPressureVessel = rpv
-	ret.SteamGenerator.HeatInput = rpv.ThermalPower
+
+	// RHRS: once RCS has cooled below the entrance threshold
+	// (350°F, <400 psig) the RHRS steps and assumes decay-heat
+	// removal. HeatTransferRate is integrated into the RCS
+	// outlet temperature and SteamGenerator.HeatInput is zeroed
+	// so the SG no longer carries the cooldown duty.
+	//
+	// Spec justification:
+	//   - Entrance criteria: "When the reactor coolant
+	//     temperature has dropped to 350°F (177°C) and the
+	//     pressure has been reduced to less than approximately
+	//     400 psig (28 bar), the RHR equipment is placed in
+	//     operation."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
+	//   - Hand-off: "At this point the reactor cooling function
+	//     has been taken over by the RHRS, and the steam dump
+	//     system may be shutdown."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:35-37
+	dt := TimeStep
+	rcsOutletF := ret.ReactorPressureVessel.Outlet.Float()
+	rcsPressure := float64(ret.Pressurizer.Pressure)
+	ret.ResidualHeatRemovalSystem = ret.ResidualHeatRemovalSystem.Step(
+		ret.ReactorPressureVessel.Outlet,
+		rcsPressure,
+		u.NewValue(RHRSCCWDesignInletTemp, u.Fahrenheit),
+	)
+	if ret.ResidualHeatRemovalSystem.HasTakenOver {
+		rejectionW := float64(
+			ret.ResidualHeatRemovalSystem.TrainA.HeatExchanger.HeatTransferRate,
+		) + float64(
+			ret.ResidualHeatRemovalSystem.TrainB.HeatExchanger.HeatTransferRate,
+		)
+		decayW := float64(ret.ReactorPressureVessel.ThermalPower)
+		netW := decayW - rejectionW
+		rcsMassKg := 3_500_000.0 * 0.453592
+		deltaTK := netW / (rcsMassKg * 4186.0) * dt.Seconds()
+		ret.ReactorPressureVessel.Outlet = u.NewValue(
+			rcsOutletF+deltaTK*9.0/5.0, u.Fahrenheit,
+		)
+		ret.SteamGenerator.HeatInput = 0
+	} else {
+		ret.SteamGenerator.HeatInput = rpv.ThermalPower
+	}
 	ret.SteamGenerator = ret.SteamGenerator.Step()
 	return ret
 }
@@ -559,10 +616,38 @@ func MakePlant() Plant {
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
 	p.ReactorBuilding.ChemicalVolumeControlSystem = CVCS{
 		Mode:               CVCSVolumeControl,
-		VCTLevel:           VCTDesignLevel,
+		VCTLevel:           u.NewValue(VCTDesignLevel, u.Gallon),
 		BoronConcentration: CVCSInitialBoron,
-		LetdownValveOpen:   true,
 	}
+	// Letdown is flowing at construction (set LetdownFlow so
+	// the Step function's letdownValveOpen sentinel works).
+	p.ReactorBuilding.ChemicalVolumeControlSystem.LetdownFlow = CVCSDesignLetdownFlow
+
+	// RHRS defaults (plans/p15_1.txt). Both pumps are off and
+	// the hot-leg isolation valves are closed at construction;
+	// the operator aligns the trains and starts the pumps once
+	// RCS temp ≤ 350°F and pressure < 400 psig.
+	// Spec: "When the reactor coolant temperature has dropped
+	// to 350°F (177°C) and the pressure has been reduced to
+	// less than approximately 400 psig (28 bar), the RHR
+	// equipment is placed in operation."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
+	p.ReactorBuilding.ResidualHeatRemovalSystem = RHRS{
+		TrainA: RHRSTrain{Pump: Pump{Running: false}},
+		TrainB: RHRSTrain{Pump: Pump{Running: false}},
+	}
+
+	// Reactor makeup control valve defaults: closed at startup
+	// (the operator opens it during cooldown / VCT-level
+	// recovery).
+	// Spec: "Because of the influx of makeup water from the
+	// reactor makeup control system [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-6
+	p.ReactorBuilding.ReactorMakeupControlValve = MakeupValve{
+		Open: 0,
+		Flow: u.NewValue(0, u.Gallon),
+	}
+
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration =
 		CVCSInitialBoron
 

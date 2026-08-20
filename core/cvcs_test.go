@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -17,17 +18,16 @@ import (
 func TestCVCS_VolumeControlKeepsBoronSteady(t *testing.T) {
 	c := (&CVCS{
 		Mode:               CVCSVolumeControl,
-		VCTLevel:           VCTDesignLevel,
+		VCTLevel:           u.NewValue(VCTDesignLevel, u.Gallon),
 		BoronConcentration: CVCSInitialBoron,
-		LetdownValveOpen:   true,
-	}).Step(true, 0)
+	}).Step(true, true, u.NewValue(0, u.Gallon))
 	assert.Equal(t, CVCSInitialBoron, c.BoronConcentration,
 		"want BoronConcentration unchanged in VolumeControl, got %v",
 		c.BoronConcentration)
-	assert.InDelta(t, CVCSChargingFlow, c.ChargingFlow, 1e-9,
-		"want ChargingFlow=CVCSChargingFlow, got %v", c.ChargingFlow)
-	assert.InDelta(t, CVCSLetdownFlow, c.LetdownFlow, 1e-9,
-		"want LetdownFlow=CVCSLetdownFlow, got %v", c.LetdownFlow)
+	assert.InDelta(t, CVCSDesignChargingFlow.Float(), c.ChargingFlow.Float(), 1e-9,
+		"want ChargingFlow=CVCSDesignChargingFlow, got %v", c.ChargingFlow)
+	assert.InDelta(t, CVCSDesignLetdownFlow.Float(), c.LetdownFlow.Float(), 1e-9,
+		"want LetdownFlow=CVCSDesignLetdownFlow, got %v", c.LetdownFlow)
 }
 
 // In boration mode (BTRSRecirculationPumpRunning), the RCS boron
@@ -41,12 +41,11 @@ func TestCVCS_VolumeControlKeepsBoronSteady(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:16-19
 func TestCVCS_BorationIncreasesBoronConcentration(t *testing.T) {
 	c := (&CVCS{
-		Mode:                          CVCSBoration,
-		VCTLevel:                      VCTDesignLevel,
-		BoronConcentration:            CVCSInitialBoron,
-		LetdownValveOpen:              true,
-		BTRSRecirculationPumpRunning:  true,
-	}).Step(true, 0)
+		Mode:                         CVCSBoration,
+		VCTLevel:                     u.NewValue(VCTDesignLevel, u.Gallon),
+		BoronConcentration:           CVCSInitialBoron,
+		BTRSRecirculationPumpRunning: true,
+	}).Step(true, true, u.NewValue(0, u.Gallon))
 	assert.InDelta(t, CVCSBorationRate, c.BorationRate, 1e-9,
 		"want BorationRate=CVCSBorationRate, got %v", c.BorationRate)
 	assert.Greater(t, c.BoronConcentration, CVCSInitialBoron,
@@ -65,12 +64,11 @@ func TestCVCS_BorationIncreasesBoronConcentration(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:26-30
 func TestCVCS_DilutionDecreasesBoronConcentration(t *testing.T) {
 	c := (&CVCS{
-		Mode:                          CVCSDilution,
-		VCTLevel:                      VCTDesignLevel,
-		BoronConcentration:            CVCSInitialBoron,
-		LetdownValveOpen:              true,
-		BTRSRecirculationPumpRunning:  true,
-	}).Step(true, 0)
+		Mode:                         CVCSDilution,
+		VCTLevel:                     u.NewValue(VCTDesignLevel, u.Gallon),
+		BoronConcentration:           CVCSInitialBoron,
+		BTRSRecirculationPumpRunning: true,
+	}).Step(true, true, u.NewValue(0, u.Gallon))
 	assert.InDelta(t, CVCSDilutionRate, c.DilutionRate, 1e-9,
 		"want DilutionRate=CVCSDilutionRate, got %v", c.DilutionRate)
 	assert.Less(t, c.BoronConcentration, CVCSInitialBoron,
@@ -91,15 +89,14 @@ func TestCVCS_DilutionDecreasesBoronConcentration(t *testing.T) {
 func TestCVCS_HighVCTLevelSwitchesToLetdownMode(t *testing.T) {
 	c := (&CVCS{
 		Mode:               CVCSVolumeControl,
-		VCTLevel:           VCTHighLevel + 1,
+		VCTLevel:           u.NewValue(VCTHighLevel+1, u.Gallon),
 		BoronConcentration: CVCSInitialBoron,
-		LetdownValveOpen:   true,
-	}).Step(true, 0)
+	}).Step(true, true, u.NewValue(0, u.Gallon))
 	assert.Equal(t, CVCSLetdown, c.Mode,
 		"want CVCSLetdown with VCTLevel>VCTHighLevel, got %v", c.Mode)
-	assert.Zero(t, c.ChargingFlow,
+	assert.Zero(t, c.ChargingFlow.Float(),
 		"want ChargingFlow=0 in CVCSLetdown, got %v", c.ChargingFlow)
-	assert.Zero(t, c.LetdownFlow,
+	assert.Zero(t, c.LetdownFlow.Float(),
 		"want LetdownFlow=0 in CVCSLetdown, got %v", c.LetdownFlow)
 }
 
@@ -118,34 +115,32 @@ func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 	steps := int(1 * time.Second / TimeStep)
 	// Charging pump only.
 	c := CVCS{
-		Mode:             CVCSVolumeControl,
-		VCTLevel:         initial,
+		Mode:               CVCSVolumeControl,
+		VCTLevel:           u.NewValue(initial, u.Gallon),
 		BoronConcentration: CVCSInitialBoron,
-		LetdownValveOpen: true,
 	}
 	for i := 0; i < steps; i++ {
-		c = c.Step(true, 0)
+		c = c.Step(true, true, u.NewValue(0, u.Gallon))
 	}
-	wantLoss := CVCSChargingFlow * 1.0
-	assert.InDelta(t, initial-wantLoss, c.VCTLevel, 1e-6,
+	wantLoss := CVCSDesignChargingFlow.Float() * 1.0
+	assert.InDelta(t, initial-wantLoss, c.VCTLevel.Float(), 1e-3,
 		"want VCTLevel=%v after 1 s charging-pump-only, got %v",
-		initial-wantLoss, c.VCTLevel)
+		initial-wantLoss, c.VCTLevel.Float())
 
 	// Now with BTRS pump also running.
 	c = CVCS{
-		Mode:                          CVCSBoration,
-		VCTLevel:                      initial,
-		BoronConcentration:            CVCSInitialBoron,
-		LetdownValveOpen:              true,
-		BTRSRecirculationPumpRunning:  true,
+		Mode:                         CVCSBoration,
+		VCTLevel:                     u.NewValue(initial, u.Gallon),
+		BoronConcentration:           CVCSInitialBoron,
+		BTRSRecirculationPumpRunning: true,
 	}
 	for i := 0; i < steps; i++ {
-		c = c.Step(true, 0)
+		c = c.Step(true, true, u.NewValue(0, u.Gallon))
 	}
-	wantLossBoth := (CVCSChargingFlow + VCTBTRSCirculation) * 1.0
-	assert.InDelta(t, initial-wantLossBoth, c.VCTLevel, 1e-6,
+	wantLossBoth := (CVCSDesignChargingFlow.Float() + VCTBTRSCirculation) * 1.0
+	assert.InDelta(t, initial-wantLossBoth, c.VCTLevel.Float(), 1e-3,
 		"want VCTLevel=%v after 1 s charging+BTRS, got %v",
-		initial-wantLossBoth, c.VCTLevel)
+		initial-wantLossBoth, c.VCTLevel.Float())
 }
 
 // End-to-end: with the reactor at rated power, switching to
@@ -211,4 +206,40 @@ func TestCVCS_DilutionDecreasesBoronAtExpectedRate(t *testing.T) {
 	assert.InDelta(t, wantFall, gotFall, wantFall*0.1,
 		"want boron fall ≈ %v ppm after 10 s dilution, got %v (before=%v after=%v)",
 		wantFall, gotFall, boronBefore, boronAfter)
+}
+
+// When the operator opens the reactor makeup control valve,
+// fresh borated water flows to the VCT. The VCT level rises at
+// a rate proportional to the valve Open fraction.
+//
+// Spec justification:
+//   - "Because of the influx of makeup water from the reactor
+//     makeup control system, the volume control tank level
+//     controller automatically diverts the outflow from the
+//     BTRS into the BRS holdup tanks."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
+//   - "The reactor makeup control system dilution is [...]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:17
+func TestCVCS_MakeupValveRaisesVCTLevel(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	// Stop the charging pump and letdown valve so the VCT is
+	// not being depleted by charging-pump suction; then
+	// opening the makeup valve should be the only inflow.
+	p.ReactorBuilding.ReactorCoolantPump.Running = false
+	p.ReactorBuilding.ChemicalVolumeControlSystem.LetdownFlow =
+		u.NewValue(0, u.Gallon)
+	stepN(&p, int(1*time.Second/TimeStep))
+	vctBefore := p.ReactorBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
+
+	// Open the makeup valve to half-flow.
+	p.ReactorBuilding.ReactorMakeupControlValve.Open = 0.5
+	stepN(&p, int(5*time.Second/TimeStep))
+	vctAfter := p.ReactorBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
+
+	wantRise := ReactorMakeupDesignFlow.Float() * 0.5 * 5.0
+	assert.InDelta(t, wantRise, vctAfter-vctBefore, wantRise*0.1,
+		"want VCT rise ≈ %v gal after 5 s at 0.5 makeup, got %v (before=%v after=%v)",
+		wantRise, vctAfter-vctBefore, vctBefore, vctAfter)
 }

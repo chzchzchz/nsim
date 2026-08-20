@@ -21,6 +21,39 @@ type ReactorBuilding struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_14/page_189.txt:77
 	ChemicalVolumeControlSystem CVCS
 
+	// ResidualHeatRemovalSystem models the RHRS — the post-
+	// shutdown decay-heat removal path. The RHRS takes RCS hot-
+	// leg coolant through two redundant trains, rejects heat to
+	// component cooling water via shell-and-tube heat exchangers,
+	// and returns cooled flow to the RCS cold legs. The system is
+	// gated on RCS temperature ≤ 350°F and pressure < 400 psig.
+	// "The primary function of the Residual Heat Removal System
+	// (RHRS) is to transfer heat energy from the core and
+	// Reactor Coolant System (RCS) during plant cooldown and
+	// refueling operations."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_084.txt:26-29
+	// "When the reactor coolant temperature has dropped to 350°F
+	// (177°C) and the pressure has been reduced to less than
+	// approximately 400 psig (28 bar), the RHR equipment is
+	// placed in operation."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
+	ResidualHeatRemovalSystem RHRS
+
+	// ReactorMakeupControlValve is the operator-controlled
+	// makeup valve between the refueling-water storage tank
+	// and the volume control tank. Its Flow attribute is the
+	// per-step volume of fresh borated water supplied to the
+	// VCT. The spec describes the reactor makeup control
+	// system in narrative form.
+	// "Because of the influx of makeup water from the reactor
+	// makeup control system, the volume control tank level
+	// controller automatically diverts the outflow from the
+	// BTRS into the BRS holdup tanks."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-7
+	// "The reactor makeup control system dilution is [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:17
+	ReactorMakeupControlValve MakeupValve
+
 	// Grid is the infinite-bus model of the off-site distribution
 	// grid. Lives on ReactorBuilding because it is a plant-wide
 	// service consulted by both the primary (electrical RCP

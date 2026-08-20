@@ -409,23 +409,25 @@ const (
 //     controller automatically diverts the outflow from the
 //     BTRS into the BRS holdup tanks."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
+//   - Charging-pump manual control: "The charging pump flow and
+//     low-pressure letdown valve are controlled manually during
+//     plant startup and cooldown. [...] The charging flow control
+//     then maintains normal charging flow."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115-117
 //
-// Charging-pump flow and letdown are the primary-level
-// actuators; typical charging flow for a four-loop plant is
-// in the range of 20–40 gpm per pump. The BTRS demineralizer
-// exchange capacity sets the boron-concentration rate of
-// change; 0.8 ppm/step at the 1 ms plant step yields
-// 48 ppm/min, at the high end of the typical boration-rate
-// range and consistent with the spec's "relatively fast"
-// boration language for load-follow and xenon-compensation
-// manoeuvres.
+// Charging-pump flow and letdown are the primary-level actuators;
+// typical charging flow for a four-loop plant is in the range of
+// 20–40 gpm per pump. The BTRS demineralizer exchange capacity
+// sets the boron-concentration rate of change; 0.8 ppm/s yields
+// 48 ppm/min, at the high end of the typical boration-rate range
+// and consistent with the spec's "relatively fast" boration
+// language for load-follow and xenon-compensation manoeuvres.
 const (
 	// CVCSBorationRate is the increase in RCS boron
 	// concentration per second when the BTRS is in boration
-	// mode. With a 1 ms plant step the per-step delta is
-	// CVCSBorationRate * 1e-3 ppm. Sized at 48 ppm/min (0.8
-	// ppm/s) — the high end of typical boration rates used
-	// for xenon-transient compensation.
+	// mode. Sized at 48 ppm/min (0.8 ppm/s) — the high end of
+	// typical boration rates used for xenon-transient
+	// compensation.
 	CVCSBorationRate float64 = 0.8
 
 	// CVCSDilutionRate is the decrease in RCS boron
@@ -463,23 +465,6 @@ const (
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:37-39
 	VCTBTRSCirculation float64 = 2.0
 
-	// CVCSChargingFlow is the design charging-pump flow into
-	// the RCS cold legs (gal/s). Sized at 30 gpm = 0.5 gal/s
-	// per charging pump, with two pumps running. The spec
-	// does not state a numeric value; the figure is
-	// representative of a four-loop Westinghouse plant.
-	// "The pressurizer level is controlled by balancing the
-	// charging flow to the letdown flow."
-	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
-	CVCSChargingFlow float64 = 0.5
-
-	// CVCSLetdownFlow is the design letdown flow from the RCS
-	// back to the VCT (gal/s). Sized at 75 gpm = 1.25 gal/s
-	// to match the charging rate with a 2:1 letdown-to-
-	// charging ratio (typical for CVCS letdown-orifice
-	// sizing).
-	CVCSLetdownFlow float64 = 1.25
-
 	// CVCSInitialBoron is the RCS boron concentration at
 	// construction (ppm). 1000 ppm is typical for hot-zero-
 	// power (HZP) at beginning-of-life; the value drops over
@@ -506,6 +491,56 @@ const (
 	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
 	CoreBoronWorthPer100ppm float32 = -0.05
 )
+
+// CVCSDesignChargingFlow is the design charging-pump flow rate
+// into the RCS cold legs. The spec describes the charging pumps
+// in narrative form without stating a numeric gpm; the value
+// here is sized at 30 gpm per charging pump (typical for a
+// four-loop plant) with two pumps running.
+//
+// Spec justification:
+//   - "The charging pumps take the coolant from the volume
+//     control tank [...]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:79-80
+//   - "The charging pump flow and low-pressure letdown valve are
+//     controlled manually during plant startup and cooldown.
+//     [...] The charging flow control then maintains normal
+//     charging flow."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115-117
+//   - "The pressurizer level is controlled by balancing the
+//     charging flow to the letdown flow."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
+var CVCSDesignChargingFlow Volume = u.NewValue(30, u.Gallon)
+
+// CVCSDesignLetdownFlow is the design letdown flow rate from
+// the RCS back to the VCT. The spec describes the letdown
+// orifice and letdown chiller path in narrative form without
+// stating a numeric gpm; the value here is sized at 75 gpm
+// (typical for a four-loop plant) to provide a 2.5:1
+// letdown-to-charging ratio that matches the design
+// letdown-orifice sizing.
+//
+// Spec justification:
+//   - "The charging pumps take the coolant from the volume
+//     control tank [...]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:79-80
+//   - "The charging pump flow and low-pressure letdown valve
+//     are controlled manually [...]."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115
+var CVCSDesignLetdownFlow Volume = u.NewValue(75, u.Gallon)
+
+// ReactorMakeupDesignFlow is the per-minute volume of makeup
+// water delivered to the VCT when the reactor makeup control
+// valve is fully open. Sized at 60 gpm — typical of a
+// four-loop Westinghouse plant's RWST-to-VCT makeup line.
+//
+// Spec justification:
+//   - "Because of the influx of makeup water from the reactor
+//     makeup control system [...]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-6
+//   - "The reactor makeup control system dilution is [...]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:17
+var ReactorMakeupDesignFlow Volume = u.NewValue(60, u.Gallon)
 
 type FuelRods struct{ Part }
 
@@ -1419,6 +1454,30 @@ type Valve struct {
 	Open float64
 }
 
+// MakeupValve is the operator-controlled reactor makeup control
+// valve between the refueling-water storage tank (RWST) and the
+// volume control tank (VCT). Open=1 is full-flow; Open=0 is
+// closed. Flow is the per-second volume of makeup water delivered
+// to the VCT, derived from the Open fraction and a design full-
+// open flow rate.
+//
+// Spec justification:
+//   - "The charging pumps take the coolant from the volume control
+//     tank [...]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:79-80
+//   - "Because of the influx of makeup water from the reactor
+//     makeup control system, the volume control tank level
+//     controller automatically diverts the outflow from the BTRS
+//     into the BRS holdup tanks."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-8
+//   - "The reactor makeup control system dilution is [...]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:17
+type MakeupValve struct {
+	Part
+	Open  float64
+	Flow  Volume
+}
+
 // Grid models the infinite bus at the station switchyard. It is a
 // one-cell representation of the off-site distribution grid with
 // frequency and voltage state.
@@ -1606,31 +1665,46 @@ type CVCS struct {
 	// VCTLevel crosses VCTHighLevel.
 	Mode CVCSMode
 
-	// ChargingFlow is the charging-pump flow into the RCS
-	// cold legs (gal/s). Driven by ChargingPumpRunning.
-	ChargingFlow float64
+	// ChargingFlow is the flow rate from the charging pumps
+	// into the RCS cold legs (gal). Set to CVCSDesignChargingFlow
+	// when a pump is running; zero otherwise.
+	// "The charging pumps take the coolant from the volume
+	// control tank [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:79-80
+	// "system pressure is maintained by charging and letdown
+	// flow control."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:96-97
+	ChargingFlow Volume
 
-	// LetdownFlow is the letdown flow from the RCS through
-	// the letdown chiller and demineralizers back to the VCT
-	// (gal/s). Driven by LetdownValveOpen.
-	LetdownFlow float64
+	// LetdownFlow is the flow rate from the RCS letdown tap
+	// through the letdown chiller and demineralizers back to
+	// the VCT (gal/s).
+	// "The charging pumps take the coolant from the volume
+	// control tank [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:79-80
+	LetdownFlow Volume
 
 	// BoronConcentration is the RCS boron concentration in
 	// ppm. This is the primary state variable that boration
 	// and dilution modify. Plant.Step propagates this value
 	// into ReactorPressureVessel.ControlRods.BoronConcentration
 	// so the reactivity model can use it.
+	// "The operating mode (boration or dilution) and the
+	// magnitude of the boron concentration change required is
+	// determined by comparison of the measured Tc (cold leg
+	// temperature) with the programmed (function of power)
+	// Tc."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
 	BoronConcentration float64
 
 	// VCTLevel is the volume control tank level (gal). It is
-	// replenished by the reactor makeup control system and
-	// depleted by charging-pump flow + BTRS recirculation.
-	// Overflow is diverted to the BRS.
+	// replenished by reactor makeup control system and
+	// depleted by BTRS flow; overflow is diverted to the BRS.
 	// "the volume control tank level controller automatically
 	// diverts the outflow from the BTRS into the BRS holdup
 	// tanks."
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
-	VCTLevel float64
+	VCTLevel Volume
 
 	// BTRSRecirculationPumpRunning is true when the BTRS pump
 	// is circulating VCT flow through the demineralizers.
@@ -1640,28 +1714,15 @@ type CVCS struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:37-39
 	BTRSRecirculationPumpRunning bool
 
-	// BorationRate is the per-second boron concentration
-	// increase, positive when the BTRS is in boration mode.
-	// Reset to 0 at the start of every step; populated only
-	// when the BTRS is actively transferring boron to the
-	// RCS.
+	// BorationRate is the instantaneous rate of boron
+	// concentration increase in ppm per second, positive
+	// when the BTRS is in boration mode.
 	BorationRate float64
 
-	// DilutionRate is the per-second boron concentration
-	// decrease, positive when the BTRS is in dilution mode.
-	// Reset to 0 at the start of every step; populated only
-	// when the BTRS is actively absorbing boron from the
-	// RCS.
+	// DilutionRate is the instantaneous rate of boron
+	// concentration decrease in ppm per second, positive when
+	// the BTRS is in dilution mode.
 	DilutionRate float64
-
-	// LetdownValveOpen is true when the letdown isolation
-	// valve is open. Letdown only proceeds when this is true;
-	// it is closed during solid-plant cooldown to isolate the
-	// RCS pressure boundary.
-	// "system pressure is maintained by charging and letdown
-	// flow control."
-	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:96-97
-	LetdownValveOpen bool
 }
 
 // CVCSMode enumerates the CVCS operating modes.
@@ -1718,4 +1779,162 @@ const (
 	// tanks."
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
 	CVCSLetdown
+)
+
+// HeatExchanger models a generic shell-and-tube heat exchanger. The
+// RHR heat exchangers are the primary use of this type in the model;
+// CCW circulates through the shell side and RCS fluid through the
+// tubes, so HeatTransferRate is the per-step watts rejected from
+// tube-side fluid to shell-side fluid.
+//
+// Spec justification:
+//   - "transfer heat from the hot reactor coolant fluid to the
+//     component cooling water circulating through the RHR heat
+//     exchanger shell side."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:19-22
+type HeatExchanger struct {
+	Part
+
+	// HeatTransferRate is the per-step heat flux rejected
+	// from the tube-side fluid to the shell-side fluid.
+	HeatTransferRate Watts
+}
+
+// RHRSTrain models one independent, redundant subsystem of the
+// Residual Heat Removal System. Each train consists of one RHR pump,
+// one RHR heat exchanger, suction and discharge isolation valves,
+// a bypass loop around the heat exchanger, and a minimum-flow
+// recirculation line.
+//
+// Spec justification:
+//   - "The RHRS consists of two independent, redundant mechanical
+//     subsystems, each of which receives electrical power from one
+//     of two separate and redundant electrical power trains. Each
+//     subsystem consists of one RHR pump, one RHR heat exchanger,
+//     and the required piping, valves, and instrumentation."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_084.txt:1-5
+//   - "A bypass loop is provided around the RHR heat exchanger to
+//     permit control of RCS cooldown while maintaining a constant
+//     total pump flow."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_084.txt:50-53
+//   - "A minimum flow for the RHR pump is provided by a
+//     recirculation line from the heat exchanger outlet to the pump
+//     suction which remains open in all system operating modes."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_084.txt:53-57
+type RHRSTrain struct {
+	Part
+	Pump
+
+	// HeatExchanger models the RHR heat exchanger shell-and-tube
+	// bundle that transfers decay heat from the RCS fluid to the
+	// component cooling water.
+	HeatExchanger
+
+	// SuctionValves are the two series motor-operated isolation
+	// valves on the hot-leg suction line. Both must be open for
+	// the train to take suction from the RCS.
+	SuctionValves [2]Valve
+
+	// BypassValve is the flow-control valve in the bypass loop
+	// around the RHR heat exchanger. Open=1 means full bypass
+	// (no heat rejection); Open=0 means full flow through the
+	// HX. The spec describes this as a remote manual throttle
+	// valve for cooldown-rate control.
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:58-66
+	BypassValve Valve
+
+	// WarmupComplete is true once the mini-flow warmup period
+	// has finished and the hot-leg block valves may be opened.
+	WarmupComplete bool
+
+	// WarmupTimer tracks the warmup duration.
+	WarmupTimer time.Duration
+
+	// ReturnFlow is the total flow returned to the RCS cold legs
+	// (gal/s). The bypass controller maintains this constant
+	// regardless of BypassValve position.
+	ReturnFlow Volume
+}
+
+// RHRS models the complete Residual Heat Removal System. The spec
+// describes two independent redundant subsystems.
+//
+// Spec justification:
+//   - "The RHRS consists of two independent, redundant mechanical
+//     subsystems, each of which..."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_084.txt:75
+//   - Primary function, design basis, and thresholds in the same
+//     chapter.
+type RHRS struct {
+	Part
+
+	// TrainA and TrainB are the two independent subsystems.
+	TrainA RHRSTrain
+	TrainB RHRSTrain
+
+	// Running indicates at least one train is operating.
+	Running bool
+
+	// HasTakenOver is true once the RHRS has assumed the reactor
+	// cooling function from the steam dump system. This gates
+	// steam-dump shutdown in Plant.Step.
+	HasTakenOver bool
+}
+
+// RHRS design constants.
+//
+// Spec justification:
+//   - "reduce the RCS temperature to 140°F (60°C) within 20 hours
+//     following reactor shutdown."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_084.txt:31-32
+//   - "When the reactor coolant temperature has dropped to 350°F
+//     (177°C) and the pressure has been reduced to less than
+//     approximately 400 psig (28 bar), the RHR equipment is placed
+//     in operation."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
+//   - "One reactor coolant pump is kept running ... until the
+//     cooling temperature is below 160°F (71°C)."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:37-40
+const (
+	// RHRSTempThreshold is the maximum RCS temperature at which
+	// the RHRS may be started (350°F = 177°C).
+	RHRSTempThreshold = 350.0 // °F
+
+	// RHRSPressureThreshold is the maximum RCS pressure at which
+	// the RHRS may be started (400 psig ≈ 28 bar).
+	RHRSPressureThreshold = 400.0 // psig
+
+	// RHRSDesignCooldownTemp is the target RCS temperature after
+	// 20 hours of RHRS operation (140°F = 60°C).
+	RHRSDesignCooldownTemp = 140.0 // °F
+
+	// RHRSDesignCooldownTime is the design cooldown period from
+	// 350°F to 140°F with both trains operating.
+	RHRSDesignCooldownTime = 20.0 * time.Hour
+
+	// RHRSCoolingTempBelowRCPStop is the RCS temperature below
+	// which the last running RCP may be stopped (160°F = 71°C).
+	RHRSCoolingTempBelowRCPStop = 160.0 // °F
+
+	// RHRSPumpMinFlowGalPerStep is the minimum recirculation
+	// flow through the RHR pump (gal/step).
+	RHRSPumpMinFlowGalPerStep = 50.0
+
+	// RHRSTrainDesignFlow is the design flow through one RHR
+	// train at full-speed pump operation (gal/s).
+	RHRSTrainDesignFlow = 200.0
+
+	// RHRSTrainWarmupTime is the mini-flow warmup period before
+	// hot-leg isolation valves may be opened.
+	RHRSTrainWarmupTime = 5 * time.Minute
+
+	// RHRSCCWDesignInletTemp is the component cooling water
+	// inlet temperature to the RHR HX (°F). The spec notes
+	// "component cooling water at no more than design temperature".
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:11-12
+	RHRSCCWDesignInletTemp = 100.0 // °F
+
+	// RHRSHXApproachTemp is the temperature approach of the RHR
+	// heat exchanger (RCS outlet temp - CCW inlet temp, °F).
+	RHRSHXApproachTemp = 20.0
 )
