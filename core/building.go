@@ -69,7 +69,41 @@ type ReactorBuilding struct {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:56-60
 	SafetyInjectionSystem SIS
 
-	// ReactorMakeupControlValve is the operator-controlled
+	// EmergencyFeedwaterSystem is the secondary-side counterpart
+	// to the SIS. Two identical subsystems (A and B), each with
+	// one motor-driven and one turbine-driven pump sharing a
+	// primary emergency feedwater tank. The motor-driven pumps
+	// start on low-low SG level or on a safety-injection
+	// signal; the turbine-driven pumps start when two SGs
+	// simultaneously report low-low level.
+	//
+	// Spec justification:
+	//   - "The primary function of the Emergency Feedwater
+	//     System (EFWS) shown in Figure 5.2-1 is to supply
+	//     feedwater to the steam generators following accident
+	//     or transient conditions when the main feedwater
+	//     system is not available. The EFWS thereby maintains
+	//     the capability of the steam generators to remove
+	//     plant stored heat and core decay heat by converting
+	//     the emergency feedwater to steam which is then
+	//     discharged to the condenser or to the atmosphere."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:23-32
+	//   - "The use of both motor driven and turbine driven pumps
+	//     satisfies the requirement that the pumps be powered by
+	//     diverse power sources."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:1-5
+	//   - "The system is designed to supply at least the minimum
+	//     required flow, within one minute of the actuation
+	//     signal, to at least two effective steam generators
+	//     [...], and to continue this delivery for an indefinite
+	//     period without operator action."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:23-28
+	EmergencyFeedwaterSystem EFWS
+
+	// EFWSFeedwaterFlow is the total EFWS feedwater flow rate
+	// delivered to the steam generators (gal/s). Populated by
+	// the EFWS step; consumed by the SG feedwater model.
+	EFWSFeedwaterFlow Volume
 	// makeup valve between the refueling-water storage tank
 	// and the volume control tank. Its Flow attribute is the
 	// per-step volume of fresh borated water supplied to the

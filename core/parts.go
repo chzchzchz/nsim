@@ -2192,3 +2192,292 @@ type SIS struct {
 	SwitchoverComplete bool
 }
 
+// EFWSTank models the primary emergency feedwater supply tank in
+// each EFWS subsystem. The primary tank is sized for 13 hours of
+// hot standby plus 5 hours of cooldown, and its water temperature
+// is limited to 120°F (48.9°C).
+//
+// Spec justification:
+//   - "A primary emergency feedwater supply tank, to which the
+//     suction of the emergency feedwater pumps are normally
+//     aligned, is provided in each subsystem. The tanks are
+//     safety grade and seismically qualified. Each tank contains
+//     a quantity of condensate quality water sufficient to allow
+//     the plant to be maintained in hot standby for 13 hours then
+//     allow a 5-hour cooldown of the plant to 350°F (176.7°C).
+//     The maximum permissible water temperature in the primary
+//     emergency feedwater supply tank is 120°F (48.9°C)."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:48-59
+type EFWSTank struct {
+	Part
+
+	// Level is the remaining water volume (gal).
+	Level Volume
+
+	// Capacity is the full water capacity of the tank (gal).
+	Capacity Volume
+
+	// Temperature is the water temperature (°F). The spec
+	// limits the primary tank to 120°F (48.9°C).
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:56-59
+	Temperature Temperature
+
+	// IsPrimary is true for the primary emergency feedwater
+	// tank; false for the alternate (condensate storage tank)
+	// source. The simplified model only populates primary
+	// tanks.
+	IsPrimary bool
+}
+
+// EFWSPump extends AFWPump with the EFWS-specific valves: the
+// flow-modulating valve in the discharge line, the orificed
+// recirculation line back to the tank, and the steam admission
+// valve for the turbine-driven pump.
+//
+// Spec justification:
+//   - "Normally open, fail-open, air-operated, flow-modulating
+//     valves are located in each pump discharge line. These
+//     valves will be normally full open when the system is
+//     activated."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:1-4
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:94-95
+//   - Recirculation line: "Each pump is provided with an orificed
+//     recirculation line leading back to the primary emergency
+//     feedwater tank."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:17-20
+//   - Steam admission valve: "The steam supply line for each
+//     turbine driven pump is connected to the main steam line
+//     from a steam generator. This line is fitted with a steam
+//     admission valve which is a pneumatically operated valve
+//     arranged to fail-open on loss of air or electrical power."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:42-47
+type EFWSPump struct {
+	AFWPump
+
+	// FlowModulatingValve is the discharge flow-modulating
+	// valve. Open=1 is full flow (assumed for the first 30
+	// minutes after actuation); Open=0 is shut.
+	FlowModulatingValve Valve
+
+	// RecirculationValve is the orificed recirculation line
+	// from the pump discharge back to the primary emergency
+	// feedwater tank. Open=1 is normal operating position.
+	RecirculationValve Valve
+
+	// SteamAdmissionValve is the steam admission valve on the
+	// turbine-driven pump's steam supply line. Fail-open on
+	// loss of air or electrical power.
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:42-47
+	SteamAdmissionValve Valve
+}
+
+// EFWSSubsystem models one of the two identical EFWS subsystems
+// (A and B). Each subsystem has its own primary tank and one
+// each of a motor-driven and a turbine-driven pump.
+//
+// Spec justification:
+//   - "The EFWS consists of two identical subsystems each of
+//     which receives electrical power from one of two separate
+//     Safety Class 1E electrical power trains. Each subsystem
+//     consists of a primary emergency feedwater tank, one motor
+//     driven emergency feedwater pump, one turbine driven
+//     emergency feedwater pump."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:61-69
+type EFWSSubsystem struct {
+	Part
+
+	// Tank is the primary emergency feedwater supply tank.
+	Tank EFWSTank
+
+	// MotorPump is the motor-driven emergency feedwater pump.
+	MotorPump EFWSPump
+
+	// TurbinePump is the turbine-driven emergency feedwater
+	// pump.
+	TurbinePump EFWSPump
+
+	// MotorPumpRunning and TurbinePumpRunning are the per-step
+	// running states set by the auto-start logic in Plant.Step.
+	MotorPumpRunning   bool
+	TurbinePumpRunning bool
+}
+
+// EFWS models the complete Emergency Feedwater System: two
+// independent, identical subsystems, each with one motor-driven
+// and one turbine-driven pump sharing a primary tank. The two
+// pumps in each subsystem are powered from diverse power sources
+// (Class 1E electrical train for the motor-driven pump; main
+// steam line through a fail-open admission valve for the
+// turbine-driven pump) so the system can sustain decay-heat
+// removal through either loss-of-offsite-power or main-steam
+// failure events.
+//
+// Spec justification:
+//   - Diverse power sources: "The use of both motor driven and
+//     turbine driven pumps satisfies the requirement that the
+//     pumps be powered by diverse power sources."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:1-5
+//   - "The EFWS thereby maintains the capability of the steam
+//     generators to remove plant stored heat and core decay heat
+//     by converting the emergency feedwater to steam which is
+//     then discharged to the condenser or to the atmosphere."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:23-32
+type EFWS struct {
+	Part
+
+	// SubsystemA and SubsystemB are the two independent
+	// subsystems.
+	SubsystemA EFWSSubsystem
+	SubsystemB EFWSSubsystem
+
+	// Active is true while any EFWS pump is running and
+	// delivering water to the steam generators.
+	Active bool
+
+	// MotorPumpStartCount and TurbinePumpStartCount are the
+	// cumulative count of times the motor/turbine pumps have
+	// been started in this run. Exposed for operator-display
+	// and instrumentation tests.
+	MotorPumpStartCount   int
+	TurbinePumpStartCount int
+}
+
+// EFWS design constants.
+//
+// Spec justification:
+//   - Primary tank sizing language: "Each tank contains a
+//     quantity of condensate quality water sufficient to allow
+//     the plant to be maintained in hot standby for 13 hours
+//     then allow a 5-hour cooldown of the plant to 350°F
+//     (176.7°C). The maximum permissible water temperature in
+//     the primary emergency feedwater supply tank is 120°F
+//     (48.9°C)."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:52-59
+//   - Two identical subsystems: "The EFWS consists of two
+//     identical subsystems each of which receives electrical
+//     power from one of two separate Safety Class 1E electrical
+//     power trains. Each subsystem consists of a primary
+//     emergency feedwater tank, one motor driven emergency
+//     feedwater pump, one turbine driven emergency feedwater
+//     pump."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:61-69
+//   - Performance requirement: "The system is designed to
+//     supply at least the minimum required flow, within one
+//     minute of the actuation signal, to at least two effective
+//     steam generators [...], and to continue this delivery for
+//     an indefinite period without operator action."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:23-28
+//   - 30-minute operator delay: "it is assumed that no
+//     operator action can be taken for 30 minutes, and for this
+//     period it is assumed that these valves will be full open."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:36-39
+//   - Auto-start signals:
+//       "Low-low level in 2/4 level channels in any one steam
+//       generator" → Motor driven pumps.
+//       specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:71-79
+//       "Low-low level in 2/4 level channels in any two steam
+//       generators" → Turbine drive pumps.
+//       specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:82-92
+//       "Safety injection" → Motor driven pumps.
+//       specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:94-98
+//   - EFWS secured: "the reactor coolant hot leg temperature
+//     is reduced to 350°F (176.7°C) and the RHRS has been
+//     activated, the EFWS is secured."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:101-104
+//   - EFWS secured (longer-form restatement):
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:91-96
+//   - Alternate CST source: "reactor coolant pump operating,
+//     for 2 days (48 hours) beginning 18 hours after reactor
+//     trip."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:90-92
+const (
+	// EFWSDeliveryTime is the time (s) within which the system
+	// must supply minimum required flow to at least two
+	// effective steam generators after the actuation signal.
+	// "supply at least the minimum required flow, within one
+	// minute of the actuation signal"
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:24-25
+	EFWSDeliveryTime float64 = 60.0 // 1 minute
+
+	// EFWSOperatorDelay is the assumed time (s) before the
+	// operator can take action to adjust the flow-modulating
+	// valves.
+	// "it is assumed that no operator action can be taken for
+	// 30 minutes"
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:36-38
+	EFWSOperatorDelay float64 = 1800.0 // 30 minutes
+
+	// EFWSAlternateDuration is the duration (s) for which the
+	// alternate emergency feedwater source (condensate storage
+	// tanks) can sustain the plant: 2 days (48 hours)
+	// beginning 18 hours after reactor trip.
+	// "reactor coolant pump operating, for 2 days (48 hours)
+	// beginning 18 hours after reactor trip."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:90-92
+	EFWSAlternateDuration float64 = 48.0 * 3600.0
+
+	// EFWSAlternateStartDelay is the delay (s) after reactor
+	// trip before the alternate source becomes the primary
+	// supply.
+	EFWSAlternateStartDelay float64 = 18.0 * 3600.0
+
+	// EFWSLevelLowLow is the steam-generator water level (gal)
+	// below which the EFWS auto-start logic considers the
+	// level "low-low". The spec describes the actuation logic
+	// as a 2-out-of-4 level-channel coincidence, not a
+	// numeric SG-volume threshold; the value here is sized to
+	// be ~30% of the SG water inventory for a four-loop
+	// plant.
+	EFWSLevelLowLow float64 = 3000.0
+
+	// EFWSSecureTemp is the primary system hot-leg temperature
+	// (°F) below which the EFWS is secured and the RHRS takes
+	// over decay-heat removal.
+	// "the EFWS continues to supply feedwater to the steam
+	// generators throughout the cooldown until the primary
+	// system hot leg temperature is reduced to 350°F (176.7°C).
+	// At this temperature, the Residual Heat Removal System
+	// (RHRS) is activated and the EFWS is secured."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:91-96
+	// "the reactor coolant hot leg temperature is reduced to
+	// 350°F (176.7°C) and the RHRS has been activated, the EFWS
+	// is secured."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:101-104
+	EFWSSecureTemp float64 = 350.0
+)
+
+// EFWSPrimaryTankCapacity is the full water capacity of each
+// primary emergency feedwater tank (gal). The spec describes the
+// required duration (13 h hot standby + 5 h cooldown) but does not
+// state a numeric capacity. The value 25,000 gal is sized so a
+// single motor-driven pump (150 gpm) depletes the tank in roughly
+// 2.8 hours, leaving margin for the operator-driven cooldown rate.
+//
+// Spec justification:
+//   - "Each tank contains a quantity of condensate quality water
+//     sufficient to allow the plant to be maintained in hot
+//     standby for 13 hours then allow a 5-hour cooldown of the
+//     plant to 350°F (176.7°C)."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:52-56
+var EFWSPrimaryTankCapacity Volume = u.NewValue(25000, u.Gallon)
+
+// EFWSPrimaryTankMaxTemp is the maximum permissible water
+// temperature in the primary emergency feedwater supply tank (°F).
+// "The maximum permissible water temperature in the primary
+// emergency feedwater supply tank is 120°F (48.9°C)."
+// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:56-59
+var EFWSPrimaryTankMaxTemp Temperature = u.NewValue(120, u.Fahrenheit)
+
+// EFWSMotorPumpFlow is the design discharge flow rate of each
+// motor-driven EFWS pump (gal/s). The spec does not state a
+// numeric gpm; the value 150 gpm is a typical rated flow for a
+// Westinghouse four-loop motor-driven AFW pump.
+var EFWSMotorPumpFlow Volume = u.NewValue(150.0/60.0, u.Gallon)
+
+// EFWSTurbinePumpFlow is the design discharge flow rate of each
+// turbine-driven EFWS pump (gal/s). The spec does not state a
+// numeric gpm; the value 200 gpm is higher than the motor-driven
+// pump because the turbine governor can track steam demand.
+var EFWSTurbinePumpFlow Volume = u.NewValue(200.0/60.0, u.Gallon)
+
+

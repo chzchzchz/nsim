@@ -124,6 +124,24 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	rcsPressureSIS := float64(ret.ReactorPressureVessel.Pressure)
 	ret.SafetyInjectionSystem = ret.SafetyInjectionSystem.Step(rcsPressureSIS)
 
+	// EFWS: per-step tank depletion and secured-condition
+	// check. The auto-start logic is in Plant.Step (it needs
+	// the cross-building DieselStartSignal). The secured
+	// condition fires when the hot-leg temperature has been
+	// reduced to EFWSSecureTemp and the RHRS has taken over.
+	//
+	// Spec justification:
+	//   - "the reactor coolant hot leg temperature is reduced
+	//     to 350°F (176.7°C) and the RHRS has been activated,
+	//     the EFWS is secured."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:101-104
+	rhrsActive := ret.ResidualHeatRemovalSystem.Running &&
+		ret.ResidualHeatRemovalSystem.HasTakenOver
+	ret.EmergencyFeedwaterSystem = ret.EmergencyFeedwaterSystem.Step(
+		ret.ReactorPressureVessel.Outlet, rhrsActive,
+	)
+	ret.EFWSFeedwaterFlow = ret.EmergencyFeedwaterSystem.EFWSFeedwaterFlow()
+
 	return ret
 }
 
@@ -397,6 +415,107 @@ func (p *Plant) Step() {
 			p.nextPlant.ReactorBuilding.SafetyInjectionSystem.HHSISuction =
 				SISSuctionRWST
 		}
+	}
+
+	// EFWS auto-start. The pump-start logic is the most
+	// load-bearing safety function of the EFWS; the spec
+	// enumerates three independent actuation signals.
+	//
+	// Spec justification:
+	//   - Safety-injection signal: "Safety injection / Motor
+	//     driven pumps."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:94-98
+	//   - Low-low level in any one SG: "Low-low level in 2/4
+	//     level channels in any one steam generator / Motor
+	//     driven pumps."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:71-79
+	//   - Low-low level in any two SGs: "Low-low level in 2/4
+	//     level channels in any two steam generators / Turbine
+	//     drive pumps."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:82-92
+	//   - Diverse power sources: "The use of both motor driven
+	//     and turbine driven pumps satisfies the requirement
+	//     that the pumps be powered by diverse power sources."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:3-5
+	efws := &p.nextPlant.ReactorBuilding.EmergencyFeedwaterSystem
+	if !efws.Active {
+		sgWaterLow := p.ReactorBuilding.SteamGenerator.Water.Float() <
+			EFWSLevelLowLow
+		// The simplified model uses a single combined
+		// SteamGenerator field, so "low-low in any one SG"
+		// reduces to a single boolean and "low-low in any
+		// two SGs" becomes equivalent to "low-low in any
+		// one SG". The per-loop SGs are not modelled
+		// separately at this fidelity band.
+		if p.Outside.DieselGenerator.StartSignal ==
+			DieselStartSafetyInjection || sgWaterLow {
+			if !efws.SubsystemA.MotorPumpRunning {
+				efws.SubsystemA.MotorPumpRunning = true
+				efws.MotorPumpStartCount++
+			}
+			if !efws.SubsystemB.MotorPumpRunning {
+				efws.SubsystemB.MotorPumpRunning = true
+				efws.MotorPumpStartCount++
+			}
+			efws.Active = true
+		}
+		if sgWaterLow {
+			// Single-SG low-low simultaneously satisfies
+			// the "two SG" condition in the simplified
+			// model, so the turbine pump starts too.
+			if !efws.SubsystemA.TurbinePumpRunning {
+				efws.SubsystemA.TurbinePumpRunning = true
+				efws.TurbinePumpStartCount++
+			}
+			if !efws.SubsystemB.TurbinePumpRunning {
+				efws.SubsystemB.TurbinePumpRunning = true
+				efws.TurbinePumpStartCount++
+			}
+		}
+	}
+
+	// EFWS: turbine-driven pump steam admission. The
+	// SteamAdmissionValve is fail-open on loss of air or
+	// electrical power; whenever an SG header has pressure the
+	// valve is open and the pump is ready to drive.
+	//
+	// Spec justification:
+	//   - "The steam supply line for each turbine driven pump
+	//     is connected to the main steam line from a steam
+	//     generator. This line is fitted with a steam admission
+	//     valve which is a pneumatically operated valve arranged
+	//     to fail-open on loss of air or electrical power."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:42-47
+	if float64(p.ReactorBuilding.SteamGenerator.Pressure) > 0 {
+		efws.SubsystemA.TurbinePump.SteamAdmissionValve.Open = 1.0
+		efws.SubsystemB.TurbinePump.SteamAdmissionValve.Open = 1.0
+		efws.SubsystemA.TurbinePump.DriveReady = true
+		efws.SubsystemB.TurbinePump.DriveReady = true
+	}
+	// Motor-driven pump DriveReady tracks the ESF bus (wired
+	// by the existing AFWPump.DriveReady path through the
+	// diesel). When the diesel reaches RatedToLoad the bus is
+	// energised; the motor-driven pump's DriveReady follows.
+	if p.Outside.DieselGenerator.ReadyToLoad {
+		efws.SubsystemA.MotorPump.DriveReady = true
+		efws.SubsystemB.MotorPump.DriveReady = true
+	}
+
+	// Flow-modulating valves: assume full-open during the
+	// first 30 minutes after actuation. After that the
+	// operator controls them, but the simplified model leaves
+	// them at full-open for the duration of the run.
+	//
+	// Spec justification:
+	//   - "it is assumed that no operator action can be taken
+	//     for 30 minutes, and for this period it is assumed
+	//     that these valves will be full open."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:36-39
+	if efws.Active {
+		efws.SubsystemA.MotorPump.FlowModulatingValve.Open = 1.0
+		efws.SubsystemA.TurbinePump.FlowModulatingValve.Open = 1.0
+		efws.SubsystemB.MotorPump.FlowModulatingValve.Open = 1.0
+		efws.SubsystemB.TurbinePump.FlowModulatingValve.Open = 1.0
 	}
 
 	// Reactor-to-turbine trip cascade. The spec's protective feature
@@ -721,6 +840,56 @@ func MakePlant() Plant {
 		HHSIPumpRunning: false,
 		HHSISuction:     SISSuctionRWST,
 		RWSTLevel:       u.NewValue(SISRWSTCapacity, u.Gallon),
+	}
+
+	// EFWS defaults (plans/p17_1.txt). At construction the
+	// primary tanks are full, both pumps in each subsystem
+	// are off, and the EFWS is not active. The auto-start
+	// logic in Plant.Step activates the system on low-low SG
+	// level or a safety-injection signal.
+	//
+	// Spec justification:
+	//   - "A primary emergency feedwater supply tank, to
+	//     which the suction of the emergency feedwater pumps
+	//     are normally aligned, is provided in each
+	//     subsystem."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:48-51
+	//   - "Each tank contains a quantity of condensate
+	//     quality water sufficient to allow the plant to be
+	//     maintained in hot standby for 13 hours then allow a
+	//     5-hour cooldown of the plant to 350°F (176.7°C).
+	//     The maximum permissible water temperature in the
+	//     primary emergency feedwater supply tank is 120°F
+	//     (48.9°C)."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:52-59
+	efwsSubsystem := func() EFWSSubsystem {
+		return EFWSSubsystem{
+			Tank: EFWSTank{
+				Level:      EFWSPrimaryTankCapacity,
+				Capacity:   EFWSPrimaryTankCapacity,
+				Temperature: EFWSPrimaryTankMaxTemp,
+				IsPrimary:  true,
+			},
+			MotorPump: EFWSPump{
+				AFWPump: AFWPump{
+					Pump: Pump{Running: false},
+				},
+				FlowModulatingValve: Valve{Open: 0},
+				RecirculationValve:  Valve{Open: 1},
+			},
+			TurbinePump: EFWSPump{
+				AFWPump: AFWPump{
+					Pump:        Pump{Running: false},
+					DriveSource: DriveSteam,
+				},
+				FlowModulatingValve: Valve{Open: 0},
+				RecirculationValve:  Valve{Open: 1},
+			},
+		}
+	}
+	p.ReactorBuilding.EmergencyFeedwaterSystem = EFWS{
+		SubsystemA: efwsSubsystem(),
+		SubsystemB: efwsSubsystem(),
 	}
 
 	// Reactor makeup control valve defaults: closed at startup
