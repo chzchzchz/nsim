@@ -100,13 +100,15 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:50-51
 	//
 	// The per-step extraction steam flow is sized at the design
-	// extraction rate (~10% of design feedwater flow per LP stage,
-	// ~5% per HP stage) so the per-stage temperature rise
-	// converges to LPTemperatureRisePerStage / HPTemperatureRisePerStage
-	// at design operating point.
+	// extraction rate derived from the turbine's load fraction
+	// (plans/p11_1.txt). The MSR reheater section uses the same
+	// extraction supply for both the LP sixth-stage taps and the
+	// HP heater train, so the per-stage temperature rise
+	// converges to LPTemperatureRisePerStage /
+	// HPTemperatureRisePerStage at design operating point.
 	fwIn := u.NewValue(120, u.Fahrenheit)
-	lpSteam := FeedwaterDesignFlow.Float() * 0.1
-	hpSteam := FeedwaterDesignFlow.Float() * 0.05
+	lpSteam := ret.Turbine.ExtractionSteamFlow.Float() * MSRSixthStageExtractionFraction
+	hpSteam := ret.Turbine.ExtractionSteamFlow.Float() * MSRDesignExtractionFraction
 	lp := ret.LowPressureHeater
 	for i := 0; i < 4; i++ {
 		lp = lp.Step(fwIn.Float(), lpSteam)
@@ -114,6 +116,16 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 			u.Fahrenheit)
 	}
 	ret.LowPressureHeater = lp
+
+	// MSR moisture drain to hotwell (feedwater system).
+	// Spec: "where the water is removed and drained to the
+	// feedwater system."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:62-63
+	msrDrain := ret.Turbine.MoistureSeparatorReheater.DrainFlow.Float()
+	ret.Condenser.HotwellLevel = u.NewValue(
+		ret.Condenser.HotwellLevel.Float()+msrDrain,
+		u.Gallon,
+	)
 
 	// HP train: two stages.
 	hp := ret.HighPressureHeater

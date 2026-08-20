@@ -152,3 +152,32 @@ func TestTurbine_NilStopValveAllowsSteam(t *testing.T) {
 	assert.Equal(t, TurbineRunning, tr.State,
 		"want Running with nil stop valve pointer and steam, got %v", tr.State)
 }
+
+// At rated load the turbine produces its full HP steam flow as
+// ExtractionSteamFlow and HPExhaustPressure sits below the SG
+// pressure due to HP-turbine pressure drop.
+//
+// Spec justification:
+//   - "A small portion of the steam in the high-pressure turbine
+//     is extracted to the highest pressure feedwater heaters."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:31-32
+func TestTurbine_ExtractionOutputAtRatedLoad(t *testing.T) {
+	tr := Turbine{
+		State:     TurbineRunning,
+		Velocity:  TurbineRatedSpeed,
+		RealPower: TurbineRatedkW,
+	}
+	open := 1.0
+	for i := 0; i < 1000; i++ {
+		tr = tr.Step(SteamGeneratorShellPressure, 0, false, &open)
+	}
+	assert.Greater(t, tr.ExtractionSteamFlow.Float(), 0.0,
+		"want ExtractionSteamFlow > 0 at rated load, got %v",
+		tr.ExtractionSteamFlow.Float())
+	assert.Less(t, tr.HPExhaustPressure, SteamGeneratorShellPressure,
+		"want HPExhaustPressure < SG pressure, got %v vs %v",
+		tr.HPExhaustPressure, SteamGeneratorShellPressure)
+	assert.GreaterOrEqual(t, tr.HPExhaustQuality, HPExhaustQualityLowLoad,
+		"want HPExhaustQuality >= low-load floor, got %v",
+		tr.HPExhaustQuality)
+}

@@ -1,5 +1,9 @@
 package core
 
+import (
+	u "github.com/bcicen/go-units"
+)
+
 // Step advances the turbine by TimeStep on a 1 ms tick. The caller
 // passes the upstream steam pressure, downstream condenser pressure,
 // and a stop-valve-gated admission factor. When stopValveOpen is
@@ -118,6 +122,68 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 	} else {
 		ret.RealPower = 0
 	}
+
+	// Extraction steam supply for feedwater heaters and MSR
+	// reheater. The total HP steam flow is the upstream value
+	// from which the per-extraction-tap fractions (MSR, HP
+	// heaters, LP sixth-stage) are taken in Plant.Step.
+	//
+	// Spec: "A small portion of the steam in the high-pressure
+	// turbine is extracted to the highest pressure feedwater
+	// heaters; the remainder is exhausted to moisture
+	// separator-re heaters with a small extraction to the sixth
+	// stage feedwater heaters."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:30-34
+	loadFraction := float64(ret.RealPower) / float64(TurbineRatedkW)
+	if loadFraction < 0 {
+		loadFraction = 0
+	}
+	ret.ExtractionSteamFlow = u.NewValue(
+		loadFraction*FeedwaterDesignFlow.Float(),
+		u.Gallon,
+	)
+
+	// HP exhaust quality falls with load fraction because the
+	// HP turbine does less expansion work per pound of steam.
+	ret.HPExhaustQuality = HPExhaustQualityFullLoad -
+		(HPExhaustQualityFullLoad-HPExhaustQualityLowLoad)*(1-loadFraction)
+	if ret.HPExhaustQuality < HPExhaustQualityLowLoad {
+		ret.HPExhaustQuality = HPExhaustQualityLowLoad
+	}
+	// HP exhaust pressure is slightly below SG pressure due to
+	// the pressure drop across the HP turbine stages.
+	ret.HPExhaustPressure = sgPressure * 0.90
+
+	// MSR: moisture removal + reheating before LP turbine.
+	//
+	// Spec: "In the moisture separator-reheaters, moisture is
+	// mechanically separated from the turbine steam and the
+	// steam is then super heated before entering the three
+	// low-pressure turbines."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:31-35
+	//
+	// Inlet temperature is approximated as the saturated steam
+	// temperature at the HP exhaust pressure. For "important
+	// aspects" fidelity a simple linear surrogate is sufficient.
+	inletTempF := float64(ret.HPExhaustPressure)*5.5 + 80.0
+	inletTemp := u.NewValue(inletTempF, u.Fahrenheit)
+	// MSR receives the highest-pressure extraction steam and main
+	// steam before the throttle valves for reheating. The total
+	// steam available to the MSR reheater tubes is a fraction of
+	// the HP steam flow; with ExtractionSteamFlow = total HP steam
+	// flow, applying MSRDesignExtractionFraction gives the design
+	// reheat duty.
+	reheatFlow := u.NewValue(
+		ret.ExtractionSteamFlow.Float()*MSRDesignExtractionFraction,
+		u.Gallon,
+	)
+	ret.MoistureSeparatorReheater = ret.MoistureSeparatorReheater.Step(
+		ret.HPExhaustPressure,
+		ret.HPExhaustQuality,
+		inletTemp,
+		reheatFlow,
+		ret.HPExhaustPressure*0.98,
+	)
 
 	return ret
 }

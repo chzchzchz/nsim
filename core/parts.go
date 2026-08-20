@@ -69,6 +69,85 @@ type Turbine struct {
 
 	SteamLossTimer time.Duration
 	RealPower      Watts
+
+	// ExtractionSteamFlow is the total extraction steam available
+	// to the feedwater heaters and MSR reheater. It is computed
+	// per step as a fraction of the turbine's equivalent steam
+	// flow.
+	ExtractionSteamFlow Volume
+
+	// HPExhaustQuality is the steam quality (0..1) at the HP
+	// turbine exhaust, before the MSR. The spec notes that
+	// moisture is mechanically separated at this point
+	// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:31-35).
+	HPExhaustQuality float64
+
+	// HPExhaustPressure is the steam pressure at the HP turbine
+	// exhaust (MSR inlet).
+	HPExhaustPressure Pressure
+
+	MoistureSeparatorReheater // embedded MSR state
+}
+
+// MoistureSeparatorReheater models one combined moisture separator-
+// reheater assembly between the HP exhaust and the LP turbines.
+// The spec describes these as single assemblies that perform both
+// moisture removal and steam reheating.
+//
+// Spec justification:
+//   - "Combination moisture separator-reheater assemblies are
+//     provided between the high- and low-pressure elements to dry
+//     and superheat the steam."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_198.txt:43-45
+//   - "Typical combined moisture separator-reheaters [...] remove
+//     the moisture in the wet steam exhausting from the high-
+//     pressure element exhaust and reheat the steam to over 100°F
+//     (55°C) superheat."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:54-55
+//   - "The wet steam enters the moisture removal section and rises
+//     through chevron-type moisture-separators where the water is
+//     removed and drained to the feedwater system."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:60-62
+//   - "The dried steam then passes through the reheater section
+//     where it is reheated by the highest pressure extraction steam
+//     and by main steam withdrawn before the throttle valves."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:64-66
+type MoistureSeparatorReheater struct {
+	Part
+
+	// InletQuality is the mass fraction of steam (0..1) in the
+	// wet exhaust from the HP turbine. At full load the HP
+	// exhaust is typically 0.85–0.92 quality; it falls at low
+	// load as more moisture forms.
+	InletQuality float64
+
+	// InletPressure is the pressure of the HP turbine exhaust
+	// steam entering the MSR.
+	InletPressure Pressure
+
+	// OutletPressure is the pressure leaving the MSR, slightly
+	// lower than InletPressure due to pressure drop across the
+	// separator and reheater.
+	OutletPressure Pressure
+
+	// OutletTemperature is the superheated steam temperature
+	// leaving the reheater section. The spec targets >100°F
+	// superheat over the saturation temperature at OutletPressure.
+	OutletTemperature Temperature
+
+	// DrainFlow is the condensed moisture removed per step,
+	// drained to the feedwater system (hotwell).
+	DrainFlow Volume
+
+	// ReheatSteamPressure is the pressure of the extraction
+	// steam (or main steam before the throttle valves) that
+	// supplies the reheater tubes.
+	ReheatSteamPressure Pressure
+
+	// ReheatSteamFlow is the mass flow of reheating extraction
+	// steam. Set by the turbine step as a fraction of total
+	// load.
+	ReheatSteamFlow Volume
 }
 
 // TurbineState is the operating state of the main turbine.
@@ -750,6 +829,47 @@ var FeedwaterMinFlow Volume = u.NewValue(950, u.Gallon)
 // × 0.001 s/step ≈ 0.38 gal/step; the constant is sized in gal/s
 // for the per-step integration in heater.go.
 var FeedwaterDesignFlow Volume = u.NewValue(380, u.Gallon) // gal/s
+
+// MSR and extraction steam design constants (plans/p11_1.txt).
+//
+// Spec justification:
+//   - "A small portion of the steam in the high-pressure turbine
+//     is extracted to the highest pressure feedwater heaters."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:31-32
+//   - Reheat target: "reheat the steam to over 100°F (55°C)
+//     superheat."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:55
+//   - The typical four-cylinder turbine-generator is rated
+//     ≈1500 MWe.
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_197.txt:16-17
+const (
+	// MSRMoistureRemovalEfficiency is the fraction of liquid
+	// water removed per pass through the chevron separators.
+	MSRMoistureRemovalEfficiency = 0.95
+
+	// MSRReheatTarget is the target steam temperature rise
+	// across the reheater section at design extraction steam
+	// flow.
+	MSRReheatTarget = 100.0 // °F
+
+	// MSRDesignExtractionFraction is the fraction of HP steam
+	// flow diverted to the MSR reheater and the highest-pressure
+	// feedwater heaters at full turbine load.
+	MSRDesignExtractionFraction = 0.12
+
+	// MSRSixthStageExtractionFraction is the fraction of HP
+	// steam flow diverted to the sixth-stage (lowest-pressure)
+	// extraction for one representative LP feedwater heater.
+	MSRSixthStageExtractionFraction = 0.03
+
+	// HPExhaustQualityFullLoad is the expected steam quality
+	// at the HP exhaust at rated turbine power.
+	HPExhaustQualityFullLoad = 0.90
+
+	// HPExhaustQualityLowLoad is the expected steam quality
+	// at the HP exhaust at low turbine power (more moisture).
+	HPExhaustQualityLowLoad = 0.70
+)
 
 // SteamGeneratorFullLoadSteamFlow is the per-SG steam flow at rated
 // load, sized for 480 kg/s of saturated steam at 920 psia. The spec
