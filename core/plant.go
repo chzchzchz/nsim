@@ -56,7 +56,58 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 		false,
 		&stopOpen,
 	)
-	ret.Generator.RealPower = ret.Turbine.RealPower
+
+	// Generator terminal state. Voltage and frequency track rated
+	// values whenever the breaker is closed and the rotor is at
+	// speed; otherwise they decay to zero (the generator has no
+	// excitation or grid back-feed when off-line).
+	//
+	// Spec: "Output voltage: 24,000 to 26,000 volts, three-phase,
+	// 60 Hz"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21
+	// "Speed: 1800 rpm"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:22
+	rated := ret.Turbine.State == TurbineRunning &&
+		float64(ret.Turbine.Velocity) >= float64(TurbineRatedSpeed)*0.99
+	if ret.Generator.BreakerClosed && rated {
+		ret.Generator.Voltage = GeneratorRatedVoltage
+		ret.Generator.Frequency = GeneratorRatedFrequency
+	} else {
+		ret.Generator.Voltage = 0
+		ret.Generator.Frequency = 0
+	}
+
+	// RealPower and ReactivePower are zero whenever the breaker
+	// is open, regardless of the turbine's mechanical output. The
+	// breaker gates grid connection.
+	//
+	// Spec: "output power, the power factor, and speed to ensure
+	// that the limits of the generator are not exceeded."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
+	// "Power factor: 0.9, short circuit ratio: 0.58"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:19
+	if ret.Generator.BreakerClosed && ret.Turbine.RealPower > 0 {
+		ret.Generator.RealPower = ret.Turbine.RealPower
+		pf := ret.Generator.PowerFactor
+		if pf <= 0 {
+			pf = GeneratorPowerFactor
+		}
+		ret.Generator.ReactivePower =
+			float64(ret.Turbine.RealPower) * (1.0/pf - 1.0)
+	} else {
+		ret.Generator.RealPower = 0
+		ret.Generator.ReactivePower = 0
+	}
+
+	// OPC trip pops the breaker. The spec describes OPC as part
+	// of the protective trip layer that closes steam valves AND
+	// disconnects the generator from the grid.
+	//
+	// Spec: "OPC trip (110%)"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:72
+	if ret.Turbine.OPCTrip {
+		ret.Generator.BreakerClosed = false
+	}
 
 	// Steam dump: open when condenser pressure is above the
 	// threshold. The dump valve provides a relief path for
@@ -74,9 +125,12 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 
 	// CondensingRate: pass the turbine's exhaust mass flow back
 	// into the condenser so its level/pressure step can react.
+	// The condensing rate tracks the turbine's mechanical output
+	// regardless of breaker state — the condenser sees exhaust
+	// steam whether or not the unit is exporting to the grid.
 	if ret.Turbine.State == TurbineRunning {
 		ret.Condenser.CondensingRate = u.NewValue(
-			steamMassFromPower(ret.Generator.RealPower),
+			steamMassFromPower(ret.Turbine.RealPower),
 			u.Gallon,
 		)
 	} else {
@@ -217,7 +271,7 @@ func (p *Plant) Step() {
 	// turbine into TurbineTripped the same step the reactor trips,
 	// matching the auto-stop-oil "hydraulic fluid dumped to drain"
 	// behaviour described in the spec.
-	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:64
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:33-35
 	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:28-34
 	if p.ReactorBuilding.ReactorPressureVessel.Trip ||
 		p.TurbineBuilding.Turbine.State == TurbineTripped {
@@ -225,6 +279,34 @@ func (p *Plant) Step() {
 		if p.TurbineBuilding.Turbine.State == TurbineRunning {
 			p.TurbineBuilding.Turbine.State = TurbineTripped
 		}
+	}
+
+	// Load-runback propagation. The spec's protective-layer output
+	// for the DEHM is a "controlled selectable rate" runback on
+	// dropped rod / high kw/ft / low DNBR / rapid nuclear flux
+	// decrease / rod bottom circuitry. We collapse those four
+	// signals into a single LoadRunback bit set when the reactor
+	// trips (the most aggressive of the four signals); the
+	// per-signal wiring is in scope for a later plan.
+	//
+	// Spec: "Automatic load runback initiated by a dropped rod
+	// signal, high kw/ft signal or low departure from nucleate
+	// boiling ratio signal."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:26-29
+	if p.ReactorBuilding.ReactorPressureVessel.Trip {
+		p.TurbineBuilding.Turbine.LoadRunback = true
+	}
+
+	// Reactor trip also opens the generator breaker so the unit
+	// stops exporting power to the grid. Combined with the
+	// stop-valve close above, this matches the spec's protective
+	// cascade of "Turbine trip following a reactor trip" and the
+	// DEHM's automatic load-runback behaviour.
+	//
+	// Spec: "Turbine trip following a reactor trip."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:33-35
+	if p.ReactorBuilding.ReactorPressureVessel.Trip {
+		p.TurbineBuilding.Generator.BreakerClosed = false
 	}
 
 	cwPumpRunning := p.Outside.CirculatingWaterPump.Running
@@ -329,6 +411,26 @@ func MakePlant() Plant {
 	p.TurbineBuilding.Condenser.Pressure = CondenserDesignVacuum
 	p.TurbineBuilding.Turbine.StopValve = Valve{Open: 1.0}
 	p.Outside.CirculatingWaterPump = Pump{Running: true}
+
+	// Generator defaults (plans/p12_1.txt).
+	//   - BreakerClosed = false at startup; the operator closes
+	//     it after synchronisation.
+	//   - PowerFactor = 0.9 per design point.
+	//   - RatedMVA = 1370 MVA per the spec.
+	// Spec: "Rating: 1370 mva"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:18
+	// Spec: "Power factor: 0.9, short circuit ratio: 0.58"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:19
+	p.TurbineBuilding.Generator.BreakerClosed = false
+	p.TurbineBuilding.Generator.PowerFactor = GeneratorPowerFactor
+	p.TurbineBuilding.Generator.RatedMVA = GeneratorRatedMVA
+
+	// Turbine setpoint defaults: 1.0 (full-load demand) when the
+	// operator closes the breaker and 0.0 when off-line.
+	// RampRate is set to the spec's "controlled selectable rate"
+	// (5% per minute, ≈0.000833/s) at construction time.
+	p.TurbineBuilding.Turbine.Setpoint = 0
+	p.TurbineBuilding.Turbine.RampRate = TurbineLoadRunbackRate
 
 	return p
 }

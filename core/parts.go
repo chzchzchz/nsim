@@ -70,6 +70,58 @@ type Turbine struct {
 	SteamLossTimer time.Duration
 	RealPower      Watts
 
+	// Setpoint is the operator-selected load demand as a
+	// fraction of TurbineRatedkW (0..1). "After generator
+	// breaker closure, the ability to increase or decrease
+	// electrical load at a controlled selectable rate."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:80-82
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_202.txt:49-51
+	// Resolution: 0.5 percent load (GeneratorSetpointResolution).
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:82-83
+	Setpoint float64
+
+	// RampRate is the per-second fraction of TurbineRatedkW at
+	// which RealPower may change toward Setpoint. Equal to
+	// TurbineLoadRunbackRate by default; sized so a full-load
+	// runback takes ~20 minutes, matching the typical DEHM
+	// "controlled selectable rate" behaviour.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:80-82
+	RampRate float64
+
+	// LoadRunback is set by the operator or reactor-protection
+	// signals (reactor trip, dropped rod, high kw/ft, low DNBR)
+	// to drive Setpoint toward zero at RampRate. The spec
+	// describes a load-runback initiator list of:
+	//   - dropped rod signal
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:26-29
+	//   - high kw/ft signal
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:29
+	//   - low departure from nucleate boiling ratio signal
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:29
+	//   - rapid decrease in nuclear flux or rod bottom circuitry
+	//     (load-limit path)
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:93-96
+	// Plant.Step collapses the four signals into a single bit;
+	// the protective-layer output of the DEHM is "shed load at
+	// the controlled rate", which this flag represents.
+	LoadRunback bool
+
+	// OPCAlarm is set by the turbine step when shaft velocity
+	// exceeds TurbineOPCALarmFraction of TurbineRatedSpeed
+	// (103%). The OPC controller raises this as a purely
+	// informative alarm; no automatic action is taken at this
+	// level.
+	// "OPC alarm (103%)"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:72
+	OPCAlarm bool
+
+	// OPCTrip is latched when shaft velocity exceeds
+	// TurbineOPCTripFraction of TurbineRatedSpeed (110%). Once
+	// latched, the stop valve is held closed until reset.
+	// "OPC trip (110%)"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:72
+	OPCTrip bool
+
 	// ExtractionSteamFlow is the total extraction steam available
 	// to the feedwater heaters and MSR reheater. It is computed
 	// per step as a fraction of the turbine's equivalent steam
@@ -178,6 +230,73 @@ const (
 	TurbineOverspeedTripRatio float64  = 1.20
 	TurbineSteamLossDeadline           = 2 * time.Second
 	TurbineRatedkW            Watts    = 1_000_000e3
+)
+
+// Turbine-generator grid-coupling and protective-control constants
+// (plans/p12_1.txt).
+//
+// Spec justification:
+//   - "The two speed channels and OPC redundantly provide OPC alarm
+//     (103%), OPC trip (110%), and fast valving functions."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:71-73
+//   - "After generator breaker closure, the ability to increase or
+//     decrease electrical load at a controlled selectable rate. The
+//     resolution of this controller is 0.5 percent load."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:80-83
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_202.txt:49-52
+//   - Generator rating: "Rating: 1370 mva"
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:18
+//   - Generator power factor: "Power factor: 0.9, short circuit ratio:
+//     0.58"
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:19
+const (
+	// TurbineOPCALarmFraction is the shaft-speed fraction of
+	// TurbineRatedSpeed at which the OPC channel raises an
+	// alarm. "OPC alarm (103%)"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:72
+	TurbineOPCALarmFraction float64 = 1.03
+
+	// TurbineOPCTripFraction is the shaft-speed fraction of
+	// TurbineRatedSpeed at which the OPC channel trips the
+	// turbine (closes the stop and governing valves). "OPC trip
+	// (110%)"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:72
+	TurbineOPCTripFraction float64 = 1.10
+
+	// TurbineLoadRunbackRate is the maximum fraction of rated
+	// load per second the turbine will shed during a
+	// load-runback transient. The spec describes "controlled
+	// selectable rate" with "0.5 percent load" resolution
+	// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:80-83);
+	// 5% per minute (≈0.00083/s) is a typical Westinghouse DEHM
+	// load-runback rate.
+	TurbineLoadRunbackRate float64 = 0.05 / 60.0
+
+	// GeneratorRatedMVA is the apparent-power rating of the main
+	// generator. "Rating: 1370 mva"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:18
+	GeneratorRatedMVA float64 = 1370e3
+
+	// GeneratorRatedVoltage is the rated terminal voltage. "Output
+	// voltage: 24,000 to 26,000 volts, three-phase, 60 Hz"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21
+	GeneratorRatedVoltage float64 = 25000
+
+	// GeneratorRatedFrequency is the rated electrical frequency.
+	// "60 Hz"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21
+	GeneratorRatedFrequency float64 = 60
+
+	// GeneratorPowerFactor is the design power factor
+	// (lagging). "Power factor: 0.9"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:19
+	GeneratorPowerFactor float64 = 0.9
+
+	// GeneratorSetpointResolution is the load-demand controller
+	// resolution. "The resolution of this controller is 0.5
+	// percent load."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:82-83
+	GeneratorSetpointResolution float64 = 0.005
 )
 
 type FuelRods struct{ Part }
@@ -343,30 +462,77 @@ func (s *SteamGenerator) heatTransferred() Watts {
 	return 0
 }
 
-// PowerGenerator models the electrical side of a generator set. The diesel
-// engine step populates these fields; the main turbine's generator
-// populates them in its own step (not yet implemented).
+// PowerGenerator models the electrical side of a generator set. The
+// diesel engine step populates these fields; the main turbine's
+// generator populates them in its own step.
 //
 // Spec justification for the field set:
-//   - Voltage / Frequency —
-//     "two 6600-volt engineered safety features buses" (diesel output).
-//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-82
+//   - Voltage / Frequency / RealPower —
 //     "Output voltage: 24,000 to 26,000 volts, three-phase, 60 Hz" (main
 //     generator reference).
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21
+//     "two 6600-volt engineered safety features buses" (diesel output).
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-82
 //   - BreakerClosed —
 //     "controls for the governor, voltage regulator, generator breaker,
 //     and synchronization for each diesel generator are located on
 //     physically separated portions of the main control board".
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:1-4
+//     The main generator breaker is closed by the operator after
+//     synchronisation and reopened on an OPC trip, operator manual
+//     trip, or grid fault.
+//   - PowerFactor / ReactivePower —
+//     "output power, the power factor, and speed to ensure that the
+//     limits of the generator are not exceeded."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
+//     "Power factor: 0.9, short circuit ratio: 0.58"
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:19
+//   - RatedMVA —
+//     "Rating: 1370 mva"
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:18
 //   - RealPower — the running load in Watts, sized by RatedkW *
 //     RunningFraction so a downstream load sequencer (planned for the
 //     future) can sum load against rated capacity.
 type PowerGenerator struct {
 	Part
-	Voltage       float64
-	Frequency     float64
-	RealPower     Watts
+
+	// Voltage is the terminal voltage in volts. For the main
+	// generator the design point is 24–26 kV at 60 Hz
+	// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21).
+	Voltage float64
+
+	// Frequency is the terminal electrical frequency in Hz.
+	// Tracks shaft speed / pole-pair-count for synchronous
+	// generators; the main generator runs at 1800 rpm / 60 Hz
+	// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:22).
+	Frequency float64
+
+	// RatedMVA is the apparent-power rating of the generator.
+	// "Rating: 1370 mva"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:18
+	RatedMVA float64
+
+	// RealPower is the active power output in watts. When
+	// BreakerClosed is false the output is zero regardless of
+	// steam flow.
+	RealPower Watts
+
+	// ReactivePower is the reactive power output in vars,
+	// derived from RealPower and PowerFactor as
+	// RealPower * (1/PowerFactor - 1) (lagging convention). When
+	// BreakerClosed is false the output is zero.
+	ReactivePower float64
+
+	// PowerFactor is the cosine of the phase angle between
+	// voltage and current (lagging). The spec's design point is
+	// 0.9; the implementation clamps the default to that value.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:19
+	PowerFactor float64
+
+	// BreakerClosed is true when the generator breaker is
+	// closed and the generator is connected to the grid. The
+	// operator closes it after synchronisation; it opens on an
+	// OPC trip, operator manual trip, or grid fault.
 	BreakerClosed bool
 }
 

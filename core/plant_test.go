@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // When the reactor trips, Plant.Step must cascade the trip to the
@@ -101,4 +102,51 @@ func TestPlant_HeaterTrainRaisesFeedwaterTemperature(t *testing.T) {
 	stepN(&p, int(5*time.Second/TimeStep))
 	rise := p.TurbineBuilding.HighPressureHeater.TemperatureRise.Float()
 	assert.GreaterOrEqual(t, rise, 0.0, "want non-negative HP heater rise, got %v", rise)
+}
+
+// When the reactor trips, the breaker must open so the unit stops
+// exporting power to the grid. Plant.Step cascades the trip
+// through the protective-layer wiring.
+//
+// Spec justification:
+//   - "Turbine trip following a reactor trip." (item 2 of the
+//     protective features list)
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:33-35
+//   - "Release of this oil, called auto stop oil, by any one of
+//     the turbine trip devices [...] causes all steam control
+//     valves to close."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:28-34
+func TestPlant_ReactorTripOpensBreaker(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.TurbineBuilding.Generator.BreakerClosed = true
+	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	stepN(&p, int(2*time.Second/TimeStep))
+	require.True(t, p.TurbineBuilding.Generator.BreakerClosed,
+		"precondition: want BreakerClosed before trip, got false")
+	p.ReactorBuilding.ReactorPressureVessel.Trip = true
+	stepN(&p, int(100*time.Millisecond/TimeStep))
+	assert.False(t, p.TurbineBuilding.Generator.BreakerClosed,
+		"want BreakerClosed=false after reactor trip, got true")
+}
+
+// With the generator breaker open the unit produces no electrical
+// power even when the turbine is running at speed — the breaker
+// gates grid connection.
+//
+// Spec justification:
+//   - "output power, the power factor, and speed to ensure that the
+//     limits of the generator are not exceeded."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
+func TestPlant_BreakerOpenZerosRealPower(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.TurbineBuilding.Generator.BreakerClosed = false
+	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	stepN(&p, int(5*time.Second/TimeStep))
+	assert.Zero(t, p.TurbineBuilding.Generator.RealPower,
+		"want RealPower=0 with breaker open, got %v",
+		p.TurbineBuilding.Generator.RealPower)
 }

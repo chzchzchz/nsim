@@ -64,6 +64,62 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 		steamFlow = 0
 	}
 
+	// Load runback (DEHM protective layer). When any reactor-
+	// protection signal asserts (reactor trip, dropped rod, high
+	// kw/ft, low DNBR, rapid nuclear flux decrease, rod bottom
+	// circuitry), Plant.Step sets LoadRunback; the Setpoint
+	// descends toward zero at RampRate so RealPower follows.
+	//
+	// Spec: "Automatic load runback initiated by a dropped rod
+	// signal, high kw/ft signal or low departure from nucleate
+	// boiling ratio signal."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:26-29
+	// "Automatic turbine load runback via load limit for a
+	// dropped rod control cluster assembly is initiated by
+	// either a rapid decrease in nuclear flux or by the rod
+	// bottom circuitry."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:93-96
+	if ret.LoadRunback && ret.Setpoint > 0 {
+		ret.Setpoint -= ret.RampRate * dt.Seconds()
+		if ret.Setpoint < 0 {
+			ret.Setpoint = 0
+		}
+	}
+
+	// OPC alarm at TurbineOPCALarmFraction (103% of rated
+	// speed). Informational only — no automatic action.
+	//
+	// Spec: "The two speed channels and OPC redundantly provide
+	// OPC alarm (103%), OPC trip (110%), and fast valving
+	// functions."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:71-73
+	ret.OPCAlarm = ret.State == TurbineRunning &&
+		float64(ret.Velocity) > float64(TurbineRatedSpeed)*TurbineOPCALarmFraction
+
+	// OPC trip at TurbineOPCTripFraction (110% of rated speed).
+	// Closes the stop valve; latches until reset.
+	//
+	// Spec: "The mechanical hydraulic overspeed trip mechanism
+	// (Item 1) causes the turbine valve hydraulic fluid pressure
+	// to dump to drain, thereby closing the main steam stop and
+	// governing valves and the reheat steam stop and intercept
+	// valves at a pre-selected percent above rated speed."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:9-15
+	//   (chapter 15.1 numbering in the spec maps to page_207.txt
+	//   in this repo)
+	if ret.State == TurbineRunning &&
+		float64(ret.Velocity) > float64(TurbineRatedSpeed)*TurbineOPCTripFraction {
+		ret.OPCTrip = true
+		ret.StopValve.Open = 0
+		ret.State = TurbineTripped
+	}
+
+	// Reset clears the OPC trip latch once the rotor has
+	// stopped.
+	if reset && ret.OPCTrip && ret.Velocity < turbineStopThreshold {
+		ret.OPCTrip = false
+	}
+
 	switch ret.State {
 	case TurbineOff:
 		if steamFlow > 0 {
@@ -117,8 +173,29 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 		ret.State = TurbineTripped
 	}
 
+	// RealPower tracks shaft speed up to the operator-selected
+	// Setpoint. The setpoint ceiling is what the DEHM would
+	// enforce via the governing valves; we approximate that by
+	// clamping RealPower after the speed-based calculation.
+	// Setpoint == 0 means "no demand selected" (operator has
+	// not yet called for a load); we leave the velocity-derived
+	// power uncapped so existing tests that don't set a Setpoint
+	// keep working, and Plant.Step's synchronisation path
+	// enforces a real ceiling once the operator closes the
+	// breaker at a non-zero setpoint.
+	//
+	// Spec: "After generator breaker closure, the ability to
+	// increase or decrease electrical load at a controlled
+	// selectable rate."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:80-82
 	if ret.State == TurbineRunning && TurbineRatedSpeed > 0 {
 		ret.RealPower = Watts(float64(ret.Velocity) / float64(TurbineRatedSpeed) * float64(TurbineRatedkW))
+		if ret.Setpoint > 0 {
+			maxPower := ret.Setpoint * float64(TurbineRatedkW)
+			if float64(ret.RealPower) > maxPower {
+				ret.RealPower = Watts(maxPower)
+			}
+		}
 	} else {
 		ret.RealPower = 0
 	}
