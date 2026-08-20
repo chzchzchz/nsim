@@ -1,6 +1,8 @@
 package core
 
 import (
+	"io"
+
 	u "github.com/bcicen/go-units"
 )
 
@@ -9,7 +11,26 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 }
 
 func (t *TurbineBuilding) Step() TurbineBuilding {
-	return *t
+	ret := *t
+	// SteamGenerator lives on ReactorBuilding, not TurbineBuilding;
+	// the caller (Plant.Step) passes the upstream pressure in via
+	// StepWithSteam. This signature stays for the legacy call path
+	// where no upstream is wired; production uses StepWithSteam.
+	return ret
+}
+
+// StepWithSteam advances the TurbineBuilding with the upstream steam
+// generator's pressure supplied by the caller.
+func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure) TurbineBuilding {
+	ret := *t
+	ret.Turbine = ret.Turbine.Step(
+		sgPressure,
+		ret.Condenser.Pressure,
+		ret.MakeupValve.Open,
+		false,
+	)
+	ret.Generator.RealPower = ret.Turbine.RealPower
+	return ret
 }
 
 // Plant represents all state relevant to the facility.
@@ -31,8 +52,13 @@ func (p *Plant) Step() {
 	p.Electrical.DieselGenB = &p.nextPlant.Outside.DieselGenerator
 
 	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step()
-	p.nextPlant.TurbineBuilding = p.TurbineBuilding.Step()
+	p.nextPlant.TurbineBuilding = p.TurbineBuilding.StepWithSteam(p.ReactorBuilding.SteamGenerator.Pressure)
 	p.nextPlant.Electrical = p.Electrical.Step()
+
+	// Pressure-driven fluid flow integrates the freshly-stepped parts.
+	// Graph nodes hold pointers into nextPlant; the mutations land in
+	// nextPlant directly so Update() copies them into p.
+	simulateFluidFlow(p.BuildGraphFor(p.nextPlant), TimeStep)
 }
 
 func (p *Plant) Update() {
@@ -69,4 +95,63 @@ func MakePlant() Plant {
 		RiverTemp: u.NewValue(75, u.Fahrenheit),
 	}
 	return p
+}
+
+// BuildGraph returns a PlantGraph whose node refs point into p. Used
+// outside the Step loop (ExportDot, tests) where mutating p is fine.
+func (p *Plant) BuildGraph() *PlantGraph { return p.BuildGraphFor(p) }
+
+// BuildGraphFor is the same as BuildGraph but lets the caller target an
+// arbitrary *Plant (typically nextPlant during Step). Internal helpers
+// use this to avoid mutating the current plant directly.
+//
+// The connections modelled are the primary loop, the secondary loop,
+// and the AFWS suction line, drawn from
+// specs/the_westinghouse_pressurized_water_react/glossary.md
+// (cold leg, hot leg, hot standby) and chapter_5/page_099.txt (AFWS
+// pumps, common pipe header).
+func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
+	g := &PlantGraph{Nodes: map[string]GraphNode{}}
+
+	add := func(id, kind string, ref interface{}) {
+		g.Nodes[id] = GraphNode{ID: id, Kind: kind, Ref: ref}
+	}
+	edge := func(from, to string, valve *Valve, pump *Pump) {
+		g.Edges = append(g.Edges, GraphEdge{From: from, To: to, Valve: valve, Pump: pump})
+	}
+
+	add("RPV", "ReactorPressureVessel", &target.ReactorBuilding.ReactorPressureVessel)
+	add("Pressurizer", "Pressurizer", &target.ReactorBuilding.Pressurizer)
+	add("SG", "SteamGenerator", &target.ReactorBuilding.SteamGenerator)
+	add("RCP", "ReactorCoolantPump", &target.ReactorBuilding.ReactorCoolantPump)
+	edge("RPV", "SG", nil, &target.ReactorBuilding.ReactorCoolantPump) // hot leg through RCP
+	edge("SG", "RPV", nil, nil)                                        // cold leg
+
+	edge("RPV", "Pressurizer", &target.ReactorBuilding.SafetyValve, nil)
+	edge("Pressurizer", "RPV", nil, nil)
+
+	add("Condenser", "Condenser", &target.TurbineBuilding.Condenser)
+	add("CST", "CondensateStorageTank", &target.Outside.CondensateStorageTank)
+	add("HDT", "HeaterDrainTank", &target.TurbineBuilding.HeaterDrainTank)
+	edge("SG", "Condenser", &target.TurbineBuilding.MakeupValve, nil)
+	edge("Condenser", "CST", &target.TurbineBuilding.RecirculateValve, nil)
+	edge("CST", "HDT", nil, &target.TurbineBuilding.CondensatePump)
+	edge("HDT", "SG", nil, &target.TurbineBuilding.MainFeedwaterPump)
+
+	add("DieselAFWPump", "DieselAFWPump", &target.Outside.DieselAFWPump.Pump)
+	add("MotorAFWPump", "MotorAFWPump", &target.Outside.MotorAFWPump.Pump)
+	add("TurbineAFWPump", "TurbineAFWPump", &target.Outside.TurbineAFWPump.Pump)
+	edge("CST", "DieselAFWPump", &target.Outside.DieselAFWPump.CSTValve, nil)
+	edge("DieselAFWPump", "SG", &target.Outside.DieselAFWPump.ServiceWaterValve, nil)
+	edge("CST", "MotorAFWPump", &target.Outside.MotorAFWPump.CSTValve, nil)
+	edge("MotorAFWPump", "SG", &target.Outside.MotorAFWPump.ServiceWaterValve, nil)
+	edge("CST", "TurbineAFWPump", &target.Outside.TurbineAFWPump.CSTValve, nil)
+	edge("TurbineAFWPump", "SG", &target.Outside.TurbineAFWPump.ServiceWaterValve, nil)
+
+	return g
+}
+
+// ExportDot writes the plant's graph in Graphviz DOT format.
+func (p *Plant) ExportDot(w io.Writer) error {
+	return p.BuildGraph().ExportDot(w)
 }

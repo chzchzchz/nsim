@@ -35,7 +35,39 @@ type Pump struct {
 type Turbine struct {
 	Part
 	Velocity
+
+	State          TurbineState
+	SteamLossTimer time.Duration
+	RealPower      Watts
 }
+
+// TurbineState is the operating state of the main turbine.
+//
+// Spec justification:
+//   - glossary.md turbine trip: "When turbine steam inlet valves are
+//     rapidly closed to block steam flow, stopping the turbine."
+//     specs/.../back_matter/page_245.txt:48-50
+//   - chapter_15/page_205.txt:28-34 — the auto-stop-oil trip system
+//     causes all steam control valves to close on any trip signal.
+//   - chapter_15/page_205.txt:40 — "turbine speed does not exceed 120
+//     percent of [rated]" — see TurbineOverspeedTripRatio below.
+type TurbineState int
+
+const (
+	TurbineOff TurbineState = iota
+	TurbineRunning
+	TurbineTripped
+)
+
+// Rated values for the main turbine, sized for a large turbo-generator
+// to match the implied megawatt scale of
+// specs/.../chapter_15/page_208.txt:21 (24-26 kV main generator).
+const (
+	TurbineRatedSpeed         Velocity = 1800
+	TurbineOverspeedTripRatio float64  = 1.20
+	TurbineSteamLossDeadline           = 2 * time.Second
+	TurbineRatedkW            Watts    = 1_000_000e3
+)
 
 type FuelRods struct{ Part }
 type ControlRods struct{ Part }
@@ -62,7 +94,8 @@ type Pressurizer struct {
 type SteamGenerator struct {
 	Part
 	Pressure
-	Water Volume
+	Water  Volume
+	Volume Volume
 }
 
 func (s *SteamGenerator) Update() SteamGenerator {
@@ -112,7 +145,10 @@ type PowerGenerator struct {
 	RealPower     Watts
 	BreakerClosed bool
 }
-type Condenser struct{ Part }
+type Condenser struct {
+	Part
+	Pressure
+}
 type Polisher struct{}
 
 // Heats water from 120F to 360F
