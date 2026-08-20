@@ -34,13 +34,13 @@ type TurbineBuilding struct {
 	// Downstream of polisher
 	LowPressureHeater
 	/*
-		The heater drain tanks are horizontal 13,120-gal tanks. Each tank normally receives
-	drains from its associated fifth-stage heater and moisture separator drain tank. Each
-	tank also receives alternate drains from the associated sixth- and seventh-stage
-	heaters and first- and second-stage reheater drain tanks. Each tank is designed for
-	220 psig and 400°F. The tanks are cross-connected by a 20-in. line. A dump valve
-	which taps off the cross-connection drains the tanks to condenser A on a high level
-	in either tank. */
+			The heater drain tanks are horizontal 13,120-gal tanks. Each tank normally receives
+		drains from its associated fifth-stage heater and moisture separator drain tank. Each
+		tank also receives alternate drains from the associated sixth- and seventh-stage
+		heaters and first- and second-stage reheater drain tanks. Each tank is designed for
+		220 psig and 400°F. The tanks are cross-connected by a 20-in. line. A dump valve
+		which taps off the cross-connection drains the tanks to condenser A on a high level
+		in either tank. */
 	HeaterDrainTank   Tank
 	HeaterDrainPump   Pump
 	MainFeedwaterPump Pump

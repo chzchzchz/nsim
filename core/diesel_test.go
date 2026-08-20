@@ -33,7 +33,7 @@ func TestDiesel_FSM_StartAndReachReady(t *testing.T) {
 	p.ServiceWaterPump.Running = true
 
 	p.Outside.DieselGenerator = newDiesel(500)
-	p.Outside.DieselGenerator.StartRequested = true
+	p.Outside.DieselGenerator.StartSignal = DieselStartManual
 
 	stepN(&p, 1)
 	if p.Outside.DieselGenerator.State != DieselCranking {
@@ -77,7 +77,7 @@ func TestDiesel_FuelOnlyDecreasesWhileRunning(t *testing.T) {
 		t.Fatalf("at rest: fuel should not change, was %v now %v", levelAtRest, got)
 	}
 
-	p.Outside.DieselGenerator.StartRequested = true
+	p.Outside.DieselGenerator.StartSignal = DieselStartManual
 	// Get to running.
 	stepN(&p, int(10*time.Second/TimeStep))
 	before := p.Outside.DieselGenerator.Fuel.Level.Float()
@@ -92,7 +92,7 @@ func TestDiesel_TripsOnFuelExhaustion(t *testing.T) {
 	p := MakePlant()
 	p.ServiceWaterPump.Running = true
 	p.Outside.DieselGenerator = newDiesel(0.0001) // tiny sliver
-	p.Outside.DieselGenerator.StartRequested = true
+	p.Outside.DieselGenerator.StartSignal = DieselStartManual
 
 	stepN(&p, int(10*time.Second/TimeStep))
 	if p.Outside.DieselGenerator.State != DieselTripped {
@@ -104,7 +104,7 @@ func TestDiesel_TripsOnCoolantOverTemp(t *testing.T) {
 	p := MakePlant()
 	p.ServiceWaterPump.Running = false // no cooling
 	p.Outside.DieselGenerator = newDiesel(500)
-	p.Outside.DieselGenerator.StartRequested = true
+	p.Outside.DieselGenerator.StartSignal = DieselStartManual
 
 	// Crank to running.
 	stepN(&p, int(10*time.Second/TimeStep))

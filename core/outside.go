@@ -34,5 +34,14 @@ func (o *Outside) Step() Outside {
 		// decrease pipe pressure
 	}
 	ret.DieselGenerator = o.DieselGenerator.Step(o.ServiceWaterPump.Running)
+
+	// The diesel-driven AFW pump must be gated by the diesel's readiness:
+	// an AFW pump labelled "diesel-driven" cannot deliver flow when its
+	// diesel is not running. DriveReady mirrors the upstream; effective
+	// flow is `Running && DriveReady`, computed by the consumer (the
+	// fluid model). We do not stomp Running here so an operator's
+	// pre-start intent survives the Cranking transient.
+	// specs/.../chapter_5/page_099.txt:89-93.
+	ret.DieselAFWPump.DriveReady = ret.DieselGenerator.ReadyToLoad
 	return ret
 }

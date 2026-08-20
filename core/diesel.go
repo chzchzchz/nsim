@@ -26,23 +26,28 @@ var (
 )
 
 // Step advances the diesel generator by TimeStep. The state machine,
-// speed ramp, fuel integration, and cooling integration all run on the
-// 1 ms plant step defined in core/units.go:16.
+// speed ramp, generator output ramp, fuel integration, and cooling
+// integration all run on the 1 ms plant step defined in core/units.go:16.
+//
+// Spec justification for each block is inline below.
 func (d *DieselGenerator) Step(swRunning bool) DieselGenerator {
 	ret := *d
 	dt := TimeStep
 
-	// 1) Transitions.
+	// 1) State-machine transitions.
+	//
+	// Any non-None StartSignal causes Off -> Cranking; DieselStartNone
+	// returns the engine to Off once speed has decayed.
 	switch ret.State {
 	case DieselOff:
-		if ret.StartRequested && ret.Fuel.Level.Float() > 0 {
+		if ret.StartSignal != DieselStartNone && ret.Fuel.Level.Float() > 0 {
 			ret.State = DieselCranking
 			ret.CrankStartTime = 0
 			ret.ReadyTime = 0
 			ret.ReadyToLoad = false
 		}
 	case DieselCranking:
-		if !ret.StartRequested && ret.Speed == 0 {
+		if ret.StartSignal == DieselStartNone && ret.Speed == 0 {
 			ret.State = DieselOff
 			break
 		}
@@ -53,14 +58,14 @@ func (d *DieselGenerator) Step(swRunning bool) DieselGenerator {
 			ret.State = DieselTripped
 		}
 	case DieselRunning:
-		if !ret.StartRequested {
+		if ret.StartSignal == DieselStartNone {
 			ret.State = DieselOff
 		}
 		if ret.Fuel.Level.Float() <= 0 {
 			ret.State = DieselTripped
 		}
 	case DieselTripped:
-		if !ret.StartRequested && ret.Speed == 0 {
+		if ret.StartSignal == DieselStartNone && ret.Speed == 0 {
 			ret.State = DieselOff
 		}
 	}
@@ -113,6 +118,11 @@ func (d *DieselGenerator) Step(swRunning bool) DieselGenerator {
 
 	// 4) Cooling integration. Service Water flowing -> approach ambient;
 	// Service Water off -> drift upward while running, cool while stopped.
+	//
+	// Spec: "Diesel generator coolers" / "Containment spray pump diesel
+	// engine coolers" are Service Water System loads.
+	// specs/.../chapter_12/page_169.txt:89, page_170.txt:84,
+	// page_171.txt:8-9
 	ambient := ret.Fuel.Part.Temperature.Float() // proxy for ambient
 	gap := ret.CoolantTemp.Float() - ambient
 	if swRunning {
@@ -128,6 +138,44 @@ func (d *DieselGenerator) Step(swRunning bool) DieselGenerator {
 	// 5) Cooling trip.
 	if ret.State == DieselRunning && ret.CoolantTemp.Float() >= DieselCoolantTripTemp.Float() {
 		ret.State = DieselTripped
+	}
+
+	// 6) Generator-side output ramp.
+	//
+	// "The diesel generators are provided with static-type brushless
+	// excitation and field flashing for rapid voltage buildup."
+	// specs/.../chapter_11/page_166.txt:46-51
+	//
+	// Voltage and Frequency ramp from 0 to DieselRatedVoltage /
+	// DieselRatedFrequency over DieselFieldFlashingTime. BreakerClosed
+	// latches once ReadyToLoad is true (i.e. once the diesel can carry
+	// load, per chapter_11/page_166.txt:50). RealPower follows the
+	// mechanical RunningFraction scaled by DieselRatedkW.
+	switch ret.State {
+	case DieselRunning:
+		ret.Generator.Voltage += DieselRatedVoltage * (dt.Seconds() / DieselFieldFlashingTime.Seconds())
+		if ret.Generator.Voltage > DieselRatedVoltage {
+			ret.Generator.Voltage = DieselRatedVoltage
+		}
+		ret.Generator.Frequency += DieselRatedFrequency * (dt.Seconds() / DieselFieldFlashingTime.Seconds())
+		if ret.Generator.Frequency > DieselRatedFrequency {
+			ret.Generator.Frequency = DieselRatedFrequency
+		}
+		ret.Generator.RealPower = Watts(float64(DieselRatedkW) * float64(ret.RunningFraction))
+		if ret.ReadyToLoad && !ret.Generator.BreakerClosed {
+			ret.Generator.BreakerClosed = true
+		}
+	default:
+		ret.Generator.Voltage -= DieselRatedVoltage * (dt.Seconds() / DieselFieldFlashingTime.Seconds())
+		if ret.Generator.Voltage < 0 {
+			ret.Generator.Voltage = 0
+		}
+		ret.Generator.Frequency -= DieselRatedFrequency * (dt.Seconds() / DieselFieldFlashingTime.Seconds())
+		if ret.Generator.Frequency < 0 {
+			ret.Generator.Frequency = 0
+		}
+		ret.Generator.RealPower = 0
+		ret.Generator.BreakerClosed = false
 	}
 
 	return ret

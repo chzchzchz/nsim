@@ -22,7 +22,7 @@ type Fluid struct {
 
 type Tank struct {
 	Part
-	Level Volume
+	Level    Volume
 	Capacity Volume
 	Pressure
 }
@@ -86,7 +86,32 @@ func (s *SteamGenerator) heatTransferred() Watts {
 	return 0
 }
 
-type PowerGenerator struct{ Part }
+// PowerGenerator models the electrical side of a generator set. The diesel
+// engine step populates these fields; the main turbine's generator
+// populates them in its own step (not yet implemented).
+//
+// Spec justification for the field set:
+//   - Voltage / Frequency —
+//     "two 6600-volt engineered safety features buses" (diesel output).
+//     specs/.../chapter_11/page_165.txt:73-82
+//     "Output voltage: 24,000 to 26,000 volts, three-phase, 60 Hz" (main
+//     generator reference).
+//     specs/.../chapter_15/page_208.txt:21
+//   - BreakerClosed —
+//     "controls for the governor, voltage regulator, generator breaker,
+//     and synchronization for each diesel generator are located on
+//     physically separated portions of the main control board".
+//     specs/.../chapter_11/page_166.txt:1-4
+//   - RealPower — the running load in Watts, sized by RatedkW *
+//     RunningFraction so a downstream load sequencer (planned for the
+//     future) can sum load against rated capacity.
+type PowerGenerator struct {
+	Part
+	Voltage       float64
+	Frequency     float64
+	RealPower     Watts
+	BreakerClosed bool
+}
 type Condenser struct{ Part }
 type Polisher struct{}
 
@@ -94,11 +119,87 @@ type Polisher struct{}
 type LowPressureHeater struct{ Part }
 type HighPressureHeater struct{ Part }
 
+// AFWPump is the auxiliary feedwater pump described in chapter 5.2 of
+// the spec.
+//
+// Spec justification for DriveSource / DriveReady:
+//   - The EFWS has three diverse power sources for the AFW pumps —
+//     "motor driven and turbine driven pumps are located in the
+//     emergency feedwater pump building. The use of both motor driven
+//     and turbine driven pumps satisfies the requirement that the pumps
+//     be powered by diverse power sources."
+//     specs/.../chapter_5/page_099.txt:89-93
+//   - A pump labelled "diesel-driven" must not run when its diesel is
+//     not running. DriveReady latches that condition without forcing the
+//     pump type to know about diesel internals.
 type AFWPump struct {
 	Pump
+
+	// DriveSource names the upstream that supplies motive force.
+	DriveSource DriveSource
+
+	// DriveReady is latched by the upstream drive (diesel, ESF bus,
+	// steam header) and gates the Pump.Running field's effectiveness.
+	DriveReady bool
+
 	ServiceWaterValve Valve
 	CSTValve          Valve
 }
+
+// DieselStartCause names the source of the start signal that asked the
+// onsite emergency diesel generator to run. The engine itself does not
+// care which cause tripped; downstream consumers (a future load
+// sequencer, if one is added) do.
+//
+// Spec justification:
+//   - DieselStartSafetyInjection —
+//     "The onsite emergency diesel generators are started." (item 1 in the
+//     SIS actuation list)
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:18-22
+//   - DieselStartLossOfOffsitePower —
+//     "In the event of total loss of auxiliary power from off-site
+//     sources, auxiliary power required for safe shutdown will be
+//     supplied from physically and electrically independent diesel
+//     generators located on the site."
+//     specs/.../chapter_11/page_165.txt:28-36
+//   - DieselStartManual / DieselStartTest — operator action from the
+//     main control board; the spec locates "controls for the governor,
+//     voltage regulator, generator breaker, and synchronization for each
+//     diesel generator […] on physically separated portions of the main
+//     control board".
+//     specs/.../chapter_11/page_166.txt:2-4
+type DieselStartCause int
+
+const (
+	DieselStartNone DieselStartCause = iota
+	DieselStartManual
+	DieselStartSafetyInjection
+	DieselStartLossOfOffsitePower
+	DieselStartTest
+)
+
+// DriveSource names the upstream that supplies motive force to a pump.
+//
+// Spec justification:
+//   - DriveDiesel — the diesel-driven auxiliary feedwater pump described
+//     alongside the motor-driven and turbine-driven units in the EFWS:
+//     "The use of both motor driven and turbine driven pumps satisfies
+//     the requirement that the pumps be powered by diverse power sources."
+//     specs/.../chapter_5/page_099.txt:89-93
+//   - DriveSteam — the turbine-driven AFW pump whose "steam supply line
+//     for each turbine driven pump is connected to the main steam line
+//     from a steam generator."
+//     specs/.../chapter_5/page_099.txt:42-47
+//   - DriveElectric — the motor-driven AFW pump fed from the "Safety
+//     Class 1E electrical power" trains.
+//     specs/.../chapter_5/page_099.txt:71-82
+type DriveSource int
+
+const (
+	DriveElectric DriveSource = iota
+	DriveSteam
+	DriveDiesel
+)
 
 type DieselGenerator struct {
 	Part
@@ -113,9 +214,10 @@ type DieselGenerator struct {
 	// aux feed pump running for 24 hours
 	Fuel Tank
 
-	// Operator-controlled between steps. Latched true until the start
-	// sequence completes or an explicit operator stop clears it.
-	StartRequested bool
+	// Operator-controlled between steps. DieselStartNone is the resting
+	// state; any non-None value is treated as a request to run. Latched
+	// across steps until an explicit DieselStartNone clears it.
+	StartSignal DieselStartCause
 
 	// Per-spec state machine.
 	State DieselState
@@ -135,6 +237,12 @@ type DieselGenerator struct {
 	// Cooling state — driven by ServiceWaterPump.Running
 	// (chapter_12/page_169.txt:89).
 	CoolantTemp Temperature
+
+	// Generator-side output. See core/parts.go:89 for the PowerGenerator
+	// definition; this field is the "generator" half of the diesel
+	// generator. Voltage / Frequency are ramped up by the diesel step
+	// once rated speed is reached.
+	Generator PowerGenerator
 }
 
 // DieselState is the operational state of the onsite emergency
@@ -156,14 +264,21 @@ const (
 )
 
 // Rated speed and trip thresholds for the emergency diesel generator.
+//
+// Spec justification:
+//   - DieselRatedSpeed, DieselReadyDeadline, DieselRatedLoadDeadline —
+//     "reach rated speed and be ready to begin accepting load within 10
+//     seconds, and be capable of carrying rated load within 30 seconds
+//     after receipt of a start signal to the diesel engine."
+//     specs/.../chapter_11/page_166.txt:46-51
 const (
-	// Chapter_11/page_166.txt:50-51 — rated speed reached within 10 s.
-	DieselRatedSpeed RPM = 1800
-	// Chapter_11/page_166.txt:50 — ready to accept load within 10 s.
-	DieselReadyDeadline = 10 * time.Second
-	// Chapter_11/page_166.txt:50 — capable of carrying rated load
-	// within 30 s.
-	DieselRatedLoadDeadline = 30 * time.Second
+	DieselRatedSpeed        RPM     = 1800
+	DieselReadyDeadline             = 10 * time.Second
+	DieselRatedLoadDeadline         = 30 * time.Second
+	DieselRatedVoltage      float64 = 6600
+	DieselRatedFrequency    float64 = 60
+	DieselRatedkW           Watts   = 4000e3
+	DieselFieldFlashingTime         = 1 * time.Second
 )
 
 // DieselCoolantTripTemp — cooling trip threshold; the spec implies
