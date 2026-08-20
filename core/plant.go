@@ -9,6 +9,32 @@ import (
 func (r *ReactorBuilding) Step() ReactorBuilding {
 	ret := *r
 	ret.Pressurizer = ret.Pressurizer.Step(&ret.PORV)
+	// CVCS: charging, letdown, VCT level, and boron
+	// concentration. The CVCS boron's reactivity contribution
+	// is read by the RPV step below, so CVCS must run first.
+	//
+	// Spec: "The pressurizer level is controlled by balancing
+	// the charging flow to the letdown flow."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
+	// Spec: "The operating mode (boration or dilution) and the
+	// magnitude of the boron concentration change required is
+	// determined by comparison of the measured Tc (cold leg
+	// temperature) with the programmed (function of power) Tc."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
+	ret.ChemicalVolumeControlSystem = ret.ChemicalVolumeControlSystem.Step(
+		ret.ReactorCoolantPump.Running,
+		0,
+	)
+	// Propagate the CVCS boron concentration into the
+	// reactivity model. The RPV step reads
+	// ControlRods.BoronConcentration to compute the boron
+	// reactivity contribution.
+	//
+	// Spec: "the boron concentration changes significantly
+	// with fuel depletion."
+	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
+	ret.ReactorPressureVessel.ControlRods.BoronConcentration =
+		ret.ChemicalVolumeControlSystem.BoronConcentration
 	rpv := ret.ReactorPressureVessel.Step(ret.ReactorCoolantPump.Running)
 	ret.ReactorPressureVessel = rpv
 	ret.SteamGenerator.HeatInput = rpv.ThermalPower
@@ -521,6 +547,24 @@ func MakePlant() Plant {
 		FixedMW:    HouseLoadFixed,
 		VariableMW: HouseLoadFixed * HouseLoadVariableFraction,
 	}
+
+	// CVCS defaults (plans/p14_1.txt). At construction the
+	// charging pumps are off, the letdown valve is open, the
+	// VCT is at design level, and the RCS is at the
+	// hot-zero-power (HZP) boron concentration.
+	// Spec: "The operating mode (boration or dilution) and the
+	// magnitude of the boron concentration change required is
+	// determined by comparison of the measured Tc (cold leg
+	// temperature) with the programmed (function of power) Tc."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
+	p.ReactorBuilding.ChemicalVolumeControlSystem = CVCS{
+		Mode:               CVCSVolumeControl,
+		VCTLevel:           VCTDesignLevel,
+		BoronConcentration: CVCSInitialBoron,
+		LetdownValveOpen:   true,
+	}
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration =
+		CVCSInitialBoron
 
 	return p
 }

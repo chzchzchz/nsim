@@ -102,11 +102,24 @@ func (r *ReactorPressureVessel) Step(rcpRunning bool) ReactorPressureVessel {
 	}
 	ret.Pressure = Pressure(pressure)
 
-	// 4) Reactivity contributions.
+	// 4) Reactivity contributions. The rod-bank term follows the
+	// ABCD rod-worth curve (plans/p7_1.txt). The Doppler term
+	// captures fuel-temperature feedback. The boron term
+	// converts the CVCS boron concentration to reactivity
+	// using a linear worth model centred on CVCSInitialBoron;
+	// positive ΔBoron decreases reactivity (boron is a
+	// neutron absorber).
+	//
+	// Spec: "the moderator temperature coefficient is positive
+	// at low power (BOL), and [...] the boron concentration
+	// changes significantly with fuel depletion."
+	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
 	rodReactivity := float32(ret.ControlRods.Position-1) * CoreRodWorthABCD
 	dopplerDeltaF := outletF - float64(CoreDopplerReferenceTempF)
 	dopplerPcm := float32(dopplerDeltaF * CoreDopplerPcmPerDegF)
-	ret.Reactivity = rodReactivity + dopplerPcm
+	boronDelta := (ret.ControlRods.BoronConcentration - CVCSInitialBoron) / 100.0
+	boronPcm := float32(boronDelta) * CoreBoronWorthPer100ppm
+	ret.Reactivity = rodReactivity + dopplerPcm + boronPcm
 
 	// 5) Thermal power output. At-power: rated scaled by the
 	// reactivity power-defect correction. After trip: decay-heat

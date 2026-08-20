@@ -393,6 +393,120 @@ const (
 	HouseLoadVariableFraction float64 = 0.03
 )
 
+// CVCS design constants (plans/p14_1.txt).
+//
+// Spec justification:
+//   - "The pressurizer level is controlled by balancing the
+//     charging flow to the letdown flow."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
+//   - Boration/dilution flow through the BTRS: "for boration, an
+//     increase in the boric acid concentration of the reactor
+//     coolant is accomplished by sending the flow from the VCT,
+//     at relatively high temperatures (140°F) (60°C), to the
+//     thermal regeneration demineralizers."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:16-19
+//   - VCT/BRS overflow: "the volume control tank level
+//     controller automatically diverts the outflow from the
+//     BTRS into the BRS holdup tanks."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
+//
+// Charging-pump flow and letdown are the primary-level
+// actuators; typical charging flow for a four-loop plant is
+// in the range of 20–40 gpm per pump. The BTRS demineralizer
+// exchange capacity sets the boron-concentration rate of
+// change; 0.8 ppm/step at the 1 ms plant step yields
+// 48 ppm/min, at the high end of the typical boration-rate
+// range and consistent with the spec's "relatively fast"
+// boration language for load-follow and xenon-compensation
+// manoeuvres.
+const (
+	// CVCSBorationRate is the increase in RCS boron
+	// concentration per second when the BTRS is in boration
+	// mode. With a 1 ms plant step the per-step delta is
+	// CVCSBorationRate * 1e-3 ppm. Sized at 48 ppm/min (0.8
+	// ppm/s) — the high end of typical boration rates used
+	// for xenon-transient compensation.
+	CVCSBorationRate float64 = 0.8
+
+	// CVCSDilutionRate is the decrease in RCS boron
+	// concentration per second when the BTRS is in dilution
+	// mode. Sized symmetrically with CVCSBorationRate.
+	CVCSDilutionRate float64 = 0.8
+
+	// VCTDesignLevel is the nominal VCT level (gal). The spec
+	// does not state a numeric volume; the value is sized so
+	// VCT accumulator dynamics are visible at operator-training
+	// timescales.
+	VCTDesignLevel float64 = 500.0
+
+	// VCTHighLevel is the VCT level at which the level
+	// controller diverts BTRS outflow to the BRS holdup
+	// tanks.
+	// "the volume control tank level controller automatically
+	// diverts the outflow from the BTRS into the BRS holdup
+	// tanks."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
+	VCTHighLevel float64 = 700.0
+
+	// VCTLowLevel is the VCT level at which the operator
+	// needs to initiate makeup from the refueling-water
+	// storage tank.
+	VCTLowLevel float64 = 300.0
+
+	// VCTBTRSCirculation is the per-second volume of VCT
+	// inventory routed through the BTRS recirculation pump
+	// during boration/dilution. Sized at 2 gal/s — a typical
+	// BTRS pump rating for a four-loop plant.
+	// "The BTRS recirculation pump provides the motive
+	// force to route flow from the VCT through the
+	// demineralizers during boration and dilution modes."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:37-39
+	VCTBTRSCirculation float64 = 2.0
+
+	// CVCSChargingFlow is the design charging-pump flow into
+	// the RCS cold legs (gal/s). Sized at 30 gpm = 0.5 gal/s
+	// per charging pump, with two pumps running. The spec
+	// does not state a numeric value; the figure is
+	// representative of a four-loop Westinghouse plant.
+	// "The pressurizer level is controlled by balancing the
+	// charging flow to the letdown flow."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
+	CVCSChargingFlow float64 = 0.5
+
+	// CVCSLetdownFlow is the design letdown flow from the RCS
+	// back to the VCT (gal/s). Sized at 75 gpm = 1.25 gal/s
+	// to match the charging rate with a 2:1 letdown-to-
+	// charging ratio (typical for CVCS letdown-orifice
+	// sizing).
+	CVCSLetdownFlow float64 = 1.25
+
+	// CVCSInitialBoron is the RCS boron concentration at
+	// construction (ppm). 1000 ppm is typical for hot-zero-
+	// power (HZP) at beginning-of-life; the value drops over
+	// core life as the operator dilutes to compensate for
+	// fission-product buildup and fuel depletion.
+	// "The operating mode (boration or dilution) and the
+	// magnitude of the boron concentration change required
+	// is determined by comparison of the measured Tc (cold
+	// leg temperature) with the programmed (function of
+	// power) Tc."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
+	CVCSInitialBoron float64 = 1000.0
+
+	// CoreBoronWorthPer100ppm is the reactivity contribution
+	// of 100 ppm of dissolved boric acid. Negative — boron
+	// is a neutron absorber. Sized at ≈ −50 pcm per 100 ppm
+	// so a 1000 ppm HZP inventory gives ≈ −500 pcm of boron
+	// reactivity, which is consistent with the spec's
+	// "critical boron concentration" and rod-bank withdrawal
+	// sequences for a four-loop Westinghouse plant.
+	// "the moderator temperature coefficient is positive at
+	// low power (BOL), and [...] the boron concentration
+	// changes significantly with fuel depletion."
+	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
+	CoreBoronWorthPer100ppm float32 = -0.05
+)
+
 type FuelRods struct{ Part }
 
 // ControlRods models the rod cluster control (RCC) assemblies.
@@ -415,6 +529,21 @@ type FuelRods struct{ Part }
 type ControlRods struct {
 	Part
 	Position float64 // 0..1 fraction of withdrawal
+
+	// BoronConcentration is the RCS boron concentration in
+	// ppm. Plant.Step propagates CVCS.BoronConcentration here
+	// so the reactivity model can use it. The reactivity
+	// contribution is proportional to (BoronConcentration -
+	// CVCSInitialBoron)/100 * CoreBoronWorthPer100ppm — a
+	// positive ΔBoron decreases reactivity (boron is a
+	// neutron absorber).
+	//
+	// Spec: "the moderator temperature coefficient is
+	// positive at low power (BOL), and [...] the boron
+	// concentration changes significantly with fuel
+	// depletion."
+	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
+	BoronConcentration float64
 }
 type Nozzle struct{ Part }
 
@@ -1421,3 +1550,172 @@ type HouseLoad struct {
 	// generator is online and at the supplied load fraction.
 	TotalMW float64
 }
+
+// CVCS models the Chemical and Volume Control System, the primary
+// chemistry and volume-regulation loop. The spec describes it as
+// the "Chemical and Volume Control System (CVCS)" and places it
+// between the RCS letdown tap, the volume control tank, the
+// charging pumps, and the BTRS demineralizers.
+//
+// Spec justification:
+//   - "The operating mode (boration or dilution) and the magnitude
+//     of the boron concentration change required is determined by
+//     comparison of the measured Tc (cold leg temperature) with
+//     the programmed (function of power) Tc."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
+//   - "The boron concentration of the water in the VCT is
+//     maintained within a narrow band by the system's control of
+//     boration/dilution operations." (paraphrase; the VCT
+//     boron-concentration control band is described throughout
+//     chapter_7/page_134-135.)
+//   - "The pressurizer level is controlled by balancing the
+//     charging flow to the letdown flow."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
+//   - Boration path: "for boration, an increase in the boric acid
+//     concentration of the reactor coolant is accomplished by
+//     sending the flow from the VCT, at relatively high
+//     temperatures (140°F) (60°C), to the thermal regeneration
+//     demineralizers."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:16-19
+//   - Dilution path: "for dilution, a decrease in the boric acid
+//     concentration in the reactor coolant is accomplished by
+//     sending the flow from the VCT, at relatively low
+//     temperatures (50°F) (10°C), to the thermal regeneration
+//     demineralizers."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:26-30
+//   - BTRS recirculation pump: "The BTRS recirculation pump
+//     provides the motive force to route flow from the VCT through
+//     the demineralizers during boration and dilution modes."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:37-39
+//   - VCT is part of CVCS: "the volume control tank (part of the
+//     Chemical and Volume Control System)"
+//     specs/the_westinghouse_pressurized_water_react/chapter_14/page_189.txt:77
+//   - VCT level controller overflow: "the volume control tank
+//     level controller automatically diverts the outflow from the
+//     BTRS into the BRS holdup tanks."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
+//   - BRS collects CVCS letdown: "The BRS normally collects water
+//     from the RCS through the Chemical and Volume Control System
+//     (CVCS) letdown line."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:32-35
+type CVCS struct {
+	Part
+
+	// Mode selects the current CVCS operating mode. Set by
+	// the operator (ICS) or by the VCT level controller when
+	// VCTLevel crosses VCTHighLevel.
+	Mode CVCSMode
+
+	// ChargingFlow is the charging-pump flow into the RCS
+	// cold legs (gal/s). Driven by ChargingPumpRunning.
+	ChargingFlow float64
+
+	// LetdownFlow is the letdown flow from the RCS through
+	// the letdown chiller and demineralizers back to the VCT
+	// (gal/s). Driven by LetdownValveOpen.
+	LetdownFlow float64
+
+	// BoronConcentration is the RCS boron concentration in
+	// ppm. This is the primary state variable that boration
+	// and dilution modify. Plant.Step propagates this value
+	// into ReactorPressureVessel.ControlRods.BoronConcentration
+	// so the reactivity model can use it.
+	BoronConcentration float64
+
+	// VCTLevel is the volume control tank level (gal). It is
+	// replenished by the reactor makeup control system and
+	// depleted by charging-pump flow + BTRS recirculation.
+	// Overflow is diverted to the BRS.
+	// "the volume control tank level controller automatically
+	// diverts the outflow from the BTRS into the BRS holdup
+	// tanks."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
+	VCTLevel float64
+
+	// BTRSRecirculationPumpRunning is true when the BTRS pump
+	// is circulating VCT flow through the demineralizers.
+	// "The BTRS recirculation pump provides the motive force
+	// to route flow from the VCT through the demineralizers
+	// during boration and dilution modes."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:37-39
+	BTRSRecirculationPumpRunning bool
+
+	// BorationRate is the per-second boron concentration
+	// increase, positive when the BTRS is in boration mode.
+	// Reset to 0 at the start of every step; populated only
+	// when the BTRS is actively transferring boron to the
+	// RCS.
+	BorationRate float64
+
+	// DilutionRate is the per-second boron concentration
+	// decrease, positive when the BTRS is in dilution mode.
+	// Reset to 0 at the start of every step; populated only
+	// when the BTRS is actively absorbing boron from the
+	// RCS.
+	DilutionRate float64
+
+	// LetdownValveOpen is true when the letdown isolation
+	// valve is open. Letdown only proceeds when this is true;
+	// it is closed during solid-plant cooldown to isolate the
+	// RCS pressure boundary.
+	// "system pressure is maintained by charging and letdown
+	// flow control."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:96-97
+	LetdownValveOpen bool
+}
+
+// CVCSMode enumerates the CVCS operating modes.
+//
+// Spec justification:
+//   - "The operating mode (boration or dilution) and the magnitude
+//     of the boron concentration change required is determined by
+//     comparison of the measured Tc (cold leg temperature) with
+//     the programmed (function of power) Tc."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
+//   - VCT high-level letdown-to-BRS path: "the volume control tank
+//     level controller automatically diverts the outflow from the
+//     BTRS into the BRS holdup tanks."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
+type CVCSMode int
+
+const (
+	// CVCSVolumeControl is the normal operating mode. Charging
+	// and letdown balance to maintain pressurizer level; no
+	// boron concentration change.
+	// "The pressurizer level is controlled by balancing the
+	// charging flow to the letdown flow."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
+	CVCSVolumeControl CVCSMode = iota
+
+	// CVCSBoration is the mode where the BTRS demineralizers
+	// release boron into the charging stream, raising RCS
+	// boron concentration at CVCSBorationRate.
+	// "for boration, an increase in the boric acid
+	// concentration of the reactor coolant is accomplished by
+	// sending the flow from the VCT, at relatively high
+	// temperatures (140°F) (60°C), to the thermal
+	// regeneration demineralizers."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:16-19
+	CVCSBoration
+
+	// CVCSDilution is the mode where the BTRS demineralizers
+	// absorb boron from the charging stream, lowering RCS
+	// boron concentration at CVCSDilutionRate.
+	// "for dilution, a decrease in the boric acid
+	// concentration in the reactor coolant is accomplished by
+	// sending the flow from the VCT, at relatively low
+	// temperatures (50°F) (10°C), to the thermal regeneration
+	// demineralizers."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:26-30
+	CVCSDilution
+
+	// CVCSLetdown is the high-VCT-level mode where the
+	// level controller has diverted BTRS outflow to the BRS
+	// holdup tanks. Charging and letdown are halted so the
+	// VCT level can stabilise.
+	// "the volume control tank level controller automatically
+	// diverts the outflow from the BTRS into the BRS holdup
+	// tanks."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
+	CVCSLetdown
+)

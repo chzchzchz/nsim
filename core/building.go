@@ -11,6 +11,16 @@ type ReactorBuilding struct {
 	PORV                  Valve
 	PressurizedReliefTank Tank
 
+	// ChemicalVolumeControlSystem models the CVCS — the primary
+	// chemistry and volume-regulation loop. Lives on
+	// ReactorBuilding because it is in the nuclear steam supply
+	// system and supplies the RCS cold legs via the charging
+	// pumps.
+	// "The volume control tank (part of the Chemical and
+	// Volume Control System)"
+	// specs/the_westinghouse_pressurized_water_react/chapter_14/page_189.txt:77
+	ChemicalVolumeControlSystem CVCS
+
 	// Grid is the infinite-bus model of the off-site distribution
 	// grid. Lives on ReactorBuilding because it is a plant-wide
 	// service consulted by both the primary (electrical RCP
