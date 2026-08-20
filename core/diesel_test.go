@@ -113,9 +113,18 @@ func TestDiesel_TripsOnCoolantOverTemp(t *testing.T) {
 		t.Fatalf("expected Running, got %v", p.Outside.DieselGenerator.State)
 	}
 
-	// Run a long time without service water.
-	stepN(&p, int(10*time.Minute/TimeStep))
-	if p.Outside.DieselGenerator.State != DieselTripped {
-		t.Fatalf("want Tripped on loss of cooling, got %v", p.Outside.DieselGenerator.State)
+	// Run with no service water; expect a coolant over-temperature
+	// trip. Break out of the loop once the trip latches — the
+	// coolant heating rate is sized so the trip occurs well within
+	// a minute of simulated time, and we only need the transition.
+	const maxSim = 10 * time.Minute
+	for i := 0; i < int(maxSim/TimeStep); i++ {
+		p.Step()
+		p.Update()
+		if p.Outside.DieselGenerator.State == DieselTripped {
+			return
+		}
 	}
+	t.Fatalf("want Tripped on loss of cooling within %v, state=%v",
+		maxSim, p.Outside.DieselGenerator.State)
 }

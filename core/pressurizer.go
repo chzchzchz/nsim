@@ -13,13 +13,70 @@ func (p *Pressurizer) Step(porv *Valve) Pressurizer {
 	ret := *p
 	dt := TimeStep
 
-	// 1) Steam-bubble inventory. The fluid graph (see
-	// simulateFluidFlow) moves water in and out of ret.Water via the
-	// surge-line edges; this step just tracks the resulting bubble by
-	// mass balance. We approximate by treating Water as the liquid
-	// inventory and Pressure as proportional to (SteamBubble / Volume)
-	// within bounds; this gives the bubble behaviour without a real
-	// steam-table.
+	// 1) Heater effect — boil water into the steam bubble. The
+	// heaters vaporise liquid inventory, growing the bubble and
+	// (via the bubble-stiffness model) raising pressure toward
+	// PressurizerHeaterTarget. Sized so 200 psi/s × 1 s raises
+	// pressure by ~200 psi (matching the spec's heater-rate
+	// narrative).
+	//
+	// "All pressurizer heaters are energized to start the bubble
+	// formation during plant startup."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:15-23
+	// "operation of pressurizer heaters and spray maintains the
+	// system pressure in accordance with the applicable temperature-
+	// pressure curves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:42-43
+	if ret.HeatersOn {
+		bubble := ret.Volume.Float() - ret.Water.Float()
+		target := float64(PressurizerHeaterTarget)
+		base := float64(PressurizerBasePressure)
+		current := base + bubble*PressurizerBubbleStiffness
+		if current < target {
+			// Convert the desired psi rise into additional bubble
+			// volume via the bubble stiffness, then drain that
+			// volume from the liquid inventory.
+			psiRise := float64(PressurizerHeaterRate) * dt.Seconds()
+			if current+psiRise > target {
+				psiRise = target - current
+			}
+			bubbleRise := psiRise / PressurizerBubbleStiffness
+			newWater := ret.Water.Float() - bubbleRise
+			if newWater < 0 {
+				newWater = 0
+			}
+			ret.Water = vol(ret.Water, newWater)
+		}
+	}
+
+	// 2) Spray effect — condense steam back into the pressurizer.
+	// The spray valve draws cold RCS water through the spray line;
+	// in this model it condenses bubble volume back into the liquid
+	// inventory, pulling pressure toward PressurizerSprayMin.
+	if ret.SprayOpen > 0 {
+		bubble := ret.Volume.Float() - ret.Water.Float()
+		current := float64(PressurizerBasePressure) + bubble*PressurizerBubbleStiffness
+		if current > float64(PressurizerSprayMin) {
+			psiDrop := ret.SprayOpen * float64(PressurizerSprayRate) * dt.Seconds()
+			if current-psiDrop < float64(PressurizerSprayMin) {
+				psiDrop = current - float64(PressurizerSprayMin)
+			}
+			bubbleDrop := psiDrop / PressurizerBubbleStiffness
+			newWater := ret.Water.Float() + bubbleDrop
+			if newWater > ret.Volume.Float() {
+				newWater = ret.Volume.Float()
+			}
+			ret.Water = vol(ret.Water, newWater)
+		}
+	}
+
+	// 3) Bubble and pressure derived from the (possibly modified)
+	// water inventory. The fluid graph (see simulateFluidFlow) also
+	// moves water in and out of ret.Water via the surge-line edges.
+	// Pressure is clamped at the heater target so the heater
+	// controls act as a hard ceiling: the bubble cannot grow past
+	// the point that would push pressure above PressurizerHeaterTarget
+	// while HeatersOn.
 	//
 	// "When the pressurizer fluid reaches saturation temperature for
 	// the pressure being maintained, steam formation in the
@@ -34,52 +91,47 @@ func (p *Pressurizer) Step(porv *Valve) Pressurizer {
 	if bubble > totalVol {
 		bubble = totalVol
 	}
+	pressure := float64(PressurizerBasePressure) + bubble*PressurizerBubbleStiffness
+	if ret.HeatersOn && pressure > float64(PressurizerHeaterTarget) {
+		maxBubble := (float64(PressurizerHeaterTarget) - float64(PressurizerBasePressure)) / PressurizerBubbleStiffness
+		newWater := totalVol - maxBubble
+		if newWater < 0 {
+			newWater = 0
+		}
+		ret.Water = vol(ret.Water, newWater)
+		waterVol = newWater
+		bubble = maxBubble
+	}
 	ret.SteamBubble = u.NewValue(bubble, u.Gallon)
+	ret.Pressure = Pressure(float64(PressurizerBasePressure) + bubble*PressurizerBubbleStiffness)
 
-	// 2) Pressure from the bubble. Sized so a typical ~30% bubble
-	// yields the 2250 psia operating pressure cited in
-	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:69.
-	base := float64(PressurizerBasePressure)
-	pressure := base + bubble*PressurizerBubbleStiffness
-
-	// 3) Heater effect. "All pressurizer heaters are energized to start
-	// the bubble formation during plant startup."
-	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:15-23
-	// "operation of pressurizer heaters and spray maintains the system
-	// pressure in accordance with the applicable temperature-pressure
-	// curves." specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:42-43
-	if ret.HeatersOn && pressure < float64(PressurizerHeaterTarget) {
-		pressure += float64(PressurizerHeaterRate) * dt.Seconds()
-		if pressure > float64(PressurizerHeaterTarget) {
-			pressure = float64(PressurizerHeaterTarget)
-		}
-	}
-
-	// 4) Spray effect. "Pressurizer heater and spray valve control is
-	// [used] to maintain the pressure in accordance with the
-	// applicable temperature-pressure curves."
-	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:42-43
-	if ret.SprayOpen > 0 && pressure > float64(PressurizerSprayMin) {
-		drop := ret.SprayOpen * float64(PressurizerSprayRate) * dt.Seconds()
-		pressure -= drop
-		if pressure < float64(PressurizerSprayMin) {
-			pressure = float64(PressurizerSprayMin)
-		}
-	}
-
-	// 5) Cooldown path. "All pressurizer heaters are turned off and
+	// 4) Cooldown path. "All pressurizer heaters are turned off and
 	// the spray valves are controlled manually to cool the
 	// pressurizer." specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:81-82
-	if !ret.HeatersOn && ret.SprayOpen == 0 && pressure > base {
-		pressure -= float64(PressurizerAmbientDecay) * dt.Seconds()
-		if pressure < base {
-			pressure = base
+	// Modeled as a slow bubble condensation (water rises) when the
+	// pressurizer sits above its base pressure with no active
+	// control.
+	if !ret.HeatersOn && ret.SprayOpen == 0 {
+		base := float64(PressurizerBasePressure)
+		current := float64(ret.Pressure)
+		if current > base {
+			psiDrop := float64(PressurizerAmbientDecay) * dt.Seconds()
+			if current-psiDrop < base {
+				psiDrop = current - base
+			}
+			bubbleDrop := psiDrop / PressurizerBubbleStiffness
+			newWater := waterVol + bubbleDrop
+			if newWater > totalVol {
+				newWater = totalVol
+			}
+			ret.Water = vol(ret.Water, newWater)
+			ret.SteamBubble = u.NewValue(totalVol-newWater, u.Gallon)
+			ret.Pressure = Pressure(float64(PressurizerBasePressure) +
+				(totalVol-newWater)*PressurizerBubbleStiffness)
 		}
 	}
 
-	ret.Pressure = Pressure(pressure)
-
-	// 6) PORV / safety valve. When the pressurizer over-pressurises
+	// 5) PORV / safety valve. When the pressurizer over-pressurises
 	// past the safety setpoint the valve opens; the step simply
 	// toggles Open and lets the next step's pressure integration
 	// react. "Pressurizer pressure control system [consists of]

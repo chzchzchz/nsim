@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"strings"
 	"testing"
-	"time"
 
 	u "github.com/bcicen/go-units"
 )
@@ -73,9 +72,18 @@ func TestGraph_ExportDotRoundTrip(t *testing.T) {
 func TestFluidFlow_ValveOpen_MovesWater(t *testing.T) {
 	p := MakePlant()
 	// Open the MakeupValve between SG and Condenser; pressurise the SG.
+	// Equalise the RPV and HDT pressures so the cold-leg and
+	// heater-drain edges sit at zero deltaP and don't drain the SG
+	// across the 1-step assertion window. Trip the reactor and pin
+	// the rods at full insertion so HeatInput collapses to the
+	// decay-heat floor within one step.
+	p.ReactorBuilding.ReactorPressureVessel.Trip = true
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 0
+	p.ReactorBuilding.ReactorPressureVessel.Pressure = 100
 	p.TurbineBuilding.MakeupValve.Open = 1.0
 	p.ReactorBuilding.SteamGenerator.Pressure = 100
 	p.TurbineBuilding.Condenser.Pressure = 0
+	p.TurbineBuilding.HeaterDrainTank.Pressure = 100
 	p.ReactorBuilding.SteamGenerator.Water = u.NewValue(1000, u.Gallon)
 
 	beforeSG := p.ReactorBuilding.SteamGenerator.Water.Float()
@@ -99,15 +107,9 @@ func TestFluidFlow_ValveClosed_NoMovement(t *testing.T) {
 	p.TurbineBuilding.HeaterDrainTank.Pressure = 100
 	p.ReactorBuilding.Pressurizer.Pressure = 100
 	p.ReactorBuilding.SteamGenerator.Water = u.NewValue(1000, u.Gallon)
-	// Trip the reactor and pin rods to 0 so HeatInput collapses to
-	// the decay-heat floor within the 1-step assertion window.
-	p.ReactorBuilding.ReactorPressureVessel.Trip = true
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 0
-	for i := 0; i < int(time.Minute/TimeStep); i++ {
-		p.Step()
-		p.Update()
-	}
-	p.ReactorBuilding.SteamGenerator.Water = u.NewValue(1000, u.Gallon)
+	// Pin SG.HeatInput to zero so SG.Step doesn't boil inventory and
+	// drift SG.Water during the assertion window.
+	p.ReactorBuilding.SteamGenerator.HeatInput = 0
 
 	before := p.ReactorBuilding.SteamGenerator.Water.Float()
 	p.Step()

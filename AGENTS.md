@@ -19,3 +19,4 @@
 # Tests
 
 * Avoid writing slow tests (e.g., >1 second runtime)
+* Use testify/require and testify/assert packages for tests instead of t.Fatal or t.Error

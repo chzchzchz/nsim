@@ -14,7 +14,7 @@ func TestPressurizer_HeatersDrivePressureUp(t *testing.T) {
 	p := MakePlant()
 	// Size the bubble so the bubble-derived pressure sits a few
 	// hundred psi below the heater target; equalise primary-loop
-	// pressures so the surge-line edges are at zero deltaP and the
+	// pressures so the surge-line edges sit at zero deltaP and the
 	// graph does not drain the pressurizer over the 1 s test window.
 	p.ReactorBuilding.ReactorPressureVessel.Pressure = 2000
 	p.ReactorBuilding.SteamGenerator.Pressure = 2000

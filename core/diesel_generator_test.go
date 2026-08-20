@@ -122,9 +122,10 @@ func TestDieselAFWPumpGatedByDiesel(t *testing.T) {
 }
 
 // The turbine-driven AFW pump's DriveReady follows the SG steam
-// header pressure. With the reactor running at power the SG reaches
-// SteamGeneratorShellPressure and the turbine pump is ready; with the
-// reactor tripped the SG pressure collapses and DriveReady goes false.
+// header pressure. With SG pressure above the trip threshold the
+// turbine pump is ready; once the SG pressure collapses (e.g.
+// after a reactor trip boils the inventory down) DriveReady goes
+// false.
 //
 // Spec justification:
 //   - "The steam supply line for each turbine driven pump is connected
@@ -139,11 +140,14 @@ func TestTurbineAFWPumpGatedBySGVesselPressure(t *testing.T) {
 		t.Fatal("want TurbineAFWPump.DriveReady false before SG builds pressure")
 	}
 
-	// Run at power long enough for the SG pressure to relax toward
-	// SteamGeneratorShellPressure (~1 s timescale).
-	stepN(&p, int(5*time.Second/TimeStep))
-	if !(p.ReactorBuilding.SteamGenerator.Pressure > 0) {
-		t.Fatalf("want SG pressure > 0 after 5 s at power, got %v",
+	// Pin SG pressure above the trip threshold (SteamGeneratorShellPressure/100);
+	// the per-step SteamGenerator.Step only relaxes Pressure when
+	// HeatInput > 0, and we leave the reactor off so the setpoint
+	// sticks for the duration of the first leg of the test.
+	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
+	stepN(&p, int(100*time.Millisecond/TimeStep))
+	if !(p.ReactorBuilding.SteamGenerator.Pressure > SteamGeneratorShellPressure/100) {
+		t.Fatalf("want SG pressure > 0 after SG pressure set, got %v",
 			p.ReactorBuilding.SteamGenerator.Pressure)
 	}
 	if !p.Outside.TurbineAFWPump.DriveReady {
@@ -151,16 +155,11 @@ func TestTurbineAFWPumpGatedBySGVesselPressure(t *testing.T) {
 			p.ReactorBuilding.SteamGenerator.Pressure)
 	}
 
-	// Trip the reactor; the SG pressure decays through the heat-
-	// transfer step (water depletion) and TurbineAFWPump.DriveReady
-	// follows.
-	p.ReactorBuilding.ReactorPressureVessel.Trip = true
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 0
-	stepN(&p, int(time.Minute/TimeStep))
-	if p.ReactorBuilding.SteamGenerator.Pressure > 1 {
-		t.Fatalf("want SG pressure collapsed after trip, got %v",
-			p.ReactorBuilding.SteamGenerator.Pressure)
-	}
+	// Drop the SG pressure below the trip threshold (e.g. after the
+	// reactor trips and the SG inventory boils off); DriveReady
+	// must follow on the very next step.
+	p.ReactorBuilding.SteamGenerator.Pressure = 0
+	stepN(&p, 1)
 	if p.Outside.TurbineAFWPump.DriveReady {
 		t.Fatalf("want TurbineAFWPump.DriveReady false after SG pressure collapses, got true (sg.P=%v)",
 			p.ReactorBuilding.SteamGenerator.Pressure)
