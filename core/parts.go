@@ -306,6 +306,11 @@ type PowerGenerator struct {
 //     steam dump system with an acceptable increase in turbine back
 //     pressure."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:14-18
+//   - HotwellLevel — the level in the condenser hotwell from which
+//     the condensate pumps take suction. The spec describes "the
+//     closed-loop type with deaeration accomplished in the condenser
+//     hotwell".
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:38-40
 //   - VacuumPumpRunning — operator-controlled flag set from the
 //     steam-jet air ejector / vacuum pump subsystem.
 //   - CirculatingWaterIn — temperature of the CW water entering the
@@ -320,6 +325,7 @@ type Condenser struct {
 	Part
 	Pressure
 	Level              Volume
+	HotwellLevel       Volume
 	VacuumPumpRunning  bool
 	CirculatingWaterIn Temperature
 	CWOut              Temperature
@@ -327,9 +333,97 @@ type Condenser struct {
 }
 type Polisher struct{}
 
-// Heats water from 120F to 360F
-type LowPressureHeater struct{ Part }
-type HighPressureHeater struct{ Part }
+// LowPressureHeater models one stage of the low-pressure feedwater
+// heating train. The heater uses extraction steam from the
+// corresponding turbine stage to raise the feedwater temperature
+// before it reaches the deaerator. Four such stages sit between
+// the condenser hotwell and the deaerator; the model below collapses
+// them into one stage and lets the plant step iterate four times.
+//
+// Spec justification:
+//   - "The condensate pumps take suction from the condenser hotwell
+//     and pump condensate [...] through four stages of low-pressure
+//     feedwater heaters to the deaerator."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-45
+//   - "Several stages of extraction are used for the feedwater
+//     heaters."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:35
+//     "A small portion of the steam in the high-pressure turbine
+//     is extracted to the highest pressure feedwater heaters [...]."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:26-35
+//   - Drain cascade: "Drains from the four low-pressure feedwater
+//     heaters are cascaded back to the condenser."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:13-15
+type LowPressureHeater struct {
+	Part
+
+	// ExtractionSteamPressure is the pressure of the extraction
+	// steam from the corresponding turbine stage. Operator-set
+	// from the turbine extraction list (out of scope for p10).
+	ExtractionSteamPressure Pressure
+
+	// SteamFlow is the per-step extraction steam mass flow in
+	// gallons. Operator-set; the step uses 0 to mean "no steam
+	// available", which freezes the temperature rise.
+	SteamFlow Volume
+
+	// Inlet is the temperature of the feedwater entering this
+	// stage. Set by the previous stage (or by the condenser/CST
+	// for stage 1).
+	Inlet Temperature
+
+	// TemperatureRise is the temperature increase produced by
+	// this heater stage, computed per step from the steam
+	// energy balance.
+	TemperatureRise Temperature
+
+	// DrainLevel is the condensate level in this heater's drain
+	// section. LP heater drains cascade back to the condenser
+	// (spec citation above).
+	DrainLevel Volume
+
+	// DrainValve gates the drain path. Open=1 allows drain flow;
+	// Open=0 blocks it (e.g. during isolation).
+	DrainValve Valve
+}
+
+// HighPressureHeater models one stage of the high-pressure feedwater
+// heater train, located on the main-feed-pump discharge side.
+//
+// Spec justification:
+//   - "The water discharge from the feedwater pumps flows through
+//     two stages of high-pressure heaters then into the steam
+//     generators."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:50-51
+//   - "Drains from the high-pressure feedwater heaters are routed
+//     to the deaerator."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:13-14
+type HighPressureHeater struct {
+	Part
+
+	// ExtractionSteamPressure is the pressure of the highest-
+	// pressure extraction steam (main steam or first-stage HP
+	// extraction).
+	ExtractionSteamPressure Pressure
+
+	// SteamFlow is the per-step extraction steam flow in gallons.
+	SteamFlow Volume
+
+	// Inlet is the feedwater temperature entering this HP heater.
+	Inlet Temperature
+
+	// TemperatureRise computed per step from the steam energy
+	// balance; the HP train's per-stage rise is smaller than the
+	// LP train's because the feedwater is already pre-heated.
+	TemperatureRise Temperature
+
+	// DrainLevel in the HP heater drain section.
+	DrainLevel Volume
+
+	// DrainValve; open drains to the deaerator tank (spec citation
+	// above).
+	DrainValve Valve
+}
 
 // AFWPump is the auxiliary feedwater pump described in chapter 5.2 of
 // the spec.
@@ -574,6 +668,88 @@ const (
 	CondenserVacuumTimeConstant      float64  = 2.0
 	CondenserNoCWDegradeTimeConstant float64  = 5.0
 )
+
+// Feedwater heating train design constants (plans/p10_1.txt).
+//
+// Spec justification:
+//   - LPTemperatureRisePerStage / HPTemperatureRisePerStage — no
+//     per-stage temperature numbers are stated in the spec; the
+//     heater model uses a per-stage rise that sums to the
+//     condensate-to-deaerator temperature rise on the LP side and
+//     the deaerator-to-SG rise on the HP side. The full train's
+//     rise is sized to give ~120°F → ~440°F feedwater at full
+//     load, consistent with the closed-loop feedwater heating
+//     train described in:
+//     "The condensate pumps take suction from the condenser
+//     hotwell and pump condensate [...] through four stages of
+//     low-pressure feedwater heaters to the deaerator."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-45
+//     "The water discharge from the feedwater pumps flows through
+//     two stages of high-pressure heaters then into the steam
+//     generators."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:50-51
+//   - ExtractionSteamEnthalpy — the latent heat of saturated steam
+//     at a typical mid-range LP extraction pressure (~60–80 psia).
+//     The spec does not state a number; ~1.16 MJ/kg is the textbook
+//     value at that pressure.
+const (
+	LPTemperatureRisePerStage float64 = 70
+	HPTemperatureRisePerStage float64 = 20
+	ExtractionSteamEnthalpy   Watts   = 1.16e6
+	KilogramsPerGallon        float64 = 3.785
+)
+//   - LPTemperatureRisePerStage / HPTemperatureRisePerStage — no
+//     per-stage temperature numbers are stated in the spec; the
+//     heater model uses a per-stage rise that sums to the
+//     condensate-to-deaerator temperature rise on the LP side and
+//     the deaerator-to-SG rise on the HP side. The full train's
+//     rise is sized to give ~120°F → ~440°F feedwater at full
+//     load, consistent with the closed-loop feedwater heating
+//     train described in:
+//     "The condensate pumps take suction from the condenser
+//     hotwell and pump condensate [...] through four stages of
+//     low-pressure feedwater heaters to the deaerator."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-45
+//     "The water discharge from the feedwater pumps flows through
+//     two stages of high-pressure heaters then into the steam
+//     generators."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:50-51
+//   - ExtractionSteamEnthalpy — the latent heat of saturated steam
+//     at a typical mid-range LP extraction pressure (~60–80 psia).
+//     The spec does not state a number; ~1.16 MJ/kg is the textbook
+//     value at that pressure.
+//   - FeedwaterMinFlow — the minimum stable flow below which the
+//     main feed pump discharge recirculates to the deaerator.
+//     "The discharge from the pumps is automatically recirculated
+//     back to the deaerator whenever the flow to the high-pressure
+//     feedwater heaters falls below the minimum."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:28-31
+//   - FeedwaterDesignFlow — the design volumetric flow through the
+//     main feed pump at full load. Anchored on the per-SG steam
+//     flow of 3,813,000 lb/hr (480 kg/s):
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
+//     three SGs at full load give 3 × 480 kg/s = 1440 kg/s ≈
+//     9531 gal/s, converted below.
+// FeedwaterMinFlow is the minimum stable flow below which the
+// main feed pump discharge recirculates to the deaerator.
+// "The discharge from the pumps is automatically recirculated back
+// to the deaerator whenever the flow to the high-pressure
+// feedwater heaters falls below the minimum."
+// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:28-31
+//
+// Sized as 10% of design flow; the spec does not state a specific
+// minimum flow value.
+var FeedwaterMinFlow Volume = u.NewValue(950, u.Gallon)
+
+// FeedwaterDesignFlow is the design volumetric flow through the
+// main feed pump at full load. Anchored on the per-SG steam flow
+// of 3,813,000 lb/hr (480 kg/s) for three SGs.
+// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
+// 3 × 480 kg/s = 1440 kg/s ≈ 1440 / 3.785 ≈ 380 gal/s = ~22,800
+// gal/min. The per-step value below is per-step at 1 ms: 380 gal/s
+// × 0.001 s/step ≈ 0.38 gal/step; the constant is sized in gal/s
+// for the per-step integration in heater.go.
+var FeedwaterDesignFlow Volume = u.NewValue(380, u.Gallon) // gal/s
 
 // SteamGeneratorFullLoadSteamFlow is the per-SG steam flow at rated
 // load, sized for 480 kg/s of saturated steam at 920 psia. The spec

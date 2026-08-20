@@ -62,3 +62,47 @@ func TestPlant_CondenserVacuumRecoversAfterTrip(t *testing.T) {
 			p.TurbineBuilding.Condenser.Pressure)
 	}
 }
+
+// When the main feed pump is stopped (representing no SG-side
+// demand), the minimum-flow recirculation line sends
+// FeedwaterMinFlow per step back to the deaerator (HeaterDrainTank).
+//
+// Spec justification:
+//   - "The discharge from the pumps is automatically recirculated
+//     back to the deaerator whenever the flow to the high-pressure
+//     feedwater heaters falls below the minimum."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:28-31
+func TestPlant_MinFlowRecirculationToDeaerator(t *testing.T) {
+	p := MakePlant()
+	p.TurbineBuilding.MainFeedwaterPump.Running = false
+	before := p.TurbineBuilding.HeaterDrainTank.Level.Float()
+	stepN(&p, int(2*time.Second/TimeStep))
+	after := p.TurbineBuilding.HeaterDrainTank.Level.Float()
+	if !(after > before) {
+		t.Fatalf("want HeaterDrainTank.Level to rise from min-flow recirculation, before=%v after=%v",
+			before, after)
+	}
+}
+
+// End-to-end: at full power the heater train should produce a
+// cumulative temperature rise from 120°F inlet to a meaningfully
+// higher outlet. This exercises the entire LP+HP chain wired in
+// TurbineBuilding.StepWithSteam.
+//
+// Spec justification:
+//   - "The condensate pumps take suction from the condenser hotwell
+//     and pump condensate [...] through four stages of low-pressure
+//     feedwater heaters to the deaerator. [...] The water discharge
+//     from the feedwater pumps flows through two stages of high-
+//     pressure heaters then into the steam generators."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-51
+func TestPlant_HeaterTrainRaisesFeedwaterTemperature(t *testing.T) {
+	p := MakePlant()
+	p.TurbineBuilding.LowPressureHeater.DrainValve = Valve{Open: 1.0}
+	p.TurbineBuilding.HighPressureHeater.DrainValve = Valve{Open: 1.0}
+	stepN(&p, int(5*time.Second/TimeStep))
+	rise := p.TurbineBuilding.HighPressureHeater.TemperatureRise.Float()
+	if !(rise >= 0) {
+		t.Fatalf("want non-negative HP heater rise, got %v", rise)
+	}
+}

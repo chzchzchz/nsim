@@ -99,6 +99,20 @@ func (c *Condenser) Step(cwIn Temperature, vacuumPumpRunning, cwPumpRunning bool
 	cwDelta := CondenserCWRise * (CondenserDesignCWFlowGPM / cwFlowGpm)
 	ret.CWOut = u.NewValue(cwIn.Float()+cwDelta, u.Fahrenheit)
 
+	// 5) Hotwell level. Accumulates the per-step condensed steam
+	// minus the condensate pump's suction flow (proportional to
+	// the CW flow proxy). The hotwell feeds the LP heater train.
+	// "The condensate pumps take suction from the condenser
+	// hotwell [...]."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-42
+	pumpSuctionFlow := cwFlowGpm * 0.01 // gal/s at design flow
+	netInflow := steamMass - pumpSuctionFlow*dt.Seconds()
+	newLevel := ret.HotwellLevel.Float() + netInflow
+	if newLevel < 0 {
+		newLevel = 0
+	}
+	ret.HotwellLevel = u.NewValue(newLevel, u.Gallon)
+
 	ret.CondensingRate = u.NewValue(0, u.Gallon)
 	return ret
 }

@@ -99,3 +99,29 @@ func TestCondenser_LevelAccumulatesCondensingRate(t *testing.T) {
 			want, steps, perStep, got)
 	}
 }
+
+// HotwellLevel accumulates condensed steam minus the condensate
+// pump suction flow. With CW running and incoming steam load, the
+// hotwell rises.
+//
+// Spec justification:
+//   - "The condensate pumps take suction from the condenser
+//     hotwell [...]."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-42
+func TestCondenser_HotwellAccumulates(t *testing.T) {
+	c := Condenser{
+		Pressure:           CondenserDesignVacuum,
+		VacuumPumpRunning:  true,
+		CirculatingWaterIn: u.NewValue(CondenserDesignCWIn, u.Fahrenheit),
+	}
+	const perStep = 5.0
+	const steps = 1000
+	for i := 0; i < steps; i++ {
+		c.CondensingRate = u.NewValue(perStep, u.Gallon)
+		c = c.Step(c.CirculatingWaterIn, true, true)
+	}
+	if !(c.HotwellLevel.Float() > 0) {
+		t.Fatalf("want HotwellLevel > 0 after %d steps, got %v",
+			steps, c.HotwellLevel.Float())
+	}
+}

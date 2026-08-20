@@ -83,6 +83,79 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 		ret.Condenser.CondensingRate = u.NewValue(0, u.Gallon)
 	}
 
+	// Feedwater heater train: four LP stages between the
+	// condenser hotwell and the deaerator, then two HP stages on
+	// the main-feed-pump discharge side. The hotwell feedwater
+	// temperature is the condenser drain temperature (~120°F at
+	// design vacuum).
+	//
+	// Spec justification for the topology:
+	//   - "The condensate pumps take suction from the condenser
+	//     hotwell and pump condensate [...] through four stages of
+	//     low-pressure feedwater heaters to the deaerator."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-45
+	//   - "The water discharge from the feedwater pumps flows
+	//     through two stages of high-pressure heaters then into
+	//     the steam generators."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:50-51
+	//
+	// The per-step extraction steam flow is sized at the design
+	// extraction rate (~10% of design feedwater flow per LP stage,
+	// ~5% per HP stage) so the per-stage temperature rise
+	// converges to LPTemperatureRisePerStage / HPTemperatureRisePerStage
+	// at design operating point.
+	fwIn := u.NewValue(120, u.Fahrenheit)
+	lpSteam := FeedwaterDesignFlow.Float() * 0.1
+	hpSteam := FeedwaterDesignFlow.Float() * 0.05
+	lp := ret.LowPressureHeater
+	for i := 0; i < 4; i++ {
+		lp = lp.Step(fwIn.Float(), lpSteam)
+		fwIn = u.NewValue(lp.Inlet.Float()+lp.TemperatureRise.Float(),
+			u.Fahrenheit)
+	}
+	ret.LowPressureHeater = lp
+
+	// HP train: two stages.
+	hp := ret.HighPressureHeater
+	for i := 0; i < 2; i++ {
+		hp = hp.Step(fwIn.Float(), hpSteam)
+		fwIn = u.NewValue(hp.Inlet.Float()+hp.TemperatureRise.Float(),
+			u.Fahrenheit)
+	}
+	ret.HighPressureHeater = hp
+
+	// HP drains route to the deaerator tank. The
+	// HeaterDrainTank plays the role of the deaerator water
+	// storage tank:
+	// "The booster pumps draw suction from the deaerator water
+	// storage tank, which is mounted directly below the
+	// deaerator [...]."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:47-49
+	// "Drains from the high-pressure feedwater heaters are
+	// routed to the deaerator."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:13-14
+	hpDrain := hp.DrainLevel
+	newHDTLevel := ret.HeaterDrainTank.Level.Float() + hpDrain.Float()
+	ret.HeaterDrainTank.Level = u.NewValue(newHDTLevel, u.Gallon)
+
+	// Minimum-flow recirculation. When the main feed pump is
+	// running but the net flow to the HP heaters is below
+	// FeedwaterMinFlow, the discharge recirculates to the
+	// deaerator.
+	// "The discharge from the pumps is automatically recirculated
+	// back to the deaerator whenever the flow to the high-pressure
+	// feedwater heaters falls below the minimum."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:28-31
+	// We approximate "net flow" with the pump's Running flag: when
+	// the pump is stopped (or no SG-side demand exists), the
+	// minimum-flow line moves FeedwaterMinFlow per step back to
+	// the deaerator tank.
+	if !ret.MainFeedwaterPump.Running {
+		recirc := FeedwaterMinFlow.Float() * float64(TimeStep.Seconds())
+		newHDTLevel := ret.HeaterDrainTank.Level.Float() + recirc
+		ret.HeaterDrainTank.Level = u.NewValue(newHDTLevel, u.Gallon)
+	}
+
 	return ret
 }
 
@@ -285,10 +358,26 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	add("Condenser", "Condenser", &target.TurbineBuilding.Condenser)
 	add("CST", "CondensateStorageTank", &target.Outside.CondensateStorageTank)
 	add("HDT", "HeaterDrainTank", &target.TurbineBuilding.HeaterDrainTank)
+	add("LPHeaterDrain", "LowPressureHeaterDrain",
+		&target.TurbineBuilding.LowPressureHeater)
+	add("HPHeaterDrain", "HighPressureHeaterDrain",
+		&target.TurbineBuilding.HighPressureHeater)
 	edge("SG", "Condenser", &target.TurbineBuilding.MakeupValve, nil)
 	edge("Condenser", "CST", &target.TurbineBuilding.RecirculateValve, nil)
 	edge("CST", "HDT", nil, &target.TurbineBuilding.CondensatePump)
 	edge("HDT", "SG", nil, &target.TurbineBuilding.MainFeedwaterPump)
+
+	// LP heater drains cascade back to the condenser.
+	// "Drains from the four low-pressure feedwater heaters are
+	// cascaded back to the condenser."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:14-15
+	edge("LPHeaterDrain", "Condenser", nil, nil)
+
+	// HP heater drains route to the deaerator tank (HeaterDrainTank).
+	// "Drains from the high-pressure feedwater heaters are routed
+	// to the deaerator."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:13-14
+	edge("HPHeaterDrain", "HDT", nil, &target.TurbineBuilding.HeaterDrainPump)
 
 	add("DieselAFWPump", "DieselAFWPump", &target.Outside.DieselAFWPump.Pump)
 	add("MotorAFWPump", "MotorAFWPump", &target.Outside.MotorAFWPump.Pump)

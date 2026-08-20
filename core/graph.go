@@ -84,6 +84,22 @@ func (c *Condenser) level() Volume      { return zeroVolume }
 func (c *Condenser) setLevel(Volume)    {}
 func (c *Condenser) capacity() Volume   { return zeroVolume }
 
+// LP and HP heater drains are bookkeeping edges in the plant
+// graph. The heater Steps accumulate drain volume directly into
+// their destination tanks (condenser for LP, deaerator tank for
+// HP) per plans/p10_1.txt; the fluid-graph simulator never
+// transfers volume across these edges, so the implementations
+// return zero everywhere and satisfy the fluidNode interface.
+func (l *LowPressureHeater) pressure() Pressure { return 0 }
+func (l *LowPressureHeater) level() Volume      { return zeroVolume }
+func (l *LowPressureHeater) setLevel(Volume)    {}
+func (l *LowPressureHeater) capacity() Volume   { return zeroVolume }
+
+func (h *HighPressureHeater) pressure() Pressure { return 0 }
+func (h *HighPressureHeater) level() Volume      { return zeroVolume }
+func (h *HighPressureHeater) setLevel(Volume)    {}
+func (h *HighPressureHeater) capacity() Volume   { return zeroVolume }
+
 var zeroVolume = u.NewValue(0, u.Gallon)
 
 // flowCoefficient is the per-second, per-psi volume transfer rate.

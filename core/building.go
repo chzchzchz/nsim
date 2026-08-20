@@ -31,8 +31,14 @@ type TurbineBuilding struct {
 	// TODO: 7.2-2
 	// CondensatePolisher Polisher
 
-	// Downstream of polisher
-	LowPressureHeater
+	// Downstream of polisher: four-stage LP feedwater heater
+	// train, then deaerator (HeaterDrainTank plays the role of
+	// the deaerator water storage tank).
+	// "The condensate pumps take suction from the condenser
+	// hotwell and pump condensate [...] through four stages of
+	// low-pressure feedwater heaters to the deaerator."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-45
+	LowPressureHeater LowPressureHeater
 	/*
 			The heater drain tanks are horizontal 13,120-gal tanks. Each tank normally receives
 		drains from its associated fifth-stage heater and moisture separator drain tank. Each
@@ -44,7 +50,13 @@ type TurbineBuilding struct {
 	HeaterDrainTank   Tank
 	HeaterDrainPump   Pump
 	MainFeedwaterPump Pump
-	HighPressureHeater
+	// Two-stage HP feedwater heater train on the main-feed-pump
+	// discharge side, draining to the deaerator tank.
+	// "The water discharge from the feedwater pumps flows
+	// through two stages of high-pressure heaters then into the
+	// steam generators."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:50-51
+	HighPressureHeater HighPressureHeater
 
 	SecondStageHeaterDrainTank Tank
 	SecondStageHeaterDrainPump Pump
