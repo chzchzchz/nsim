@@ -122,6 +122,25 @@ type Turbine struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:72
 	OPCTrip bool
 
+	// GridFrequency is the infinite-bus frequency in Hz that
+	// the governor droop correction compares against
+	// GridRatedFrequency. Plant.Step latches the grid frequency
+	// from the Grid cell before calling Turbine.Step; the
+	// turbine step computes the droop bias from this field.
+	//
+	// Spec: "computes signals comparing turbine speed and
+	// first-stage pressure with reference values established
+	// by the dispatcher or initiated at the operator's panel."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
+	GridFrequency float64
+
+	// DroopBias is the per-step bias applied to Setpoint by the
+	// frequency-droop governor. Positive when the grid is
+	// under-frequency (turbine must pick up load), negative
+	// when over-frequency. Plant.Step reads this back after the
+	// turbine step to apply the bias to Setpoint.
+	DroopBias float64
+
 	// ExtractionSteamFlow is the total extraction steam available
 	// to the feedwater heaters and MSR reheater. It is computed
 	// per step as a fraction of the turbine's equivalent steam
@@ -297,6 +316,81 @@ const (
 	// percent load."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:82-83
 	GeneratorSetpointResolution float64 = 0.005
+)
+
+// Station electrical design constants (plans/p13_1.txt).
+//
+// Spec justification:
+//   - Off-site distribution grid and 6600 V plant distribution bus:
+//     "The system auxiliary power is supplied from independent and
+//     electrically isolated buses of the off-site main distribution
+//     grid. This supply is transformed to the plant electrical
+//     distribution bus voltage, normally 6600 volts, by one or
+//     more system auxiliary transformers."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:40-44
+//   - Generator terminal voltage rating (24–26 kV):
+//     "Output voltage: 24,000 to 26,000 volts, three-phase, 60 Hz"
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21
+//   - Steam dump / islanding:
+//     "The steam dump system permits rapid automatic reduction of
+//     core power without reactor trip and enables the plant to
+//     continue operation and supply power for its own auxiliaries.
+//     This capability could be of critical importance in the event
+//     of large grid system disturbances."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:55-60
+const (
+	// GridRatedFrequency is the infinite-bus design frequency.
+	// The main generator is rated for 1800 rpm / 60 Hz.
+	// "Output voltage: 24,000 to 26,000 volts, three-phase, 60 Hz"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21
+	GridRatedFrequency float64 = 60.0
+
+	// GridRatedVoltage is the nominal off-site distribution grid
+	// voltage available at the station switchyard. The spec does
+	// not state a numeric value; the value chosen here is the
+	// generator terminal voltage (24 kV) which is the standard
+	// output of a hydrogen-inner-cooled synchronous generator.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21
+	GridRatedVoltage float64 = 24_000.0
+
+	// StationRatedBusVoltage is the plant electrical distribution
+	// bus voltage (6600 V). "This supply is transformed to the
+	// plant electrical distribution bus voltage, normally 6600
+	// volts."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:42-44
+	StationRatedBusVoltage float64 = 6600.0
+
+	// TurbineDroop is the governor speed-droop setting (4%). A 4%
+	// droop means a 2.4 Hz deviation from 60 Hz causes the
+	// generator to swing from no-load to full-load. The spec does
+	// not state a numeric droop; 4% is a standard nuclear-turbine
+	// governor setting consistent with the "controlled selectable
+	// rate" of load changes.
+	// "Wide range speed control of the turbine from turning gear
+	// to rated speed."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-76
+	TurbineDroop float64 = 0.04
+
+	// TurbineDroopBiasLimit caps the per-step setpoint bias
+	// applied by the droop governor. Without a limit, a large
+	// frequency step (e.g. grid separation to 55 Hz) would
+	// saturate the setpoint and force the unit into full-load
+	// pickup. The ±5% cap is sized for transient droop response
+	// without saturating the operator's setpoint.
+	TurbineDroopBiasLimit float64 = 0.05
+
+	// HouseLoadFixed is the always-on station auxiliary demand
+	// (control systems, ESF bus trickle charge, HVAC, lighting).
+	// Sized at ≈30 MW, ≈3% of the 1000 MWe TurbineRatedkW.
+	// "supply power for its own auxiliaries."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:57-58
+	HouseLoadFixed float64 = 30_000.0
+
+	// HouseLoadVariableFraction is the fraction of generator
+	// output consumed by variable auxiliaries (RCPs, feedwater
+	// pumps, condensate pumps, heater drain pumps) at full load.
+	// Sized at 3% of rated.
+	HouseLoadVariableFraction float64 = 0.03
 )
 
 type FuelRods struct{ Part }
@@ -1194,4 +1288,136 @@ type Pipe struct {
 type Valve struct {
 	Part
 	Open float64
+}
+
+// Grid models the infinite bus at the station switchyard. It is a
+// one-cell representation of the off-site distribution grid with
+// frequency and voltage state.
+//
+// Spec justification:
+//   - "The main power system is made up of the plant main generator
+//     and the associated controls necessary to transmit power to
+//     the off-site distribution grid."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:17-19
+//   - "critical importance in the event of large grid system
+//     disturbances."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:59-60
+//   - Generator-side voltage/frequency anchor: "Output voltage:
+//     24,000 to 26,000 volts, three-phase, 60 Hz"
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21
+type Grid struct {
+	Part
+
+	// Frequency is the grid frequency in Hz. Normal steady
+	// state is 60 Hz; the operator (or scenario script) can
+	// apply a step or ramp to simulate grid disturbances. The
+	// DEHM uses this frequency as the speed reference for the
+	// turbine governor's droop correction.
+	// "Wide range speed control of the turbine from turning
+	// gear to rated speed."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
+	Frequency float64
+
+	// Voltage is the grid-side voltage in volts available at
+	// the station switchyard. The System Auxiliary Transformer
+	// (SAT) picks up house load when this is non-zero.
+	Voltage float64
+
+	// LoadDemand is the external grid's MW demand on this
+	// plant. It is a pure input: the grid does not model
+	// other generators or area control error.
+	LoadDemand float64
+}
+
+// StationTransformer models the unit auxiliary transformer (UAT)
+// and system auxiliary transformer (SAT) split described in the
+// spec.
+//
+// Spec justification:
+//   - "The system auxiliary power is supplied from independent
+//     and electrically isolated buses of the off-site main
+//     distribution grid. This supply is transformed to the plant
+//     electrical distribution bus voltage, normally 6600 volts,
+//     by one or more system auxiliary transformers."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:40-44
+//   - "Likewise, the unit auxiliary power is transformed from
+//     the output of the plant main generator through the unit
+//     auxiliary transformer to the plant electrical distribution
+//     voltage."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:45-48
+//   - "When the plant is operating and supplying power to the
+//     main distribution grid and the unit auxiliary transformer,
+//     the plant distribution buses are split and part are
+//     supplied by the plant's own generator and the other part
+//     are supplied by the system auxiliary transformers."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:51-56
+//   - Automatic transfer: "Because plant buses are capable of
+//     receiving power from either of two supplies and because
+//     automatic transfer of supplies is provided on sensing loss
+//     of power, reliability of power is assured."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:56-59
+type StationTransformer struct {
+	Part
+
+	// UATEnergized is true when the unit auxiliary transformer
+	// is supplied from the main generator (breaker closed AND
+	// generator producing rated voltage).
+	// "the unit auxiliary power is transformed from the output
+	// of the plant main generator through the unit auxiliary
+	// transformer"
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:45-47
+	UATEnergized bool
+
+	// SATEnergized is true when the system auxiliary transformer
+	// is supplied from the off-site grid (grid voltage > 0).
+	// "The system auxiliary power is supplied from independent
+	// and electrically isolated buses of the off-site main
+	// distribution grid."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:40-42
+	SATEnergized bool
+
+	// UATOutputVoltage is the plant distribution bus voltage
+	// when UAT is energized (6600 V design).
+	UATOutputVoltage float64
+
+	// SATOutputVoltage is the plant distribution bus voltage
+	// when SAT is energized (6600 V design).
+	SATOutputVoltage float64
+
+	// HouseLoadSuppliedFrom identifies which transformer is
+	// currently supplying the station house load: "UAT",
+	// "SAT", or "" when neither is energised (black-out). On
+	// turbine trip the spec describes automatic transfer to
+	// SAT.
+	// "house loads automatically transferred to the offsite
+	// sources of power."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:64-66
+	HouseLoadSuppliedFrom string
+}
+
+// HouseLoad is the station's own electrical demand: RCPs, feed
+// pumps, condensate pumps, heaters, ESF bus trickle charge, HVAC,
+// lighting, and control systems.
+//
+// Spec justification:
+//   - "supply power for its own auxiliaries."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:57-58
+//   - "house loads automatically transferred to the offsite
+//     sources of power."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:64-66
+type HouseLoad struct {
+	Part
+
+	// FixedMW is the always-on demand (control systems, HVAC,
+	// lighting, ESF bus trickle charge).
+	FixedMW float64
+
+	// VariableMW is the demand that scales with turbine load
+	// (RCPs, feedwater pumps, condensate pumps).
+	VariableMW float64
+
+	// TotalMW is the computed sum for the current step, in
+	// watts. The variable component is added when the
+	// generator is online and at the supplied load fraction.
+	TotalMW float64
 }

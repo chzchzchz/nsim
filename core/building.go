@@ -10,6 +10,31 @@ type ReactorBuilding struct {
 	BlockValve            Valve
 	PORV                  Valve
 	PressurizedReliefTank Tank
+
+	// Grid is the infinite-bus model of the off-site distribution
+	// grid. Lives on ReactorBuilding because it is a plant-wide
+	// service consulted by both the primary (electrical RCP
+	// supply) and secondary (turbine governor) sides.
+	// "transmit power to the off-site distribution grid."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:18-19
+	Grid Grid
+
+	// StationTransformer models the UAT/SAT split that supplies
+	// the plant distribution bus. House load is automatically
+	// transferred to SAT on turbine trip / UAT de-energisation.
+	// "Because plant buses are capable of receiving power from
+	// either of two supplies and because automatic transfer of
+	// supplies is provided on sensing loss of power, reliability
+	// of power is assured."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:56-59
+	StationTransformer StationTransformer
+
+	// HouseLoad is the station's own electrical demand
+	// (RCPs, feedwater pumps, condensate pumps, heaters, ESF
+	// bus trickle charge, HVAC, lighting, control systems).
+	// "supply power for its own auxiliaries."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:57-58
+	HouseLoad HouseLoad
 }
 
 // Turbine building holds the secondary loop, excluding the steam generator.

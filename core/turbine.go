@@ -86,6 +86,48 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 		}
 	}
 
+	// Frequency-droop governor. When the infinite-bus frequency
+	// deviates from GridRatedFrequency the DEHM adjusts the
+	// governing valves so the unit picks up load (under-frequency)
+	// or sheds load (over-frequency). The bias is a fraction of
+	// rated per the droop constant: at 4% droop a 1% frequency
+	// drop raises output by 25% of rated (1/0.04 = 25). The
+	// per-step bias is capped at TurbineDroopBiasLimit to avoid
+	// saturating the operator's setpoint on a large grid
+	// disturbance.
+	//
+	// GridFrequency == 0 means "not wired to a grid yet"
+	// (uninitialised sentinel for tests that don't set up the
+	// grid model); in that case the droop correction is skipped
+	// so the turbine behaves as it did before p13.
+	//
+	// Spec: "computes signals comparing turbine speed and
+	// first-stage pressure with reference values established by
+	// the dispatcher or initiated at the operator's panel."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
+	// "Wide range speed control of the turbine from turning
+	// gear to rated speed."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
+	ret.DroopBias = 0
+	if ret.GridFrequency != 0 && ret.State == TurbineRunning {
+		freqErr := ret.GridFrequency - GridRatedFrequency
+		droopBias := -freqErr / (GridRatedFrequency * TurbineDroop)
+		if droopBias > TurbineDroopBiasLimit {
+			droopBias = TurbineDroopBiasLimit
+		}
+		if droopBias < -TurbineDroopBiasLimit {
+			droopBias = -TurbineDroopBiasLimit
+		}
+		ret.DroopBias = droopBias
+		ret.Setpoint += droopBias
+		if ret.Setpoint > 1.0 {
+			ret.Setpoint = 1.0
+		}
+		if ret.Setpoint < 0 {
+			ret.Setpoint = 0
+		}
+	}
+
 	// OPC alarm at TurbineOPCALarmFraction (103% of rated
 	// speed). Informational only — no automatic action.
 	//

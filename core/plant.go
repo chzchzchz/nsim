@@ -309,12 +309,85 @@ func (p *Plant) Step() {
 		p.TurbineBuilding.Generator.BreakerClosed = false
 	}
 
+	// Grid interface: advance the infinite bus, then latch the
+	// grid frequency into the turbine so the droop governor can
+	// see it during the next turbine step. Plant.Step is the only
+	// writer of GridFrequency; the turbine step only reads.
+	//
+	// Spec: "computes signals comparing turbine speed and
+	// first-stage pressure with reference values established by
+	// the dispatcher or initiated at the operator's panel."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
+	p.nextPlant.ReactorBuilding.Grid = p.ReactorBuilding.Grid.Step()
+	p.TurbineBuilding.Turbine.GridFrequency = p.nextPlant.ReactorBuilding.Grid.Frequency
+
 	cwPumpRunning := p.Outside.CirculatingWaterPump.Running
 	p.nextPlant.TurbineBuilding = p.TurbineBuilding.StepWithSteam(
 		p.nextPlant.ReactorBuilding.SteamGenerator.Pressure,
 		cwPumpRunning,
 	)
 	p.nextPlant.Electrical = p.Electrical.Step()
+
+	// Station transformer and house load. The station transformer
+	// step reads the generator's terminal voltage (post step)
+	// and the grid voltage to decide whether UAT and SAT are
+	// energised. The house load step sums fixed demand plus a
+	// variable demand that scales with turbine load fraction
+	// when the generator is online.
+	//
+	// Spec: "the plant distribution buses are split and part are
+	// supplied by the plant's own generator and the other part
+	// are supplied by the system auxiliary transformers."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:54-56
+	// "supply power for its own auxiliaries."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:57-58
+	p.nextPlant.ReactorBuilding.StationTransformer =
+		p.nextPlant.ReactorBuilding.StationTransformer.Step(
+			float64(p.nextPlant.TurbineBuilding.Generator.Voltage),
+			p.nextPlant.ReactorBuilding.Grid.Voltage,
+			p.nextPlant.TurbineBuilding.Generator.BreakerClosed,
+		)
+	loadFraction := 0.0
+	if TurbineRatedkW > 0 {
+		loadFraction = float64(p.nextPlant.TurbineBuilding.Turbine.RealPower) /
+			float64(TurbineRatedkW)
+		if loadFraction < 0 {
+			loadFraction = 0
+		}
+		if loadFraction > 1 {
+			loadFraction = 1
+		}
+	}
+	p.nextPlant.ReactorBuilding.HouseLoad =
+		p.nextPlant.ReactorBuilding.HouseLoad.Step(
+			p.nextPlant.TurbineBuilding.Generator.BreakerClosed,
+			loadFraction,
+		)
+
+	// Net generator output after house load. When the breaker is
+	// closed, the gross generator output minus house load is what
+	// flows to the grid. When the breaker is open, house load is
+	// still drawn — from SAT, not the generator — so
+	// Generator.RealPower stays at zero (the generator isn't
+	// powering anything).
+	//
+	// Spec: "house loads automatically transferred to the offsite
+	// sources of power."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:64-66
+	if p.nextPlant.TurbineBuilding.Generator.BreakerClosed {
+		gross := float64(p.nextPlant.TurbineBuilding.Turbine.RealPower)
+		net := gross - p.nextPlant.ReactorBuilding.HouseLoad.TotalMW
+		if net < 0 {
+			net = 0
+		}
+		p.nextPlant.TurbineBuilding.Generator.RealPower = Watts(net)
+		pf := p.nextPlant.TurbineBuilding.Generator.PowerFactor
+		if pf <= 0 {
+			pf = GeneratorPowerFactor
+		}
+		p.nextPlant.TurbineBuilding.Generator.ReactivePower =
+			net * (1.0/pf - 1.0)
+	}
 
 	// Cross-building DriveReady wiring for the AFW pumps. The fluid
 	// graph (see simulateFluidFlow) treats `Running && DriveReady` as
@@ -431,6 +504,23 @@ func MakePlant() Plant {
 	// (5% per minute, ≈0.000833/s) at construction time.
 	p.TurbineBuilding.Turbine.Setpoint = 0
 	p.TurbineBuilding.Turbine.RampRate = TurbineLoadRunbackRate
+
+	// Grid interface defaults (plans/p13_1.txt). At construction
+	// the off-site grid is available (SAT can be energised),
+	// the grid sits at 60 Hz / 24 kV, and the house load has
+	// the design 3% fixed-plus-variable split.
+	// Spec: "Output voltage: 24,000 to 26,000 volts, three-phase,
+	// 60 Hz"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21
+	p.ReactorBuilding.Grid = Grid{
+		Frequency: GridRatedFrequency,
+		Voltage:   GridRatedVoltage,
+	}
+	p.ReactorBuilding.StationTransformer = StationTransformer{}
+	p.ReactorBuilding.HouseLoad = HouseLoad{
+		FixedMW:    HouseLoadFixed,
+		VariableMW: HouseLoadFixed * HouseLoadVariableFraction,
+	}
 
 	return p
 }

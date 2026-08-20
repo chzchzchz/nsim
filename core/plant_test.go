@@ -150,3 +150,73 @@ func TestPlant_BreakerOpenZerosRealPower(t *testing.T) {
 		"want RealPower=0 with breaker open, got %v",
 		p.TurbineBuilding.Generator.RealPower)
 }
+
+// End-to-end: when the operator closes the breaker at full load,
+// the turbine produces RealPower and the UAT picks up house
+// load (HouseLoadSuppliedFrom="UAT"). Net generator output to
+// the grid is gross − house load.
+//
+// Spec justification:
+//   - "the plant distribution buses are split and part are
+//     supplied by the plant's own generator and the other part
+//     are supplied by the system auxiliary transformers."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:54-56
+//   - "supply power for its own auxiliaries."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:57-58
+func TestPlant_BreakerCloseEnergizesUATAndSubtractsHouseLoad(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.TurbineBuilding.Generator.BreakerClosed = true
+	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	stepN(&p, int(5*time.Second/TimeStep))
+	require.True(t, p.TurbineBuilding.Generator.BreakerClosed,
+		"precondition: want BreakerClosed, got false")
+	assert.Equal(t, "UAT", p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom,
+		"want HouseLoadSuppliedFrom=UAT with breaker closed, got %q",
+		p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom)
+	// Generator.RealPower is now the net of gross turbine output
+	// minus house load; both should be positive.
+	assert.Greater(t, p.TurbineBuilding.Generator.RealPower, Watts(0),
+		"want net RealPower > 0, got %v",
+		p.TurbineBuilding.Generator.RealPower)
+	assert.Less(t, p.TurbineBuilding.Generator.RealPower,
+		p.TurbineBuilding.Turbine.RealPower,
+		"want net < gross (house load subtracted), got net=%v gross=%v",
+		p.TurbineBuilding.Generator.RealPower,
+		p.TurbineBuilding.Turbine.RealPower)
+}
+
+// End-to-end: a reactor trip opens the generator breaker and
+// drops the UAT, automatically transferring house load to SAT.
+// The reactor trip does NOT remove house load from the grid; it
+// just switches the supply source from UAT to SAT.
+//
+// Spec justification:
+//   - "The turbine and turbine-generator will trip off the line
+//     with house loads automatically transferred to the offsite
+//     sources of power."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:63-66
+//   - "automatic transfer of supplies is provided on sensing
+//     loss of power"
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:58-59
+func TestPlant_ReactorTripTransfersHouseLoadToSAT(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.TurbineBuilding.Generator.BreakerClosed = true
+	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	stepN(&p, int(2*time.Second/TimeStep))
+	require.Equal(t, "UAT",
+		p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom,
+		"precondition: want UAT supplying before trip, got %q",
+		p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom)
+	p.ReactorBuilding.ReactorPressureVessel.Trip = true
+	stepN(&p, int(200*time.Millisecond/TimeStep))
+	assert.Equal(t, "SAT",
+		p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom,
+		"want HouseLoadSuppliedFrom=SAT after trip, got %q",
+		p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom)
+	assert.False(t, p.TurbineBuilding.Generator.BreakerClosed,
+		"want BreakerClosed=false after trip, got true")
+}
