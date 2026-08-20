@@ -2,8 +2,23 @@ package core
 
 // Step advances the turbine by TimeStep on a 1 ms tick. The caller
 // passes the upstream steam pressure, downstream condenser pressure,
-// and the steam-inlet valve openness — keeping the step pure so
-// tests can drive it without constructing a full Plant.
+// and a stop-valve-gated admission factor. When stopValveOpen is
+// nil, admission is the MakeupValve.Open fraction (legacy
+// behaviour). When stopValveOpen is non-nil, admission is
+// *stopValveOpen — allowing Plant.Step to gate the admission via
+// the auto-stop-oil protective trip system.
+//
+// Spec justification for the trip cascade:
+//   - "Release of this oil, called auto stop oil, by any one of the
+//     turbine trip devices [...] causes all steam control valves to
+//     close."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:28-34
+//   - "The mechanical hydraulic overspeed trip mechanism (Item 1)
+//     causes the turbine valve hydraulic fluid pressure to dump to
+//     drain, thereby closing the main steam stop and governing
+//     valves and the reheat steam stop and intercept valves at a
+//     pre-selected percent above rated speed."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:9-15
 //
 // State machine (Off / Running / Tripped) and trip causes:
 //
@@ -19,14 +34,28 @@ package core
 // SteamFlow is the pressure differential across the steam-inlet
 // valve, in arbitrary "psi-equivalent" units. The turbine converts it
 // into angular Velocity up to TurbineRatedSpeed and into RealPower up
-// to TurbineRatedkW. The SteamFlow definition is local to the step;
-// the wiring in TurbineBuilding.Step feeds in the building's pressures
-// and the MakeupValve.Open fraction.
-func (t *Turbine) Step(sgPressure, condPressure Pressure, valveOpen float64, reset bool) Turbine {
+// to TurbineRatedkW.
+func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveOpen *float64) Turbine {
 	ret := *t
 	dt := TimeStep
 
-	steamFlow := float64(sgPressure-condPressure) * valveOpen
+	admission := float64(0)
+	if stopValveOpen != nil {
+		v := *stopValveOpen
+		if v < 0 {
+			v = 0
+		}
+		if v > 1 {
+			v = 1
+		}
+		admission = v
+	} else {
+		// Legacy call path (no stop valve gating): use 1.0 as a
+		// neutral default. The MakeupValve wiring is no longer
+		// authoritative for steam admission.
+		admission = 1.0
+	}
+	steamFlow := float64(sgPressure-condPressure) * admission
 	if steamFlow < 0 {
 		steamFlow = 0
 	}

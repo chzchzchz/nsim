@@ -38,7 +38,35 @@ type Turbine struct {
 	Part
 	Velocity
 
-	State          TurbineState
+	State TurbineState
+
+	// StopValve is the main-steam stop valve. Open=1 is normal
+	// operation; Open=0 is the trip state (auto-closed by reactor
+	// trip, overspeed, or operator manual trip).
+	//
+	// Spec justification:
+	//   - "Release of this oil, called auto stop oil, by any one of
+	//     the turbine trip devices [...] causes all steam control
+	//     valves to close."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:28-34
+	//   - "Stop valve and check valve in each steam generator outlet
+	//     main steam line." (item 3 of the protective features list)
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:66-69
+	StopValve Valve
+
+	// DumpValve is the steam dump valve to the condenser. Open=0 is
+	// normal operation; Open=1 dumps steam to the condenser during
+	// trip or load rejection.
+	//
+	// Spec justification:
+	//   - "Condenser steam dump valves" (item 8 of the protective
+	//     features list)
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:62
+	//   - "These valves open under a sudden reduction in turbine-
+	//     generator load (in excess of 10%) or a turbine trip."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:5-11
+	DumpValve Valve
+
 	SteamLossTimer time.Duration
 	RealPower      Watts
 }
@@ -262,9 +290,40 @@ type PowerGenerator struct {
 	RealPower     Watts
 	BreakerClosed bool
 }
+
+// Condenser models the main condenser (chapter 15.3). The shell-
+// side steam condenses on the tube bundle; the latent heat is
+// rejected to the circulating water (CW) flowing inside the tubes.
+//
+// Spec justification for the field set:
+//   - Pressure — the condenser operates at sub-atmospheric vacuum
+//     under normal conditions: "Under normal operation the air is
+//     removed by steam jet air ejectors or vacuum pumps."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:19-22
+//   - Level — condensate accumulation; the condensate pumps (out of
+//     scope for p9) eventually drain it back to the CST.
+//     "There is also sufficient surface to condense steam from the
+//     steam dump system with an acceptable increase in turbine back
+//     pressure."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:14-18
+//   - VacuumPumpRunning — operator-controlled flag set from the
+//     steam-jet air ejector / vacuum pump subsystem.
+//   - CirculatingWaterIn — temperature of the CW water entering the
+//     condenser tubes. Set once per step from outside.go's
+//     CirculatingWaterPump state.
+//   - CWOut — informational outlet temperature of the CW (delta-T
+//     across the tube bundle).
+//   - CondensingRate — per-step steam mass condensed in gallons; set
+//     by TurbineBuilding.StepWithSteam from the turbine's exhaust
+//     mass flow, consumed by the condenser step.
 type Condenser struct {
 	Part
 	Pressure
+	Level              Volume
+	VacuumPumpRunning  bool
+	CirculatingWaterIn Temperature
+	CWOut              Temperature
+	CondensingRate     Volume
 }
 type Polisher struct{}
 
@@ -457,6 +516,63 @@ const (
 	SteamGeneratorShellPressure       Pressure = 920
 	SteamGeneratorShellDesignPressure Pressure = 1000
 	LatentHeatOfSteamization          Watts    = 2.26e6
+)
+
+// AtmosphericPressure is the standard sea-level pressure the
+// condenser back-pressure relaxes toward when the vacuum pumps and
+// circulating-water pumps are unavailable. Not stated explicitly in
+// the Westinghouse PWR spec but used to bound the no-CW condenser
+// degradation.
+const AtmosphericPressure Pressure = 14.7
+
+// Condenser and main-steam system constants (plans/p9_1.txt).
+//
+// Spec justification:
+//   - CondenserDesignVacuum — "Under normal operation the air is
+//     removed by steam jet air ejectors or vacuum pumps."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:19-22
+//     The number below approximates a well-operated condenser with
+//     a modest air in-leakage.
+//   - CondenserDesignCWIn — design circulating-water inlet
+//     temperature of 75°F (24°C), matching the RiverTemp default
+//     used for the Service Water system (core/plant.go).
+//   - CondenserCWRise — design temperature rise of the CW across
+//     the tube bundle, sized to give a sensible heat-rejection
+//     value. The spec does not state a value.
+//   - CondenserDesignCWFlowGPM — per-condenser CW flow sized for a
+//     large 4-loop plant (essential CW pump rating "approximately
+//     20,000 gpm").
+//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_170.txt:39-43
+//   - CondenserDesignSteamLoadGalPerStep — full-load steam
+//     volumetric flow per step, derived from
+//     SteamGeneratorFullLoadSteamFlow × 4 loops / steps-per-second.
+//     The per-SG spec value is 3,813,000 lb/hr (480 kg/s).
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:49-56
+//   - SteamDumpOpenThreshold — condenser pressure above which the
+//     dump valves open automatically to relieve inertial heat. Not
+//     stated in the spec; sized above design vacuum but well below
+//     atmospheric.
+//   - StopValveCloseDelay — hydraulic time for the auto-stop-oil
+//     system to dump fluid pressure and close all stop valves
+//     after a trip signal. The spec describes mechanical-hydraulic
+//     dumping without a stated delay.
+//     "Release of this oil, called auto stop oil, by any one of
+//     the turbine trip devices [...] causes all steam control
+//     valves to close."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:28-34
+//   - CondenserVacuumTimeConstant / CondenserNoCWDegradeTimeConstant
+//     — sized for plausible ~2 s vacuum recovery and a few seconds
+//     of no-CW degradation; not stated in the spec.
+const (
+	CondenserDesignVacuum            Pressure = 1.5
+	CondenserDesignCWIn              float64  = 75
+	CondenserCWRise                  float64  = 15
+	CondenserDesignCWFlowGPM         float64  = 20000
+	CondenserDesignSteamLoadGalPer   float64  = 100
+	SteamDumpOpenThreshold           Pressure = 5.0
+	StopValveCloseDelay                       = 50 * time.Millisecond
+	CondenserVacuumTimeConstant      float64  = 2.0
+	CondenserNoCWDegradeTimeConstant float64  = 5.0
 )
 
 // SteamGeneratorFullLoadSteamFlow is the per-SG steam flow at rated

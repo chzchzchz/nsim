@@ -26,17 +26,83 @@ func (t *TurbineBuilding) Step() TurbineBuilding {
 }
 
 // StepWithSteam advances the TurbineBuilding with the upstream steam
-// generator's pressure supplied by the caller.
-func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure) TurbineBuilding {
+// generator's pressure supplied by the caller. The condenser is
+// stepped first so the turbine reads a fresh back-pressure; the
+// condenser accumulates the turbine's exhaust mass flow via
+// CondensingRate for the next call.
+//
+// Spec justification for the order (condenser → turbine):
+//   - "The main condenser condenses the exhaust from the main
+//     turbines [...]" — the condenser's pressure is the turbine's
+//     back-pressure.
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:14-15
+//   - The dump valve is described as opening under steam-dump
+//     conditions; the condenser must be stepped first so the
+//     turbine can see its pressure rise:
+//     "These valves open under a sudden reduction in turbine-
+//     generator load (in excess of 10%) or a turbine trip."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:5-11
+func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool) TurbineBuilding {
 	ret := *t
+
+	cwIn := ret.Condenser.CirculatingWaterIn
+	c := ret.Condenser.Step(cwIn, ret.Condenser.VacuumPumpRunning, cwPumpRunning)
+	ret.Condenser = c
+
+	stopOpen := ret.Turbine.StopValve.Open
 	ret.Turbine = ret.Turbine.Step(
 		sgPressure,
-		ret.Condenser.Pressure,
-		ret.MakeupValve.Open,
+		c.Pressure,
 		false,
+		&stopOpen,
 	)
 	ret.Generator.RealPower = ret.Turbine.RealPower
+
+	// Steam dump: open when condenser pressure is above the
+	// threshold. The dump valve provides a relief path for
+	// inertial heat from the SG when the turbine cannot accept
+	// steam (trip or low load).
+	// "Condenser steam dump valves" (item 8 of the protective
+	// features list) — these open automatically on load reduction.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:62
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:5-11
+	if c.Pressure > SteamDumpOpenThreshold {
+		ret.Turbine.DumpValve.Open = 1.0
+	} else {
+		ret.Turbine.DumpValve.Open = 0.0
+	}
+
+	// CondensingRate: pass the turbine's exhaust mass flow back
+	// into the condenser so its level/pressure step can react.
+	if ret.Turbine.State == TurbineRunning {
+		ret.Condenser.CondensingRate = u.NewValue(
+			steamMassFromPower(ret.Generator.RealPower),
+			u.Gallon,
+		)
+	} else {
+		ret.Condenser.CondensingRate = u.NewValue(0, u.Gallon)
+	}
+
 	return ret
+}
+
+// steamMassFromPower converts electrical RealPower into per-step
+// steam mass condensed at the condenser. Sized for a 1000 MWe
+// turbine exhausting roughly 480 kg/s of steam per SG × 4 SGs at
+// full load; we ignore feedwater-heater extractions and treat the
+// mass flow as proportional to RealPower / TurbineRatedkW.
+func steamMassFromPower(p Watts) float64 {
+	if TurbineRatedkW <= 0 {
+		return 0
+	}
+	frac := float64(p) / float64(TurbineRatedkW)
+	if frac < 0 {
+		frac = 0
+	}
+	if frac > 1 {
+		frac = 1
+	}
+	return frac * CondenserDesignSteamLoadGalPer
 }
 
 // Plant represents all state relevant to the facility.
@@ -58,7 +124,29 @@ func (p *Plant) Step() {
 	p.Electrical.DieselGenB = &p.nextPlant.Outside.DieselGenerator
 
 	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step()
-	p.nextPlant.TurbineBuilding = p.TurbineBuilding.StepWithSteam(p.nextPlant.ReactorBuilding.SteamGenerator.Pressure)
+
+	// Reactor-to-turbine trip cascade. The spec's protective feature
+	// list includes "Turbine trip following a reactor trip" (item 2)
+	// and describes the auto-stop-oil mechanism that closes all steam
+	// control valves on any trip signal. We therefore latch the
+	// turbine into TurbineTripped the same step the reactor trips,
+	// matching the auto-stop-oil "hydraulic fluid dumped to drain"
+	// behaviour described in the spec.
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:64
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:28-34
+	if p.ReactorBuilding.ReactorPressureVessel.Trip ||
+		p.TurbineBuilding.Turbine.State == TurbineTripped {
+		p.TurbineBuilding.Turbine.StopValve.Open = 0
+		if p.TurbineBuilding.Turbine.State == TurbineRunning {
+			p.TurbineBuilding.Turbine.State = TurbineTripped
+		}
+	}
+
+	cwPumpRunning := p.Outside.CirculatingWaterPump.Running
+	p.nextPlant.TurbineBuilding = p.TurbineBuilding.StepWithSteam(
+		p.nextPlant.ReactorBuilding.SteamGenerator.Pressure,
+		cwPumpRunning,
+	)
 	p.nextPlant.Electrical = p.Electrical.Step()
 
 	// Cross-building DriveReady wiring for the AFW pumps. The fluid
@@ -87,6 +175,12 @@ func (p *Plant) Step() {
 		p.nextPlant.Electrical.ESFBusA.Energized
 	p.nextPlant.Outside.TurbineAFWPump.DriveReady =
 		p.nextPlant.ReactorBuilding.SteamGenerator.Pressure > SteamGeneratorShellPressure/100
+
+	// Plumb the CW inlet temperature from the outside loop. The
+	// CirculatingWaterPump.Temperature field models the CW supply
+	// header; in steady state this tracks RiverTemp.
+	p.nextPlant.TurbineBuilding.Condenser.CirculatingWaterIn =
+		p.Outside.CirculatingWaterPump.Temperature
 
 	// Pressure-driven fluid flow integrates the freshly-stepped parts.
 	// Graph nodes hold pointers into nextPlant; the mutations land in
@@ -141,6 +235,16 @@ func MakePlant() Plant {
 	p.Outside.TurbineAFWPump.DriveSource = DriveSteam
 	p.Outside.MotorAFWPump.DriveSource = DriveElectric
 	p.Outside.DieselAFWPump.DriveSource = DriveDiesel
+
+	// Condenser / steam-system defaults (plans/p9_1.txt).
+	// "Under normal operation the air is removed by steam jet air
+	// ejectors or vacuum pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:19-22
+	p.TurbineBuilding.Condenser.VacuumPumpRunning = true
+	p.TurbineBuilding.Condenser.Pressure = CondenserDesignVacuum
+	p.TurbineBuilding.Turbine.StopValve = Valve{Open: 1.0}
+	p.Outside.CirculatingWaterPump = Pump{Running: true}
+
 	return p
 }
 
