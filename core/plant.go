@@ -7,7 +7,9 @@ import (
 )
 
 func (r *ReactorBuilding) Step() ReactorBuilding {
-	return *r
+	ret := *r
+	ret.Pressurizer = ret.Pressurizer.Step(&ret.PORV)
+	return ret
 }
 
 func (t *TurbineBuilding) Step() TurbineBuilding {
@@ -55,6 +57,25 @@ func (p *Plant) Step() {
 	p.nextPlant.TurbineBuilding = p.TurbineBuilding.StepWithSteam(p.ReactorBuilding.SteamGenerator.Pressure)
 	p.nextPlant.Electrical = p.Electrical.Step()
 
+	// Cross-building DriveReady wiring for the AFW pumps. The fluid
+	// graph (see simulateFluidFlow) treats `Running && DriveReady` as
+	// the gate for effective flow, so each pump's DriveReady must be
+	// latched from its upstream before the graph runs.
+	//
+	// Spec justification:
+	//   - DieselAFWPump: "motor driven and turbine driven pumps are
+	//     located in the emergency feedwater pump building. The use of
+	//     both motor driven and turbine driven pumps satisfies the
+	//     requirement that the pumps be powered by diverse power
+	//     sources." (chapter_5/page_099.txt:89-93)
+	//   - MotorAFWPump: ESF bus is fed by the diesel after LossOfOffsite
+	//     (chapter_11/page_165.txt:23-36); until ESF is Energized the
+	//     motor-driven AFWP cannot deliver flow.
+	p.nextPlant.Outside.DieselAFWPump.DriveReady =
+		p.nextPlant.Outside.DieselGenerator.ReadyToLoad
+	p.nextPlant.Outside.MotorAFWPump.DriveReady =
+		p.nextPlant.Electrical.ESFBusA.Energized
+
 	// Pressure-driven fluid flow integrates the freshly-stepped parts.
 	// Graph nodes hold pointers into nextPlant; the mutations land in
 	// nextPlant directly so Update() copies them into p.
@@ -94,6 +115,9 @@ func MakePlant() Plant {
 		},
 		RiverTemp: u.NewValue(75, u.Fahrenheit),
 	}
+	p.Outside.TurbineAFWPump.DriveSource = DriveSteam
+	p.Outside.MotorAFWPump.DriveSource = DriveElectric
+	p.Outside.DieselAFWPump.DriveSource = DriveDiesel
 	return p
 }
 

@@ -16,7 +16,7 @@ package core
 //     auxiliary power from off-site sources, auxiliary power required
 //     for safe shutdown will be supplied from physically and
 //     electrically independent diesel generators located on the site."
-//     specs/.../chapter_11/page_165.txt:23-41, page_166.txt:91-94
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:23-36
 type Electrical struct {
 	ESFBusA ESFBus
 	ESFBusB ESFBus
@@ -38,12 +38,12 @@ type Electrical struct {
 //   - Voltage rating —
 //     "All of the engineered safety system loads are fed from two
 //     6600-volt engineered safety features buses."
-//     specs/.../chapter_11/page_165.txt:72-74
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:72-74
 //   - Energized state — the bus is considered energized when any of its
 //     supplying sources is delivering voltage above the pickup threshold;
 //     this matches the diesel-generator "ready to begin accepting load"
 //     deadline of 10 s.
-//     specs/.../chapter_11/page_166.txt:50
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:50
 type ESFBus struct {
 	Part
 	Voltage   float64

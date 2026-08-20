@@ -121,7 +121,8 @@ func (d *DieselGenerator) Step(swRunning bool) DieselGenerator {
 	//
 	// Spec: "Diesel generator coolers" / "Containment spray pump diesel
 	// engine coolers" are Service Water System loads.
-	// specs/.../chapter_12/page_169.txt:89, page_170.txt:84,
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89,
+	// page_170.txt:84,
 	// page_171.txt:8-9
 	ambient := ret.Fuel.Part.Temperature.Float() // proxy for ambient
 	gap := ret.CoolantTemp.Float() - ambient
@@ -144,7 +145,7 @@ func (d *DieselGenerator) Step(swRunning bool) DieselGenerator {
 	//
 	// "The diesel generators are provided with static-type brushless
 	// excitation and field flashing for rapid voltage buildup."
-	// specs/.../chapter_11/page_166.txt:46-51
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:46-51
 	//
 	// Voltage and Frequency ramp from 0 to DieselRatedVoltage /
 	// DieselRatedFrequency over DieselFieldFlashingTime. BreakerClosed

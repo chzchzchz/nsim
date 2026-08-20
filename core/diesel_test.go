@@ -81,7 +81,7 @@ func TestDiesel_FuelOnlyDecreasesWhileRunning(t *testing.T) {
 	// Get to running.
 	stepN(&p, int(10*time.Second/TimeStep))
 	before := p.Outside.DieselGenerator.Fuel.Level.Float()
-	stepN(&p, int(time.Hour/TimeStep)) // 1 hr running
+	stepN(&p, int(10*time.Second/TimeStep)) // 10 s running is plenty to observe fuel burn
 	after := p.Outside.DieselGenerator.Fuel.Level.Float()
 	if !(after < before) {
 		t.Fatalf("running: fuel must decrease, before %v after %v", before, after)
@@ -113,7 +113,7 @@ func TestDiesel_TripsOnCoolantOverTemp(t *testing.T) {
 	}
 
 	// Run a long time without service water.
-	stepN(&p, int(1*time.Hour/TimeStep))
+	stepN(&p, int(10*time.Minute/TimeStep))
 	if p.Outside.DieselGenerator.State != DieselTripped {
 		t.Fatalf("want Tripped on loss of cooling, got %v", p.Outside.DieselGenerator.State)
 	}

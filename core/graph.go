@@ -93,8 +93,8 @@ const flowCoefficient = 60.0 / 60.0 // gal per second per psi
 
 // pumpHead is the head a running pump adds to an edge in psi. Sized to
 // match the AFWP shutoff head cited in
-// specs/.../chapter_5/page_099.txt:100-109 (and the equivalent comment
-// block in cmd/nsim/main.go:34-39).
+// specs/westinghouse_tech_manual/chapter_5/page_0532.txt:9-12 (and the equivalent
+// comment block in cmd/nsim/main.go:34-39).
 const pumpHead = 1472.0
 
 // simulateFluidFlow advances every edge in g by dt. It mutates the

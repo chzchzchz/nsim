@@ -69,7 +69,8 @@ func TestDieselGeneratorReachesRatedOutputIn10s(t *testing.T) {
 }
 
 // With offsite power unavailable, the ESF bus is energised by the diesel
-// within ~10 s of StartSignal.
+// within ~10 s of StartSignal, and the motor-driven AFW pump's
+// DriveReady follows the bus.
 func TestESFBusEnergizedByDiesel(t *testing.T) {
 	p := MakePlant()
 	p.ServiceWaterPump.Running = true
@@ -87,6 +88,9 @@ func TestESFBusEnergizedByDiesel(t *testing.T) {
 	}
 	if p.Electrical.ESFBusA.Voltage < DieselRatedVoltage*0.99 {
 		t.Fatalf("want ESFBusA.voltage ~= %v, got %v", DieselRatedVoltage, p.Electrical.ESFBusA.Voltage)
+	}
+	if !p.Outside.MotorAFWPump.DriveReady {
+		t.Fatalf("want MotorAFWPump.DriveReady=true after ESFBusA energized, got false")
 	}
 }
 

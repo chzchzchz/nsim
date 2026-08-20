@@ -46,7 +46,7 @@ type Turbine struct {
 // Spec justification:
 //   - glossary.md turbine trip: "When turbine steam inlet valves are
 //     rapidly closed to block steam flow, stopping the turbine."
-//     specs/.../back_matter/page_245.txt:48-50
+//     specs/the_westinghouse_pressurized_water_react/back_matter/page_245.txt:48-50
 //   - chapter_15/page_205.txt:28-34 — the auto-stop-oil trip system
 //     causes all steam control valves to close on any trip signal.
 //   - chapter_15/page_205.txt:40 — "turbine speed does not exceed 120
@@ -61,7 +61,7 @@ const (
 
 // Rated values for the main turbine, sized for a large turbo-generator
 // to match the implied megawatt scale of
-// specs/.../chapter_15/page_208.txt:21 (24-26 kV main generator).
+// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21 (24-26 kV main generator).
 const (
 	TurbineRatedSpeed         Velocity = 1800
 	TurbineOverspeedTripRatio float64  = 1.20
@@ -84,12 +84,59 @@ type ReactorPressureVessel struct {
 	Pressure
 }
 
+// Pressurizer models the surge-line volume at the top of the primary
+// loop that holds the steam bubble used for pressure control.
+//
+// Spec justification for the field set:
+//   - Pressure, Water, Volume — "The pressurizer is a partial tank that
+//     contains saturated water and steam in equilibrium at saturation
+//     temperature corresponding to the pressure." (glossary.md
+//     pressurizer, p. 169)
+//   - HeatersOn — "All pressurizer heaters are energized to start the
+//     bubble formation during plant startup."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:15-23
+//   - SprayOpen — "Pressurizer heater and spray valve control is [...]
+//     used to maintain the pressure in accordance with the applicable
+//     temperature-pressure curves."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:42-43
+//   - SteamBubble — "When the pressurizer fluid reaches saturation
+//     temperature for the pressure being maintained, steam formation
+//     in the pressurizer begins."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:15-23
 type Pressurizer struct {
 	Part
 	Pressure
-	Water Volume
-	Volume
+	Water      Volume
+	Volume     Volume
+	HeatersOn  bool
+	SprayOpen  float64
+	SteamBubble Volume
 }
+
+// Pressurizer control tunables. The numbers below are sized to give
+// spec-anchored behaviour on the 1 ms plant step:
+//
+//   - PressurizerBasePressure + PressurizerBubbleStiffness * bubble ->
+//     ~2250 psia at a ~30% bubble (chapter_16/page_224.txt:69).
+//   - PressurizerHeaterRate drives Pressure toward the target on a
+//     timescale of a few seconds.
+//   - PressurizerPORVTrip is the safety-valve setpoint the step uses to
+//     crack the PORV.
+//
+// Spec justification:
+//   - "operation of pressurizer heaters and spray maintains the system
+//     pressure in accordance with the applicable temperature-pressure
+//     curves." specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:42-43
+const (
+	PressurizerBasePressure    Pressure = 1500
+	PressurizerHeaterTarget    Pressure = 2250
+	PressurizerHeaterRate      Pressure = 200  // psi/s while HeatersOn
+	PressurizerSprayMin        Pressure = 1400
+	PressurizerSprayRate       Pressure = 300  // psi/s at SprayOpen == 1
+	PressurizerAmbientDecay    Pressure = 5    // psi/s cooldown when idle
+	PressurizerBubbleStiffness float64   = 2.5 // psi per gallon of bubble
+	PressurizerPORVTrip        Pressure = 2500
+)
 
 type SteamGenerator struct {
 	Part
@@ -126,15 +173,15 @@ func (s *SteamGenerator) heatTransferred() Watts {
 // Spec justification for the field set:
 //   - Voltage / Frequency —
 //     "two 6600-volt engineered safety features buses" (diesel output).
-//     specs/.../chapter_11/page_165.txt:73-82
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-82
 //     "Output voltage: 24,000 to 26,000 volts, three-phase, 60 Hz" (main
 //     generator reference).
-//     specs/.../chapter_15/page_208.txt:21
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21
 //   - BreakerClosed —
 //     "controls for the governor, voltage regulator, generator breaker,
 //     and synchronization for each diesel generator are located on
 //     physically separated portions of the main control board".
-//     specs/.../chapter_11/page_166.txt:1-4
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:1-4
 //   - RealPower — the running load in Watts, sized by RatedkW *
 //     RunningFraction so a downstream load sequencer (planned for the
 //     future) can sum load against rated capacity.
@@ -164,7 +211,7 @@ type HighPressureHeater struct{ Part }
 //     emergency feedwater pump building. The use of both motor driven
 //     and turbine driven pumps satisfies the requirement that the pumps
 //     be powered by diverse power sources."
-//     specs/.../chapter_5/page_099.txt:89-93
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:1-5
 //   - A pump labelled "diesel-driven" must not run when its diesel is
 //     not running. DriveReady latches that condition without forcing the
 //     pump type to know about diesel internals.
@@ -197,13 +244,13 @@ type AFWPump struct {
 //     sources, auxiliary power required for safe shutdown will be
 //     supplied from physically and electrically independent diesel
 //     generators located on the site."
-//     specs/.../chapter_11/page_165.txt:28-36
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:28-36
 //   - DieselStartManual / DieselStartTest — operator action from the
 //     main control board; the spec locates "controls for the governor,
 //     voltage regulator, generator breaker, and synchronization for each
 //     diesel generator […] on physically separated portions of the main
 //     control board".
-//     specs/.../chapter_11/page_166.txt:2-4
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:2-4
 type DieselStartCause int
 
 const (
@@ -221,14 +268,14 @@ const (
 //     alongside the motor-driven and turbine-driven units in the EFWS:
 //     "The use of both motor driven and turbine driven pumps satisfies
 //     the requirement that the pumps be powered by diverse power sources."
-//     specs/.../chapter_5/page_099.txt:89-93
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:1-5
 //   - DriveSteam — the turbine-driven AFW pump whose "steam supply line
 //     for each turbine driven pump is connected to the main steam line
 //     from a steam generator."
-//     specs/.../chapter_5/page_099.txt:42-47
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:42-47
 //   - DriveElectric — the motor-driven AFW pump fed from the "Safety
 //     Class 1E electrical power" trains.
-//     specs/.../chapter_5/page_099.txt:71-82
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:71-82
 type DriveSource int
 
 const (
@@ -306,7 +353,7 @@ const (
 //     "reach rated speed and be ready to begin accepting load within 10
 //     seconds, and be capable of carrying rated load within 30 seconds
 //     after receipt of a start signal to the diesel engine."
-//     specs/.../chapter_11/page_166.txt:46-51
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:46-51
 const (
 	DieselRatedSpeed        RPM     = 1800
 	DieselReadyDeadline             = 10 * time.Second
