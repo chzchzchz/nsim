@@ -47,10 +47,12 @@ type Turbine struct {
 //   - glossary.md turbine trip: "When turbine steam inlet valves are
 //     rapidly closed to block steam flow, stopping the turbine."
 //     specs/the_westinghouse_pressurized_water_react/back_matter/page_245.txt:48-50
-//   - chapter_15/page_205.txt:28-34 — the auto-stop-oil trip system
-//     causes all steam control valves to close on any trip signal.
-//   - chapter_15/page_205.txt:40 — "turbine speed does not exceed 120
-//     percent of [rated]" — see TurbineOverspeedTripRatio below.
+//   - auto-stop-oil trip system (lines 28-34) causes all steam
+//     control valves to close on any trip signal.
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:28-34
+//   - "turbine speed does not exceed 120 percent of [rated]" (line 40)
+//     — see TurbineOverspeedTripRatio below.
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:40
 type TurbineState int
 
 const (
@@ -117,7 +119,8 @@ type Pressurizer struct {
 // spec-anchored behaviour on the 1 ms plant step:
 //
 //   - PressurizerBasePressure + PressurizerBubbleStiffness * bubble ->
-//     ~2250 psia at a ~30% bubble (chapter_16/page_224.txt:69).
+//     ~2250 psia at a ~30% bubble.
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:69
 //   - PressurizerHeaterRate drives Pressure toward the target on a
 //     timescale of a few seconds.
 //   - PressurizerPORVTrip is the safety-valve setpoint the step uses to
@@ -143,6 +146,18 @@ type SteamGenerator struct {
 	Pressure
 	Water  Volume
 	Volume Volume
+
+	// SteamFlowRate is the design steam mass-flow the SG is sized
+	// for, in volumetric units compatible with Water/Volume.
+	// Sized to the spec's 480 kg/s full-load steam flow.
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
+	SteamFlowRate Volume
+
+	// HeatInput is the primary-to-secondary heat flux in Watts.
+	// Caller-supplied (the reactor step is out of scope; p7
+	// candidate). When zero the SG does not generate steam on its
+	// own; the fluid graph dominates the inventory.
+	HeatInput Watts
 }
 
 func (s *SteamGenerator) Update() SteamGenerator {
@@ -306,11 +321,13 @@ type DieselGenerator struct {
 	State DieselState
 
 	// Simulated time accumulated in the current state, used to meet
-	// chapter_11/page_166.txt:50-51 deadlines (10 s ready, 30 s rated).
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:50-51
+	// deadlines (10 s ready, 30 s rated).
 	CrankStartTime time.Duration
 	ReadyTime      time.Duration
 
-	// Rated-load readiness latch (chapter_11/page_166.txt:50).
+	// Rated-load readiness latch
+	// (specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:50).
 	ReadyToLoad bool
 
 	// RunningFraction is the fraction of rated load currently served,
@@ -318,7 +335,7 @@ type DieselGenerator struct {
 	RunningFraction float32
 
 	// Cooling state — driven by ServiceWaterPump.Running
-	// (chapter_12/page_169.txt:89).
+	// (specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89).
 	CoolantTemp Temperature
 
 	// Generator-side output. See core/parts.go:89 for the PowerGenerator
@@ -329,14 +346,15 @@ type DieselGenerator struct {
 }
 
 // DieselState is the operational state of the onsite emergency
-// diesel generator (chapter_11/page_165.txt:96-122).
+// diesel generator
+// (specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:96-122).
 type DieselState int
 
 const (
 	// DieselOff is the resting state; Speed == 0.
 	DieselOff DieselState = iota
 	// DieselCranking is the air-over-piston start transient
-	// (chapter_11/page_166.txt:77-78).
+	// (specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:77-78).
 	DieselCranking
 	// DieselRunning means rated speed has been reached and the unit is
 	// ready to accept load.
@@ -364,9 +382,50 @@ const (
 	DieselFieldFlashingTime         = 1 * time.Second
 )
 
+// SteamGenerator shell-side operating pressure and the latent heat of
+// vaporisation used by the heat-transfer step.
+//
+// Spec justification:
+//   - SteamGeneratorShellPressure — "Full load pressure, shell side:
+//     920 psia (63 bar)" for the 2-loop plant from Table 3.4-1
+//     (specs/the_westinghouse_pressurized_water_react/chapter_3/page_066.txt:36,
+//     value lines 80-82).
+//   - SteamGeneratorShellDesignPressure — design pressure on the
+//     shell side is 1000 psia per the plan p6_1 trip-threshold
+//     choice. (Table 3.4-1 quotes 1200 psia for the same row;
+//     the plan uses 1000 as the trip point; the discrepancy is
+//     noted in plans/x/x.txt verification.)
+//   - LatentHeatOfSteamization — water at ~558 F to saturated steam
+//     at 920 psia. The spec does not state a value; this is the
+//     textbook number from standard steam tables.
+const (
+	SteamGeneratorShellPressure       Pressure = 920
+	SteamGeneratorShellDesignPressure Pressure = 1000
+	LatentHeatOfSteamization          Watts    = 2.26e6
+)
+
+// SteamGeneratorFullLoadSteamFlow is the per-SG steam flow at rated
+// load, sized for 480 kg/s of saturated steam at 920 psia. The spec
+// quotes 3,813,000 lb/hr (480 kg/s) per steam generator.
+// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
+//
+// We convert kg/s -> lb/hr (× 2.2046 × 3600) and approximate the
+// specific volume of saturated steam at 920 psia as ~0.47 ft^3/lb,
+// giving a volumetric flow in ft^3/hr which we then express in
+// gallons. The exact conversion is not load-bearing — the value
+// drives the boil-rate integration only.
+var SteamGeneratorFullLoadSteamFlow = u.NewValue(480*2.2046*3600*0.47/7.4805, u.Gallon)
+
+// SteamGeneratorFullLoadHeatInput is the primary-to-secondary heat
+// flux that vaporises 480 kg/s of water at LatentHeatOfSteamization.
+// Sized to match the spec's 480 kg/s full-load steam flow
+// (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56).
+var SteamGeneratorFullLoadHeatInput Watts = Watts(480 * float64(LatentHeatOfSteamization))
+
 // DieselCoolantTripTemp — cooling trip threshold; the spec implies
-// Service-Water loss must trip the engine (chapter_12/page_169.txt:89,
-// page_171.txt:8-9).
+// Service-Water loss must trip the engine
+// (specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89,
+// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:8-9).
 var DieselCoolantTripTemp = u.NewValue(220, u.Fahrenheit)
 
 type Transformer struct{ Part }

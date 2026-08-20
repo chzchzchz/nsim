@@ -10,7 +10,9 @@ import (
 // reasonable defaults and reasonable in-test overrides live here).
 var (
 	// Cranking acceleration toward DieselRatedSpeed, in RPM/s. Sized so
-	// rated speed is reached within chapter_11/page_166.txt:50's 10 s.
+	// rated speed is reached within
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:48-49's
+	// 10 s.
 	dieselCrankAccel RPM = 300
 	// Coasting friction in 1/s once tripped / stopped.
 	dieselCoastRate = 3.0
@@ -21,7 +23,9 @@ var (
 	dieselAmbientRate = 0.05
 	// Fuel burn rate at full load — sized so 500 gal of fuel (the day
 	// tank set in core/plant.go:50-54) supports ~4 days of rated load,
-	// matching the chapter_11/page_166.txt:36-37 7-day (full tank) hint.
+	// matching the
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:36-37
+	// 7-day (full tank) hint.
 	dieselFuelRate = u.NewValue(500.0/(4*24), u.Gallon) // gal/hr at 1.0 frac
 )
 
@@ -82,7 +86,9 @@ func (d *DieselGenerator) Step(swRunning bool) DieselGenerator {
 	case DieselRunning:
 		ret.Speed = DieselRatedSpeed
 		ret.ReadyTime += dt
-		// Spec deadline (chapter_11/page_166.txt:50) is "10 seconds after
+		// Spec deadline
+		// (specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:50)
+		// is "10 seconds after
 		// receipt of a start signal", so check the total elapsed time
 		// since the start signal latched, not just Running time.
 		if !ret.ReadyToLoad && ret.CrankStartTime+ret.ReadyTime >= DieselReadyDeadline {
@@ -122,8 +128,8 @@ func (d *DieselGenerator) Step(swRunning bool) DieselGenerator {
 	// Spec: "Diesel generator coolers" / "Containment spray pump diesel
 	// engine coolers" are Service Water System loads.
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89,
-	// page_170.txt:84,
-	// page_171.txt:8-9
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_170.txt:84,
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:8-9
 	ambient := ret.Fuel.Part.Temperature.Float() // proxy for ambient
 	gap := ret.CoolantTemp.Float() - ambient
 	if swRunning {
@@ -150,7 +156,9 @@ func (d *DieselGenerator) Step(swRunning bool) DieselGenerator {
 	// Voltage and Frequency ramp from 0 to DieselRatedVoltage /
 	// DieselRatedFrequency over DieselFieldFlashingTime. BreakerClosed
 	// latches once ReadyToLoad is true (i.e. once the diesel can carry
-	// load, per chapter_11/page_166.txt:50). RealPower follows the
+	// load, per
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:50).
+	// RealPower follows the
 	// mechanical RunningFraction scaled by DieselRatedkW.
 	switch ret.State {
 	case DieselRunning:

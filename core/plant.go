@@ -9,6 +9,7 @@ import (
 func (r *ReactorBuilding) Step() ReactorBuilding {
 	ret := *r
 	ret.Pressurizer = ret.Pressurizer.Step(&ret.PORV)
+	ret.SteamGenerator = ret.SteamGenerator.Step()
 	return ret
 }
 
@@ -54,7 +55,7 @@ func (p *Plant) Step() {
 	p.Electrical.DieselGenB = &p.nextPlant.Outside.DieselGenerator
 
 	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step()
-	p.nextPlant.TurbineBuilding = p.TurbineBuilding.StepWithSteam(p.ReactorBuilding.SteamGenerator.Pressure)
+	p.nextPlant.TurbineBuilding = p.TurbineBuilding.StepWithSteam(p.nextPlant.ReactorBuilding.SteamGenerator.Pressure)
 	p.nextPlant.Electrical = p.Electrical.Step()
 
 	// Cross-building DriveReady wiring for the AFW pumps. The fluid
@@ -67,10 +68,11 @@ func (p *Plant) Step() {
 	//     located in the emergency feedwater pump building. The use of
 	//     both motor driven and turbine driven pumps satisfies the
 	//     requirement that the pumps be powered by diverse power
-	//     sources." (chapter_5/page_099.txt:89-93)
+	//     sources."
+	//     (specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:1-5)
 	//   - MotorAFWPump: ESF bus is fed by the diesel after LossOfOffsite
-	//     (chapter_11/page_165.txt:23-36); until ESF is Energized the
-	//     motor-driven AFWP cannot deliver flow.
+	//     (specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:23-36);
+	//     until ESF is Energized the motor-driven AFWP cannot deliver flow.
 	p.nextPlant.Outside.DieselAFWPump.DriveReady =
 		p.nextPlant.Outside.DieselGenerator.ReadyToLoad
 	p.nextPlant.Outside.MotorAFWPump.DriveReady =
@@ -132,8 +134,9 @@ func (p *Plant) BuildGraph() *PlantGraph { return p.BuildGraphFor(p) }
 // The connections modelled are the primary loop, the secondary loop,
 // and the AFWS suction line, drawn from
 // specs/the_westinghouse_pressurized_water_react/glossary.md
-// (cold leg, hot leg, hot standby) and chapter_5/page_099.txt (AFWS
-// pumps, common pipe header).
+// (cold leg, hot leg, hot standby) and
+// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt
+// (AFWS pumps, common pipe header).
 func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	g := &PlantGraph{Nodes: map[string]GraphNode{}}
 

@@ -40,7 +40,8 @@ func TestDiesel_FSM_StartAndReachReady(t *testing.T) {
 		t.Fatalf("after 1 step with start signal: want Cranking, got %v", p.Outside.DieselGenerator.State)
 	}
 
-	// 10 s of simulated time — chapter_11/page_166.txt:50.
+	// 10 s of simulated time —
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:48-49.
 	stepN(&p, int(10*time.Second/TimeStep))
 	if p.Outside.DieselGenerator.State != DieselRunning {
 		t.Fatalf("after 10 s: want Running, got %v", p.Outside.DieselGenerator.State)

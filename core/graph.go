@@ -33,9 +33,9 @@ type GraphNode struct {
 //
 // Spec justification:
 //   * "piping configurations and valving"
-//     (chapter_5/page_094.txt:70)
+//     (specs/the_westinghouse_pressurized_water_react/chapter_5/page_094.txt:70)
 //   * "pumps directed into common pipe header"
-//     (chapter_5/page_099.txt:81-82)
+//     (specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:81-82)
 type GraphEdge struct {
 	From  string
 	To    string
@@ -112,8 +112,11 @@ const pumpHead = 1472.0
 //	tank drops below zero.
 //
 // Spec justification for the per-edge rule: the spec frames flow in
-// terms of pressure differential, pumps, and valves (glossary.md
-// hot standby, chapter_5/page_094.txt:70, chapter_5/page_099.txt:81-82).
+// terms of pressure differential, pumps, and valves
+// (specs/the_westinghouse_pressurized_water_react/glossary.md
+// hot standby,
+// specs/the_westinghouse_pressurized_water_react/chapter_5/page_094.txt:70,
+// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:81-82).
 func simulateFluidFlow(g *PlantGraph, dt time.Duration) {
 	if g == nil {
 		return
