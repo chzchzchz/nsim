@@ -104,11 +104,34 @@ type ReactorBuilding struct {
 	// delivered to the steam generators (gal/s). Populated by
 	// the EFWS step; consumed by the SG feedwater model.
 	EFWSFeedwaterFlow Volume
-	// makeup valve between the refueling-water storage tank
-	// and the volume control tank. Its Flow attribute is the
-	// per-step volume of fresh borated water supplied to the
-	// VCT. The spec describes the reactor makeup control
-	// system in narrative form.
+
+	// ComponentCoolingWaterSystem models the CCWS — the
+	// intermediate cooling loop that removes heat from
+	// safeguards equipment and rejects it to the service water
+	// system. The simplified model tracks a single lumped
+	// inlet/outlet temperature that the RHRS Step consumes as
+	// its ccwInletTemp argument.
+	//
+	// Spec justification:
+	//   - "The Safeguards subsystem is divided into two separate
+	//     and redundant safeguards trains and provides cooling
+	//     water to safeguards equipment such as the residual
+	//     heat removal heat exchangers [...] Each safeguards
+	//     train is sized to supply 100-percent post-accident
+	//     component cooling flow requirements."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:33-42
+	//   - "The CCWS pumps, heat exchangers of the Safeguards
+	//     subsystem and its associated piping, valves and
+	//     instrumentations are seismically qualified as required
+	//     for an engineered safeguards system."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:116-120
+	ComponentCoolingWaterSystem CCWS
+
+	// ReactorMakeupControlValve is the makeup valve between the
+	// refueling-water storage tank and the volume control tank.
+	// Its Flow attribute is the per-step volume of fresh borated
+	// water supplied to the VCT. The spec describes the reactor
+	// makeup control system in narrative form.
 	// "Because of the influx of makeup water from the reactor
 	// makeup control system, the volume control tank level
 	// controller automatically diverts the outflow from the

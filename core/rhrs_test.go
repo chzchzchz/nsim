@@ -22,7 +22,7 @@ func TestRHRS_StartRequiresTempAndPressureThresholds(t *testing.T) {
 	rcsAbove := u.NewValue(RHRSTempThreshold+1, u.Fahrenheit)
 	rcsAt := u.NewValue(RHRSTempThreshold, u.Fahrenheit)
 	rcsBelow := u.NewValue(RHRSTempThreshold-10, u.Fahrenheit)
-	ccw := u.NewValue(RHRSCCWDesignInletTemp, u.Fahrenheit)
+	ccw := u.NewValue(CCWSInletSteadyStateTemp, u.Fahrenheit)
 
 	hot := (&RHRS{}).Step(rcsAbove, RHRSPressureThreshold-1, ccw)
 	assert.False(t, hot.Running,
@@ -63,7 +63,7 @@ func TestRHRS_DoesNotStartAboveTempThreshold(t *testing.T) {
 		},
 	}
 	rcsHot := u.NewValue(RHRSTempThreshold+10, u.Fahrenheit)
-	ccw := u.NewValue(RHRSCCWDesignInletTemp, u.Fahrenheit)
+	ccw := u.NewValue(CCWSInletSteadyStateTemp, u.Fahrenheit)
 	r = r.Step(rcsHot, 100, ccw)
 	assert.False(t, r.Running,
 		"want Running=false with RCS temp above threshold, got %v",
@@ -96,7 +96,7 @@ func TestRHRS_WarmupTimerKeepsSuctionClosed(t *testing.T) {
 		SuctionValves: [2]Valve{{Open: 0}, {Open: 1}},
 	}
 	rcsHot := u.NewValue(350, u.Fahrenheit)
-	ccw := u.NewValue(RHRSCCWDesignInletTemp, u.Fahrenheit)
+	ccw := u.NewValue(CCWSInletSteadyStateTemp, u.Fahrenheit)
 	tr = tr.Step(rcsHot, ccw, false)
 	assert.False(t, tr.WarmupComplete,
 		"want WarmupComplete=false before warmup elapses, got %v",
@@ -130,7 +130,7 @@ func TestRHRS_MinimumFlowRecircAlwaysPresent(t *testing.T) {
 		WarmupComplete: true,
 	}
 	rcsHot := u.NewValue(350, u.Fahrenheit)
-	ccw := u.NewValue(RHRSCCWDesignInletTemp, u.Fahrenheit)
+	ccw := u.NewValue(CCWSInletSteadyStateTemp, u.Fahrenheit)
 	tr = tr.Step(rcsHot, ccw, true)
 	dt := TimeStep.Seconds()
 	want := (RHRSTrainDesignFlow + RHRSPumpMinFlowGalPerStep) * dt
@@ -154,7 +154,7 @@ func TestRHRS_MinimumFlowRecircAlwaysPresent(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:61-66
 func TestRHRS_BypassValveKeepsReturnFlowConstant(t *testing.T) {
 	rcsHot := u.NewValue(350, u.Fahrenheit)
-	ccw := u.NewValue(RHRSCCWDesignInletTemp, u.Fahrenheit)
+	ccw := u.NewValue(CCWSInletSteadyStateTemp, u.Fahrenheit)
 	mk := func(open float64) *RHRSTrain {
 		return &RHRSTrain{
 			Pump:           Pump{Running: true},
@@ -223,7 +223,7 @@ func TestRHRS_EndToEndCooldownTransfersHeatFromRCS(t *testing.T) {
 	r2 := r.Step(
 		p.ReactorBuilding.ReactorPressureVessel.Outlet,
 		float64(p.ReactorBuilding.Pressurizer.Pressure),
-		u.NewValue(RHRSCCWDesignInletTemp, u.Fahrenheit),
+		u.NewValue(CCWSInletSteadyStateTemp, u.Fahrenheit),
 	)
 	r = &r2
 	assert.True(t, r.HasTakenOver,

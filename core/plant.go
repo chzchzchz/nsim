@@ -73,10 +73,11 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	dt := TimeStep
 	rcsOutletF := ret.ReactorPressureVessel.Outlet.Float()
 	rcsPressure := float64(ret.Pressurizer.Pressure)
+	ret.ComponentCoolingWaterSystem = ret.ComponentCoolingWaterSystem.Step()
 	ret.ResidualHeatRemovalSystem = ret.ResidualHeatRemovalSystem.Step(
 		ret.ReactorPressureVessel.Outlet,
 		rcsPressure,
-		u.NewValue(RHRSCCWDesignInletTemp, u.Fahrenheit),
+		ret.ComponentCoolingWaterSystem.OutletTemp,
 	)
 	if ret.ResidualHeatRemovalSystem.HasTakenOver {
 		rejectionW := float64(
@@ -501,6 +502,21 @@ func (p *Plant) Step() {
 		efws.SubsystemB.MotorPump.DriveReady = true
 	}
 
+	// CCWS pumps derive power from the ESF bus; the diesel
+	// energises them through the same path as the EFWS motor
+	// pumps. Set PumpRunning when the diesel is ready so the
+	// CCWS Step applies the recovery-lag to the inlet.
+	//
+	// Spec justification:
+	//   - "The CCWS Safeguards subsystem is considered an
+	//     engineered safeguards system because it is required
+	//     to remove decay heat during postaccident and to
+	//     provide cooling water to safeguards equipment."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_103.txt:135-138
+	if p.Outside.DieselGenerator.ReadyToLoad {
+		p.nextPlant.ReactorBuilding.ComponentCoolingWaterSystem.PumpRunning = true
+	}
+
 	// Flow-modulating valves: assume full-open during the
 	// first 30 minutes after actuation. After that the
 	// operator controls them, but the simplified model leaves
@@ -890,6 +906,30 @@ func MakePlant() Plant {
 	p.ReactorBuilding.EmergencyFeedwaterSystem = EFWS{
 		SubsystemA: efwsSubsystem(),
 		SubsystemB: efwsSubsystem(),
+	}
+
+	// CCWS defaults (plans/p18_1.txt). At construction the
+	// inlet temperature sits at the steady-state setpoint
+	// (105°F), no pumps are running, and the surge tank is
+	// full. The simplified model brings pumps online in
+	// Plant.Step when the safety-injection actuation signal
+	// arrives.
+	//
+	// Spec justification:
+	//   - "The component cooling water inlet temperature to
+	//     various components during normal cooldown is permitted
+	//     to increase to 120°F (49°C), however it must return to
+	//     105°F (40°C) after four hours."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112
+	//   - "a standby pump in each train of the Safeguards
+	//     subsystem is provided. A spare pump is also available
+	//     in the Auxiliary subsystem."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:93-96
+	p.ReactorBuilding.ComponentCoolingWaterSystem = CCWS{
+		PumpRunning:    false,
+		InletTemp:      u.NewValue(CCWSInletSteadyStateTemp, u.Fahrenheit),
+		OutletTemp:     u.NewValue(CCWSInletSteadyStateTemp, u.Fahrenheit),
+		SurgeTankLevel: CCWSSurgeTankCapacity,
 	}
 
 	// Reactor makeup control valve defaults: closed at startup

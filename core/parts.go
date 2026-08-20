@@ -1928,12 +1928,6 @@ const (
 	// hot-leg isolation valves may be opened.
 	RHRSTrainWarmupTime = 5 * time.Minute
 
-	// RHRSCCWDesignInletTemp is the component cooling water
-	// inlet temperature to the RHR HX (°F). The spec notes
-	// "component cooling water at no more than design temperature".
-	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:11-12
-	RHRSCCWDesignInletTemp = 100.0 // °F
-
 	// RHRSHXApproachTemp is the temperature approach of the RHR
 	// heat exchanger (RCS outlet temp - CCW inlet temp, °F).
 	RHRSHXApproachTemp = 20.0
@@ -2480,4 +2474,146 @@ var EFWSMotorPumpFlow Volume = u.NewValue(150.0/60.0, u.Gallon)
 // pump because the turbine governor can track steam demand.
 var EFWSTurbinePumpFlow Volume = u.NewValue(200.0/60.0, u.Gallon)
 
+// CCWS models the Component Cooling Water System — the
+// intermediate cooling loop that removes heat from safeguards
+// equipment and rejects it to the ultimate heat sink via the
+// service water system. The simplified model collapses the
+// Safeguards subsystem (two independent trains, two pumps each,
+// one HX, one surge tank) and the Auxiliary subsystem (two pumps,
+// one HX, one surge tank) into a single lumped component.
+//
+// Spec justification:
+//   - Safeguards subsystem architecture: "The Safeguards
+//     subsystem is divided into two separate and redundant
+//     safeguards trains and provides cooling water to safeguards
+//     equipment such as the residual heat removal heat
+//     exchangers and pump, the reactor coolant pump thermal
+//     barriers, the containment fan coolers, the containment
+//     spray pump heat exchangers, the spent fuel pit heat
+//     exchangers, and the positive displacement pump. Each
+//     safeguards train is sized to supply 100-percent
+//     post-accident component cooling flow requirements."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:33-42
+//   - No cross-connection between trains: "to retain total
+//     physical separation consisting of two separate, independent
+//     safeguards trains with no cross connection between the two
+//     trains. Components of each safeguards train (pumps and
+//     heat exchanger) are housed in separate safeguards equipment
+//     cubicles."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:8-14
+//   - Flow path: "The component cooling water flows from the
+//     pump, through the shell side of the component cooling heat
+//     exchangers, through the components being cooled, and back
+//     to the pump. The surge tank is connected to the suction
+//     side of the component cooling pumps."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:51-56
+//   - Surge-tank function: "They provide a surge volume to
+//     accommodate thermal expansion and contraction of system
+//     volume during transients, and collects water that may leak
+//     into the system from components being cooled."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:60-64
+//   - Temperature limit: "The component cooling water inlet
+//     temperature to various components during normal cooldown
+//     is permitted to increase to 120°F (49°C), however it must
+//     return to 105°F (40°C) after four hours."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112
+//   - Standby-pump redundancy: "Failure of a pump will not
+//     affect the time required for cooldown because a standby
+//     pump in each train of the Safeguards subsystem is
+//     provided. A spare pump is also available in the Auxiliary
+//     subsystem."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:92-96
+//   - Seismic qualification: "The CCWS pumps, heat exchangers
+//     of the Safeguards subsystem and its associated piping,
+//     valves and instrumentations are seismically qualified as
+//     required for an engineered safeguards system."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:116-120
+type CCWS struct {
+	Part
+
+	// PumpRunning is true when at least one safeguards train or
+	// the auxiliary train is running. The spec describes standby
+	// pumps in each train; the simplified model collapses
+	// running state to a single boolean.
+	// "a standby pump in each train of the Safeguards subsystem
+	// is provided."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:93-94
+	PumpRunning bool
+
+	// InletTemp is the CCW inlet temperature (°F). During normal
+	// cooldown this is permitted to rise to 120°F but must
+	// recover to 105°F within four hours.
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112
+	InletTemp Temperature
+
+	// OutletTemp is the CCW outlet temperature (°F) after picking
+	// up heat from the cooled components. This is the value
+	// supplied to the RHRS Step as the ccwInletTemp argument.
+	OutletTemp Temperature
+
+	// SurgeTankLevel is the remaining water volume in the CCWS
+	// surge tank (gal). The tank provides surge volume for
+	// thermal expansion and collects leakage.
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:60-64
+	SurgeTankLevel Volume
+}
+
+// CCWS design constants.
+//
+// Spec justification:
+//   - Temperature limit and recovery: "The component cooling
+//     water inlet temperature to various components during
+//     normal cooldown is permitted to increase to 120°F (49°C),
+//     however it must return to 105°F (40°C) after four hours."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112
+//   - "During plant normal cooldown, the standby train of the
+//     Safeguards subsystem is placed in operation at
+//     approximately four hours after reactor shutdown."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:102-104
+const (
+	// CCWSInletSteadyStateTemp is the design steady-state CCW
+	// inlet temperature (°F). Below this value recovery is
+	// targeted.
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112
+	CCWSInletSteadyStateTemp = 105.0 // °F
+
+	// CCWSInletMaxCooldownTemp is the maximum permitted CCW
+	// inlet temperature during cooldown transients (°F).
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112
+	CCWSInletMaxCooldownTemp = 120.0 // °F
+
+	// CCWSRecoveryTimeConstant is the first-order-lag time
+	// constant (s) used to drive CCW inlet temperature back
+	// toward CCWSInletSteadyStateTemp after a transient. Sized
+	// so a 120°F → 105°F excursion completes in roughly four
+	// hours (5× tau ≈ 4 h).
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112
+	CCWSRecoveryTimeConstant = 1.0 * time.Hour
+)
+
+// CCWSSurgeTankCapacity is the lumped total water volume of the
+// CCWS surge tanks (gal). The spec describes three surge tanks
+// (one per safeguards train and one for the auxiliary subsystem)
+// but does not state a numeric capacity; the value chosen is
+// representative of a single surge tank for a four-loop plant.
+// specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:60-67
+var CCWSSurgeTankCapacity Volume = u.NewValue(5000, u.Gallon)
+
+// CCWSDesignFlow is the lumped CCW flow rate through all cooled
+// components combined (gal/s). The spec does not state a single
+// total flow; the value 800 gpm (≈18.5 gal/s) is representative
+// of a single safeguards train serving RHR HX, CVCS HX, and RCP
+// thermal barriers at full post-accident load.
+// "Each safeguards train is sized to supply 100-percent
+// post-accident component cooling flow requirements."
+// specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:41-42
+var CCWSDesignFlow Volume = u.NewValue(800.0/60.0, u.Gallon)
+
+// CCHXApproachTemp is the lumped temperature rise across the
+// CCWS heat exchanger (°F). Used as the single-step outlet
+// temperature offset above the inlet so the simplified model
+// does not need to track individual cooled-component heat
+// loads. The spec does not state an approach temperature; 10°F
+// is typical for a shell-and-tube HX with moderate heat duties.
+var CCHXApproachTemp Temperature = u.NewValue(10.0, u.Fahrenheit)
 
