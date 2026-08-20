@@ -120,3 +120,49 @@ func TestDieselAFWPumpGatedByDiesel(t *testing.T) {
 		t.Fatal("want DieselAFWPump.Running preserved once DriveReady")
 	}
 }
+
+// The turbine-driven AFW pump's DriveReady follows the SG steam
+// header pressure. With the reactor running at power the SG reaches
+// SteamGeneratorShellPressure and the turbine pump is ready; with the
+// reactor tripped the SG pressure collapses and DriveReady goes false.
+//
+// Spec justification:
+//   - "The steam supply line for each turbine driven pump is connected
+//     to the main steam line from a steam generator."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:42-47
+func TestTurbineAFWPumpGatedBySGVesselPressure(t *testing.T) {
+	p := MakePlant()
+	p.Outside.TurbineAFWPump.Running = true
+	p.Outside.TurbineAFWPump.DriveSource = DriveSteam
+
+	if p.Outside.TurbineAFWPump.DriveReady {
+		t.Fatal("want TurbineAFWPump.DriveReady false before SG builds pressure")
+	}
+
+	// Run at power long enough for the SG pressure to relax toward
+	// SteamGeneratorShellPressure (~1 s timescale).
+	stepN(&p, int(5*time.Second/TimeStep))
+	if !(p.ReactorBuilding.SteamGenerator.Pressure > 0) {
+		t.Fatalf("want SG pressure > 0 after 5 s at power, got %v",
+			p.ReactorBuilding.SteamGenerator.Pressure)
+	}
+	if !p.Outside.TurbineAFWPump.DriveReady {
+		t.Fatalf("want TurbineAFWPump.DriveReady true while SG has pressure, got false (sg.P=%v)",
+			p.ReactorBuilding.SteamGenerator.Pressure)
+	}
+
+	// Trip the reactor; the SG pressure decays through the heat-
+	// transfer step (water depletion) and TurbineAFWPump.DriveReady
+	// follows.
+	p.ReactorBuilding.ReactorPressureVessel.Trip = true
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 0
+	stepN(&p, int(time.Minute/TimeStep))
+	if p.ReactorBuilding.SteamGenerator.Pressure > 1 {
+		t.Fatalf("want SG pressure collapsed after trip, got %v",
+			p.ReactorBuilding.SteamGenerator.Pressure)
+	}
+	if p.Outside.TurbineAFWPump.DriveReady {
+		t.Fatalf("want TurbineAFWPump.DriveReady false after SG pressure collapses, got true (sg.P=%v)",
+			p.ReactorBuilding.SteamGenerator.Pressure)
+	}
+}

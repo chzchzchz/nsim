@@ -72,7 +72,28 @@ const (
 )
 
 type FuelRods struct{ Part }
-type ControlRods struct{ Part }
+
+// ControlRods models the rod cluster control (RCC) assemblies.
+// Position=1 means fully withdrawn (normal operation);
+// Position=0 means fully inserted (reactor tripped).
+//
+// Spec justification:
+//   - "Rod cluster control (RCC) assemblies are used for reactor
+//     startup or shutdown, to follow load changes, and to control
+//     small transient changes in reactivity."
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_035.txt:90-93
+//   - "extend the full length of the core when fully inserted. Full
+//     length RCCs provide operational reactivity control and can shut
+//     the reactor down at all times, even with the most reactive RCC
+//     stuck out of the core."
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_035.txt:108-114
+//   - Glossary "rod worth — The reactivity change per unit change in
+//     control rod position."
+//     specs/the_westinghouse_pressurized_water_react/back_matter/page_244.txt:46-47
+type ControlRods struct {
+	Part
+	Position float64 // 0..1 fraction of withdrawal
+}
 type Nozzle struct{ Part }
 
 type ReactorPressureVessel struct {
@@ -81,8 +102,23 @@ type ReactorPressureVessel struct {
 	ControlRods
 	Reactivity float32
 	DecayHeat  float32
-	Inlet      Nozzle
-	Outlet     Nozzle
+
+	// ThermalPower is the per-step heat flux produced by the core
+	// and consumed downstream by the SG's HeatInput. Rated when
+	// the operator has the reactor running at power; decays via
+	// the standard shutdown curve when Trip is set.
+	ThermalPower Watts
+
+	// TimeSinceTrip is 0 while running and accumulates after Trip.
+	TimeSinceTrip time.Duration
+
+	// Trip is the operator-controlled trip flag. Set true to drop
+	// the rods; the per-step output then follows the decay-heat
+	// curve.
+	Trip bool
+
+	Inlet  Nozzle
+	Outlet Nozzle
 	Pressure
 }
 
@@ -108,10 +144,10 @@ type ReactorPressureVessel struct {
 type Pressurizer struct {
 	Part
 	Pressure
-	Water      Volume
-	Volume     Volume
-	HeatersOn  bool
-	SprayOpen  float64
+	Water       Volume
+	Volume      Volume
+	HeatersOn   bool
+	SprayOpen   float64
 	SteamBubble Volume
 }
 
@@ -133,11 +169,11 @@ type Pressurizer struct {
 const (
 	PressurizerBasePressure    Pressure = 1500
 	PressurizerHeaterTarget    Pressure = 2250
-	PressurizerHeaterRate      Pressure = 200  // psi/s while HeatersOn
+	PressurizerHeaterRate      Pressure = 200 // psi/s while HeatersOn
 	PressurizerSprayMin        Pressure = 1400
-	PressurizerSprayRate       Pressure = 300  // psi/s at SprayOpen == 1
-	PressurizerAmbientDecay    Pressure = 5    // psi/s cooldown when idle
-	PressurizerBubbleStiffness float64   = 2.5 // psi per gallon of bubble
+	PressurizerSprayRate       Pressure = 300 // psi/s at SprayOpen == 1
+	PressurizerAmbientDecay    Pressure = 5   // psi/s cooldown when idle
+	PressurizerBubbleStiffness float64  = 2.5 // psi per gallon of bubble
 	PressurizerPORVTrip        Pressure = 2500
 )
 
@@ -427,6 +463,50 @@ var SteamGeneratorFullLoadHeatInput Watts = Watts(480 * float64(LatentHeatOfStea
 // (specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89,
 // specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:8-9).
 var DieselCoolantTripTemp = u.NewValue(220, u.Fahrenheit)
+
+// Reactor core sizing. The spec gives steam-flow and pressure data
+// (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56,
+// specs/the_westinghouse_pressurized_water_react/chapter_3/page_066.txt:80-82)
+// but does not state a plant-wide rated thermal power. The number
+// below is sized so that four SGs at SteamGeneratorFullLoadHeatInput
+// match the standard 4-loop plant scale (~3.4 GWt).
+const (
+	CoreRatedThermalPower Watts = 3_800_000_000
+)
+
+// Decay-heat model constants.
+//
+// Spec justification:
+//   - The spec does not state a decay-heat curve; the model follows
+//     the textbook two-branch approximation of ANSI/ANS-5.1 (1971).
+//     The fast branch (half-life ~ 40 s) drops the reactor from
+//     rated to the ~6.5% shutdown level; the slow branch (e-folding
+//     ~ 20 h) tracks the residual heat the Residual Heat Removal
+//     System is designed to remove. The 20-hour cooldown target is
+//     cited in
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_083.txt:104-105
+//     ("reduce the RCS temperature to 140°F (60°C) within 20 hours
+//     following reactor shutdown").
+const (
+	CoreDecayHeatShutdownFraction float64 = 0.065 // 6.5% of rated
+	CoreDecayHeatMinFraction      float64 = 0.005 // long tail ~0.5%
+	CoreDecayHeatTimeConstant             = 20 * time.Hour
+	CoreDecayHeatFastTimeConstant         = 50 * time.Second
+
+	// Reactivity contributions. ABCD is the absolute delta-k at
+	// full rod insertion, scaled so withdrawing the rods from 0 to
+	// 1 shifts reactivity by 45 pcm in the positive direction.
+	CoreRodWorthABCD float32 = -0.045
+
+	// Doppler / temperature feedback. The Doppler defect is
+	// defined as negative reactivity associated with rising fuel
+	// temperature; the proxy below uses the coolant outlet
+	// temperature deviation from a design full-load reference.
+	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:89-96
+	// specs/the_westinghouse_pressurized_water_react/back_matter/page_244.txt:60-62
+	CoreDopplerReferenceTempF float32 = 571 // design full-load Tavg °F
+	CoreDopplerPcmPerDegF     float32 = -0.08
+)
 
 type Transformer struct{ Part }
 

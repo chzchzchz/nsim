@@ -13,14 +13,14 @@ import (
 // GraphNode identifies one fluid-bearing part in the plant graph.
 //
 // Spec justification:
-//   * "The reactor coolant cold leg is the reactor coolant return line
+//   - "The reactor coolant cold leg is the reactor coolant return line
 //     from the steam generator to the reactor vessel." (glossary.md
 //     cold leg, p. 51)
-//   * "The reactor coolant hot leg is the reactor coolant exit line from
+//   - "The reactor coolant hot leg is the reactor coolant exit line from
 //     the reactor vessel to the steam generator." (glossary.md hot leg,
 //     p. 87)
-//   These two lines are the primary physical edges in a PWR; the graph
-//   below represents them explicitly.
+//     These two lines are the primary physical edges in a PWR; the graph
+//     below represents them explicitly.
 type GraphNode struct {
 	ID   string
 	Kind string
@@ -32,9 +32,9 @@ type GraphNode struct {
 // adds head when running.
 //
 // Spec justification:
-//   * "piping configurations and valving"
+//   - "piping configurations and valving"
 //     (specs/the_westinghouse_pressurized_water_react/chapter_5/page_094.txt:70)
-//   * "pumps directed into common pipe header"
+//   - "pumps directed into common pipe header"
 //     (specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:81-82)
 type GraphEdge struct {
 	From  string
@@ -59,20 +59,20 @@ type fluidNode interface {
 	capacity() Volume
 }
 
-func (t *Tank) pressure() Pressure        { return t.Pressure }
-func (t *Tank) level() Volume             { return t.Level }
-func (t *Tank) setLevel(v Volume)         { t.Level = v }
-func (t *Tank) capacity() Volume          { return t.Capacity }
+func (t *Tank) pressure() Pressure { return t.Pressure }
+func (t *Tank) level() Volume      { return t.Level }
+func (t *Tank) setLevel(v Volume)  { t.Level = v }
+func (t *Tank) capacity() Volume   { return t.Capacity }
 
 func (s *SteamGenerator) pressure() Pressure { return s.Pressure }
 func (s *SteamGenerator) level() Volume      { return s.Water }
 func (s *SteamGenerator) setLevel(v Volume)  { s.Water = v }
 func (s *SteamGenerator) capacity() Volume   { return s.Volume }
 
-func (p *Pressurizer) pressure() Pressure    { return p.Pressure }
-func (p *Pressurizer) level() Volume         { return p.Water }
-func (p *Pressurizer) setLevel(v Volume)     { p.Water = v }
-func (p *Pressurizer) capacity() Volume      { return p.Volume }
+func (p *Pressurizer) pressure() Pressure { return p.Pressure }
+func (p *Pressurizer) level() Volume      { return p.Water }
+func (p *Pressurizer) setLevel(v Volume)  { p.Water = v }
+func (p *Pressurizer) capacity() Volume   { return p.Volume }
 
 func (r *ReactorPressureVessel) pressure() Pressure { return r.Pressure }
 func (r *ReactorPressureVessel) level() Volume      { return zeroVolume }

@@ -9,6 +9,9 @@ import (
 func (r *ReactorBuilding) Step() ReactorBuilding {
 	ret := *r
 	ret.Pressurizer = ret.Pressurizer.Step(&ret.PORV)
+	rpv := ret.ReactorPressureVessel.Step()
+	ret.ReactorPressureVessel = rpv
+	ret.SteamGenerator.HeatInput = rpv.ThermalPower
 	ret.SteamGenerator = ret.SteamGenerator.Step()
 	return ret
 }
@@ -73,10 +76,17 @@ func (p *Plant) Step() {
 	//   - MotorAFWPump: ESF bus is fed by the diesel after LossOfOffsite
 	//     (specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:23-36);
 	//     until ESF is Energized the motor-driven AFWP cannot deliver flow.
+	//   - TurbineAFWPump: "The steam supply line for each turbine driven
+	//     pump is connected to the main steam line from a steam
+	//     generator. This line is fitted with a steam admission valve
+	//     […] arranged to fail-open on loss of air or electrical power."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:42-47
 	p.nextPlant.Outside.DieselAFWPump.DriveReady =
 		p.nextPlant.Outside.DieselGenerator.ReadyToLoad
 	p.nextPlant.Outside.MotorAFWPump.DriveReady =
 		p.nextPlant.Electrical.ESFBusA.Energized
+	p.nextPlant.Outside.TurbineAFWPump.DriveReady =
+		p.nextPlant.ReactorBuilding.SteamGenerator.Pressure > SteamGeneratorShellPressure/100
 
 	// Pressure-driven fluid flow integrates the freshly-stepped parts.
 	// Graph nodes hold pointers into nextPlant; the mutations land in
@@ -93,6 +103,8 @@ func (p *Plant) Update() {
 
 func MakePlant() Plant {
 	p := Plant{nextPlant: &Plant{}}
+	p.ReactorBuilding.SteamGenerator.Volume = u.NewValue(100000, u.Gallon)
+	p.ReactorBuilding.SteamGenerator.Water = u.NewValue(80000, u.Gallon)
 	p.TurbineBuilding.HeaterDrainTank = Tank{
 		Level:    u.NewValue(0, u.Gallon),
 		Capacity: u.NewValue(13120, u.Gallon),
