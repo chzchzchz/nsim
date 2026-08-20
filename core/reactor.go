@@ -7,8 +7,8 @@ import (
 )
 
 // Step advances the reactor pressure vessel by TimeStep. It
-// implements the minimal reactivity model and the two-branch decay
-// heat curve described in plans/p7_1.txt.
+// implements the primary-side thermal model and the minimal
+// reactivity model described in plans/p7_1.txt and plans/p8_1.txt.
 //
 // Spec justification for the underlying physics:
 //   - Rod cluster control: "Rod cluster control (RCC) assemblies are
@@ -29,6 +29,11 @@ import (
 //     increase in reactor core power due to temperature feedback
 //     effects from an increase in fuel and moderator temperature."
 //     specs/the_westinghouse_pressurized_water_react/back_matter/page_244.txt:60-62
+//   - Moderator temperature coefficient: varies with boron
+//     concentration; positive at beginning-of-life, negative at
+//     end-of-life.
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_039.txt:54-55
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
 //   - Decay heat removal: "The system is designed to reduce the RCS
 //     temperature to 140°F (60°C) within 20 hours following reactor
 //     shutdown."
@@ -37,7 +42,19 @@ import (
 //     the steam generators to remove plant stored heat and core
 //     decay heat by converting the emergency feedwater to steam."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:28-31
-func (r *ReactorPressureVessel) Step() ReactorPressureVessel {
+//   - RCS design temperatures: "Reactor coolant inlet temperature:
+//     621°F (327°C); outlet: 558°F (292°C)"
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60-61
+//   - Design full-load average temperature: "about 571°F (300°C)"
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:115-116
+//   - RPV design pressure: "designed for full system pressure of
+//     2500 psia (172.3 bar a)"
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_054.txt:20
+//   - RCP design capacity / head: "Design capacity 97,600 gpm
+//     (6.15 m3/sec) Design head 280 ft (85.3 m)"
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_056.txt:124-130
+//     (cited for context; not directly used in the model).
+func (r *ReactorPressureVessel) Step(rcpRunning bool) ReactorPressureVessel {
 	ret := *r
 	dt := TimeStep
 
@@ -48,51 +65,73 @@ func (r *ReactorPressureVessel) Step() ReactorPressureVessel {
 		ret.TimeSinceTrip = 0
 	}
 
-	// 2) Control-rod reactivity contribution. Position=0 (fully
-	// inserted) gives most negative reactivity (shutdown).
-	// Position=1 (fully withdrawn) gives zero rod contribution.
-	rodReactivity := float32(ret.ControlRods.Position-1) * CoreRodWorthABCD
-
-	// 3) Doppler / temperature feedback. Proxy: coolant outlet
-	// temperature deviation from the design full-load reference.
-	// The spec ties this to the broader "power defect":
-	// "The sum of the above three effects, Doppler, variable average
-	// moderator temperature, and redistribution is termed the power
-	// defect."
-	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:100-104
-	var outletF float32
-	if ret.Outlet.Temperature.Unit().Name == "" {
-		outletF = float32(ret.Outlet.Temperature.Float())
-	} else {
-		toF, err := ret.Outlet.Temperature.Convert(u.Fahrenheit)
-		if err != nil {
-			outletF = float32(ret.Outlet.Temperature.Float())
-		} else {
-			outletF = float32(toF.Float())
-		}
+	// 2) Primary-side thermal model.
+	powerFrac := float64(ret.ThermalPower) / float64(CoreRatedThermalPower)
+	if powerFrac < 0 {
+		powerFrac = 0
 	}
-	dopplerDelta := outletF - CoreDopplerReferenceTempF
-	ret.Reactivity = rodReactivity + dopplerDelta*CoreDopplerPcmPerDegF
+	refDeltaF := CoreReferenceOutletF - CoreReferenceInletF
+	targetOutlet := CoreReferenceInletF + powerFrac*refDeltaF
 
-	// 4) Thermal power output. At-power: rated. After trip:
-	// two-branch decay-heat curve.
-	powerFrac := float32(1.0)
+	outletF := ret.Outlet.Float()
+	outletF += (targetOutlet - outletF) * (dt.Seconds() / PrimaryThermalTimeConstant)
+	if outletF < 0 {
+		outletF = 0
+	}
+	ret.Outlet = u.NewValue(outletF, u.Fahrenheit)
+
+	if rcpRunning {
+		blend := CoreInletBlendFraction * powerFrac
+		targetInlet := CoreReferenceInletF*(1-blend) + outletF*blend
+		inletF := ret.Inlet.Float()
+		inletF += (targetInlet - inletF) * (dt.Seconds() / PrimaryInletTimeConstant)
+		if inletF < 0 {
+			inletF = 0
+		}
+		ret.Inlet = u.NewValue(inletF, u.Fahrenheit)
+	}
+
+	// 3) Pressure relaxes toward the RPV design pressure. The
+	// pressurizer (p5) sets the actual RCS pressure; this is the
+	// design baseline the RPV itself sits at in steady state.
+	pressure := float64(ret.Pressure)
+	pressure += (float64(RPVDesignPressure) - pressure) *
+		(dt.Seconds() / PrimaryPressureTimeConstant)
+	if pressure < 0 {
+		pressure = 0
+	}
+	ret.Pressure = Pressure(pressure)
+
+	// 4) Reactivity contributions.
+	rodReactivity := float32(ret.ControlRods.Position-1) * CoreRodWorthABCD
+	dopplerDeltaF := outletF - float64(CoreDopplerReferenceTempF)
+	dopplerPcm := float32(dopplerDeltaF * CoreDopplerPcmPerDegF)
+	ret.Reactivity = rodReactivity + dopplerPcm
+
+	// 5) Thermal power output. At-power: rated scaled by the
+	// reactivity power-defect correction. After trip: decay-heat
+	// curve from p7 (unchanged).
+	powerFrac32 := float32(powerFrac)
 	if ret.Trip {
 		t := ret.TimeSinceTrip.Seconds()
 		if t < CoreDecayHeatFastTimeConstant.Seconds() {
 			fast := float32(CoreDecayHeatShutdownFraction +
 				(1.0-CoreDecayHeatShutdownFraction)*
-					math.Exp(-t/CoreDecayHeatFastTimeConstant.Seconds()))
-			powerFrac = fast
+					math.Exp(-float64(t)/CoreDecayHeatFastTimeConstant.Seconds()))
+			powerFrac32 = fast
 		} else {
 			tSlow := t - CoreDecayHeatFastTimeConstant.Seconds()
 			slow := float32(CoreDecayHeatMinFraction +
 				(CoreDecayHeatShutdownFraction-CoreDecayHeatMinFraction)*
 					math.Exp(-tSlow/CoreDecayHeatTimeConstant.Seconds()))
-			powerFrac = slow
+			powerFrac32 = slow
 		}
 	}
-	ret.ThermalPower = Watts(float64(CoreRatedThermalPower) * float64(powerFrac))
+	powerCorrection := 1.0 + float64(ret.Reactivity)/100.0
+	if powerCorrection < 0 {
+		powerCorrection = 0
+	}
+	ret.ThermalPower = Watts(float64(CoreRatedThermalPower) * float64(powerFrac32) * powerCorrection)
 	if ret.ThermalPower < 0 {
 		ret.ThermalPower = 0
 	}

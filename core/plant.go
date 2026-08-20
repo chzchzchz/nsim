@@ -9,7 +9,7 @@ import (
 func (r *ReactorBuilding) Step() ReactorBuilding {
 	ret := *r
 	ret.Pressurizer = ret.Pressurizer.Step(&ret.PORV)
-	rpv := ret.ReactorPressureVessel.Step()
+	rpv := ret.ReactorPressureVessel.Step(ret.ReactorCoolantPump.Running)
 	ret.ReactorPressureVessel = rpv
 	ret.SteamGenerator.HeatInput = rpv.ThermalPower
 	ret.SteamGenerator = ret.SteamGenerator.Step()
@@ -105,6 +105,15 @@ func MakePlant() Plant {
 	p := Plant{nextPlant: &Plant{}}
 	p.ReactorBuilding.SteamGenerator.Volume = u.NewValue(100000, u.Gallon)
 	p.ReactorBuilding.SteamGenerator.Water = u.NewValue(80000, u.Gallon)
+	// Initialise the RCS to the design full-load operating point so
+	// the Doppler / moderator feedback loop starts in a sane state.
+	// "Reactor coolant inlet temperature: 621°F (327°C); outlet:
+	// 558°F (292°C)" — values here are inverted for RPV-side use
+	// (cold leg from SG inlet / hot leg to SG outlet) per Table 3.4-1.
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60-61
+	p.ReactorBuilding.ReactorPressureVessel.Inlet = u.NewValue(CoreReferenceInletF, u.Fahrenheit)
+	p.ReactorBuilding.ReactorPressureVessel.Outlet = u.NewValue(CoreReferenceOutletF, u.Fahrenheit)
+	p.ReactorBuilding.ReactorPressureVessel.Pressure = RPVDesignPressure
 	p.TurbineBuilding.HeaterDrainTank = Tank{
 		Level:    u.NewValue(0, u.Gallon),
 		Capacity: u.NewValue(13120, u.Gallon),

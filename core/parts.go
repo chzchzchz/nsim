@@ -29,6 +29,8 @@ type Tank struct {
 
 type Pump struct {
 	Part
+	// Running is set by the operator between steps; stopped pumps
+	// freeze primary-side Inlet tracking in the RPV step (plans/p8_1.txt).
 	Running bool
 }
 
@@ -117,8 +119,25 @@ type ReactorPressureVessel struct {
 	// curve.
 	Trip bool
 
-	Inlet  Nozzle
-	Outlet Nozzle
+	// Inlet is the temperature of coolant entering the core via the
+	// cold legs (after the SG). Outlet is the temperature leaving
+	// the core via the hot legs (before the SG). These two
+	// temperatures drive the Doppler / moderator feedback in Step
+	// and are the basis for the average-coolant-temperature
+	// reactivity term.
+	//
+	// Spec justification:
+	//   - "Reactor coolant inlet temperature: 621°F (327°C);
+	//     outlet: 558°F (292°C)"
+	//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60-61
+	//   - "The design full load average temperature is about 571°F
+	//     (300°C)."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:115-116
+	Inlet  Temperature
+	Outlet Temperature
+
+	InletNozzle  Nozzle
+	OutletNozzle Nozzle
 	Pressure
 }
 
@@ -498,14 +517,92 @@ const (
 	// 1 shifts reactivity by 45 pcm in the positive direction.
 	CoreRodWorthABCD float32 = -0.045
 
-	// Doppler / temperature feedback. The Doppler defect is
-	// defined as negative reactivity associated with rising fuel
-	// temperature; the proxy below uses the coolant outlet
-	// temperature deviation from a design full-load reference.
-	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:89-96
-	// specs/the_westinghouse_pressurized_water_react/back_matter/page_244.txt:60-62
-	CoreDopplerReferenceTempF float32 = 571 // design full-load Tavg °F
-	CoreDopplerPcmPerDegF     float32 = -0.08
+	// Design full-load average coolant temperature (°F); the
+	// reference point at which the simplified Doppler term
+	// contributes zero reactivity.
+	//   "The design full load average temperature is about
+	//   571°F (300°C)."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:115-116
+	CoreDopplerReferenceTempF float32 = 571
+)
+
+// Primary-side thermal model constants (plans/p8_1.txt).
+//
+// Spec justification:
+//   - CoreReferenceInletF / CoreReferenceOutletF — Table 3.4-1 lists
+//     "Reactor coolant inlet temperature: 621°F; outlet: 558°F" from
+//     the steam-generator tube-side perspective. Walking the loop back
+//     to the RPV (coolant enters the core cold via the SG cold leg and
+//     leaves hot via the hot leg) means RPV-side Inlet=558°F and
+//     Outlet=621°F.
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60-61
+//   - RPVDesignPressure — "designed for full system pressure of 2500
+//     psia (172.3 bar a)"
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_054.txt:20-21
+//     The reactor coolant pump design data table repeats "Design
+//     pressure 2500 psia (172 bar)".
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_069.txt:84-91
+//   - RCP design parameters: "Design capacity 97,600 gpm (6.15
+//     m3/sec)" / "Design head 280 ft (85.3 m)" — cited for context
+//     but not directly used in the model.
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_056.txt:124-130
+//   - CoreDopplerPcmPerDegF — combined Doppler + moderator
+//     temperature coefficient of reactivity for this model. The spec
+//     describes the constituent effects separately:
+//     Doppler — "This defect is due to an increase in width of
+//     uranium-238 resonance peaks in the epithermal energy range."
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:89-96
+//     Power defect — "The negative reactivity associated with an
+//     increase in reactor core power due to temperature feedback
+//     effects from an increase in fuel and moderator temperature."
+//     specs/the_westinghouse_pressurized_water_react/back_matter/page_244.txt:60-62
+//     Temperature coefficient of reactivity — "The ratio of the
+//     change in reactivity to the change in temperature when the
+//     reactivity change is only due to a temperature change."
+//     specs/the_westinghouse_pressurized_water_react/back_matter/page_245.txt:18-20
+//     Moderator temperature coefficient — varies from positive at
+//     beginning-of-life ("on the order of +7 pcm/°F",
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_039.txt:54-55)
+//     to negative at end-of-life ("the coefficient is substantially
+//     more negative due to depletion and removal of shim boron",
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:119-121);
+//     the simplified model uses a representative negative value.
+const (
+	// Reference full-load RPV-side temperatures (°F).
+	CoreReferenceInletF  float64 = 558
+	CoreReferenceOutletF float64 = 621
+
+	// Primary loop design pressure (psia).
+	RPVDesignPressure Pressure = 2500
+
+	// PrimaryThermalTimeConstant is the thermal time constant of
+	// the core coolant + fuel + internals in seconds. Sized to give
+	// plausible ~1 s outlet response to a step in ThermalPower at
+	// the 1 ms plant step. Not derived from a spec number; the spec
+	// describes the steady-state temperatures only.
+	PrimaryThermalTimeConstant float64 = 90
+
+	// PrimaryInletTimeConstant is slower than the outlet because
+	// the cold leg traverses the entire primary loop before
+	// returning to the RPV. Roughly 3× the RPV-side thermal time
+	// constant.
+	PrimaryInletTimeConstant float64 = 270
+
+	// PrimaryPressureTimeConstant is the rate at which the RPV
+	// pressure tracks its design pressure in this simplified model.
+	PrimaryPressureTimeConstant float64 = 300
+
+	// CoreInletBlendFraction is the fraction of the power level
+	// that contributes to the inlet mixing model; at zero power the
+	// inlet is effectively decoupled from the outlet.
+	CoreInletBlendFraction float64 = 0.8
+
+	// CoreDopplerPcmPerDegF is the PWR net temperature coefficient
+	// of reactivity (combined Doppler + moderator temperature
+	// effect) expressed in pcm per degree Fahrenheit, applied to
+	// the outlet temperature. A negative value means rising outlet
+	// temperature reduces reactivity (stable).
+	CoreDopplerPcmPerDegF float64 = -1.0
 )
 
 type Transformer struct{ Part }
