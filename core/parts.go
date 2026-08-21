@@ -1254,6 +1254,123 @@ var FeedwaterMinFlow Volume = u.NewValue(950, u.Gallon)
 // for the per-step integration in heater.go.
 var FeedwaterDesignFlow Volume = u.NewValue(380, u.Gallon) // gal/s
 
+// Feedwater regulator design constants (plans/p22_1.txt).
+//
+// Spec justification:
+//   - Three-element control: "Feedwater flow to each steam generator
+//     is controlled by a feedwater regulator in each feedwater line.
+//     The regulator is controlled by steam generator level, steam
+//     flow and feedwater flow."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-72
+//   - Pump speed / control valve link: "A signal from the
+//     Feedwater Control System also sets the speed of the
+//     turbine-driven main feedwater pumps and the position of the
+//     motor-driven feedwater pump discharge control valve so as to
+//     maintain the main feedwater regulators within their control
+//     range."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:73-76
+//   - Control-range accommodation: "This setting allows the system
+//     to accommodate all operating conditions automatically and
+//     provides control margin to accommodate load transients."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:82-85
+const (
+	// FeedwaterLevelSetpoint is the normal operating steam
+	// generator water level (%). The spec describes the "narrow
+	// control range"; chosen as 50% — the centre of the narrow
+	// range.
+	FeedwaterLevelSetpoint = 50.0 // % narrow control range
+
+	// FeedwaterRegulatorGain is the proportional gain of the
+	// three-element feedwater regulator (1/s on a fractional
+	// valve demand per percent level error). The spec does not
+	// state a numerical value; chosen as 0.5 for reasonable
+	// damping on a 1 s timescale.
+	FeedwaterRegulatorGain = 0.5 // 1/s
+
+	// FeedwaterRegulatorIntegralTime is the integral time
+	// constant of the regulator (s). The spec does not state a
+	// value; chosen as 10 s for slow steady-state correction
+	// without integrator windup during shutdown.
+	FeedwaterRegulatorIntegralTime = 10.0 // s
+
+	// FeedwaterSteamFlowGain is the feedforward gain from steam
+	// flow (gal/s, normalised to FeedwaterDesignFlow) to valve
+	// demand (dimensionless). Chosen as 1.0 so feedwater flow
+	// matches steam flow on steady-state load changes.
+	FeedwaterSteamFlowGain = 1.0
+)
+
+// FeedwaterRegulator models the three-element feedwater regulator
+// that maintains steam-generator water level during power
+// operation. The regulator receives steam generator level, steam
+// flow, and feedwater flow as inputs and computes a valve-position
+// demand on the main feedwater control valve.
+//
+// The simplified model implements a single regulator shared between
+// both steam generators (the spec describes one regulator per SG;
+// parallel operation is deferred to a higher fidelity band).
+//
+// Spec justification:
+//   - Three-element control: "Feedwater flow to each steam
+//     generator is controlled by a feedwater regulator in each
+//     feedwater line. The regulator is controlled by steam
+//     generator level, steam flow and feedwater flow."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-72
+//   - Pump speed / control valve link: "A signal from the
+//     Feedwater Control System also sets the speed of the
+//     turbine-driven main feedwater pumps and the position of the
+//     motor-driven feedwater pump discharge control valve so as
+//     to maintain the main feedwater regulators within their
+//     control range."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:73-76
+//   - Control-range accommodation: "This setting allows the
+//     system to accommodate all operating conditions
+//     automatically and provides control margin to accommodate
+//     load transients."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:82-85
+type FeedwaterRegulator struct {
+	Part
+
+	// ValveDemand is the computed feedwater control valve
+	// position (0.0 = closed, 1.0 = fully open). The regulator
+	// drives this toward the position that achieves
+	// LevelSetpoint.
+	ValveDemand float64
+
+	// IntegralError is the running integral of (LevelSetpoint -
+	// Level) accumulated while Running is true. The integral
+	// freezes when the regulator stops, preventing windup
+	// during shutdown.
+	IntegralError float64
+
+	// Level is the measured steam generator water level (%).
+	// Sourced from the SteamGenerator inventory; the regulator
+	// treats it as the process variable.
+	Level float64
+
+	// LevelSetpoint is the target SG water level (%) during
+	// normal operation. Initialised to FeedwaterLevelSetpoint
+	// (50%) at construction; the operator may retune it but the
+	// simplified model holds it fixed.
+	LevelSetpoint float64
+
+	// SteamFlow is the measured steam flow from this SG
+	// (gal/s). Used as feedforward input to anticipate load
+	// transients.
+	SteamFlow float64
+
+	// FeedwaterFlow is the measured feedwater flow into this SG
+	// (gal/s). Used as feedback to close the level loop; the
+	// simplified model collapses this to a monitoring input
+	// (the PI law acts on Level, not FeedwaterFlow).
+	FeedwaterFlow float64
+
+	// Running is true when the regulator is actively
+	// controlling the feedwater valve. False when the pump is
+	// stopped or the operator has taken manual control.
+	Running bool
+}
+
 // MSR and extraction steam design constants (plans/p11_1.txt).
 //
 // Spec justification:

@@ -271,6 +271,29 @@ type TurbineBuilding struct {
 
 	CondensatePump Pump
 
+	// MainFeedwaterControlValve is the motor-operated feedwater
+	// control valve positioned by the FeedwaterRegulator to
+	// modulate feedwater flow into the SG. Open=1 is full
+	// design flow; Open=0 is closed.
+	// "A signal from the Feedwater Control System also sets
+	// the speed of the turbine-driven main feedwater pumps and
+	// the position of the motor-driven feedwater pump discharge
+	// control valve so as to maintain the main feedwater
+	// regulators within their control range."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:73-76
+	MainFeedwaterControlValve Valve
+
+	// FeedwaterRegulator is the three-element feedwater level
+	// regulator. The simplified model collapses the spec's
+	// per-SG regulators (A and B) into a single shared
+	// regulator (plans/p22_1.txt).
+	// "Feedwater flow to each steam generator is controlled by
+	// a feedwater regulator in each feedwater line. The
+	// regulator is controlled by steam generator level, steam
+	// flow and feedwater flow."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-72
+	FeedwaterRegulator FeedwaterRegulator
+
 	// Downstream of the condensate pumps are the
 	// connections to the demineralizers.
 	// TODO: 7.2-2

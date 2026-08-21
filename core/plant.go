@@ -722,6 +722,41 @@ func (p *Plant) Step() {
 		p.nextPlant.ReactorBuilding.SteamGenerator.Pressure,
 		cwPumpRunning,
 	)
+
+	// Feedwater regulator step. The simplified model collapses
+	// the spec's per-SG regulators into a single shared
+	// regulator that reads the lumped SteamGenerator (plans/p22_1.txt).
+	//
+	// The level input is derived from the SG water inventory as
+	// a fraction of the design capacity; this is the process
+	// variable the regulator drives toward FeedwaterLevelSetpoint.
+	//
+	// Spec justification:
+	//   - "Feedwater flow to each steam generator is controlled
+	//     by a feedwater regulator in each feedwater line. The
+	//     regulator is controlled by steam generator level,
+	//     steam flow and feedwater flow."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-72
+	sg := p.nextPlant.ReactorBuilding.SteamGenerator
+	sgLevelPct := 0.0
+	if sg.Volume.Float() > 0 {
+		sgLevelPct = 100.0 * sg.Water.Float() / sg.Volume.Float()
+	}
+	reg := p.nextPlant.TurbineBuilding.FeedwaterRegulator
+	reg.Level = sgLevelPct
+	reg.SteamFlow = sg.SteamFlowRate.Float()
+	reg.FeedwaterFlow = sg.SteamFlowRate.Float()
+	reg.Running = p.nextPlant.TurbineBuilding.MainFeedwaterPump.Running &&
+		!p.nextPlant.TurbineBuilding.Turbine.LoadRunback
+	reg = reg.Step()
+	p.nextPlant.TurbineBuilding.FeedwaterRegulator = reg
+
+	// Drive the main feedwater control valve to the regulator's
+	// demand. The valve position is the regulator's output and
+	// gates the effective flow into the SG.
+	p.nextPlant.TurbineBuilding.MainFeedwaterControlValve.Open =
+		reg.ValveDemand
+
 	p.nextPlant.Electrical = p.Electrical.Step()
 
 	// Station transformer and house load. The station transformer
@@ -1186,6 +1221,25 @@ func MakePlant() Plant {
 
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration =
 		CVCSInitialBoron
+
+	// Main Feedwater Control System defaults (plans/p22_1.txt).
+	// At construction the main feedwater control valve is
+	// closed, the regulator is stopped, and the level setpoint
+	// sits at FeedwaterLevelSetpoint. Plant.Step latches the
+	// regulator's Running state from MainFeedwaterPump.Running.
+	//
+	// Spec justification:
+	//   - "Feedwater flow to each steam generator is controlled
+	//     by a feedwater regulator in each feedwater line. The
+	//     regulator is controlled by steam generator level,
+	//     steam flow and feedwater flow."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-72
+	p.TurbineBuilding.MainFeedwaterControlValve = Valve{Open: 0}
+	p.TurbineBuilding.FeedwaterRegulator = FeedwaterRegulator{
+		LevelSetpoint: FeedwaterLevelSetpoint,
+		Running:       false,
+		ValveDemand:   0,
+	}
 
 	return p
 }
