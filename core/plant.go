@@ -613,6 +613,36 @@ func (p *Plant) Step() {
 			Watts(0), rcfcHeatOut,
 		)
 
+	// SWS: the service water picks up the heat rejected by the
+	// RCFC coils. In the simplified model the lumped SWS flow
+	// is the design maximum (all three essential pumps running)
+	// at construction; the outlet temperature rises with the
+	// imposed heat load.
+	//
+	// Spec justification:
+	//   - "The three essential service water pumps for each
+	//     unit are typically rated at approximately 20,000
+	//     gpm."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:46-48
+	//   - "Component cooling heat exchangers",
+	//     "Containment for ventilation coolers" are typical
+	//     SWS loads.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:81-93
+	p.nextPlant.ReactorBuilding.ServiceWaterSystem =
+		p.nextPlant.ReactorBuilding.ServiceWaterSystem.Step(rcfcHeatOut)
+
+	// SFPCS: pump auto-start and purification-flow update.
+	//
+	// Spec justification:
+	//   - "Normal operation requires two pumps with the third
+	//     pump serving as a standby."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:43-44
+	//   - "passing approximately 100 gpm (23 m3/hr) of each
+	//     loop's flow through a filter and demineralizer."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:68-71
+	p.nextPlant.ReactorBuilding.SpentFuelPoolCoolingSystem =
+		p.nextPlant.ReactorBuilding.SpentFuelPoolCoolingSystem.Step()
+
 	// Flow-modulating valves: assume full-open during the
 	// first 30 minutes after actuation. After that the
 	// operator controls them, but the simplified model leaves
@@ -1100,6 +1130,47 @@ func MakePlant() Plant {
 		Temperature:    u.NewValue(120.0, u.Fahrenheit),
 		DesignPressure: ContainmentDesignPressure,
 		FreeVolume:     ContainmentFreeVolume,
+	}
+
+	// SWS defaults (plans/p21_1.txt). At construction all
+	// three essential service water pumps are running, the
+	// inlet is at the source temperature, and the nonessential
+	// headers are aligned (no isolation).
+	//
+	// Spec justification:
+	//   - "The three essential service water pumps for each
+	//     unit are typically rated at approximately 20,000
+	//     gpm."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:46-48
+	//   - "The nonessential equipment coolers are fed from
+	//     separate branch headers that can be isolated from
+	//     the main headers under accident conditions."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:23-26
+	p.ReactorBuilding.ServiceWaterSystem = ServiceWaterSystem{
+		PumpRunning:           true,
+		Flow:                 ServiceWaterDesignFlow,
+		InletTemp:            ServiceWaterInletTemp,
+		OutletTemp:           ServiceWaterInletTemp,
+		NonessentialIsolated: false,
+	}
+
+	// SFPCS defaults (plans/p21_1.txt). Two pumps running,
+	// header pressure in the normal range (55-75 psig), pool
+	// temperature at the design value (100°F), purification
+	// flow at 100 gpm.
+	//
+	// Spec justification:
+	//   - "Normal operation requires two pumps with the third
+	//     pump serving as a standby."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:43-44
+	//   - "The system pressure is maintained at 55 to 75 psig"
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:45-46
+	p.ReactorBuilding.SpentFuelPoolCoolingSystem = SpentFuelPoolCoolingSystem{
+		PumpRunning:       true,
+		StandbyRunning:    false,
+		HeaderPressure:    SFPCPressureNormalMin,
+		PoolTemp:          u.NewValue(100.0, u.Fahrenheit),
+		PurificationFlow:  SFPCPurificationFlow,
 	}
 
 	// Reactor makeup control valve defaults: closed at startup

@@ -1,0 +1,153 @@
+package core
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+)
+
+// At construction all three essential service water pumps are
+// running (collapsed to a single boolean), the lumped flow is
+// the design maximum, and the inlet temperature equals the
+// design source temperature.
+func TestSWS_InitialStateHasAllPumpsRunning(t *testing.T) {
+	p := MakePlant()
+	sws := p.ReactorBuilding.ServiceWaterSystem
+	assert.True(t, sws.PumpRunning,
+		"want PumpRunning=true at startup, got %v", sws.PumpRunning)
+	assert.InDelta(t, ServiceWaterDesignFlow, sws.Flow, 1e-9,
+		"want Flow=ServiceWaterDesignFlow at startup, got %v",
+		sws.Flow)
+	assert.InDelta(t, ServiceWaterSourceTemp,
+		sws.InletTemp.Float(), 1e-9,
+		"want InletTemp=ServiceWaterSourceTemp at startup, got %v",
+		sws.InletTemp.Float())
+	assert.False(t, sws.NonessentialIsolated,
+		"want NonessentialIsolated=false at startup, got %v",
+		sws.NonessentialIsolated)
+}
+
+// A stopped SWS has zero flow and tracks the outlet at the
+// inlet.
+func TestSWS_StoppedPumpsHaveZeroFlow(t *testing.T) {
+	s := ServiceWaterSystem{
+		PumpRunning: true,
+		Flow:       ServiceWaterDesignFlow,
+		InletTemp:  ServiceWaterInletTemp,
+	}
+	s.PumpRunning = false
+	s2 := s.Step(Watts(1e6))
+	assert.Zero(t, s2.Flow,
+		"want Flow=0 with pumps stopped, got %v", s2.Flow)
+	assert.InDelta(t, s2.InletTemp.Float(), s2.OutletTemp.Float(), 1e-9,
+		"want OutletTemp=InletTemp with pumps stopped, got %v",
+		s2.OutletTemp.Float())
+}
+
+// While pumps are running, the outlet temperature rises above
+// the inlet by the heat load divided by the per-second water
+// mass flow.
+func TestSWS_OutletTempRisesWithHeatLoad(t *testing.T) {
+	s := ServiceWaterSystem{
+		PumpRunning: true,
+		Flow:       ServiceWaterDesignFlow,
+		InletTemp:  ServiceWaterInletTemp,
+	}
+	s2 := s.Step(Watts(0))
+	assert.InDelta(t, s.InletTemp.Float(), s2.OutletTemp.Float(), 1e-9,
+		"want OutletTemp=InletTemp with no heat load, got %v",
+		s2.OutletTemp.Float())
+	// Apply 1e7 W; expect a measurable rise above inlet.
+	hot := s.Step(Watts(1e7))
+	assert.Greater(t, hot.OutletTemp.Float(), hot.InletTemp.Float(),
+		"want OutletTemp > InletTemp with heat load, got %v vs %v",
+		hot.OutletTemp.Float(), hot.InletTemp.Float())
+}
+
+// At construction the SFPCS has its two normal pumps running,
+// header pressure in the normal range, standby off, and
+// purification flow at the design 100 gpm.
+func TestSFPCS_InitialStateHasTwoPumpsRunning(t *testing.T) {
+	p := MakePlant()
+	sf := p.ReactorBuilding.SpentFuelPoolCoolingSystem
+	assert.True(t, sf.PumpRunning,
+		"want PumpRunning=true at startup, got %v", sf.PumpRunning)
+	assert.False(t, sf.StandbyRunning,
+		"want StandbyRunning=false at startup, got %v",
+		sf.StandbyRunning)
+	assert.InDelta(t, SFPCPressureNormalMin,
+		sf.HeaderPressure, 1e-9,
+		"want HeaderPressure=SFPCPressureNormalMin at startup, got %v",
+		sf.HeaderPressure)
+	assert.InDelta(t, SFPCPurificationFlow,
+		sf.PurificationFlow, 1e-9,
+		"want PurificationFlow=SFPCPurificationFlow at startup, got %v",
+		sf.PurificationFlow)
+}
+
+// When the SFPCS header pressure drops below the standby
+// start setpoint (50 psig), the standby pump auto-starts.
+//
+// Spec justification:
+//   - "the third pump automatically starts at a header pressure
+//     of 50 psig (4.5 bar)"
+//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:47-48
+func TestSFPCS_StandbyStartsBelow50psig(t *testing.T) {
+	s := SpentFuelPoolCoolingSystem{
+		PumpRunning:    true,
+		HeaderPressure: SFPCStandbyStartPressure - 1.0,
+	}
+	s2 := s.Step()
+	assert.True(t, s2.StandbyRunning,
+		"want StandbyRunning=true below 50 psig, got %v",
+		s2.StandbyRunning)
+}
+
+// Header pressure at or above 50 psig leaves the standby off.
+func TestSFPCS_StandbyOffAbove50psig(t *testing.T) {
+	s := SpentFuelPoolCoolingSystem{
+		PumpRunning:    true,
+		HeaderPressure: SFPCStandbyStartPressure + 1.0,
+	}
+	s2 := s.Step()
+	assert.False(t, s2.StandbyRunning,
+		"want StandbyRunning=false above 50 psig, got %v",
+		s2.StandbyRunning)
+}
+
+// A stopped SFPCS has no purification flow and the standby off.
+func TestSFPCS_StoppedPumpsZeroPurificationFlow(t *testing.T) {
+	s := SpentFuelPoolCoolingSystem{
+		PumpRunning:      false,
+		PurificationFlow: SFPCPurificationFlow,
+	}
+	s2 := s.Step()
+	assert.Zero(t, s2.PurificationFlow,
+		"want PurificationFlow=0 with pumps stopped, got %v",
+		s2.PurificationFlow)
+	assert.False(t, s2.StandbyRunning,
+		"want StandbyRunning=false with pumps stopped, got %v",
+		s2.StandbyRunning)
+}
+
+// End-to-end via Plant.Step: SWS and SFPCS run at construction;
+// the SWS outlet picks up the RCFC heat sink.
+func TestSWS_EndToEndSteadyState(t *testing.T) {
+	p := MakePlant()
+	stepN(&p, int(15*time.Second/TimeStep))
+	sws := p.ReactorBuilding.ServiceWaterSystem
+	sf := p.ReactorBuilding.SpentFuelPoolCoolingSystem
+	assert.True(t, sws.PumpRunning,
+		"want SWS PumpRunning=true after stepping, got %v",
+		sws.PumpRunning)
+	assert.InDelta(t, ServiceWaterDesignFlow, sws.Flow, 1e-9,
+		"want SWS Flow=ServiceWaterDesignFlow, got %v", sws.Flow)
+	assert.True(t, sf.PumpRunning,
+		"want SFPCS PumpRunning=true after stepping, got %v",
+		sf.PumpRunning)
+	assert.InDelta(t, SFPCPurificationFlow,
+		sf.PurificationFlow, 1e-9,
+		"want SFPCS PurificationFlow=SFPCPurificationFlow, got %v",
+		sf.PurificationFlow)
+}
