@@ -3961,4 +3961,178 @@ const (
 	HydrogenRecombinerHysteresis float64 = 0.5
 )
 
+// ReactorProtectionSystem models the Reactor Protection System
+// (RPS) and Engineered Safety Features Actuation System (ESFAS)
+// for the plant. The simplified model implements trip logic
+// with 2/4 voting and ESFAS output signals. It does not model
+// detailed nuclear instrumentation channels, in-core
+// instrumentation, automatic testing facilities, preventive
+// turbine runbacks, or digital rod position indication.
+//
+// Spec justification:
+//   - RPS functions: "Monitors the plant for abnormal conditions
+//     and alerts the operator to take appropriate action;
+//     Automatically provides reactor trip (shutdown) signals and
+//     engineered safeguards actuation signals when plant
+//     conditions, as monitored by nuclear instrumentation and
+//     process instrumentation, reach the plant safety limits."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_137.txt:55-72
+//   - Trip purpose: "Whenever a direct process or calculated
+//     variable exceeds a setpoint, the reactor will be shut
+//     down: to prevent fuel rod damage for an anticipated
+//     transient (Condition II); to limit core damage for
+//     infrequent faults (Condition III); and to protect the
+//     reactor coolant pressure boundary for limiting fault
+//     conditions (Condition IV)."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:1-7
+//   - Manual trip: "The RPS provides for manual initiation of
+//     reactor trip by operator action in the control room."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:8-9
+//   - Turbine trip interlock: "The RPS initiates a turbine trip
+//     signal whenever reactor trip occurs."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:10-11
+//   - 2/4 voting logic: "The protection system normally uses 2/4
+//     logic but reverts to a safe 2/3 logic when part of the
+//     system is being tested or is involved in maintenance. A 2/4
+//     logic means that a trip occurs when at least 2 signals out
+//     of 4 indicate a trip condition."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:116-121
+//   - ESFAS description: "The protection system detects
+//     Condition II, III and IV faults and actuates the
+//     Engineered Safety Features. Table 7-1 lists the safety
+//     systems that may be actuated together with the events that
+//     trigger the actuation."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:127-131
+//   - Trip breaker 2/4 configuration: "The trip breakers are
+//     arranged to provide a 2/4 configuration."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:132-133
+//   - ESFAS Table 7-1 (Safety Injection, Steamline Isolation,
+//     Turbine Trip, Start Auxiliary Feed Pumps, Block Steam Dump,
+//     Containment Vent Isolation, Open Accumulator Isolation
+//     Valves, Containment Spray, Containment Isolation Phase B,
+//     Feedwater Isolation, Containment Isolation Phase A).
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:6-81
+type ReactorProtectionSystem struct {
+	Part
+
+	// ReactorTripped is true when the RPS has initiated a
+	// reactor trip (scram). Latches true until manually
+	// reset.
+	ReactorTripped bool
+
+	// ManualTrip is true when the operator has pressed a
+	// manual trip pushbutton.
+	// "The RPS provides for manual initiation of reactor trip
+	// by operator action in the control room."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:8-9
+	ManualTrip bool
+
+	// TripSignalCount tracks how many of the redundant trip
+	// channels are demanding a trip. The simplified model
+	// collapses the four channels into a single integer and
+	// applies 2/4 voting: a trip is declared when the count
+	// reaches RPSTripVotingThreshold.
+	// "A 2/4 logic means that a trip occurs when at least 2
+	// signals out of 4 indicate a trip condition."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:119-121
+	TripSignalCount int
+
+	// ESFAS outputs. Each is set true when the RPS commands
+	// the corresponding safeguard to actuate. The wiring in
+	// Plant.Step propagates these flags to the destination
+	// systems (DieselGenerator.StartSignal for SI, etc.).
+	// Table 7-1 lists the engineered safety features and
+	// their triggering events.
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:6-81
+
+	// SafetyInjectionActuated: SI on low pressurizer
+	// pressure, high containment pressure, low steamline
+	// pressure, low Tcold, or manual safety injection.
+	SafetyInjectionActuated bool
+
+	// SteamlineIsolationActuated: SLI on the same five
+	// triggers plus high steam-pressure rate of change.
+	SteamlineIsolationActuated bool
+
+	// ContainmentSprayActuated: CSS on high containment
+	// pressure or manual.
+	ContainmentSprayActuated bool
+
+	// ContainmentIsolationPhaseAActuated: CIS Phase A on
+	// safety injection or manual.
+	ContainmentIsolationPhaseAActuated bool
+
+	// ContainmentIsolationPhaseBActuated: CIS Phase B on
+	// high containment pressure or manual containment spray.
+	ContainmentIsolationPhaseBActuated bool
+
+	// AuxiliaryFeedPumpsStartActuated: AFWP start on safety
+	// injection or low steam generator level.
+	AuxiliaryFeedPumpsStartActuated bool
+
+	// FeedwaterIsolationActuated: FWI on high steam
+	// generator level, safety injection, or coincidence of
+	// reactor trip and low Tcold.
+	FeedwaterIsolationActuated bool
+
+	// TurbineTripActuated: turbine trip on reactor trip,
+	// high steam generator level, or safety injection.
+	TurbineTripActuated bool
+}
+
+// Reactor Protection System design constants (plans/p26_1.txt).
+//
+// Spec justification:
+//   - Trip table (Table 7-1) lists the engineered safety
+//     features and their triggering events.
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:6-81
+//   - 2/4 voting: "trip occurs when at least 2 signals out of 4
+//     indicate a trip condition."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:119-121
+//   - Trip breaker 2/4 configuration: "The trip breakers are
+//     arranged to provide a 2/4 configuration."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:132-133
+const (
+	// RPSLowPressurizerPressureTrip is the pressurizer
+	// pressure (psig) below which a trip signal is generated.
+	RPSLowPressurizerPressureTrip Pressure = 1800.0
+
+	// RPSHighPressurizerLevelTrip is the pressurizer level
+	// (%) above which a trip signal is generated.
+	RPSHighPressurizerLevelTrip float64 = 80.0
+
+	// RPSLowSteamGeneratorLevelTrip is the steam generator
+	// level (%) below which a trip signal is generated.
+	RPSLowSteamGeneratorLevelTrip float64 = 15.0
+
+	// RPSHighSteamGeneratorLevelTrip is the steam generator
+	// level (%) above which a trip signal is generated.
+	RPSHighSteamGeneratorLevelTrip float64 = 90.0
+
+	// RPSLowSteamlinePressureTrip is the steamline pressure
+	// (psig) below which a trip signal is generated.
+	RPSLowSteamlinePressureTrip Pressure = 500.0
+
+	// RPSLowTcoldTrip is the reactor coolant cold-leg
+	// temperature (°F) below which a trip signal is generated.
+	RPSLowTcoldTrip float64 = 530.0
+
+	// RPSHighContainmentPressureTrip is the containment
+	// pressure (psig) above which a trip signal is generated.
+	// Equal to the containment design pressure so a
+	// containment overpressure coincides with a trip.
+	RPSHighContainmentPressureTrip Pressure = ContainmentDesignPressure
+
+	// RPSTripVotingThreshold is the number of out-of-4 trip
+	// signals required to declare a reactor trip (2/4 logic).
+	RPSTripVotingThreshold = 2
+
+	// RPSNumTripChannels is the total number of redundant
+	// trip signal channels (4).
+	// "trip occurs when at least 2 signals out of 4 indicate a
+	// trip condition"
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:120-121
+	RPSNumTripChannels = 4
+)
+
 

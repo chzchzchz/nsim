@@ -51,6 +51,26 @@ type ReactorBuilding struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
 	ResidualHeatRemovalSystem RHRS
 
+	// ReactorProtectionSystem models the automatic protection
+	// logic and engineered safeguards actuation — the "brain"
+	// that monitors process variables, decides when to trip
+	// the reactor (2/4 voting), and actuates the engineered
+	// safety features per Table 7-1.
+	//
+	// Spec justification:
+	//   - Functions: "Monitors the plant for abnormal
+	//     conditions and alerts the operator to take
+	//     appropriate action; Automatically provides reactor
+	//     trip (shutdown) signals and engineered safeguards
+	//     actuation signals when plant conditions [...] reach
+	//     the plant safety limits."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_137.txt:55-72
+	//   - 2/4 voting: "A 2/4 logic means that a trip occurs
+	//     when at least 2 signals out of 4 indicate a trip
+	//     condition."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:119-121
+	ReactorProtectionSystem ReactorProtectionSystem
+
 	// SafetyInjectionSystem models the high-head injection phase
 	// of the Emergency Core Cooling System. It bundles the
 	// passive accumulator bank (four tanks, one per RCS loop),

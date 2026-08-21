@@ -122,3 +122,42 @@ func (r *RefuelingOperations) Step() RefuelingOperations {
 
 	return ret
 }
+
+// StepBy advances the Refueling Operations state machine by
+// the given elapsed wall-clock duration (seconds). It runs
+// Step() once per TimeStep, but skips whole phases whose
+// duration fits entirely within the remaining budget and
+// whose phase-relative actions do not need per-step
+// resolution (i.e. everything except cavity flood and
+// drain). For the cavity flood/drain phases the function
+// still calls Step() per TimeStep so the ramp integrates
+// correctly. Returns the state at the end of the elapsed
+// duration, or at RefuelingPhaseComplete if reached first.
+func (r *RefuelingOperations) StepBy(seconds float64) RefuelingOperations {
+	ret := *r
+	dt := TimeStep.Seconds()
+	remaining := seconds
+	for remaining > 0 && ret.Phase < RefuelingPhaseComplete {
+		phase := ret.Phase
+		// Phases that use TimeStep-fine integration: skip
+		// the cheap path and let the per-step loop below
+		// handle them.
+		needsPerStep := (phase == RefuelingPhasePreparation &&
+			ret.CavityFlooding) ||
+			(phase == RefuelingPhaseReassembly &&
+				ret.CavityDraining)
+		if !needsPerStep && ret.PhaseTimer == 0 &&
+			RefuelingPhaseDurations[phase] <= remaining {
+			remaining -= RefuelingPhaseDurations[phase]
+			ret.Phase++
+			ret.PhaseTimer = 0
+			continue
+		}
+		ret = ret.Step()
+		remaining -= dt
+		if ret.Phase == RefuelingPhaseComplete {
+			break
+		}
+	}
+	return ret
+}

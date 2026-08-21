@@ -50,6 +50,42 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
 	ret.ReactorPressureVessel.ControlRods.BoronConcentration =
 		ret.ChemicalVolumeControlSystem.BoronConcentration
+
+	// Reactor Protection System step. Runs before the
+	// ReactorPressureVessel step so the ReactorTripped latch
+	// is available when RPV drops rods this step. The RPS
+	// evaluates trip conditions from the current process
+	// variables (steamline pressure, SG level, Tcold,
+	// containment pressure) and computes ESFAS outputs.
+	// Pressurizer-pressure and high-level trips are deferred
+	// at this fidelity band (see rps.go preamble).
+	//
+	// Spec justification:
+	//   - 2/4 voting: "A 2/4 logic means that a trip occurs
+	//     when at least 2 signals out of 4 indicate a trip
+	//     condition."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:119-121
+	//   - Turbine trip interlock: "The RPS initiates a
+	//     turbine trip signal whenever reactor trip occurs."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:10-11
+	sgLevelPct := 0.0
+	if ret.SteamGenerator.Volume.Float() > 0 {
+		sgLevelPct = 100.0 * ret.SteamGenerator.Water.Float() /
+			ret.SteamGenerator.Volume.Float()
+	}
+	containmentGauge := ret.ContainmentBuilding.Pressure -
+		AtmosphericPressure
+	ret.ReactorProtectionSystem = ret.ReactorProtectionSystem.Step(
+		ret.SteamGenerator.Pressure,
+		sgLevelPct,
+		ret.ReactorPressureVessel.Inlet.Float(),
+		containmentGauge,
+	)
+	// Propagate the reactor trip to the reactor pressure
+	// vessel so the RPV step drops rods and follows the
+	// decay-heat curve this same step.
+	ret.ReactorPressureVessel.Trip = ret.ReactorProtectionSystem.ReactorTripped
+
 	rpv := ret.ReactorPressureVessel.Step(ret.ReactorCoolantPump.Running)
 	ret.ReactorPressureVessel = rpv
 
@@ -509,7 +545,9 @@ func (p *Plant) Step() {
 		// one SG". The per-loop SGs are not modelled
 		// separately at this fidelity band.
 		if p.Outside.DieselGenerator.StartSignal ==
-			DieselStartSafetyInjection || sgWaterLow {
+			DieselStartSafetyInjection ||
+			p.nextPlant.ReactorBuilding.ReactorProtectionSystem.AuxiliaryFeedPumpsStartActuated ||
+			sgWaterLow {
 			if !efws.SubsystemA.MotorPumpRunning {
 				efws.SubsystemA.MotorPumpRunning = true
 				efws.MotorPumpStartCount++
@@ -594,7 +632,8 @@ func (p *Plant) Step() {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-61
 	css := &p.nextPlant.ReactorBuilding.ContainmentSpraySystem
 	if !css.Running &&
-		p.ReactorBuilding.ContainmentPressure > CSSContainmentPressureSetpoint &&
+		(p.ReactorBuilding.ContainmentPressure > CSSContainmentPressureSetpoint ||
+			p.nextPlant.ReactorBuilding.ReactorProtectionSystem.ContainmentSprayActuated) &&
 		p.Outside.DieselGenerator.ReadyToLoad {
 		css.Running = true
 		css.SprayHeaderOpen = true
@@ -632,6 +671,29 @@ func (p *Plant) Step() {
 		p.nextPlant.ReactorBuilding.ContainmentBuilding.Step(
 			Watts(0), rcfcHeatOut,
 		)
+
+	// RPS-driven CIS manual flags. The Reactor Protection
+	// System is the "brain" that decides when to actuate
+	// containment isolation per Table 7-1; the wiring here
+	// sets the CIS ManualPhaseA / ManualPhaseB flags so the
+	// CIS step can latch the corresponding phases. This
+	// mirrors the existing safety-injection propagation path
+	// and extends it with RPS-driven containment spray.
+	//
+	// Spec justification:
+	//   - ESFAS Table 7-1: CIS Phase A on SI or manual.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:78-80
+	//   - CIS Phase B on high containment pressure or manual
+	//     containment spray.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:68-71
+	rps := p.nextPlant.ReactorBuilding.ReactorProtectionSystem
+	cis := &p.nextPlant.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem
+	if rps.ContainmentIsolationPhaseAActuated {
+		cis.ManualPhaseA = true
+	}
+	if rps.ContainmentIsolationPhaseBActuated {
+		cis.ManualPhaseB = true
+	}
 
 	// Containment Isolation System step. Latches Phase A on
 	// safety-injection signal or operator manual command;
@@ -809,7 +871,18 @@ func (p *Plant) Step() {
 
 	// Drive the main feedwater control valve to the regulator's
 	// demand. The valve position is the regulator's output and
-	// gates the effective flow into the SG.
+	// gates the effective flow into the SG. RPS tracks
+	// FeedwaterIsolationActuated per Table 7-1 (FWI on high SG
+	// level, safety injection, or coincidence of reactor trip
+	// and low Tcold) but the simplified model does NOT close
+	// the valve on FWI here — that wiring requires a
+	// feedwater-isolation trip valve beyond the regulator's
+	// demand range. FWI is exposed via the RPS field for
+	// operator display and downstream coordination.
+	//
+	// Spec justification:
+	//   - ESFAS Table 7-1: Feedwater Isolation triggers.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:73-76
 	p.nextPlant.TurbineBuilding.MainFeedwaterControlValve.Open =
 		reg.ValveDemand
 
@@ -935,6 +1008,26 @@ func MakePlant() Plant {
 	p.ReactorBuilding.ReactorPressureVessel.Inlet = u.NewValue(CoreReferenceInletF, u.Fahrenheit)
 	p.ReactorBuilding.ReactorPressureVessel.Outlet = u.NewValue(CoreReferenceOutletF, u.Fahrenheit)
 	p.ReactorBuilding.ReactorPressureVessel.Pressure = RPVDesignPressure
+
+	// Pressurizer design defaults: 60% liquid, 40% steam
+	// bubble, pressure at PressurizerHeaterTarget. The RPS
+	// reads Pressurizer pressure; without an explicit
+	// initialisation the bubble is empty and Pressure
+	// collapses to PressurizerBasePressure (1500 psi),
+	// below the RPSLowPressurizerPressureTrip (1800 psi)
+	// setpoint.
+	//
+	// HeatersOn is left at its zero value (false) so that
+	// tests which override Pressure to a high value are not
+	// re-clamped at the heater target. The plant-level
+	// pressurizer control loop (planned for a future plan)
+	// will manage HeatersOn and SprayOpen.
+	p.ReactorBuilding.Pressurizer = Pressurizer{
+		Volume:      u.NewValue(1500, u.Gallon),
+		Water:       u.NewValue(900, u.Gallon), // 60% liquid
+		Pressure:    PressurizerHeaterTarget,
+		SteamBubble: u.NewValue(300, u.Gallon),
+	}
 	p.TurbineBuilding.HeaterDrainTank = Tank{
 		Level:    u.NewValue(0, u.Gallon),
 		Capacity: u.NewValue(13120, u.Gallon),
@@ -1325,6 +1418,16 @@ func MakePlant() Plant {
 		WeightSafetyTripped:    false,
 		FuelTransferred:        false,
 	}
+
+	// RPS defaults (plans/p26_1.txt). At construction the
+	// reactor is not tripped, no manual trip has been
+	// pressed, no ESFAS output is active.
+	//
+	// Spec justification:
+	//   - "The RPS provides for manual initiation of reactor
+	//     trip by operator action in the control room."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:8-9
+	p.ReactorBuilding.ReactorProtectionSystem = ReactorProtectionSystem{}
 
 	// Reactor makeup control valve defaults: closed at startup
 	// (the operator opens it during cooldown / VCT-level

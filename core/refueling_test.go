@@ -61,11 +61,8 @@ func TestRefueling_CavityFloodsToMaxDepth(t *testing.T) {
 		Phase:          RefuelingPhasePreparation,
 		CavityFlooding: true,
 	}
-	// 24 ft at 1 ft/min = 24 minutes = 24*60 s = 1440 s.
-	steps := int(1500.0 / TimeStep.Seconds())
-	for i := 0; i < steps; i++ {
-		r = r.Step()
-	}
+	// 24 ft at 1 ft/min = 24 minutes = 1440 s.
+	r = r.StepBy(1500.0)
 	assert.InDelta(t, RefuelingCavityMaxDepth, r.CavityFloodDepth, 1e-6,
 		"want CavityFloodDepth=RefuelingCavityMaxDepth after flooding, "+
 			"got %v", r.CavityFloodDepth)
@@ -87,11 +84,8 @@ func TestRefueling_CavityDrainsOnReassembly(t *testing.T) {
 		HeadRemoved:      true,
 		InternalsRemoved: true,
 	}
-	// 24 ft at 1 ft/min = 24 minutes = 1500 s.
-	steps := int(1500.0 / TimeStep.Seconds())
-	for i := 0; i < steps; i++ {
-		r = r.Step()
-	}
+	// 24 ft at 1 ft/min = 24 minutes = 1440 s.
+	r = r.StepBy(1500.0)
 	assert.Zero(t, r.CavityFloodDepth,
 		"want CavityFloodDepth=0 after draining, got %v",
 		r.CavityFloodDepth)
@@ -120,10 +114,7 @@ func TestRefueling_PhaseAdvancesOnTimer(t *testing.T) {
 	for i := 0; i < 6; i++ {
 		totalSec += RefuelingPhaseDurations[i]
 	}
-	steps := int(totalSec/TimeStep.Seconds()) + 100
-	for i := 0; i < steps; i++ {
-		r = r.Step()
-	}
+	r = r.StepBy(totalSec + 100*TimeStep.Seconds())
 	assert.Equal(t, RefuelingPhaseComplete, r.Phase,
 		"want Phase=RefuelingPhaseComplete after full cycle, got %v",
 		r.Phase)
@@ -139,10 +130,7 @@ func TestRefueling_FuelTransfersAtMidPhaseHandling(t *testing.T) {
 		FuelAssembliesInPit:  0,
 	}
 	midSec := RefuelingPhaseDurations[RefuelingPhaseFuelHandling] / 2.0
-	steps := int(midSec/TimeStep.Seconds()) + 100
-	for i := 0; i < steps; i++ {
-		r = r.Step()
-	}
+	r = r.StepBy(midSec + 100*TimeStep.Seconds())
 	assert.True(t, r.FuelTransferred,
 		"want FuelTransferred=true after mid-phase, got %v",
 		r.FuelTransferred)
