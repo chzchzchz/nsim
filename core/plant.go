@@ -613,6 +613,26 @@ func (p *Plant) Step() {
 			Watts(0), rcfcHeatOut,
 		)
 
+	// Containment Isolation System step. Latches Phase A on
+	// safety-injection signal or operator manual command;
+	// latches Phase B on high containment pressure or operator
+	// manual command. The simplified model assumes
+	// instantaneous valve closure (no stroke time).
+	//
+	// Spec justification:
+	//   - Phase A actuation: "Containment Isolation Phase A:
+	//     Safety injection, Manual."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_141.txt:74-76
+	//   - Phase B actuation: "Containment Isolation Phase B:
+	//     High containment pressure, Manual actuation of
+	//     containment spray."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_141.txt:64-67
+	p.nextPlant.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem =
+		p.nextPlant.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem.Step(
+			locaSensed,
+			p.nextPlant.ReactorBuilding.ContainmentBuilding.Pressure-AtmosphericPressure,
+		)
+
 	// SWS: the service water picks up the heat rejected by the
 	// RCFC coils. In the simplified model the lumped SWS flow
 	// is the design maximum (all three essential pumps running)
@@ -1165,6 +1185,21 @@ func MakePlant() Plant {
 		Temperature:    u.NewValue(120.0, u.Fahrenheit),
 		DesignPressure: ContainmentDesignPressure,
 		FreeVolume:     ContainmentFreeVolume,
+		// CIS defaults (plans/p23_1.txt). At construction
+		// neither phase is latched, both manual flags are
+		// false, and the design-qualification flags
+		// (MissileProtected, SeismicClass1) are recorded
+		// as true.
+		//
+		// Spec justification:
+		//   - "missile protected, Seismic Class 1 and
+		//     designed for a pressure equal to or greater
+		//     than the design pressure of the containment."
+		//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_113.txt:135-138
+		ContainmentIsolationSystem: ContainmentIsolationSystem{
+			MissileProtected: true,
+			SeismicClass1:    true,
+		},
 	}
 
 	// SWS defaults (plans/p21_1.txt). At construction all

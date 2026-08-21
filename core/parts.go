@@ -3113,6 +3113,103 @@ type ContainmentBuilding struct {
 	// cubic feet (56,600 m³)."
 	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_109.txt:11-12
 	FreeVolume float64
+
+	// ContainmentIsolationSystem models the CIS — the
+	// engineered safeguard that isolates all containment
+	// penetrations via Phase A and Phase B isolation. The
+	// simplified model assumes the double-barrier principle
+	// holds and tracks a single pair of phased state booleans.
+	//
+	// Spec justification:
+	//   - Purpose: "The Containment Isolation System provides
+	//     the means of isolating the various fluid systems
+	//     passing through the containment walls as required to
+	//     prevent the release of radioactivity to the outside
+	//     environment."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_113.txt:92-96
+	//   - Double barrier: "Leakage from the containment through
+	//     these pipes or ducts which penetrate the containment
+	//     is minimized by use of a double barrier."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_113.txt:126-128
+	ContainmentIsolationSystem ContainmentIsolationSystem
+}
+
+// ContainmentIsolationSystem models the Containment Isolation
+// System — the engineered safeguard that closes isolation valves
+// on all containment penetrations to prevent radioactive release
+// during a Design Basis Accident. The simplified model tracks two
+// phased states (Phase A and Phase B) with a double-barrier
+// assumption per penetration: each penetration has at least two
+// independent isolation barriers so that failure of a single
+// active component does not result in loss of ability to isolate
+// the containment. The second barrier is implicit (blind flange or
+// closed piping) and not tracked independently.
+//
+// Spec justification:
+//   - Purpose: "The Containment Isolation System provides the
+//     means of isolating the various fluid systems passing through
+//     the containment walls as required to prevent the release of
+//     radioactivity to the outside environment."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_113.txt:92-96
+//   - Double barrier: "Leakage from the containment through these
+//     pipes or ducts which penetrate the containment is minimized
+//     by use of a double barrier. This double barrier ensures
+//     that failure of a single active component along a leakage
+//     path will not result in loss of ability to isolate the
+//     containment."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_113.txt:126-132
+//   - Phase A actuation: "Containment Isolation Phase A:
+//     Safety injection, Manual."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_141.txt:74-76
+//   - Phase B actuation: "Containment Isolation Phase B:
+//     High containment pressure, Manual actuation of containment
+//     spray."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_141.txt:64-67
+//   - Isolation barrier qualification: "missile protected, Seismic
+//     Class 1 and designed for a pressure equal to or greater than
+//     the design pressure of the containment."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_113.txt:136-138
+type ContainmentIsolationSystem struct {
+	Part
+
+	// PhaseAIsolated is true when the Phase A isolation signal
+	// has been received (safety injection or manual). Closes
+	// isolation valves on engineered-safety-features
+	// penetrations. Latched until the operator resets
+	// ManualPhaseA and the safety-injection signal clears.
+	PhaseAIsolated bool
+
+	// PhaseBIsolated is true when the Phase B isolation signal
+	// has been received (high containment pressure or manual
+	// actuation of containment spray). Closes additional
+	// non-safeguards penetrations. Latched until the operator
+	// resets ManualPhaseB and containment pressure falls below
+	// CISPhaseBSetpoint.
+	PhaseBIsolated bool
+
+	// ManualPhaseA is set by the operator to manually
+	// initiate Phase A isolation. Latched state clears when
+	// both ManualPhaseA is reset AND the safety-injection
+	// signal clears (Phase A is operator-confirmed; there is
+	// no automatic restoration).
+	ManualPhaseA bool
+
+	// ManualPhaseB is set by the operator to manually
+	// initiate Phase B isolation. Latched state clears when
+	// both ManualPhaseB is reset AND containment pressure
+	// falls below CISPhaseBSetpoint.
+	ManualPhaseB bool
+
+	// MissileProtected and SeismicClass1 record the design
+	// qualification criteria for the isolation barriers. They
+	// are not per-step dynamics but document the design basis
+	// in code.
+	// "missile protected, Seismic Class 1 and designed for a
+	// pressure equal to or greater than the design pressure of
+	// the containment."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_113.txt:135-138
+	MissileProtected bool
+	SeismicClass1    bool
 }
 
 // RCFC design constants.
@@ -3211,6 +3308,33 @@ const (
 const (
 	ContainmentDesignPressure Pressure = 60.0 // psig
 	ContainmentFreeVolume     float64  = 2_000_000.0
+)
+
+// Containment Isolation System design constants (plans/p23_1.txt).
+//
+// Spec justification:
+//   - Phase A actuation: "Containment Isolation Phase A:
+//     Safety injection, Manual."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_141.txt:74-76
+//   - Phase B actuation: "Containment Isolation Phase B:
+//     High containment pressure, Manual actuation of containment
+//     spray."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_141.txt:64-67
+//   - Isolation barrier design pressure: "missile protected,
+//     Seismic Class 1 and designed for a pressure equal to or
+//     greater than the design pressure of the containment."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_113.txt:135-138
+const (
+	// CISPhaseBSetpoint is the containment pressure (psig)
+	// that triggers automatic Phase B isolation. The spec does
+	// not state a numerical value; chosen as 50 psig,
+	// representative of the pressure rise during a design-basis
+	// LOCA before spray actuation but below the 60 psig
+	// containment design pressure documented in p20.
+	// "High containment pressure" is the automatic trigger for
+	// Phase B.
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_141.txt:65
+	CISPhaseBSetpoint Pressure = 50.0 // psig, approximate
 )
 
 // ServiceWaterSystem models the Service Water System — the
