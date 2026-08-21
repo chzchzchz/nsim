@@ -653,6 +653,22 @@ func (p *Plant) Step() {
 			p.nextPlant.ReactorBuilding.ContainmentBuilding.Pressure-AtmosphericPressure,
 		)
 
+	// Hydrogen Detection and Suppression step. Generation is
+	// active when the safety-injection signal has fired (LOCA
+	// detected); recombiners and ventilation activate
+	// automatically via the HDS step once the hydrogen
+	// concentration crosses their thresholds with hysteresis.
+	//
+	// Spec justification:
+	//   - Hydrogen source: "Under accident conditions [...]
+	//     the Zirconium water reaction can result in the
+	//     release of hydrogen gas."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:30-33
+	hds := p.nextPlant.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
+	hds.GenerationActive = locaSensed
+	hds = hds.Step()
+	p.nextPlant.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression = hds
+
 	// SWS: the service water picks up the heat rejected by the
 	// RCFC coils. In the simplified model the lumped SWS flow
 	// is the design maximum (all three essential pumps running)
@@ -1220,6 +1236,22 @@ func MakePlant() Plant {
 			MissileProtected: true,
 			SeismicClass1:    true,
 		},
+		// HDS defaults (plans/p25_1.txt). At construction the
+		// containment atmosphere has 0% hydrogen, no alarm,
+		// and no active recombiners or ventilation. Generation
+		// becomes active in Plant.Step when the
+		// safety-injection signal arrives; recombiners and
+		// ventilation activate automatically through the HDS
+		// step logic.
+		//
+		// Spec justification:
+		//   - Hydrogen alarm: "Alarms at proper setpoints
+		//     are provided."
+		//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:14-15
+		//   - Three-function defense: detect, ventilate,
+		//     recombine.
+		//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:11-26
+		HydrogenDetectionSuppression: HydrogenDetectionSuppression{},
 	}
 
 	// SWS defaults (plans/p21_1.txt). At construction all

@@ -3132,6 +3132,21 @@ type ContainmentBuilding struct {
 	//     is minimized by use of a double barrier."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_113.txt:126-128
 	ContainmentIsolationSystem ContainmentIsolationSystem
+
+	// HydrogenDetectionSuppression models the containment
+	// hydrogen monitoring and suppression system — the
+	// defence-in-depth function that prevents explosive
+	// hydrogen/oxygen accumulation in the containment
+	// atmosphere following a LOCA.
+	//
+	// Spec justification:
+	//   - Chapter 6 introduction: "controlling hydrogen to
+	//     avoid an explosive mixture."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_107.txt:52-55
+	//   - Three-function defense (detect / ventilate /
+	//     recombine):
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:11-26
+	HydrogenDetectionSuppression HydrogenDetectionSuppression
 }
 
 // ContainmentIsolationSystem models the Containment Isolation
@@ -3822,5 +3837,128 @@ const FuelAssembliesPerReactor = 193
 //     [...], and 64 are a high enrichment [...]."
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_040.txt:37-41
 const FuelAssembliesPerRefuelingOutage = 64
+
+// HydrogenDetectionSuppression models the Hydrogen Detection and
+// Suppression System for containment atmosphere safety. The
+// simplified model tracks hydrogen volume percent, recombiner
+// removal rate, ventilation removal rate, and a detection alarm
+// flag. It does not model catalytic kinetics, spatial gradients,
+// or the Zr-water reaction chemistry.
+//
+// Spec justification:
+//   - Chapter 6 introduction: containment systems protect
+//     integrity by "controlling hydrogen to avoid an explosive
+//     mixture."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_107.txt:52-55
+//   - Hydrogen source: "Under accident conditions, coolant
+//     radioactivity and the Zirconium water reaction can result
+//     in the release of hydrogen gas to the containment
+//     atmosphere. Eventually the gas could accumulate to an
+//     explosive hydrogen/oxygen concentration."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:30-38
+//   - Three-function defense (detect): "A hydrogen detection
+//     system that can detect and report in a continuous manner
+//     the hydrogen content in the containment atmosphere.
+//     Alarms at proper setpoints are provided."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:11-15
+//   - Three-function defense (ventilate): "A containment
+//     ventilation system that circulates the containment
+//     atmosphere to remove pockets of high hydrogen
+//     concentration after an accident."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:19-21
+//   - Three-function defense (recombine): "Hydrogen recombiners
+//     that burn the free hydrogen. The hydrogen/oxygen
+//     combination results in water."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:25-26
+type HydrogenDetectionSuppression struct {
+	Part
+
+	// HydrogenVolumePercent is the current hydrogen volume
+	// concentration in the containment atmosphere (%). 0
+	// under normal operation; rises during LOCA.
+	HydrogenVolumePercent float64
+
+	// HydrogenAlarm is true when the hydrogen concentration
+	// exceeds HydrogenAlarmSetpoint.
+	HydrogenAlarm bool
+
+	// RecombinerActive is true when the hydrogen recombiners
+	// are operating.
+	RecombinerActive bool
+
+	// VentilationActive is true when the containment
+	// ventilation system is circulating to remove hydrogen.
+	VentilationActive bool
+
+	// GenerationActive is true when the Zirconium-water
+	// reaction is producing hydrogen (the early-LOCA phase).
+	GenerationActive bool
+}
+
+// Hydrogen detection and suppression design constants
+// (plans/p25_1.txt).
+//
+// Spec justification:
+//   - Hydrogen alarm requirement: "Alarms at proper setpoints
+//     are provided."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:14-15
+//   - Recombiner function: "Hydrogen recombiners that burn the
+//     free hydrogen."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:25-26
+//   - Ventilation function: "A containment ventilation system
+//     that circulates the containment atmosphere to remove
+//     pockets of high hydrogen concentration after an accident."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:19-21
+//   - Hydrogen source: "Under accident conditions [...] the
+//     Zirconium water reaction can result in the release of
+//     hydrogen gas."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:30-33
+const (
+	// HydrogenAlarmSetpoint is the volume percent that
+	// triggers the high alarm. The spec does not state a
+	// numeric threshold; 2% is a conservative design value
+	// well below the lower flammability limit.
+	HydrogenAlarmSetpoint float64 = 2.0
+
+	// HydrogenExplosiveLimit is the volume percent above
+	// which the mixture is considered explosive. The spec
+	// does not state a numeric threshold; 4% is the standard
+	// engineering value for the lower flammability limit of
+	// hydrogen in air.
+	HydrogenExplosiveLimit float64 = 4.0
+
+	// HydrogenNumRecombiners is the number of hydrogen
+	// recombiners installed in the containment. The spec does
+	// not state a count; four is assumed, matching the
+	// "minimum of two units must function" pattern used for
+	// the RCFC system (plans/p20_1.txt).
+	HydrogenNumRecombiners int = 4
+
+	// HydrogenRecombinerRemovalRate is the volumetric removal
+	// rate per active recombiner (% per hour). The spec does
+	// not state a rate; 0.5 %/hour per recombiner is
+	// representative of a large catalytic recombiner.
+	HydrogenRecombinerRemovalRate float64 = 0.5
+
+	// HydrogenVentilationRemovalRate is the volumetric
+	// removal rate of the containment ventilation system
+	// (% per hour). The spec does not state a rate; 0.2
+	// %/hour is representative of containment air
+	// circulation through a filter train.
+	HydrogenVentilationRemovalRate float64 = 0.2
+
+	// HydrogenGenerationRate is the volumetric production
+	// rate of hydrogen in the containment atmosphere during
+	// early LOCA from the Zirconium water reaction (% per
+	// hour). The spec does not state a rate; 1.0 %/hour is
+	// representative of the early-phase generation spike.
+	HydrogenGenerationRate float64 = 1.0
+
+	// HydrogenRecombinerHysteresis is the volume percent
+	// above the alarm setpoint at which the recombiners
+	// activate; below (setpoint + hysteresis) they stay
+	// active to prevent cycling near the setpoint.
+	HydrogenRecombinerHysteresis float64 = 0.5
+)
 
 
