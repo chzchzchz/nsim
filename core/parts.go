@@ -2617,3 +2617,243 @@ var CCWSDesignFlow Volume = u.NewValue(800.0/60.0, u.Gallon)
 // is typical for a shell-and-tube HX with moderate heat duties.
 var CCHXApproachTemp Temperature = u.NewValue(10.0, u.Fahrenheit)
 
+// ContainmentSpraySystem models the Containment Spray System —
+// the engineered safeguard that limits peak containment pressure
+// and removes airborne fission products following a LOCA. The
+// simplified model collapses the two redundant subsystems into
+// a single lumped component.
+//
+// Spec justification:
+//   - CSS purpose: "The Containment Spray System (CSS) (Figure
+//     6-4) is an engineered safeguard designed to limit the
+//     peak pressure in the reactor containment building to a
+//     pressure less than the containment design pressure, in the
+//     event of a loss-of-coolant accident or a steam break
+//     accident inside the containment. The system also acts to
+//     remove airborne fission products, principally iodine, from
+//     the containment atmosphere, should they be present due to
+//     a fuel cladding break."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:75-85
+//   - Subsystem composition: "The system consists of a
+//     containment spray storage tank (CSST), a spray additive
+//     tank (SAT), two pumps, two heat exchangers, and a set of
+//     spray ring headers located in the upper dome of the
+//     containment and having nozzles designed to provide
+//     adequate containment spray coverage."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:14-20
+//   - Pump miniflow line: "A pump miniflow line, containing a
+//     heat exchanger and flow limiting orifice, and a test loop
+//     with a throttling valve are connected in parallel across
+//     each pump."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:20-24
+//   - Independent capability: "Each one of these subsystems is
+//     also independently capable of delivering the necessary
+//     flow to limit containment pressure in conjunction with the
+//     Reactor Containment Fan Cooler System."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:28-32
+//   - Actuation: "Initial Injection Mode – Containment spray is
+//     initiated automatically in response to a containment high
+//     pressure signal. This signal starts the spray pumps, opens
+//     the spray header isolation valves "A", and opens the SAT
+//     isolation valves "B"."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-61
+//   - Suction alignment during injection: "Suction is provided
+//     to the spray pump from the CSST, with the SAT providing
+//     sodium hydroxide solution. The SAT drains into each spray
+//     pump's suction header from the CSST; this mixing results
+//     in a solution pH that is conducive to the entrainment of
+//     iodine (airborne fission product)."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:61-66
+//   - End of injection: "(T)he storage tanks are sized to
+//     provide approximately 30 minutes of spray with spray
+//     additive, and when the CSST is drained to the "Lo-Lo"
+//     setpoint, the spray pumps are manually switched to the
+//     recirculation mode of spray operation."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:16-21
+//   - Sump pH adjustment: "An additional function which is
+//     performed by the CSS during its normal operation is the
+//     pH adjustment of the containment sump. The sodium
+//     hydroxide (spray additive) that is delivered through the
+//     injection phase is sufficient to raise the long-term sump
+//     pH to a level adequate for inhibiting chloride stress
+//     corrosion/cracking of stainless steel components, and for
+//     keeping the iodine entrained in the water."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:37-49
+//   - Manual switchover to recirculation: "The recirculation
+//     mode of the CSS will be initiated manually by the
+//     operator. To accomplish this, the sump isolation valves
+//     "C" are opened, and the spray pump suction isolation
+//     valves "D" are closed. The pumps will then deliver spray
+//     from the sump to the spray headers. Spray additive is not
+//     injected during this mode."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:63-70
+//   - CCWS services CSS pump HXs: "containment spray pump heat
+//     exchangers" are among the safeguards components cooled by
+//     the CCWS.
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:39
+type ContainmentSpraySystem struct {
+	Part
+
+	// Running is true when at least one CSS pump is running.
+	Running bool
+
+	// SprayHeaderOpen is true when the spray header isolation
+	// valves "A" are open and spray is being delivered to the
+	// ring headers.
+	// "opens the spray header isolation valves "A""
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:59-60
+	SprayHeaderOpen bool
+
+	// CSSTLevel is the remaining borated water volume in the
+	// containment spray storage tank (gal). Decreases at the
+	// spray flow rate during the injection phase.
+	// "Suction is provided to the spray pump from the CSST"
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:61-62
+	CSSTLevel Volume
+
+	// SATLevel is the remaining sodium hydroxide solution
+	// volume in the spray additive tank (gal). Drains
+	// proportionally with the CSST during the injection phase.
+	// "the SAT providing sodium hydroxide solution"
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:62-63
+	SATLevel Volume
+
+	// CSSTLowLevelSetpoint is the CSST level (gal) at which the
+	// operator manually switches the CSS to recirculation mode
+	// (the "Lo-Lo" setpoint). The simplified model uses this as
+	// a low-level alarm that triggers operator-driven switchover.
+	// "when the CSST is drained to the "Lo-Lo" setpoint, the
+	// spray pumps are manually switched to the recirculation
+	// mode of spray operation."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:18-21
+	CSSTLowLevelSetpoint Volume
+
+	// SuctionSump is true when the spray pumps have been
+	// switched to sump recirculation mode (valves "C" open,
+	// valves "D" closed). Latched true once switchover fires.
+	// "The recirculation mode of the CSS will be initiated
+	// manually by the operator."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:63-64
+	SuctionSump bool
+
+	// SumpPHAdjusted is true once the CSS has delivered enough
+	// spray additive during the injection phase to raise the
+	// long-term containment sump pH to an adequate level. This
+	// is a one-time event that latches true when CSSTLevel drops
+	// below CSSTLowLevelSetpoint.
+	// "the sodium hydroxide (spray additive) that is delivered
+	// through the injection phase is sufficient to raise the
+	// long-term sump pH to a level adequate for inhibiting
+	// chloride stress corrosion/cracking of stainless steel
+	// components, and for keeping the iodine entrained in the
+	// water."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:40-49
+	SumpPHAdjusted bool
+
+	// SprayFlow is the rate of spray solution delivery to the
+	// containment (gal/s). Zero when Running is false or
+	// SprayHeaderOpen is false; CSSDesignFlow when both are
+	// true.
+	SprayFlow float64
+}
+
+// CSS design constants.
+//
+// Spec justification:
+//   - Additive duration: "(T)he storage tanks are sized to
+//     provide approximately 30 minutes of spray with spray
+//     additive."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:16-18
+//   - Lo-Lo setpoint: "when the CSST is drained to the "Lo-Lo"
+//     setpoint, the spray pumps are manually switched to the
+//     recirculation mode of spray operation."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:18-21
+//   - Sump pH adjustment: "the sodium hydroxide (spray
+//     additive) that is delivered through the injection phase
+//     is sufficient to raise the long-term sump pH to a level
+//     adequate for inhibiting chloride stress corrosion/
+//     cracking of stainless steel components, and for keeping
+//     the iodine entrained in the water."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:40-49
+//   - CCWS safeguards loads include CSS pump heat exchangers.
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:39
+const (
+	// CSSSprayAdditiveDuration is the approximate time the CSST
+	// and SAT can supply spray with additive (min). The spec
+	// states "approximately 30 minutes"; the constant matches
+	// the spec language.
+	// "(T)he storage tanks are sized to provide approximately
+	// 30 minutes of spray with spray additive."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:16-18
+	CSSSprayAdditiveDuration = 30.0 // minutes
+
+	// CSSDesignFlow is the lumped spray flow rate from the CSS
+	// into the containment (gal/min). The spec does not state
+	// an explicit spray flow rate; 500 gpm is representative of
+	// a two-pump safeguards train delivering borated water
+	// through ring headers.
+	CSSDesignFlow float64 = 500.0 // gpm per subsystem, simplified to lumped
+
+	// CSSLowLevelSetpoint is the CSST level (gal) at which the
+	// operator manually switches the CSS to recirculation mode
+	// (Lo-Lo setpoint). The spec does not state a numerical
+	// value; 10% of CSSTCapacity (1500 gal) is a typical low-low
+	// setpoint for the injection-phase CSST.
+	// "when the CSST is drained to the "Lo-Lo" setpoint, the
+	// spray pumps are manually switched to the recirculation
+	// mode of spray operation."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:18-21
+	CSSLowLevelSetpoint = 1500.0 // gal (Lo-Lo)
+
+	// CSSMiniflowFraction is the fraction of pump discharge
+	// that returns to the CSST via the continuous miniflow path
+	// when the spray header is closed. The spec describes a
+	// miniflow line with heat exchanger and flow limiting
+	// orifice; simplified to 10% recirculation.
+	// "A pump miniflow line, containing a heat exchanger and
+	// flow limiting orifice"
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:20-22
+	CSSMiniflowFraction = 0.10
+
+	// CSSSprayEffectiveness is the fraction of incident steam
+	// mass flow condensed by a unit of spray flow
+	// (dimensionless). The spec does not state a pressure-
+	// reduction coefficient; this constant is a simulation
+	// parameter that must be calibrated against plant data. A
+	// value of 0.5 means each gal/min of spray condenses 0.5
+	// gal/min of steam.
+	// "comes in contact with the steam in the containment
+	// atmosphere, the steam is condensed and falls to the
+	// containment floor as drops of a borated sodium hydroxide
+	// solution."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:8-11
+	CSSSprayEffectiveness = 0.5 // simulation parameter, must be calibrated
+
+	// CSSContainmentPressureSetpoint is the containment pressure
+	// (psig) that automatically starts the CSS. The spec
+	// describes "containment high pressure" without a numerical
+	// setpoint; 50 psig is representative of the pressure rise
+	// during a design-basis LOCA before spray actuation.
+	// "Initial Injection Mode – Containment spray is initiated
+	// automatically in response to a containment high pressure
+	// signal."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-57
+	CSSContainmentPressureSetpoint Pressure = 50.0 // psig, approximate
+)
+
+// CSSTCapacity is the total borated water capacity of the
+// simplified lumped CSST (gal). The spec does not state a total
+// capacity; 15000 gal is sized to provide 30 min of spray at
+// CSSDesignFlow.
+// "Suction is provided to the spray pump from the CSST, with the
+// SAT providing sodium hydroxide solution."
+// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:61-63
+var CSSTCapacity Volume = u.NewValue(15000, u.Gallon)
+
+// SATCapacity is the total sodium hydroxide solution capacity of
+// the simplified lumped SAT (gal). The spec does not state a
+// capacity; 500 gal is sufficient to provide additive for 30 min
+// of spray at the chosen flow.
+// "the SAT providing sodium hydroxide solution"
+// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:62-63
+var SATCapacity Volume = u.NewValue(500, u.Gallon)

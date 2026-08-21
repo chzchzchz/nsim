@@ -11,6 +11,18 @@ type ReactorBuilding struct {
 	PORV                  Valve
 	PressurizedReliefTank Tank
 
+	// ContainmentPressure is the lumped containment atmosphere
+	// pressure (psig). A full thermodynamic model would track
+	// containment as a separate building; the simplified model
+	// uses a single scalar that rises when the PORV discharges
+	// to containment and falls when the CSS sprays. The CSS
+	// Step consumes this field as its auto-start signal:
+	// "Initial Injection Mode – Containment spray is initiated
+	// automatically in response to a containment high pressure
+	// signal."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-57
+	ContainmentPressure Pressure
+
 	// ChemicalVolumeControlSystem models the CVCS — the primary
 	// chemistry and volume-regulation loop. Lives on
 	// ReactorBuilding because it is in the nuclear steam supply
@@ -126,6 +138,24 @@ type ReactorBuilding struct {
 	//     for an engineered safeguards system."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:116-120
 	ComponentCoolingWaterSystem CCWS
+
+	// ContainmentSpraySystem models the CSS — the engineered
+	// safeguard that limits peak containment pressure and
+	// removes airborne fission products following a LOCA.
+	//
+	// Spec justification:
+	//   - "The Containment Spray System (CSS) (Figure 6-4) is an
+	//     engineered safeguard designed to limit the peak
+	//     pressure in the reactor containment building to a
+	//     pressure less than the containment design pressure,
+	//     in the event of a loss-of-coolant accident or a steam
+	//     break accident inside the containment."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:75-81
+	//   - CCWS services CSS pump HXs: "containment spray pump
+	//     heat exchangers" are among the safeguards components
+	//     cooled by the CCWS.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:39
+	ContainmentSpraySystem ContainmentSpraySystem
 
 	// ReactorMakeupControlValve is the makeup valve between the
 	// refueling-water storage tank and the volume control tank.

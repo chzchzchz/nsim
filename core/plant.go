@@ -143,6 +143,46 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	)
 	ret.EFWSFeedwaterFlow = ret.EmergencyFeedwaterSystem.EFWSFeedwaterFlow()
 
+	// CSS: containment pressure model. The simplified
+	// containment pressure rises while the PORV is open (steam
+	// dump into containment) and falls while the CSS is spraying
+	// (effectiveness × spray flow × excess pressure).
+	//
+	// Spec justification:
+	//   - "Initial Injection Mode – Containment spray is
+	//     initiated automatically in response to a containment
+	//     high pressure signal."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-57
+	//   - "comes in contact with the steam in the containment
+	//     atmosphere, the steam is condensed and falls to the
+	//     containment floor as drops of a borated sodium
+	//     hydroxide solution."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:8-11
+	csP := float64(ret.ContainmentPressure)
+	if ret.PORV.Open == 1 {
+		// PORV discharge dumps saturated steam into containment;
+		// model as a constant rise rate. The chosen 100 psig/s
+		// saturates above the design pressure in <1 s, giving a
+		// fast rising signal that triggers the CSS auto-start.
+		csP += 100.0 * dt.Seconds()
+	}
+	cssRunning := ret.ContainmentSpraySystem.Running
+	if cssRunning && ret.ContainmentSpraySystem.SprayHeaderOpen {
+		// Spray condenses steam: effectiveness × spray flow
+		// × (P - P_atm) drag toward atmospheric.
+		excess := csP - float64(AtmosphericPressure)
+		if excess > 0 {
+			csP -= CSSSprayEffectiveness *
+				ret.ContainmentSpraySystem.SprayFlow * excess *
+				dt.Seconds()
+			if csP < float64(AtmosphericPressure) {
+				csP = float64(AtmosphericPressure)
+			}
+		}
+	}
+	ret.ContainmentPressure = Pressure(csP)
+	ret.ContainmentSpraySystem = ret.ContainmentSpraySystem.Step()
+
 	return ret
 }
 
@@ -515,6 +555,29 @@ func (p *Plant) Step() {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_103.txt:135-138
 	if p.Outside.DieselGenerator.ReadyToLoad {
 		p.nextPlant.ReactorBuilding.ComponentCoolingWaterSystem.PumpRunning = true
+	}
+
+	// CSS auto-start: containment spray is initiated in
+	// response to a containment high-pressure signal. The
+	// cross-building pass has access to the live
+	// ContainmentPressure (computed by ReactorBuilding.Step
+	// above) and the diesel state. With pumps ready, the CSS
+	// transitions to the Initial Injection Mode (Running=true,
+	// SprayHeaderOpen=true, SAT isolation valves "B" open).
+	//
+	// Spec justification:
+	//   - "Initial Injection Mode – Containment spray is
+	//     initiated automatically in response to a containment
+	//     high pressure signal. This signal starts the spray
+	//     pumps, opens the spray header isolation valves "A",
+	//     and opens the SAT isolation valves "B"."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-61
+	css := &p.nextPlant.ReactorBuilding.ContainmentSpraySystem
+	if !css.Running &&
+		p.ReactorBuilding.ContainmentPressure > CSSContainmentPressureSetpoint &&
+		p.Outside.DieselGenerator.ReadyToLoad {
+		css.Running = true
+		css.SprayHeaderOpen = true
 	}
 
 	// Flow-modulating valves: assume full-open during the
@@ -931,6 +994,34 @@ func MakePlant() Plant {
 		OutletTemp:     u.NewValue(CCWSInletSteadyStateTemp, u.Fahrenheit),
 		SurgeTankLevel: CCWSSurgeTankCapacity,
 	}
+
+	// CSS defaults (plans/p19_1.txt). At construction the CSS
+	// pumps are off, both the CSST and SAT are full, the spray
+	// header is closed, and the containment sits at atmospheric
+	// pressure. The simplified model starts the CSS in
+	// Plant.Step when containment pressure rises above
+	// CSSContainmentPressureSetpoint and the diesel reaches
+	// ReadyToLoad.
+	//
+	// Spec justification:
+	//   - "The system consists of a containment spray storage
+	//     tank (CSST), a spray additive tank (SAT), two pumps,
+	//     two heat exchangers, and a set of spray ring headers."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:14-18
+	//   - "(T)he storage tanks are sized to provide approximately
+	//     30 minutes of spray with spray additive."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:16-18
+	p.ReactorBuilding.ContainmentSpraySystem = ContainmentSpraySystem{
+		Running:              false,
+		SprayHeaderOpen:      false,
+		CSSTLevel:            CSSTCapacity,
+		SATLevel:             SATCapacity,
+		CSSTLowLevelSetpoint: u.NewValue(CSSLowLevelSetpoint, u.Gallon),
+		SuctionSump:          false,
+		SumpPHAdjusted:       false,
+		SprayFlow:            0,
+	}
+	p.ReactorBuilding.ContainmentPressure = AtmosphericPressure
 
 	// Reactor makeup control valve defaults: closed at startup
 	// (the operator opens it during cooldown / VCT-level
