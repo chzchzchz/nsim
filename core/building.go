@@ -286,6 +286,24 @@ type ReactorBuilding struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:56-59
 	StationTransformer StationTransformer
 
+	// PlantElectricalSystems models the plant electrical
+	// power distribution, including offsite power, diesel
+	// generators, and 6600-volt engineered safety features
+	// buses, plus the 118V instrument-bus inverter supply
+	// that feeds the four RPS/ESF instrumentation channels
+	// (plans/p27_1.txt).
+	//
+	// Spec justification:
+	//   - Diversity of reliable power sources.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:9-14
+	//   - ESF buses: offsite normal, diesel backup.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:28-33
+	//   - Diesel start: 10s speed, 30s rated load.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:48-51
+	//   - 118V inverter power for RPS/ESF channels I-IV.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_167.txt:22-27
+	PlantElectricalSystems PlantElectricalSystems
+
 	// HouseLoad is the station's own electrical demand
 	// (RCPs, feedwater pumps, condensate pumps, heaters, ESF
 	// bus trickle charge, HVAC, lighting, control systems).

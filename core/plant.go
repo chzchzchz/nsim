@@ -888,6 +888,28 @@ func (p *Plant) Step() {
 
 	p.nextPlant.Electrical = p.Electrical.Step()
 
+	// Plant electrical systems step (plans/p27_1.txt). The
+	// simplified model rolls offsite availability, diesel
+	// start timing, ESF bus transfer, inverter power, and
+	// station-blackout declaration into a single struct
+	// that lives on ReactorBuilding. Its inputs are
+	// OffsitePowerAvailable (typically true at construction)
+	// and the auto-start signal handled in the Step function
+	// below; its outputs feed downstream consumers (e.g. the
+	// RPS and EFWS logic can gate on InverterPowerAvailable
+	// when the simplified model is extended).
+	//
+	// Spec justification:
+	//   - "The Engineered Safety Features buses are normally
+	//     supplied from the system auxiliary transformers.
+	//     In the event of total loss of auxiliary power from
+	//     off-site sources, auxiliary power required for
+	//     safe shutdown will be supplied from [...] diesel
+	//     generators."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:28-33
+	p.nextPlant.ReactorBuilding.PlantElectricalSystems =
+		p.ReactorBuilding.PlantElectricalSystems.Step()
+
 	// Station transformer and house load. The station transformer
 	// step reads the generator's terminal voltage (post step)
 	// and the grid voltage to decide whether UAT and SAT are
@@ -1428,6 +1450,30 @@ func MakePlant() Plant {
 	//     trip by operator action in the control room."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:8-9
 	p.ReactorBuilding.ReactorProtectionSystem = ReactorProtectionSystem{}
+
+	// Plant Electrical Systems defaults (plans/p27_1.txt).
+	// At construction offsite power is available, both
+	// diesel generators are stopped, both ESF buses are
+	// energized from offsite, the instrument inverters are
+	// powered, and there is no station blackout.
+	//
+	// Spec justification:
+	//   - "The system auxiliary power is supplied from
+	//     independent and electrically isolated buses of
+	//     the off-site main distribution grid."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:45-47
+	//   - "automatic transfer of supplies is provided on
+	//     sensing loss of power"
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:56-59
+	p.ReactorBuilding.PlantElectricalSystems = PlantElectricalSystems{
+		OffsitePowerAvailable:   true,
+		Diesel1Running:          false,
+		Diesel2Running:          false,
+		ESFBus1Available:        true,
+		ESFBus2Available:        true,
+		InverterPowerAvailable:  true,
+		StationBlackout:         false,
+	}
 
 	// Reactor makeup control valve defaults: closed at startup
 	// (the operator opens it during cooldown / VCT-level

@@ -4133,6 +4133,195 @@ const (
 	// trip condition"
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:120-121
 	RPSNumTripChannels = 4
+
+	// Plant electrical systems design constants.
+	//
+	// Spec justification:
+	//   - 6600-volt engineered safety features buses.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:72-81
+	//   - Diesel generators: 10 seconds to speed, 30 seconds to
+	//     rated load; 7 days fuel capacity.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:131-136
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:118-122
+	//   - 125-volt DC battery system, 118-volt AC instrument
+	//     buses.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:124-129
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_167.txt:22-27
+	//   - Automatic transfer on sensing loss of power.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:56-59
+
+	// ESFSystemVoltage is the nominal voltage of the
+	// engineered safety features buses (volts).
+	// "two 6600-volt engineered safety features buses"
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:72-74
+	ESFSystemVoltage = 6600.0
+
+	// ESFSystemCount is the number of engineered safety
+	// features buses (2).
+	// "All of the engineered safety system loads are fed from
+	// two 6600-volt engineered safety features buses."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:72-74
+	ESFSystemCount = 2
+
+	// DieselStartupTime is the time for a diesel generator
+	// to reach rated speed and be ready to begin accepting
+	// load (seconds).
+	// "reach rated speed and be ready to begin accepting load
+	// within 10 seconds"
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:48-50
+	DieselStartupTime = 10.0
+
+	// DieselRatedLoadTime is the time for a diesel generator
+	// to carry rated load after receipt of a start signal
+	// (seconds).
+	// "capable of carrying rated load within 30 seconds after
+	// receipt of a start signal"
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:50-51
+	DieselRatedLoadTime = 30.0
+
+	// DieselFuelCapacityDays is the minimum number of days of
+	// continuous rated-load operation from the onsite fuel
+	// supply.
+	// "sufficient to allow continuous rated load operation for
+	// a minimum of seven days"
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:118-122
+	DieselFuelCapacityDays = 7.0
+
+	// DCSystemVoltage is the nominal voltage of the 125-volt
+	// DC battery system (volts).
+	// "two physically separate and electrically isolated
+	// sources of 125-volt dc power"
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:124-126
+	DCSystemVoltage = 125.0
+
+	// DCSystemCount is the number of physically separate
+	// 125-volt DC sources.
+	// "two physically separate and electrically isolated
+	// sources of 125-volt dc power"
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:124-126
+	DCSystemCount = 2
+
+	// InverterVoltage is the nominal AC output voltage of the
+	// instrument inverters (volts).
+	// "The 118-volt ac instrument power supply is divided
+	// into four buses."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_167.txt:22-23
+	InverterVoltage = 118.0
+
+	// InverterFrequency is the nominal output frequency of
+	// the instrument inverters (Hz).
+	InverterFrequency = 60.0
+
+	// InverterBusCount is the number of 118-volt instrument
+	// buses (one per protection channel).
+	// "divided into four buses. These four buses provide
+	// power for reactor protection and engineered safety
+	// features instrumentation and control channels I, II,
+	// III, IV, respectively."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_167.txt:22-27
+	InverterBusCount = 4
+
+	// AutoTransferDelay is the assumed delay for automatic
+	// bus transfer on sensing loss of offsite power
+	// (seconds). The spec states automatic transfer is
+	// provided on sensing loss of power, but does not
+	// specify a numerical delay.
+	// "automatic transfer of supplies is provided on sensing
+	// loss of power"
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:56-59
+	AutoTransferDelay = 1.0
 )
+
+// PlantElectricalSystems models the plant electrical power
+// distribution, including offsite power, diesel generators,
+// 6600-volt engineered safety features buses, automatic
+// transfer between sources, and the 118-volt instrument
+// inverters that feed reactor protection and ESF
+// instrumentation channels I-IV. The simplified model tracks
+// power availability and diesel-start timing as boolean and
+// timer scalars; it does not model transformer dynamics,
+// load sequencing, or battery discharge.
+//
+// Spec justification:
+//   - Diversity of reliable power sources: "physically and
+//     electrically isolated so that any single failure will
+//     affect only one source."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:9-14
+//   - ESF buses normally from offsite, diesel backup:
+//     "normally supplied from the system auxiliary
+//     transformers. In the event of total loss of auxiliary
+//     power from off-site sources, auxiliary power required
+//     for safe shutdown will be supplied from [...] diesel
+//     generators."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:28-33
+//   - Diesel start timing: "reach rated speed and be ready
+//     to begin accepting load within 10 seconds, and be
+//     capable of carrying rated load within 30 seconds after
+//     receipt of a start signal."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:48-51
+//   - Inverter power: four 118V buses for RPS and ESF
+//     channels I-IV: "The 118-volt ac instrument power
+//     supply is divided into four buses. These four buses
+//     provide power for reactor protection and engineered
+//     safety features instrumentation and control channels
+//     I, II, III, IV, respectively."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_167.txt:22-27
+type PlantElectricalSystems struct {
+	Part
+
+	// OffsitePowerAvailable is true when the plant is
+	// receiving power from the off-site main distribution
+	// grid through the system auxiliary transformers.
+	// "The system auxiliary power is supplied from
+	// independent and electrically isolated buses of the
+	// off-site main distribution grid."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:45-47
+	OffsitePowerAvailable bool
+
+	// Diesel1Running is true when diesel generator 1 has
+	// reached rated load and is ready to accept ESF bus
+	// load.
+	Diesel1Running bool
+
+	// Diesel2Running is true when diesel generator 2 has
+	// reached rated load and is ready to accept ESF bus
+	// load.
+	Diesel2Running bool
+
+	// Diesel1StartTime is the elapsed time in seconds since
+	// diesel generator 1 received a start signal. Reset to
+	// zero when offsite power returns.
+	Diesel1StartTime float64
+
+	// Diesel2StartTime is the elapsed time in seconds since
+	// diesel generator 2 received a start signal. Reset to
+	// zero when offsite power returns.
+	Diesel2StartTime float64
+
+	// ESFBus1Available is true when Engineered Safety
+	// Features bus 1 is powered (from offsite or from diesel
+	// 1 after AutoTransferDelay).
+	ESFBus1Available bool
+
+	// ESFBus2Available is true when Engineered Safety
+	// Features bus 2 is powered (from offsite or from diesel
+	// 2 after AutoTransferDelay).
+	ESFBus2Available bool
+
+	// InverterPowerAvailable is true when the 118V
+	// instrument-bus inverter supply is available for
+	// reactor protection and ESF instrumentation. The
+	// simplified model collapses the four channel-buses
+	// into a single boolean that mirrors any one of them
+	// being powered.
+	// "The 118-volt ac instrument power supply is divided
+	// into four buses."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_167.txt:22-23
+	InverterPowerAvailable bool
+
+	// StationBlackout is true when both offsite power and
+	// both diesel generators are unavailable.
+	StationBlackout bool
+}
 
 
