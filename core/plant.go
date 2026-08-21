@@ -1149,10 +1149,18 @@ func (p *Plant) Step() {
 		p.nextPlant.ReactorBuilding.SteamGenerator.Pressure > SteamGeneratorShellPressure/100
 
 	// Plumb the CW inlet temperature from the outside loop. The
-	// CirculatingWaterPump.Temperature field models the CW supply
-	// header; in steady state this tracks RiverTemp.
+	// CirculatingWaterSystem.InletTemp field (plans/p31_1.txt)
+	// is the source-side temperature after any cooling-tower
+	// approach has been applied; in steady state this tracks
+	// RiverTemp for once-through systems.
+	//
+	// Spec justification:
+	//   - "The Circulating Water System serves as the major
+	//     heat sink for the power plant by providing large
+	//     amounts of cooling water for the main condensers."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:10-13
 	p.nextPlant.TurbineBuilding.Condenser.CirculatingWaterIn =
-		p.Outside.CirculatingWaterPump.Temperature
+		p.nextPlant.Outside.CirculatingWaterSystem.InletTemp
 
 	// Pressure-driven fluid flow integrates the freshly-stepped parts.
 	// Graph nodes hold pointers into nextPlant; the mutations land in
@@ -1236,6 +1244,30 @@ func MakePlant() Plant {
 	p.TurbineBuilding.Condenser.Pressure = CondenserDesignVacuum
 	p.TurbineBuilding.Turbine.StopValve = Valve{Open: 1.0}
 	p.Outside.CirculatingWaterPump = Pump{Running: true}
+
+	// Circulating Water System defaults (plans/p31_1.txt).
+	// At construction both CW pumps are running at design
+	// flow, the source is the once-through river intake (no
+	// cooling tower), the cooling-tower fan mirrors the CW
+	// pump state, and the inlet temperature tracks
+	// Outside.RiverTemp (set below in this MakePlant).
+	//
+	// Spec justification:
+	//   - "Depending on the plant, the source of circulating
+	//     water may be a river, lake, ocean, or cooling
+	//     tower."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
+	//   - "Circulating water for each main condenser is
+	//     supplied by vertical, mixed flow, volute type
+	//     circulating water pumps."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:56-58
+	p.Outside.CirculatingWaterSystem = CirculatingWaterSystem{
+		SourceIsCoolingTower: false,
+	}
+	p.Outside.CoolingTower = CoolingTower{
+		FanRunning: false,
+		ApproachF:  CoolingTowerApproachF,
+	}
 
 	// Generator defaults (plans/p12_1.txt).
 	//   - BreakerClosed = false at startup; the operator closes

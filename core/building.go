@@ -450,4 +450,27 @@ type TurbineBuilding struct {
 	*/
 }
 
-type CoolingTower struct{}
+// CoolingTower models a mechanical-draft cooling tower as an
+// alternative CW source. The simplified model tracks fan
+// state and approach temperature relative to ambient
+// wet-bulb. It does not model fill hydraulics, fan curves, or
+// drift loss.
+//
+// Spec justification:
+//   - CWS source may be "a river, lake, ocean, or cooling
+//     tower."
+//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
+type CoolingTower struct {
+	Part
+
+	// FanRunning is true when at least one cooling-tower fan
+	// is operating.
+	FanRunning bool
+
+	// ApproachF is the temperature difference between the
+	// tower cold-water basin and the ambient wet-bulb
+	// temperature (°F). Sized at CoolingTowerApproachF (5 °F)
+	// — a typical approach for modern mechanical-draft
+	// towers.
+	ApproachF float64
+}

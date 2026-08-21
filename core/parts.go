@@ -1241,6 +1241,68 @@ const (
 	StopValveCloseDelay                       = 50 * time.Millisecond
 	CondenserVacuumTimeConstant      float64  = 2.0
 	CondenserNoCWDegradeTimeConstant float64  = 5.0
+
+	// Circulating Water System design constants
+	// (plans/p31_1.txt).
+	//
+	// Spec justification:
+	//   - CW pumps: "vertical, mixed flow, volute type
+	//     circulating water pumps."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:56-58
+	//   - CW source diversity: "river, lake, ocean, or cooling
+	//     tower."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
+	//   - Condenser: "single-pass deaerating type with
+	//     straight-through tubes."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:19-20
+	//   - Vacuum removal: "steam jet air ejectors or vacuum
+	//     pumps."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:21-22
+
+	// CirculatingWaterPumpCount is the number of CW pumps
+	// installed per unit. The spec describes "a typical system
+	// design will provide six pumps, three each for essential
+	// and nonessential service" but the main-condenser path
+	// uses one CW pump per half-condenser (two pumps total
+	// per unit for the CWS condenser function). The simplified
+	// model uses two.
+	// "Circulating water for each main condenser is supplied
+	// by vertical, mixed flow, volute type circulating water
+	// pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:56-58
+	CirculatingWaterPumpCount = 2
+
+	// CirculatingWaterPumpFlowGPM is the design flow rate per
+	// CW pump (gal/min). The spec does not give a numeric value;
+	// sized at 550,000 gpm per pump so two pumps deliver ~1.1
+	// million gpm total, which is consistent with a 4-loop
+	// Westinghouse CWS for ~3,800,000 lb/hr main-steam flow.
+	CirculatingWaterPumpFlowGPM float64 = 550_000
+
+	// CirculatingWaterDesignFlowGPM is the total CWS design
+	// flow when both pumps are in service (gal/min).
+	CirculatingWaterDesignFlowGPM =
+		CirculatingWaterPumpFlowGPM * CirculatingWaterPumpCount
+
+	// CirculatingWaterSourceTempF is the assumed constant
+	// intake temperature for river / lake / ocean sources
+	// (°F). The spec does not state a value; 70 °F is typical
+	// for temperate climates.
+	CirculatingWaterSourceTempF = 70.0
+
+	// CondenserDesignCWRiseF is the design temperature rise of
+	// the CW across the condenser tube bundle at full
+	// condensing duty (°F). The spec does not state a number;
+	// 18 °F is sized to reject full condenser duty at the
+	// design CW flow.
+	CondenserDesignCWRiseF = 18.0
+
+	// CoolingTowerApproachF is the assumed temperature
+	// difference between the tower cold-water basin and the
+	// ambient wet-bulb (°F) when a mechanical-draft cooling
+	// tower is the CW source. The spec does not state a value;
+	// 5 °F is typical for modern mechanical-draft towers.
+	CoolingTowerApproachF = 5.0
 )
 
 // Feedwater heating train design constants (plans/p10_1.txt).
@@ -4867,6 +4929,63 @@ type GeneratorCoolingSystem struct {
 	// "Hydrogen pressure: 60 or 75 psig"
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:20
 	HydrogenPressure float64
+}
+
+// CirculatingWaterSystem models the Circulating Water System
+// (CWS) — the direct coolant for the main condenser tube
+// bundle. The simplified model tracks pump-running count,
+// total flow, source inlet temperature, and outlet
+// temperature after the condenser. It does not model intake
+// house hydraulics, ice-melting recirculation, or detailed
+// cooling-tower fill dynamics.
+//
+// Spec justification:
+//   - CWS mission: "major heat sink for the power plant by
+//     providing large amounts of cooling water for the main
+//     condensers."
+//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:10-13
+//   - Pump type: "vertical, mixed flow, volute type
+//     circulating water pumps."
+//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:56-58
+//   - Source diversity: "Depending on the plant, the source of
+//     circulating water may be a river, lake, ocean, or
+//     cooling tower."
+//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
+//   - Condenser coupling: "The condenser is usually a
+//     single-pass deaerating type with straight-through tubes."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:19-20
+type CirculatingWaterSystem struct {
+	Part
+
+	// PumpsInService is the number of CW pumps currently
+	// running. The simplified model treats this as the count
+	// of pumps that the operator has selected online; it
+	// does not model individual pump failures.
+	PumpsInService int
+
+	// FlowGPM is the total circulating water flow rate
+	// (gal/min) delivered to the main condenser tube bundle.
+	// Computed as PumpsInService ×
+	// CirculatingWaterPumpFlowGPM.
+	FlowGPM float64
+
+	// InletTemp is the CW temperature entering the condenser
+	// tubes (°F). Set from the cooling source
+	// (river/lake/ocean) or cooling-tower cold-water basin.
+	InletTemp Temperature
+
+	// OutletTemp is the CW temperature leaving the condenser
+	// tubes (°F), elevated by the latent heat of
+	// condensation. The condenser Step writes this value from
+	// the heat-balance calculation.
+	OutletTemp Temperature
+
+	// SourceIsCoolingTower is true when the CW source is a
+	// cooling tower rather than a once-through
+	// river/lake/ocean intake. When true, InletTemp is the
+	// cooling-tower cold-basin temperature
+	// (wet-bulb + ApproachF).
+	SourceIsCoolingTower bool
 }
 
 
