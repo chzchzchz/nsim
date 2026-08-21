@@ -2857,3 +2857,242 @@ var CSSTCapacity Volume = u.NewValue(15000, u.Gallon)
 // "the SAT providing sodium hydroxide solution"
 // specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:62-63
 var SATCapacity Volume = u.NewValue(500, u.Gallon)
+
+// RCFCUnit models one of the four parallel fan units in the
+// Reactor Containment Fan Cooler System. Each unit contains a
+// fan motor, cooling coils, inlet/outlet dampers, and a
+// gravity-actuated backdraft damper. The simplified model
+// tracks running state and coil heat transfer.
+//
+// Spec justification:
+//   - RCFC purpose: "The Reactor Containment Fan Cooler System
+//     (RCFC) is designed to remove heat from the containment
+//     building during both normal operation and in the event of
+//     a loss-of-coolant accident (LOCA). The RCFC is an
+//     engineered safeguard system."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:79-83
+//   - Four units, minimum two required: "In a containment, the
+//     system includes four fan units that operate in parallel.
+//     A minimum of two units must function to satisfy design
+//     requirements for both normal operation and post-accident
+//     operation."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:19-24
+//   - Normal flow path: "During normal operation, air is drawn
+//     from the upper part of the containment, through the return
+//     air ductwork, and continues through the normal flow inlet
+//     damper into the roughing filter plenum. The air continues
+//     its flow through the cooling coils and discharged by the
+//     fan into the ventilation system distribution ductwork."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:25-31
+//   - Post-LOCA flow path: "During the post LOCA operating
+//     mode, the air flow is routed from the return air ductwork,
+//     through the emergency flow inlet damper, and into the
+//     filtration package plenum. Here the air flows through
+//     moisture separators, HEPA filters, and discharges through
+//     the emergency flow outlet dampers into the roughing
+//     filter plenum and then into the cooling coils."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:47-54
+//   - Low-speed switchover: "When a LOCA is sensed, the fan
+//     motors are automatically switched to low speed to provide
+//     proper flow of the steam-air mixture."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:54-57
+//   - Backdraft damper: "A gravity actuated backdraft damper is
+//     installed in the ventilation system discharge ductwork of
+//     each fan. These dampers serve to isolate units from the
+//     ventilation system when the fan is not in use and to
+//     protect each unit from damage due to reverse flow during
+//     a LOCA pressure transient."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:71-77
+//   - Service water supply: "Cooling water is supplied by the
+//     essential service water system."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:86-87
+type RCFCUnit struct {
+	Part
+
+	// Running is true when the fan motor is energized and the
+	// unit is moving air.
+	Running bool
+
+	// LowSpeed is true when the fan motor has been switched to
+	// low speed in response to a LOCA signal. During normal
+	// operation LowSpeed is false (full speed).
+	// "When a LOCA is sensed, the fan motors are automatically
+	// switched to low speed to provide proper flow of the
+	// steam-air mixture."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:54-57
+	LowSpeed bool
+
+	// HeatTransferRate is the rate of heat rejection from the
+	// containment atmosphere to the service water system via
+	// the cooling coils (W).
+	HeatTransferRate float64
+
+	// CoilInletTemp is the service water inlet temperature to
+	// the RCFC cooling coils (°F). Assumed equal to the
+	// essential service water temperature.
+	// "Cooling water is supplied by the essential service water
+	// system."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:86-87
+	CoilInletTemp Temperature
+
+	// CoilOutletTemp is the service water outlet temperature
+	// (°F) after picking up heat from the containment
+	// atmosphere.
+	CoilOutletTemp Temperature
+
+	// BackdraftDamperOpen is true when the gravity-actuated
+	// backdraft damper is open, allowing normal forward flow.
+	// The damper closes automatically on reverse flow to
+	// protect the unit.
+	// "A gravity actuated backdraft damper is installed in the
+	// ventilation system discharge ductwork of each fan."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:71-73
+	BackdraftDamperOpen bool
+}
+
+// ContainmentBuilding models the reactor containment building —
+// the pressure and temperature boundary that contains the RCS,
+// safeguards equipment, and containment atmosphere during normal
+// and accident conditions. The simplified model tracks lumped
+// pressure and temperature, with sinks from CSS spray
+// condensation and RCFC heat removal.
+//
+// Spec justification:
+//   - Containment purpose: "This chapter discusses the design
+//     of the Reactor Containment Building (hereafter referred
+//     as the containment) that will contain and control any
+//     release of radioactivity to the environment under
+//     normal, upset, or emergency conditions."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_107.txt:43-51
+//   - Design pressure: "Transients resulting from the DBA
+//     serve as the basis for a containment design pressure of
+//     60 psig (4.46 bar)."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_110.txt:27-30
+//   - Free volume: "The internal net free volume approximates
+//     2,000,000 cubic feet (56,600 m³)."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_109.txt:11-12
+type ContainmentBuilding struct {
+	Part
+
+	// Pressure is the absolute containment pressure (psia).
+	Pressure Pressure
+
+	// Temperature is the lumped containment atmosphere
+	// temperature (°F).
+	Temperature Temperature
+
+	// DesignPressure is the containment design pressure (psig).
+	// 60 psig per the spec.
+	// "Transients resulting from the DBA serve as the basis
+	// for a containment design pressure of 60 psig (4.46
+	// bar)."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_110.txt:27-30
+	DesignPressure Pressure
+
+	// FreeVolume is the lumped free volume of the containment
+	// atmosphere (ft³). Stated in the spec as 2,000,000 ft³
+	// for a four-loop prestressed-concrete containment.
+	// "The internal net free volume approximates 2,000,000
+	// cubic feet (56,600 m³)."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_109.txt:11-12
+	FreeVolume float64
+}
+
+// RCFC design constants.
+//
+// Spec justification:
+//   - Four units, two required: "In a containment, the system
+//     includes four fan units that operate in parallel. A
+//     minimum of two units must function to satisfy design
+//     requirements for both normal operation and post-accident
+//     operation."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:19-24
+//   - Low-speed switchover: "When a LOCA is sensed, the fan
+//     motors are automatically switched to low speed."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:54-56
+//   - Service water supply: "Cooling water is supplied by the
+//     essential service water system."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:86-87
+const (
+	// RCFCUnitCount is the total number of RCFC fan units in
+	// the containment.
+	// "the system includes four fan units that operate in
+	// parallel"
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:19-20
+	RCFCUnitCount = 4
+
+	// RCFCUnitsRequired is the minimum number of units that
+	// must be running to satisfy design requirements for both
+	// normal operation and post-accident operation.
+	// "A minimum of two units must function to satisfy design
+	// requirements"
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:20-22
+	RCFCUnitsRequired = 2
+
+	// RCFCNormalSpeed is the normal full-speed air flow rate
+	// per unit (cfm). The spec does not state a numerical
+	// value; 15,000 cfm is representative of a large
+	// containment fan cooler serving a four-loop plant.
+	RCFCNormalSpeed float64 = 15000.0 // cfm per unit
+
+	// RCFCLowSpeed is the post-LOCA low-speed air flow rate
+	// per unit (cfm). The spec states fans switch to low speed
+	// but does not give a ratio; 50% of normal speed is a
+	// typical reduction.
+	// "When a LOCA is sensed, the fan motors are automatically
+	// switched to low speed."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:54-56
+	RCFCLowSpeed float64 = 7500.0 // cfm per unit
+
+	// RCFCServiceWaterFlow is the service water flow rate per
+	// RCFC unit (gpm). The spec does not state a value; 200 gpm
+	// is representative of a large shell-and-tube coil.
+	// "Cooling water is supplied by the essential service water
+	// system."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:86-87
+	RCFCServiceWaterFlow float64 = 200.0 // gpm per unit
+
+	// RCFCDesignHeatRejection is the design heat rejection per
+	// unit (W) at the design temperature difference of 50°F
+	// between containment air and service water. The spec does
+	// not state a value; sized so 4 units at 50°F ΔT give
+	// roughly 2 MW total post-LOCA heat removal (covering the
+	// 1-2 MW of CSS-condensed steam plus residual decay heat).
+	RCFCDesignHeatRejection float64 = 5e5 // W per unit at design ΔT
+
+	// RCFCDesignDeltaT is the design temperature difference
+	// between containment air and the RCFC coil inlet (°F).
+	// Used to scale Q_RCFC linearly with the live ΔT.
+	RCFCDesignDeltaT float64 = 50.0 // °F
+
+	// RCFCCoilApproachTemp is the temperature approach of the
+	// RCFC cooling coil (°F). The spec does not state a value;
+	// 15°F is typical for a finned-tube coil with air-side heat
+	// transfer.
+	RCFCCoilApproachTemp float64 = 15.0
+
+	// RCFCSWInletTemp is the assumed service water inlet
+	// temperature to the RCFC coil (°F). The spec describes
+	// service water supply without a numerical value; 60°F is
+	// typical for a deep-lake / cooling-tower service water
+	// supply at design conditions.
+	RCFCSWInletTemp float64 = 60.0
+)
+
+// ContainmentDesignPressure is the spec-stated containment
+// design pressure (psig, 60 psig) and the related
+// ContainmentFreeVolume (ft³, 2,000,000 ft³) used to
+// initialise the ContainmentBuilding.
+//
+// Spec justification:
+//   - "Transients resulting from the DBA serve as the basis for
+//     a containment design pressure of 60 psig (4.46 bar)."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_110.txt:27-30
+//   - "The internal net free volume approximates 2,000,000
+//     cubic feet (56,600 m³)."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_109.txt:11-12
+const (
+	ContainmentDesignPressure Pressure = 60.0 // psig
+	ContainmentFreeVolume     float64  = 2_000_000.0
+)
+

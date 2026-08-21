@@ -157,6 +157,37 @@ type ReactorBuilding struct {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:39
 	ContainmentSpraySystem ContainmentSpraySystem
 
+	// RCFCUnits are the four parallel fan units in the Reactor
+	// Containment Fan Cooler System. At least RCFCUnitsRequired
+	// must be running for the safeguard function to be met.
+	//
+	// Spec justification:
+	//   - "the system includes four fan units that operate in
+	//     parallel. A minimum of two units must function to
+	//     satisfy design requirements for both normal operation
+	//     and post-accident operation."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:19-24
+	RCFCUnits [RCFCUnitCount]RCFCUnit
+
+	// ContainmentBuilding models the reactor containment — the
+	// pressure and temperature boundary that contains the RCS
+	// and safeguards equipment. Tracked as lumped pressure and
+	// temperature with sinks from CSS spray condensation and
+	// RCFC heat removal.
+	//
+	// Spec justification:
+	//   - "Transients resulting from the DBA serve as the basis
+	//     for a containment design pressure of 60 psig (4.46
+	//     bar)."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_110.txt:27-30
+	//   - "This chapter discusses the design of the Reactor
+	//     Containment Building (hereafter referred as the
+	//     containment) that will contain and control any
+	//     release of radioactivity to the environment under
+	//     normal, upset, or emergency conditions."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_107.txt:43-51
+	ContainmentBuilding ContainmentBuilding
+
 	// ReactorMakeupControlValve is the makeup valve between the
 	// refueling-water storage tank and the volume control tank.
 	// Its Flow attribute is the per-step volume of fresh borated

@@ -580,6 +580,39 @@ func (p *Plant) Step() {
 		css.SprayHeaderOpen = true
 	}
 
+	// RCFC step: each running unit integrates heat rejection
+	// against the live containment temperature. The cross-
+	// building pass has access to the diesel state (the
+	// "LOCA sensed" trigger for the low-speed switchover).
+	//
+	// Spec justification:
+	//   - "When a LOCA is sensed, the fan motors are
+	//     automatically switched to low speed to provide proper
+	//     flow of the steam-air mixture."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:54-57
+	//   - "The cooling coils remove heat from the air with the
+	//     fan providing the required air flow rates."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:84-85
+	locaSensed := p.Outside.DieselGenerator.StartSignal ==
+		DieselStartSafetyInjection
+	cbTemp := p.ReactorBuilding.ContainmentBuilding.Temperature
+	for i := 0; i < RCFCUnitCount; i++ {
+		p.nextPlant.ReactorBuilding.RCFCUnits[i] =
+			p.nextPlant.ReactorBuilding.RCFCUnits[i].Step(
+				locaSensed, cbTemp,
+			)
+	}
+	var rcfcHeatOut Watts
+	for i := 0; i < RCFCUnitCount; i++ {
+		rcfcHeatOut += Watts(
+			p.nextPlant.ReactorBuilding.RCFCUnits[i].HeatTransferRate,
+		)
+	}
+	p.nextPlant.ReactorBuilding.ContainmentBuilding =
+		p.nextPlant.ReactorBuilding.ContainmentBuilding.Step(
+			Watts(0), rcfcHeatOut,
+		)
+
 	// Flow-modulating valves: assume full-open during the
 	// first 30 minutes after actuation. After that the
 	// operator controls them, but the simplified model leaves
@@ -1022,6 +1055,52 @@ func MakePlant() Plant {
 		SprayFlow:            0,
 	}
 	p.ReactorBuilding.ContainmentPressure = AtmosphericPressure
+
+	// RCFC defaults (plans/p20_1.txt). At construction all
+	// four RCFC units are running at full speed, satisfying
+	// the "minimum of two units" safeguard requirement. The
+	// service water coil inlet is at the design service-water
+	// temperature (60°F).
+	//
+	// Spec justification:
+	//   - "In a containment, the system includes four fan units
+	//     that operate in parallel. A minimum of two units must
+	//     function to satisfy design requirements for both
+	//     normal operation and post-accident operation."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:19-24
+	//   - "Cooling water is supplied by the essential service
+	//     water system."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:86-87
+	for i := 0; i < RCFCUnitCount; i++ {
+		p.ReactorBuilding.RCFCUnits[i] = RCFCUnit{
+			Running:             true,
+			LowSpeed:            false,
+			HeatTransferRate:    0,
+			CoilInletTemp:       u.NewValue(RCFCSWInletTemp, u.Fahrenheit),
+			CoilOutletTemp:      u.NewValue(RCFCSWInletTemp, u.Fahrenheit),
+			BackdraftDamperOpen: true,
+		}
+	}
+
+	// ContainmentBuilding defaults. Initialise at atmospheric
+	// pressure and 120°F (typical normal-operation atmosphere
+	// temperature); design pressure and free volume are the
+	// spec-stated values.
+	//
+	// Spec justification:
+	//   - "Transients resulting from the DBA serve as the basis
+	//     for a containment design pressure of 60 psig (4.46
+	//     bar)."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_110.txt:27-30
+	//   - "The internal net free volume approximates 2,000,000
+	//     cubic feet (56,600 m³)."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_109.txt:11-12
+	p.ReactorBuilding.ContainmentBuilding = ContainmentBuilding{
+		Pressure:       AtmosphericPressure,
+		Temperature:    u.NewValue(120.0, u.Fahrenheit),
+		DesignPressure: ContainmentDesignPressure,
+		FreeVolume:     ContainmentFreeVolume,
+	}
 
 	// Reactor makeup control valve defaults: closed at startup
 	// (the operator opens it during cooldown / VCT-level

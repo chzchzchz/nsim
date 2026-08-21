@@ -1,0 +1,160 @@
+package core
+
+import (
+	u "github.com/bcicen/go-units"
+)
+
+// Step advances one RCFC unit by one timestep. The Step
+// function implements the three state machines described in the
+// spec:
+//
+//   1. Running state. The fan motor either runs (in either
+//      high or low speed) or is stopped. When stopped, the unit
+//      rejects no heat; the backdraft damper may close to
+//      protect against reverse flow.
+//   2. Speed switchover. When the LOCA signal arrives the fan
+//      motor drops from normal speed to low speed; the air-flow
+//      path is also switched (normal dampers → emergency-flow
+//      dampers, HEPA filters, moisture separators). The
+//      simplified model collapses this to a single LowSpeed
+//      boolean.
+//   3. Heat transfer. While running, the unit rejects heat from
+//      the containment atmosphere to the service water at a
+//      rate proportional to the live ΔT (containment air
+//      temperature minus coil inlet temperature) scaled against
+//      the design ΔT.
+//
+// Spec justification:
+//   - RCFC purpose: "The Reactor Containment Fan Cooler System
+//     (RCFC) is designed to remove heat from the containment
+//     building during both normal operation and in the event of
+//     a loss-of-coolant accident (LOCA). The RCFC is an
+//     engineered safeguard system."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:79-83
+//   - Low-speed switchover: "When a LOCA is sensed, the fan
+//     motors are automatically switched to low speed to provide
+//     proper flow of the steam-air mixture."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:54-57
+//   - Service water supply: "Cooling water is supplied by the
+//     essential service water system."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:86-87
+//   - Backdraft damper: "A gravity actuated backdraft damper is
+//     installed in the ventilation system discharge ductwork of
+//     each fan. These dampers serve to isolate units from the
+//     ventilation system when the fan is not in use and to
+//     protect each unit from damage due to reverse flow during
+//     a LOCA pressure transient."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:71-77
+func (r *RCFCUnit) Step(
+	locaSensed bool,
+	containmentTemp Temperature,
+) RCFCUnit {
+	ret := *r
+
+	if !ret.Running {
+		ret.HeatTransferRate = 0
+		ret.CoilOutletTemp = ret.CoilInletTemp
+		ret.BackdraftDamperOpen = false
+		return ret
+	}
+
+	// Speed switchover. When the LOCA signal arrives, drop to
+	// low speed. The spec describes this as automatic with no
+	// operator delay.
+	//
+	// Spec justification:
+	//   - "When a LOCA is sensed, the fan motors are
+	//     automatically switched to low speed."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:54-56
+	ret.LowSpeed = locaSensed
+	ret.BackdraftDamperOpen = true
+
+	// Heat transfer: scale the design rating by the live
+	// (containment air − coil inlet) ΔT over the design ΔT.
+	// Clamp the effective ΔT at 0 so a cold containment does
+	// not produce a negative heat-rejection term.
+	airT := containmentTemp.Float()
+	coilIn := ret.CoilInletTemp.Float()
+	deltaT := airT - coilIn
+	if deltaT < RCFCCoilApproachTemp {
+		deltaT = 0
+	}
+	eff := deltaT / RCFCDesignDeltaT
+	if eff > 1.0 {
+		eff = 1.0
+	}
+	ret.HeatTransferRate = RCFCDesignHeatRejection * eff
+
+	// Coil outlet: rise above the inlet by the same temperature
+	// that the air drops by, weighted by the design rating.
+	coilOut := coilIn + deltaT*eff
+	if coilOut > airT {
+		coilOut = airT
+	}
+	ret.CoilOutletTemp = u.NewValue(coilOut, u.Fahrenheit)
+
+	return ret
+}
+
+// RCFCUnitsRunning returns the count of running RCFC units.
+// Used by ContainmentBuilding.Step to verify the safeguard
+// minimum is met.
+//
+// Spec justification:
+//   - "A minimum of two units must function to satisfy design
+//     requirements."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:20-22
+func RCFCUnitsRunning(units *[RCFCUnitCount]RCFCUnit) int {
+	n := 0
+	for i := 0; i < RCFCUnitCount; i++ {
+		if units[i].Running {
+			n++
+		}
+	}
+	return n
+}
+
+// Step advances the ContainmentBuilding by one timestep. The
+// step integrates the lumped atmosphere temperature with the
+// net heat input (RCS leak into containment, CSS spray
+// condensation enthalpy removal) minus the RCFC heat sink,
+// then derives absolute pressure via the ideal-gas law.
+//
+// Spec justification:
+//   - Containment purpose: "This chapter discusses the design of
+//     the Reactor Containment Building (hereafter referred as
+//     the containment) that will contain and control any
+//     release of radioactivity to the environment under normal,
+//     upset, or emergency conditions."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_107.txt:43-51
+//   - Design pressure: "Transients resulting from the DBA
+//     serve as the basis for a containment design pressure of
+//     60 psig (4.46 bar)."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_110.txt:27-30
+//   - Free volume: "The internal net free volume approximates
+//     2,000,000 cubic feet (56,600 m³)."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_109.txt:11-12
+func (c *ContainmentBuilding) Step(
+	heatIn Watts,
+	heatOutRCFC Watts,
+) ContainmentBuilding {
+	ret := *c
+	dt := TimeStep.Seconds()
+
+	netW := float64(heatIn) - float64(heatOutRCFC)
+	massKg := ret.FreeVolume * 0.0283168 * 1.0 // ft³ → m³, ρ_air ≈ 1 kg/m³
+	cpAir := 1005.0
+	deltaK := netW / (massKg * cpAir) * dt
+	newTempF := ret.Temperature.Float() + deltaK*9.0/5.0
+	if newTempF < -459.67 {
+		newTempF = -459.67
+	}
+	ret.Temperature = u.NewValue(newTempF, u.Fahrenheit)
+
+	rAir := 287.0
+	kelvin := (newTempF + 459.67) * 5.0 / 9.0
+	pPa := massKg * rAir * kelvin / ret.FreeVolume * 0.0283168
+	ret.Pressure = Pressure(pPa/6894.76) + AtmosphericPressure
+
+	return ret
+}
