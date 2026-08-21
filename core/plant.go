@@ -89,6 +89,51 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	rpv := ret.ReactorPressureVessel.Step(ret.ReactorCoolantPump.Running)
 	ret.ReactorPressureVessel = rpv
 
+	// RCP velocity dynamics (plans/p33_1.txt). Exponential
+	// ramp toward RCPRatedSpeed when Running; exponential decay
+	// (the flywheel coastdown) when not. The Euler update
+	// mirrors the diesel (`core/diesel.go:17-18`) and turbine
+	// (`core/turbine.go:315-319`) start/coast patterns.
+	//
+	// Spec justification:
+	//   - "A flywheel in the motor increases the total
+	//     rotating inertia, allowing the pump to coastdown
+	//     slowly after deenergizing."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_061.txt:152-158
+	//   - "A heavy flywheel on the pump motor shaft provides
+	//     long coastdown times to preclude rapid decreases in
+	//     core cooling flow during pump trips."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_1/page_020.txt:83-84
+	//   - "the long coast down times of the reactor coolant
+	//     pumps assures adequate flow during the power decay
+	//     transient."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:80-94
+	rcpV := float64(ret.ReactorCoolantPump.Velocity)
+	if ret.ReactorCoolantPump.Running {
+		rcpV += (float64(RCPRatedSpeed) - rcpV) *
+			TimeStep.Seconds() / float64(RCPStartupTimeConstant.Seconds())
+	} else {
+		rcpV -= rcpV *
+			TimeStep.Seconds() / float64(RCPCoastdownTimeConstant.Seconds())
+	}
+	if rcpV < 0 {
+		rcpV = 0
+	}
+	ret.ReactorCoolantPump.Velocity = Velocity(rcpV)
+
+	// RCP shaft-loss heat entering the primary coolant. The
+	// motor and bearing waste power scale with speed squared
+	// (over the small 1 ms step this is linear in ω² at the
+	// current velocity). Zero when the rotor is stopped.
+	//
+	// Spec: "Primary temperature is maintained through the
+	// balanced use of reactor coolant pump heat input and a
+	// steam dump system..."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:108-115
+	rcpHeat := float64(RCPRatedHeatInput) * rcpV * rcpV /
+		(float64(RCPRatedSpeed) * float64(RCPRatedSpeed))
+	ret.ReactorPressureVessel.PumpHeatInput = Watts(rcpHeat)
+
 	// RHRS: once RCS has cooled below the entrance threshold
 	// (350°F, <400 psig) the RHRS steps and assumes decay-heat
 	// removal. HeatTransferRate is integrated into the RCS

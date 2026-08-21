@@ -155,7 +155,26 @@ func simulateFluidFlow(g *PlantGraph, dt time.Duration) {
 
 		deltaP := float64(from.pressure() - to.pressure())
 		if e.Pump != nil && e.Pump.Running {
-			deltaP += pumpHead
+			head := pumpHead
+			// Other pumps keep full head because they have
+			// no speed dynamics yet; once their Velocity is
+			// non-zero the head scales with speed. The RCP
+			// is the canonical case: "Design head 280 ft"
+			// is achieved at RCPRatedSpeed (1189 rpm), and
+			// lower speeds produce proportionally less head.
+			//
+			// Spec justification:
+			//   - Design point: "Design head 280 ft (85.3 m)"
+			//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_056.txt:124-130
+			//   - Coastdown: "long coastdown times [...] to
+			//     preclude rapid decreases in core cooling
+			//     flow during pump trips."
+			//     specs/the_westinghouse_pressurized_water_react/chapter_1/page_020.txt:83-84
+			if e.Pump.Velocity > 0 {
+				head *= float64(e.Pump.Velocity) /
+					float64(RCPRatedSpeed)
+			}
+			deltaP += head
 		}
 		if e.Valve != nil {
 			deltaP *= e.Valve.Open
@@ -244,8 +263,11 @@ func pumpLabel(p *Pump) string {
 		return "pump"
 	}
 	state := "stopped"
-	if p.Running {
-		state = "running"
+	switch {
+	case p.Velocity > 0:
+		state = fmt.Sprintf("running %.0f rpm", p.Velocity)
+	case p.Running:
+		state = "starting"
 	}
 	return "pump " + state
 }

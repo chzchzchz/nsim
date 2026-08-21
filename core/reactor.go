@@ -148,6 +148,17 @@ func (r *ReactorPressureVessel) Step(rcpRunning bool) ReactorPressureVessel {
 	if ret.ThermalPower < 0 {
 		ret.ThermalPower = 0
 	}
+	// RCP shaft-loss heat enters the primary coolant (chapter
+	// 16 temperature balance). Added after the reactivity-based
+	// power so the SG HeatInput sees the total primary-side
+	// flux when the ReactorBuilding wiring copies
+	// ret.ThermalPower into SteamGenerator.HeatInput.
+	//
+	// Spec: "Primary temperature is maintained through the
+	// balanced use of reactor coolant pump heat input and a
+	// steam dump system..."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:108-115
+	ret.ThermalPower += ret.PumpHeatInput
 
 	return ret
 }

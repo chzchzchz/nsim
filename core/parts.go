@@ -32,6 +32,11 @@ type Pump struct {
 	// Running is set by the operator between steps; stopped pumps
 	// freeze primary-side Inlet tracking in the RPV step (plans/p8_1.txt).
 	Running bool
+	// Velocity is the instantaneous shaft speed (RPM). Defaults
+	// to zero at construction and is updated per-step by
+	// exponential startup / coastdown dynamics in the owning
+	// building's Step function (plans/p33_1.txt).
+	Velocity Velocity
 }
 
 type Turbine struct {
@@ -683,6 +688,19 @@ type ReactorPressureVessel struct {
 	InletNozzle  Nozzle
 	OutletNozzle Nozzle
 	Pressure
+
+	// PumpHeatInput is the per-step shaft-loss heat dumped
+	// into the coolant by the reactor coolant pump, varying
+	// with Velocity² (plans/p33_1.txt). Zero when the pump is
+	// stopped; full RCPRatedHeatInput at RCPRatedSpeed. The
+	// RPV Step adds this into ThermalPower so the SG HeatInput
+	// sees the total primary-side flux.
+	//
+	// Spec: "Primary temperature is maintained through the
+	// balanced use of reactor coolant pump heat input and a
+	// steam dump system..."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:108-115
+	PumpHeatInput Watts
 }
 
 // Pressurizer models the surge-line volume at the top of the primary
@@ -1689,6 +1707,61 @@ const (
 	// the outlet temperature. A negative value means rising outlet
 	// temperature reduces reactivity (stable).
 	CoreDopplerPcmPerDegF float64 = -1.0
+)
+
+// Reactor Coolant Pump dynamics constants (plans/p33_1.txt).
+//
+// Spec justification:
+//   - Operating speed: "Operating speed 1189 rpm"
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_056.txt:175-177
+//   - Flywheel coastdown: "A flywheel in the motor increases the
+//     total rotating inertia, allowing the pump to coastdown slowly
+//     after deenergizing. This provision, together with the Reactor
+//     Control and Protection System, maintains adequate flow through
+//     the reactor core in the event of a loss of power to the
+//     pumps."
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_061.txt:152-158
+//   - Long coastdown during offsite-power loss: "If offsite power is
+//     not available, the long coast down times of the reactor coolant
+//     pumps assures adequate flow during the power decay transient.
+//     The coast down time is prolonged by the heavy flywheel mounted
+//     above the motor."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:80-94
+//   - Heat balance: "Primary temperature is maintained through the
+//     balanced use of reactor coolant pump heat input and a steam
+//     dump system..."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:108-115
+const (
+	// RCPRatedSpeed is the design operating speed of the
+	// reactor coolant pump from Table 3.3-1.
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_056.txt:175-177
+	RCPRatedSpeed Velocity = 1189
+
+	// RCPStartupTimeConstant is the exponential rise time for
+	// the RCP motor to reach rated speed from zero when running
+	// and powered. The spec does not state a numeric start
+	// time; 2 s is a reasonable large-induction-motor value and
+	// gives a visible but controlled acceleration at the
+	// 1 ms plant step.
+	RCPStartupTimeConstant = 2 * time.Second
+
+	// RCPCoastdownTimeConstant is the exponential decay time
+	// after the pump loses power or is stopped. The spec
+	// characterises the flywheel coastdown as "long"
+	// (chapter 1, chapter 3, chapter 16); 10 s honours that
+	// description while still reaching near-zero speed within
+	// the time window of a typical transient test.
+	RCPCoastdownTimeConstant = 10 * time.Second
+
+	// RCPRatedHeatInput is the motor + bearing loss power at
+	// full speed, added to the primary coolant as a heat
+	// source. The spec does not give a numeric per-pump loss
+	// figure; this constant is derived from typical large-motor
+	// losses (~ 200 kW per pump at rated speed). It is sized
+	// so that four running pumps contribute ~ 800 kW total,
+	// consistent with the spec's framing of pump heat as a
+	// small fraction of the 3.8 GW thermal balance.
+	RCPRatedHeatInput Watts = 200_000.0
 )
 
 type Transformer struct{ Part }
