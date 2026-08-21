@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg">
+<title>PWR diesel symbols</title>
+<desc>Emergency diesel generator and fuel-oil day-tank symbols. Source-of-truth citations live in plans/svg/diesel.md.</desc>
+
+<symbol id="diesel-generator" viewBox="-100 -50 200 100">
+<title>Emergency Diesel Generator</title>
+<rect x="-90" y="-30" width="100" height="60" fill="#bdbdbd" stroke="black"/>
+<text x="-40" y="3" text-anchor="middle" font-size="10">DIESEL</text>
+<g stroke="black" stroke-width="0.6">
+<rect x="-86" y="-32" width="10" height="6"/>
+<rect x="-72" y="-32" width="10" height="6"/>
+<rect x="-58" y="-32" width="10" height="6"/>
+<rect x="-44" y="-32" width="10" height="6"/>
+<rect x="-30" y="-32" width="10" height="6"/>
+<rect x="-16" y="-32" width="10" height="6"/>
+<rect x="-86" y="26" width="10" height="6"/>
+<rect x="-72" y="26" width="10" height="6"/>
+<rect x="-58" y="26" width="10" height="6"/>
+<rect x="-44" y="26" width="10" height="6"/>
+<rect x="-30" y="26" width="10" height="6"/>
+<rect x="-16" y="26" width="10" height="6"/>
+</g>
+<rect x="10" y="-6" width="14" height="12" fill="#888" stroke="black"/>
+<rect x="24" y="-30" width="60" height="60" fill="#dcdcdc" stroke="black"/>
+<text x="54" y="3" text-anchor="middle" font-size="8">GEN</text>
+<rect x="84" y="-22" width="14" height="44" fill="#cccccc" stroke="black"/>
+<text x="91" y="3" text-anchor="middle" font-size="6">EXC</text>
+<circle id="dg-anchor-output" cx="100" cy="0" r="3" fill="none" stroke="none"/>
+<circle id="dg-anchor-fuel" cx="-90" cy="40" r="3" fill="none" stroke="none"/>
+</symbol>
+
+<symbol id="fuel-tank" viewBox="-15 -20 30 40">
+<title>Fuel Oil Day Tank</title>
+<rect x="-12" y="-15" width="24" height="30" fill="#cfcfcf" stroke="black"/>
+<rect x="-10" y="14" width="20" height="3" fill="#888"/>
+<text x="0" y="3" text-anchor="middle" font-size="6">FUEL</text>
+</symbol>
+
+</svg>

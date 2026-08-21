@@ -1,11 +1,14 @@
 package main
 
 import (
+	"flag"
+	"fmt"
+	"os"
 	"reflect"
 	"strings"
-	"fmt"
 
 	"github.com/chzchzchz/nsim/core"
+	"github.com/chzchzchz/nsim/core/svg"
 )
 
 func dump(v reflect.Value, depth int) {
@@ -31,19 +34,37 @@ func dump(v reflect.Value, depth int) {
 	}
 }
 
-/*
-The safety-related diesel- and turbine-driven auxiliary feedwater pumps are identical
-six-stage, horizontal, centrifugal pumps designed for 2000 psig, 70°F water. They
-operate with a design flow rate of 960 gpm, including 80 gpm recirculation, at a 3400
-ft (1472 psid) head. The rated speed of each pump is 4560 RPM.
-*/
-
 func main() {
+	dotPath := flag.String("dot", "", "write plant graph in DOT format to file")
+	svgPath := flag.String("svg", "", "write plant P&ID SVG to file")
+	flag.Parse()
+
 	p := core.MakePlant()
+	if *dotPath != "" {
+		f, err := os.Create(*dotPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "failed to create dot file:", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		if err := p.ExportDot(f); err != nil {
+			fmt.Fprintln(os.Stderr, "failed to export dot:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if *svgPath != "" {
+		f, err := os.Create(*svgPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "failed to create svg file:", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		if err := svg.WritePlantSVG(f, &p); err != nil {
+			fmt.Fprintln(os.Stderr, "failed to export svg:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	dump(reflect.ValueOf(p), 0)
-	/*
-	for {
-		p.Step()
-		p.Update()
-	}*/
 }

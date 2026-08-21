@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg">
+<title>PWR safety-system symbols</title>
+<desc>SIS accumulators, EFWS tank and pumps, CCWS heat exchanger, and RHRS train symbols. Source-of-truth citations live in plans/svg/safety_systems.md.</desc>
+
+<symbol id="sis-accumulators" viewBox="-100 -40 200 80">
+<title>SIS Accumulators (4 RCS loops)</title>
+<use href="#tank-accumulator" x="-90" y="0" width="40" height="80"/>
+<use href="#tank-accumulator" x="-30" y="0" width="40" height="80"/>
+<use href="#tank-accumulator" x="30" y="0" width="40" height="80"/>
+<use href="#tank-accumulator" x="90" y="0" width="40" height="80"/>
+<text x="0" y="-30" text-anchor="middle" font-size="8">ACC</text>
+</symbol>
+
+<symbol id="efws-tank" viewBox="-40 -50 80 100">
+<title>Emergency Feedwater Tank</title>
+<use href="#tank-vertical" x="-30" y="-40" width="60" height="80"/>
+<text x="0" y="5" text-anchor="middle" font-size="10">EFW</text>
+</symbol>
+
+<symbol id="efws-pump-md" viewBox="-30 -20 60 40">
+<title>Motor-Driven AFW Pump</title>
+<use href="#pump-horizontal" x="-30" y="-20" width="60" height="40"/>
+<text x="0" y="-22" text-anchor="middle" font-size="6">MD</text>
+</symbol>
+
+<symbol id="efws-pump-td" viewBox="-30 -20 60 40">
+<title>Turbine-Driven AFW Pump</title>
+<use href="#pump-turbine" x="-30" y="-20" width="60" height="40"/>
+<text x="0" y="-22" text-anchor="middle" font-size="6">TD</text>
+</symbol>
+
+<symbol id="ccws-hx" viewBox="-50 -25 100 50">
+<title>CCWS Heat Exchanger</title>
+<use href="#heat-exchanger" x="-50" y="-25" width="100" height="50"/>
+<text x="0" y="3" text-anchor="middle" font-size="8">CCW</text>
+</symbol>
+
+<symbol id="rhrs-train" viewBox="-100 -40 200 80">
+<title>RHRS Train (Pump + Heat Exchanger)</title>
+<use href="#pump-horizontal" x="-90" y="-20" width="50" height="40"/>
+<use href="#heat-exchanger" x="-30" y="-25" width="100" height="50"/>
+<text x="0" y="-32" text-anchor="middle" font-size="8">RHR</text>
+</symbol>
+
+</svg>

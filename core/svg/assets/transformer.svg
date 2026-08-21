@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg">
+<title>PWR transformer symbols</title>
+<desc>Two-winding transformer, three-winding transformer, offsite infinite bus, and ESF bus bar symbols. Source-of-truth citations live in plans/svg/transformer.md.</desc>
+
+<symbol id="transformer-2w" viewBox="-25 -25 50 50">
+<title>Two-Winding Transformer</title>
+<circle cx="-6" cy="0" r="14" fill="white" stroke="black" stroke-width="1.5"/>
+<circle cx="6" cy="0" r="14" fill="white" stroke="black" stroke-width="1.5"/>
+<line x1="-22" y1="0" x2="-20" y2="0" stroke="black"/>
+<line x1="20" y1="0" x2="22" y2="0" stroke="black"/>
+<text x="0" y="3" text-anchor="middle" font-size="6">T</text>
+</symbol>
+
+<symbol id="transformer-3w" viewBox="-30 -25 60 50">
+<title>Three-Winding Transformer</title>
+<circle cx="-8" cy="0" r="10" fill="white" stroke="black"/>
+<circle cx="0" cy="0" r="10" fill="white" stroke="black"/>
+<circle cx="8" cy="0" r="10" fill="white" stroke="black"/>
+<line x1="-22" y1="0" x2="-18" y2="0" stroke="black"/>
+<line x1="18" y1="0" x2="22" y2="0" stroke="black"/>
+<line x1="0" y1="14" x2="0" y2="20" stroke="black"/>
+</symbol>
+
+<symbol id="grid-bus" viewBox="-15 -25 30 50">
+<title>Offsite Grid (Infinite Bus)</title>
+<circle cx="0" cy="-12" r="6" fill="white" stroke="black"/>
+<line x1="0" y1="-6" x2="0" y2="18" stroke="black" stroke-width="2"/>
+<line x1="-8" y1="14" x2="8" y2="14" stroke="black" stroke-width="2"/>
+<line x1="-6" y1="18" x2="6" y2="18" stroke="black" stroke-width="2"/>
+</symbol>
+
+<symbol id="esf-bus" viewBox="-60 -10 120 20">
+<title>ESF Bus</title>
+<rect x="-50" y="-2" width="100" height="4" fill="black"/>
+<text x="0" y="-6" text-anchor="middle" font-size="8">ESF</text>
+</symbol>
+
+</svg>

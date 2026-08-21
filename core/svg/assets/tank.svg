@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg">
+<title>PWR tank symbols</title>
+<desc>Vertical, horizontal, condensate storage, accumulator, and spent-fuel-pool tank symbols. Source-of-truth citations live in plans/svg/tank.md.</desc>
+
+<symbol id="tank-vertical" viewBox="-30 -50 60 100">
+<title>Vertical Tank</title>
+<path d="M -25 -40 Q -25 -50 0 -50 Q 25 -50 25 -40" fill="#e6e6e6" stroke="black"/>
+<rect x="-25" y="-40" width="50" height="80" fill="#e6e6e6" stroke="black"/>
+<path d="M -25 40 Q -25 50 0 50 Q 25 50 25 40" fill="#e6e6e6" stroke="black"/>
+<rect x="-15" y="50" width="30" height="3" fill="#888"/>
+<circle cx="0" cy="-50" r="3" fill="white" stroke="black"/>
+<rect x="25" y="-5" width="10" height="6" fill="#cccccc" stroke="black"/>
+<rect id="tank-vertical-level" x="-23" y="-38" width="46" height="76" fill="#aad4ff" fill-opacity="0.5" stroke="none"/>
+<circle id="tank-anchor-top" cx="0" cy="-50" r="2" fill="none" stroke="none"/>
+<circle id="tank-anchor-side" cx="35" cy="-2" r="2" fill="none" stroke="none"/>
+<circle id="tank-anchor-bottom" cx="0" cy="50" r="2" fill="none" stroke="none"/>
+</symbol>
+
+<symbol id="tank-horizontal" viewBox="-50 -25 100 50">
+<title>Horizontal Tank</title>
+<rect x="-44" y="-18" width="88" height="36" fill="#e6e6e6" stroke="black"/>
+<ellipse cx="-44" cy="0" rx="6" ry="18" fill="#e6e6e6" stroke="black"/>
+<ellipse cx="44" cy="0" rx="6" ry="18" fill="#e6e6e6" stroke="black"/>
+<rect x="-25" y="18" width="6" height="3" fill="#888"/>
+<rect x="20" y="18" width="6" height="3" fill="#888"/>
+<rect id="tank-horizontal-level" x="-42" y="0" width="84" height="16" fill="#aad4ff" fill-opacity="0.5" stroke="none"/>
+<circle id="tank-anchor-end" cx="50" cy="0" r="2" fill="none" stroke="none"/>
+<circle id="tank-anchor-bottom" cx="0" cy="20" r="2" fill="none" stroke="none"/>
+</symbol>
+
+<symbol id="tank-cst" viewBox="-50 -65 100 130">
+<title>Condensate Storage Tank</title>
+<polygon points="-45,-50 45,-50 25,-65 -25,-65" fill="#cccccc" stroke="black"/>
+<rect x="-45" y="-50" width="90" height="100" fill="#e6e6e6" stroke="black"/>
+<rect x="-15" y="50" width="30" height="3" fill="#888"/>
+<rect id="tank-cst-level" x="-43" y="-48" width="86" height="96" fill="#aad4ff" fill-opacity="0.5" stroke="none"/>
+<circle id="tank-cst-anchor-top" cx="0" cy="-65" r="2" fill="none" stroke="none"/>
+<circle id="tank-cst-anchor-side" cx="45" cy="0" r="2" fill="none" stroke="none"/>
+</symbol>
+
+<symbol id="tank-accumulator" viewBox="-20 -40 40 80">
+<title>Accumulator (SI)</title>
+<path d="M -16 -32 Q -16 -40 0 -40 Q 16 -40 16 -32" fill="#e6e6e6" stroke="black"/>
+<rect x="-16" y="-32" width="32" height="64" fill="#e6e6e6" stroke="black"/>
+<path d="M -16 32 Q -16 40 0 40 Q 16 40 16 32" fill="#e6e6e6" stroke="black"/>
+<rect x="-3" y="-44" width="6" height="4" fill="#cccccc" stroke="black"/>
+<text x="0" y="-46" text-anchor="middle" font-size="6">N₂</text>
+<rect x="-4" y="40" width="8" height="6" fill="#cccccc" stroke="black"/>
+<rect id="tank-accumulator-level" x="-14" y="-30" width="28" height="60" fill="#aad4ff" fill-opacity="0.5" stroke="none"/>
+<circle id="acc-anchor-top" cx="0" cy="-44" r="2" fill="none" stroke="none"/>
+<circle id="acc-anchor-discharge" cx="0" cy="46" r="2" fill="none" stroke="none"/>
+</symbol>
+
+<symbol id="tank-sfp" viewBox="-200 -100 400 200">
+<title>Spent Fuel Pool</title>
+<rect x="-180" y="-80" width="360" height="160" fill="#aad4ff" fill-opacity="0.5" stroke="black" stroke-width="2"/>
+<g stroke="#888" stroke-width="0.5">
+<line x1="-180" y1="-40" x2="180" y2="-40"/>
+<line x1="-180" y1="0" x2="180" y2="0"/>
+<line x1="-180" y1="40" x2="180" y2="40"/>
+<line x1="-100" y1="-80" x2="-100" y2="80"/>
+<line x1="0" y1="-80" x2="0" y2="80"/>
+<line x1="100" y1="-80" x2="100" y2="80"/>
+</g>
+<rect x="-184" y="-84" width="368" height="8" fill="#888" stroke="black"/>
+<circle id="sfp-anchor-skimmer" cx="-180" cy="-80" r="2" fill="none" stroke="none"/>
+<circle id="sfp-anchor-cooling" cx="180" cy="80" r="2" fill="none" stroke="none"/>
+</symbol>
+
+</svg>

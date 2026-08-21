@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg">
+<title>PWR turbine symbols</title>
+<desc>Main turbine (HP + MSR + 3 LP) and standalone moisture-separator reheater symbols. Source-of-truth citations live in plans/svg/turbine.md.</desc>
+
+<symbol id="turbine-main" viewBox="-180 -100 360 200">
+<title>Main Turbine (4-cylinder 1800 rpm, HP + MSR + 3 LP)</title>
+<rect x="-160" y="-50" width="60" height="100" fill="#dcdcdc" stroke="black" stroke-width="1.5"/>
+<text x="-130" y="-30" text-anchor="middle" font-size="10">HP</text>
+<rect x="-150" y="-70" width="40" height="20" fill="#cccccc" stroke="black"/>
+<rect x="-150" y="50" width="40" height="20" fill="#cccccc" stroke="black"/>
+<rect x="-90" y="-60" width="40" height="120" fill="#dcdcdc" stroke="black"/>
+<text x="-70" y="-40" text-anchor="middle" font-size="8">MSR</text>
+<g stroke="black" stroke-width="0.5" fill="none">
+<path d="M -82 -20 L -76 -10 L -82 0"/>
+<path d="M -72 -20 L -66 -10 L -72 0"/>
+<path d="M -62 -20 L -56 -10 L -62 0"/>
+</g>
+<g stroke="#888" stroke-width="0.4">
+<line x1="-86" y1="20" x2="-54" y2="20"/>
+<line x1="-86" y1="30" x2="-54" y2="30"/>
+<line x1="-86" y1="40" x2="-54" y2="40"/>
+</g>
+<rect x="-40" y="-50" width="60" height="100" fill="#dcdcdc" stroke="black"/>
+<text x="-10" y="-30" text-anchor="middle" font-size="8">LP-A</text>
+<rect x="30" y="-50" width="60" height="100" fill="#dcdcdc" stroke="black"/>
+<text x="60" y="-30" text-anchor="middle" font-size="8">LP-B</text>
+<rect x="100" y="-50" width="60" height="100" fill="#dcdcdc" stroke="black"/>
+<text x="130" y="-30" text-anchor="middle" font-size="8">LP-C</text>
+<path d="M -40 50 Q -40 90 0 90 L 20 90 Q 60 90 60 50 Z" fill="#cfcfcf" stroke="black"/>
+<path d="M 30 50 Q 30 90 60 90 L 90 90 Q 120 90 120 50 Z" fill="#cfcfcf" stroke="black"/>
+<path d="M 100 50 Q 100 90 130 90 L 150 90 Q 180 90 180 50 Z" fill="#cfcfcf" stroke="black"/>
+<circle id="turb-anchor-steam-in" cx="-160" cy="0" r="3" fill="none" stroke="none"/>
+<circle id="turb-anchor-exhaust" cx="0" cy="90" r="3" fill="none" stroke="none"/>
+<circle id="turb-anchor-exhaust-2" cx="60" cy="90" r="3" fill="none" stroke="none"/>
+<circle id="turb-anchor-exhaust-3" cx="130" cy="90" r="3" fill="none" stroke="none"/>
+<circle id="turb-anchor-condenser" cx="0" cy="100" r="3" fill="none" stroke="none"/>
+</symbol>
+
+<symbol id="msr" viewBox="-30 -60 60 120">
+<title>Moisture-Separator Reheater</title>
+<rect x="-22" y="-50" width="44" height="100" fill="#dcdcdc" stroke="black"/>
+<text x="0" y="-30" text-anchor="middle" font-size="8">MSR</text>
+<g stroke="black" stroke-width="0.5" fill="none">
+<path d="M -14 -20 L -8 -10 L -14 0"/>
+<path d="M -4 -20 L 2 -10 L -4 0"/>
+<path d="M 6 -20 L 12 -10 L 6 0"/>
+</g>
+<g stroke="#888" stroke-width="0.4">
+<line x1="-18" y1="20" x2="18" y2="20"/>
+<line x1="-18" y1="30" x2="18" y2="30"/>
+<line x1="-18" y1="40" x2="18" y2="40"/>
+</g>
+<circle id="msr-anchor-in" cx="-22" cy="0" r="2" fill="none" stroke="none"/>
+<circle id="msr-anchor-out" cx="22" cy="0" r="2" fill="none" stroke="none"/>
+<circle id="msr-anchor-drain" cx="-22" cy="40" r="2" fill="none" stroke="none"/>
+</symbol>
+
+</svg>
