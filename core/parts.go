@@ -4988,4 +4988,323 @@ type CirculatingWaterSystem struct {
 	SourceIsCoolingTower bool
 }
 
+// PlantOperationalMode represents the current operational mode of the
+// plant. The simplified model collapses the full startup/shutdown
+// procedure into three modes linked by condition-based transitions.
+//
+// Spec justification:
+//   - Cold vs. hot startup: "Startup from a cold condition is initiated
+//     following a shutdown that required the Reactor Coolant System
+//     (RCS) to be cooled down and depressurized ... Startup from a hot
+//     condition refers to a return to power operation following a
+//     shutdown not requiring depressurization."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:79-86
+//   - Hot standby definition: "the plant is in the hot standby
+//     condition" when primary temperature is maintained through RCP
+//     heat and steam dump, at saturation pressure for Tavg.
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:9-16
+//   - Power operation: following the loading sequence described in
+//     normal operation.
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:135-150
+type PlantOperationalMode int
+
+const (
+	// ColdShutdown — RCS <140°F, <400 psig, pressurizer
+	// water-solid. No criticality, RCPs off, RHR may be in
+	// service.
+	ColdShutdown PlantOperationalMode = iota
+
+	// HotStandby — RCS 547–557°F, 2250 psia, no-load
+	// pressurizer level, steam bubble present. Control rods
+	// inserted. Max 2 of 4 RCPs running. RHRS may be in
+	// service.
+	HotStandby
+
+	// PowerOperation — plant loaded above 15% of rated,
+	// turbine generator online and producing power. Full
+	// control systems in automatic.
+	PowerOperation
+)
+
+// Plant Operation design constants (plans/p32_1.txt).
+//
+// Spec justification:
+//   - Loading rate: "5 percent of full power per minute."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:148-150
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:112
+//   - Heatup/cooldown rate: "50°F (28°C) per hour."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:140-141
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:153-154
+//   - Auxiliary to main feedwater: "about 3.5-percent steam flow."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:129-130
+//   - Hot standby RCP limit: "maximum of two out of four reactor
+//     coolant pumps may be secured."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:104-105
+//   - Startup times: cold = 13 h, hot = 4 h (Table 16-1 totals).
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_223.txt:191
+//   - Cooldown time: "approximately 20 hours."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_228.txt:59-61
+//   - Load follow operating range: 15%–100% of rated power.
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_230.txt:62-65
+const (
+	// OpPowerRaiseRate is the maximum fraction of rated power
+	// per second the plant may raise power during startup or
+	// load follow. Spec: "5 percent of full power per
+	// minute."
+	//   per minute → per second: 0.05 / 60 = 0.0008333...
+	OpPowerRaiseRate = 0.05 / 60.0
+
+	// OpPowerLowerRate is the maximum fraction of rated power
+	// per second the plant may lower power during shutdown or
+	// load rejection. Spec does not state a separate downward
+	// rate; the simplified model uses the same magnitude as
+	// the upward rate so shutdowns mirror startup speed.
+	OpPowerLowerRate = OpPowerRaiseRate
+
+	// OpHeatupRateLimit is the maximum RCS temperature
+	// increase rate during heatup (°F/s). Spec: "50°F (28°C)
+	// per hour."
+	//   50 / 3600 = 0.01389 °F/s.
+	OpHeatupRateLimit = 50.0 / 3600.0
+
+	// OpCooldownRateLimit is the maximum RCS temperature
+	// decrease rate during cooldown (°F/s). Spec: "50°F/hr
+	// (28°C/hr)."
+	OpCooldownRateLimit = -OpHeatupRateLimit
+
+	// OpAuxToMainFeedwaterThreshold is the per-SG steam flow
+	// fraction above which the feedwater supply switches from
+	// auxiliary to main. Spec: "about 3.5-percent steam flow."
+	OpAuxToMainFeedwaterThreshold = 0.035
+
+	// OpHotStandbyMaxRCPs is the maximum number of reactor
+	// coolant pumps permitted to run in HotStandby mode before
+	// RHRS is in service. Spec: "maximum of two out of four
+	// reactor coolant pumps (RCPs) may be secured."
+	OpHotStandbyMaxRCPs = 2
+
+	// OpColdStartupTotalHours is the estimated total cold
+	// startup time. Spec: 13.0 hours (Table 16-1, cold column
+	// total).
+	OpColdStartupTotalHours = 13.0
+
+	// OpHotStartupTotalHours is the estimated total hot
+	// startup time. Spec: 4.0 hours (hot column total in
+	// Table 16-1).
+	OpHotStartupTotalHours = 4.0
+
+	// OpCooldownTotalHours is the estimated plant cooldown
+	// time. Spec: "approximately 20 hours."
+	OpCooldownTotalHours = 20.0
+
+	// OpPowerOperationMinFraction is the minimum reactor
+	// power fraction for PowerOperation mode. Spec: "15
+	// percent."
+	OpPowerOperationMinFraction = 0.15
+
+	// OpMaxRCPs is the total number of reactor coolant pumps
+	// in the four-loop plant.
+	OpMaxRCPs = 4
+)
+
+// PlantOperation models the Chapter 16 operational layer that sits on
+// top of the physics models and enforces rate limits, mode
+// transitions, and gating conditions described in the startup,
+// normal-operation, shutdown, and load-follow sections of the spec.
+//
+// Spec justification:
+//   - Startup sequence: precritical checks, CVCS/RCS fill, CCWS in
+//     service, pressurizer heatup, letdown flow, RCP start,
+//     criticality, power raise.
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:76-116
+//   - Rate limits: 5%/min loading, 50°F/hr heatup, 50°F/hr cooldown.
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:140-141
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:148-150
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:153-154
+//   - Aux-to-main feedwater transition: "about 3.5-percent steam
+//     flow."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:129-130
+//   - Hot standby RCP limit: "maximum of two out of four reactor
+//     coolant pumps may be secured."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:104-105
+//   - Load follow: 5%/min ramp, 10% step, 12-3-6-3 cycle, 15%–100%
+//     operating range.
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_230.txt:62-87
+//   - Full load rejection: "capable of accepting complete load
+//     rejection from the maximum rated power level."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:50-53
+type PlantOperation struct {
+	Part
+
+	// Mode is the current operational mode. Transitions are
+	// gated by operator actions and by physics conditions
+	// (temperature, pressure, criticality).
+	Mode PlantOperationalMode
+
+	// StartupPhase tracks which phase of the cold or hot
+	// startup sequence has been completed. Advances as the
+	// operator satisfies gating conditions. Simplified model
+	// uses a float so that phases can be partially completed
+	// by clock time or condition progress; the set of
+	// recognized phases is the StartupPhase enum.
+	StartupPhase float64
+
+	// RampingUp is true when the plant is currently ramping
+	// power upward at the 5%/min design rate. The
+	// PlantOperation step enforces the rate limit when this
+	// flag is true.
+	RampingUp bool
+
+	// RampingDown is true when the plant is currently ramping
+	// power downward (shutdown or load rejection).
+	// Rate-limited by the 50°F/hr cooldown equivalent on
+	// power, or directly by the cooldown rate on temperature.
+	RampingDown bool
+
+	// AuxFeedwaterInUse is true when the steam generators are
+	// being supplied by the auxiliary feedwater system (EFWS,
+	// p17). Switches to false when per-SG steam flow exceeds
+	// OpAuxToMainFeedwaterThreshold.
+	AuxFeedwaterInUse bool
+
+	// HotStandbyRCPLimitActive is true when HotStandby mode
+	// is active and RHRS is not yet in service, capping the
+	// number of running RCPs at two.
+	HotStandbyRCPLimitActive bool
+
+	// LoadFollowActive is true when the plant is in
+	// load-follow mode (automatically tracking a varying load
+	// demand).
+	LoadFollowActive bool
+
+	// TavgRateLimited is the RCS average coolant temperature
+	// change rate after applying the 50°F/hr heatup/cooldown
+	// limit (°F/s). Positive when heating, negative when
+	// cooling.
+	TavgRateLimited float64
+}
+
+// Step advances the PlantOperation layer for one tick. It enforces
+// mode-dependent gating (RCP cap, aux/main feedwater path, ramping
+// flags) and the 5%/min power-raise limit that downstream turbines,
+// rod-control, and steam-dump valve logic respect.
+//
+// Spec justification:
+//   - Mode-dependent RCP cap: "a maximum of two out of four reactor
+//     coolant pumps (RCPs) may be secured. Proper loop flow and
+//     desired loop temperatures are maintained with the other RCPs
+//     until the Residual Heat Removal System (RHRS) is in service."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:104-108
+//   - 5%/min raise: "plant loading is continued to full power at a
+//     rate not to exceed 5 percent of full power per minute."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:148-150
+//   - Aux-to-main switchover: "Before reaching the flow capacity of
+//     the auxiliary feedwater system, equivalent to about 3.5-percent
+//     steam flow, the steam generators feedwater supply is switched
+//     to the main feedwater system."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:129-133
+func (po *PlantOperation) Step(
+	mode PlantOperationalMode,
+	rcsTemp Temperature,
+	rcsPressure Pressure,
+	reactorPower Watts,
+	ratedPower Watts,
+	rhsInService bool,
+	runningRCPCount int,
+	steamFlowFraction float64,
+	targetLoadFraction float64,
+) PlantOperation {
+	ret := *po
+	ret.Mode = mode
+
+	switch ret.Mode {
+	case ColdShutdown:
+		ret.RampingUp = false
+		ret.RampingDown = false
+		ret.LoadFollowActive = false
+		ret.HotStandbyRCPLimitActive = false
+		ret.AuxFeedwaterInUse = true
+		ret.StartupPhase = 0
+		ret.TavgRateLimited = 0
+
+	case HotStandby:
+		ret.RampingUp = false
+		ret.RampingDown = false
+		ret.LoadFollowActive = false
+		ret.HotStandbyRCPLimitActive = !rhsInService
+		ret.AuxFeedwaterInUse = true
+		ret.TavgRateLimited = 0
+
+	case PowerOperation:
+		ret.HotStandbyRCPLimitActive = false
+		ret.AuxFeedwaterInUse =
+			steamFlowFraction < OpAuxToMainFeedwaterThreshold
+		// TavgRateLimited is the per-second temperature
+		// change rate the plant is requesting, scaled by the
+		// normalised power demand delta. The sign tracks
+		// heatup (positive) vs. cooldown (negative); the
+		// magnitude is clamped to OpHeatupRateLimit in both
+		// directions.
+		//
+		// Spec: "Primary plant heatup rate is limited to
+		// 50°F (28°C) per hour."
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:140-141
+		normalisedPowerDelta := targetLoadFraction -
+			float64(reactorPower)/float64(ratedPower)
+		ret.TavgRateLimited = ClampRate(
+			0,
+			normalisedPowerDelta*OpHeatupRateLimit,
+			OpHeatupRateLimit,
+			OpCooldownRateLimit,
+			TimeStep,
+		)
+		powerDemandDelta := targetLoadFraction*float64(ratedPower) -
+			float64(reactorPower)
+		absRate := OpPowerRaiseRate * float64(ratedPower) *
+			TimeStep.Seconds()
+		switch {
+		case powerDemandDelta > absRate:
+			ret.RampingUp = true
+			ret.RampingDown = false
+			reactorPower += Watts(absRate)
+		case powerDemandDelta < -absRate:
+			ret.RampingUp = false
+			ret.RampingDown = true
+			reactorPower += Watts(-absRate)
+		default:
+			ret.RampingUp = false
+			ret.RampingDown = false
+			reactorPower += Watts(powerDemandDelta)
+		}
+		ret.StartupPhase = 100 // fully raised
+	}
+
+	return ret
+}
+
+// ClampRate limits the rate of change of a value to a per-second
+// ceiling while preserving sign. Used to enforce the 50°F/hr
+// heatup/cooldown and the 5%/min load-raise design limits described
+// in chapter 16.
+//
+// Spec justification:
+//   - "Primary plant heatup rate is limited to 50°F (28°C) per
+//     hour."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:140-141
+//   - "plant loading is continued to full power at a rate not to
+//     exceed 5 percent of full power per minute."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:148-150
+func ClampRate(current, desiredDelta, posLimit, negLimit float64, dt time.Duration) float64 {
+	maxDeltaPos := posLimit * dt.Seconds()
+	maxDeltaNeg := negLimit * dt.Seconds()
+	delta := desiredDelta
+	if delta > maxDeltaPos {
+		delta = maxDeltaPos
+	}
+	if delta < maxDeltaNeg {
+		delta = maxDeltaNeg
+	}
+	return delta / dt.Seconds()
+}
+
 

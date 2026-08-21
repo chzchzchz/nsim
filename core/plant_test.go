@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -219,4 +220,243 @@ func TestPlant_ReactorTripTransfersHouseLoadToSAT(t *testing.T) {
 		p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom)
 	assert.False(t, p.TurbineBuilding.Generator.BreakerClosed,
 		"want BreakerClosed=false after trip, got true")
+}
+
+// PlantOperation.Step in ColdShutdown mode resets all ramping flags
+// and leaves AuxFeedwaterInUse=true (the auxiliary path is the only
+// source available before main feedwater is lined up).
+//
+// Spec justification:
+//   - "Startup from a cold condition is initiated following a
+//     shutdown that required the Reactor Coolant System (RCS) to
+//     be cooled down and depressurized."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:79-86
+func TestPlantOperation_ColdShutdownResetsRamping(t *testing.T) {
+	po := PlantOperation{
+		RampingUp:           true,
+		RampingDown:         true,
+		AuxFeedwaterInUse:   false,
+		StartupPhase:        50,
+	}
+	out := po.Step(
+		ColdShutdown,
+		u.NewValue(120, u.Fahrenheit),
+		Pressure(200),
+		0,
+		CoreRatedThermalPower,
+		false, 0, 0, 0,
+	)
+	assert.Equal(t, ColdShutdown, out.Mode)
+	assert.False(t, out.RampingUp, "want RampingUp=false in ColdShutdown")
+	assert.False(t, out.RampingDown, "want RampingDown=false in ColdShutdown")
+	assert.True(t, out.AuxFeedwaterInUse,
+		"want AuxFeedwaterInUse=true in ColdShutdown")
+	assert.Equal(t, 0.0, out.StartupPhase,
+		"want StartupPhase reset to 0 in ColdShutdown")
+}
+
+// PlantOperation.Step in HotStandby mode activates the RCP cap
+// whenever RHRS is not yet in service, and clears it once RHRS is
+// running.
+//
+// Spec justification:
+//   - "a maximum of two out of four reactor coolant pumps (RCPs)
+//     may be secured. Proper loop flow and desired loop
+//     temperatures are maintained with the other RCPs until the
+//     Residual Heat Removal System (RHRS) is in service."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:104-108
+func TestPlantOperation_HotStandbyRCPCap(t *testing.T) {
+	po := PlantOperation{}
+	withRHRS := po.Step(
+		HotStandby,
+		u.NewValue(550, u.Fahrenheit),
+		Pressure(2250),
+		0,
+		CoreRatedThermalPower,
+		true, 0, 0, 0,
+	)
+	assert.False(t, withRHRS.HotStandbyRCPLimitActive,
+		"want HotStandbyRCPLimitActive=false when RHRS in service")
+	withoutRHRS := po.Step(
+		HotStandby,
+		u.NewValue(550, u.Fahrenheit),
+		Pressure(2250),
+		0,
+		CoreRatedThermalPower,
+		false, 0, 0, 0,
+	)
+	assert.True(t, withoutRHRS.HotStandbyRCPLimitActive,
+		"want HotStandbyRCPLimitActive=true when RHRS not in service")
+}
+
+// Aux-to-main feedwater transition. When per-SG steam flow exceeds
+// the spec's 3.5% threshold, PlantOperation.Step must flip
+// AuxFeedwaterInUse to false so the main feedwater regulators take
+// over.
+//
+// Spec justification:
+//   - "Before reaching the flow capacity of the auxiliary feedwater
+//     system, equivalent to about 3.5-percent steam flow, the steam
+//     generators feedwater supply is switched to the main feedwater
+//     system."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:129-133
+func TestPlantOperation_AuxToMainFeedwaterTransition(t *testing.T) {
+	po := PlantOperation{}
+	below := po.Step(
+		PowerOperation,
+		u.NewValue(580, u.Fahrenheit),
+		Pressure(2250),
+		CoreRatedThermalPower,
+		CoreRatedThermalPower,
+		true, 1, 0.020, 1.0,
+	)
+	assert.True(t, below.AuxFeedwaterInUse,
+		"want AuxFeedwaterInUse=true below 3.5%% threshold")
+	above := po.Step(
+		PowerOperation,
+		u.NewValue(580, u.Fahrenheit),
+		Pressure(2250),
+		CoreRatedThermalPower,
+		CoreRatedThermalPower,
+		true, 1, 0.050, 1.0,
+	)
+	assert.False(t, above.AuxFeedwaterInUse,
+		"want AuxFeedwaterInUse=false above 3.5%% threshold")
+}
+
+// Power-raise rate limit. With the target setpoint above the
+// current power by more than one tick of the 5%/min ramp, RampingUp
+// must be true and the per-tick increment must not exceed
+// OpPowerRaiseRate × ratedPower × TimeStep.
+//
+// Spec justification:
+//   - "plant loading is continued to full power at a rate not to
+//     exceed 5 percent of full power per minute."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:148-150
+func TestPlantOperation_PowerRaiseRateLimit(t *testing.T) {
+	po := PlantOperation{}
+	// Plant at zero power; target setpoint = full load.
+	// Demand delta = CoreRatedThermalPower ≫ one tick of ramp.
+	out := po.Step(
+		PowerOperation,
+		u.NewValue(580, u.Fahrenheit),
+		Pressure(2250),
+		0,
+		CoreRatedThermalPower,
+		true, 1, 0.050, 1.0,
+	)
+	assert.True(t, out.RampingUp,
+		"want RampingUp=true when demand exceeds one tick")
+	assert.False(t, out.RampingDown,
+		"want RampingDown=false when raising")
+}
+
+// When the target setpoint is within one tick of the current power,
+// the regulator settles: neither RampingUp nor RampingDown is set
+// and StartupPhase is latched at 100.
+func TestPlantOperation_PowerOperationSettles(t *testing.T) {
+	po := PlantOperation{}
+	tinyDelta := OpPowerRaiseRate * float64(CoreRatedThermalPower) *
+		TimeStep.Seconds() / 2
+	out := po.Step(
+		PowerOperation,
+		u.NewValue(580, u.Fahrenheit),
+		Pressure(2250),
+		Watts(float64(CoreRatedThermalPower)-tinyDelta),
+		CoreRatedThermalPower,
+		true, 1, 0.050, 1.0,
+	)
+	assert.False(t, out.RampingUp,
+		"want RampingUp=false when within one tick of target")
+	assert.False(t, out.RampingDown,
+		"want RampingDown=false when within one tick of target")
+	assert.Equal(t, 100.0, out.StartupPhase,
+		"want StartupPhase=100 in PowerOperation")
+}
+
+// Load-follow ramp down. With the target setpoint below the current
+// power by more than one tick, RampingDown must be true.
+//
+// Spec justification:
+//   - "ramp changes of 5 percent of rated power per minute."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:112
+func TestPlantOperation_PowerLowerRateLimit(t *testing.T) {
+	po := PlantOperation{}
+	out := po.Step(
+		PowerOperation,
+		u.NewValue(580, u.Fahrenheit),
+		Pressure(2250),
+		CoreRatedThermalPower,
+		CoreRatedThermalPower,
+		true, 1, 0.050, 0.5,
+	)
+	assert.False(t, out.RampingUp,
+		"want RampingUp=false when lowering")
+	assert.True(t, out.RampingDown,
+		"want RampingDown=true when demand drops below one tick")
+}
+
+// Load-follow operating range. PlantOperation.Step in PowerOperation
+// mode accepts any target setpoint within the spec's 15%–100%
+// operating range. Below 15% the plant should leave PowerOperation
+// in a real plant; the simplified model still permits any
+// setpoint but the operator is expected to drive the mode
+// transition explicitly.
+//
+// Spec justification:
+//   - "The NSSS is capable of following repetitive load changes
+//     automatically throughout the range of 15 percent to 100
+//     percent of rated power."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_230.txt:62-65
+func TestPlantOperation_LoadFollow15To100(t *testing.T) {
+	po := PlantOperation{}
+	for _, frac := range []float64{0.15, 0.50, 1.00} {
+		out := po.Step(
+			PowerOperation,
+			u.NewValue(580, u.Fahrenheit),
+			Pressure(2250),
+			Watts(frac*float64(CoreRatedThermalPower)),
+			CoreRatedThermalPower,
+			true, 1, frac, frac,
+		)
+		assert.Equal(t, PowerOperation, out.Mode,
+			"want Mode=PowerOperation at %v fraction", frac)
+	}
+}
+
+// ClampRate returns posLimit*dt when desired delta exceeds the
+// positive ceiling, negLimit*dt when desired delta falls below
+// the negative floor, and the raw delta otherwise.
+func TestClampRate_Positive(t *testing.T) {
+	dt := time.Second
+	got := ClampRate(0, 100, 5, -5, dt)
+	assert.InDelta(t, 5.0, got, 1e-9,
+		"want ClampRate to clamp to posLimit when desired > ceiling")
+}
+
+func TestClampRate_Negative(t *testing.T) {
+	dt := time.Second
+	got := ClampRate(0, -100, 5, -5, dt)
+	assert.InDelta(t, -5.0, got, 1e-9,
+		"want ClampRate to clamp to negLimit when desired < floor")
+}
+
+func TestClampRate_Passthrough(t *testing.T) {
+	dt := time.Second
+	got := ClampRate(0, 3, 5, -5, dt)
+	assert.InDelta(t, 3.0, got, 1e-9,
+		"want ClampRate to pass desired delta through within limits")
+}
+
+// Plant.Step must propagate PlantOperation mode into nextPlant and
+// apply the resulting gating. With Mode=ColdShutdown,
+// AuxFeedwaterInUse must end up true after the step.
+func TestPlant_StepPropagatesPlantOperation(t *testing.T) {
+	p := MakePlant()
+	p.PlantOperation.Mode = ColdShutdown
+	stepN(&p, 1)
+	assert.Equal(t, ColdShutdown, p.PlantOperation.Mode,
+		"want Mode=ColdShutdown after step")
+	assert.True(t, p.PlantOperation.AuxFeedwaterInUse,
+		"want AuxFeedwaterInUse=true in ColdShutdown")
 }

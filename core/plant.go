@@ -533,7 +533,21 @@ type Plant struct {
 	TurbineBuilding
 	Outside
 	Electrical
-	nextPlant *Plant
+	// PlantOperation is the Chapter 16 operational-mode
+	// layer (plans/p32_1.txt) that tracks the mode state
+	// machine (ColdShutdown → HotStandby → PowerOperation)
+	// and enforces rate limits, the auxiliary-to-main
+	// feedwater transition, and the hot-standby RCP cap.
+	//
+	// Spec justification:
+	//   - Operational modes: chapter 16 covers startup,
+	//     normal operation, load follow, shutdown.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:79-86
+	//   - Rate limits: 5%/min loading, 50°F/hr heatup/cooldown.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:140-141
+	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:148-150
+	PlantOperation PlantOperation
+	nextPlant     *Plant
 }
 
 func (p *Plant) Step() {
@@ -1162,6 +1176,48 @@ func (p *Plant) Step() {
 	p.nextPlant.TurbineBuilding.Condenser.CirculatingWaterIn =
 		p.nextPlant.Outside.CirculatingWaterSystem.InletTemp
 
+	// Plant Operation step (plans/p32_1.txt). Drives the
+	// operational-mode state machine, the 5%/min loading
+	// ramp, the aux-to-main feedwater transition, and the
+	// hot-standby RCP cap. The per-SG steam flow fraction is
+	// approximated as SG shell pressure over its design value
+	// (920 psia at full load) because the simplified model
+	// collapses all four SGs into a single lumped
+	// SteamGenerator and does not track per-SG mass flow
+	// separately.
+	//
+	// Spec justification:
+	//   - 5%/min ramp: "plant loading is continued to full
+	//     power at a rate not to exceed 5 percent of full power
+	//     per minute."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:148-150
+	//   - Aux-to-main: "Before reaching the flow capacity of
+	//     the auxiliary feedwater system, equivalent to about
+	//     3.5-percent steam flow, the steam generators feedwater
+	//     supply is switched to the main feedwater system."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:129-133
+	//   - Hot-standby RCP cap: "a maximum of two out of four
+	//     reactor coolant pumps (RCPs) may be secured."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:104-108
+	runningRCPs := 0
+	if p.nextPlant.ReactorBuilding.ReactorCoolantPump.Running {
+		runningRCPs = 1
+	}
+	steamFlowFraction := float64(
+		p.nextPlant.ReactorBuilding.SteamGenerator.Pressure,
+	) / float64(SteamGeneratorShellPressure)
+	p.nextPlant.PlantOperation = p.nextPlant.PlantOperation.Step(
+		p.nextPlant.PlantOperation.Mode,
+		p.nextPlant.ReactorBuilding.ReactorPressureVessel.Outlet,
+		p.nextPlant.ReactorBuilding.ReactorPressureVessel.Pressure,
+		p.nextPlant.ReactorBuilding.ReactorPressureVessel.ThermalPower,
+		CoreRatedThermalPower,
+		p.nextPlant.ReactorBuilding.ResidualHeatRemovalSystem.Running,
+		runningRCPs,
+		steamFlowFraction,
+		p.nextPlant.TurbineBuilding.Turbine.Setpoint,
+	)
+
 	// Pressure-driven fluid flow integrates the freshly-stepped parts.
 	// Graph nodes hold pointers into nextPlant; the mutations land in
 	// nextPlant directly so Update() copies them into p.
@@ -1173,6 +1229,7 @@ func (p *Plant) Update() {
 	p.TurbineBuilding = p.nextPlant.TurbineBuilding
 	p.Outside = p.nextPlant.Outside
 	p.Electrical = p.nextPlant.Electrical
+	p.PlantOperation = p.nextPlant.PlantOperation
 }
 
 func MakePlant() Plant {
