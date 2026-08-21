@@ -910,6 +910,34 @@ func (p *Plant) Step() {
 	p.nextPlant.ReactorBuilding.PlantElectricalSystems =
 		p.ReactorBuilding.PlantElectricalSystems.Step()
 
+	// Plant control room step (plans/p28_1.txt). The control
+	// room is a passive aggregator: its availability is
+	// gated on electrical power, its safety-station status
+	// mirrors the ESF bus state, and its alarm is the OR
+	// of the RPS trip and the hydrogen-alarm signals.
+	//
+	// Spec justification:
+	//   - Power dependency: "No single failure in the power
+	//     distribution system will result in degradation of
+	//     the control area functions, except for ancillary
+	//     or nonessential performance features."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_146.txt:11-16
+	//   - Alarm acknowledgement: "Turned off by operator
+	//     acknowledgement."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:66-67
+	pes := &p.nextPlant.ReactorBuilding.PlantElectricalSystems
+	alarmCondition :=
+		p.nextPlant.ReactorBuilding.ReactorProtectionSystem.ReactorTripped ||
+			p.nextPlant.ReactorBuilding.ContainmentBuilding.
+				HydrogenDetectionSuppression.HydrogenAlarm
+	pcrIn := p.ReactorBuilding.PlantControlRoom
+	pcrIn.PowerAvailable = pes.InverterPowerAvailable
+	p.nextPlant.ReactorBuilding.PlantControlRoom = pcrIn.Step(
+		alarmCondition,
+		pes.ESFBus1Available,
+		pes.ESFBus2Available,
+	)
+
 	// Station transformer and house load. The station transformer
 	// step reads the generator's terminal voltage (post step)
 	// and the grid voltage to decide whether UAT and SAT are
@@ -1473,6 +1501,32 @@ func MakePlant() Plant {
 		ESFBus2Available:        true,
 		InverterPowerAvailable:  true,
 		StationBlackout:         false,
+	}
+
+	// Plant Control Room defaults (plans/p28_1.txt). At
+	// construction the control room has electrical power,
+	// the PCC and auxiliary panels are operational, all
+	// displays are active, control inputs are accepted,
+	// and no annunciator alarm is sounding.
+	//
+	// Spec justification:
+	//   - PCC: "all controls, displays and instrumentation
+	//     required for normal power operation."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:23-26
+	//   - Operator controls: "Controls have been segregated
+	//     into operating areas which optimize the location
+	//     of frequently used and important controls."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_146.txt:1-6
+	p.ReactorBuilding.PlantControlRoom = PlantControlRoom{
+		PowerAvailable:                true,
+		PCCAvailable:                  true,
+		AuxiliaryPanelsAvailable:      true,
+		GraphicDisplaysAvailable:      true,
+		DedicatedDisplaysAvailable:    true,
+		AnnunciatorAlarm:              false,
+		AlarmAcknowledged:             false,
+		ControlInputsAvailable:        true,
+		SafetySystemStationsAvailable: true,
 	}
 
 	// Reactor makeup control valve defaults: closed at startup

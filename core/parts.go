@@ -4230,6 +4230,67 @@ const (
 	// loss of power"
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:56-59
 	AutoTransferDelay = 1.0
+
+	// Plant control room design constants.
+	//
+	// Spec justification:
+	//   - "Over a dozen graphical display devices (CRTs and
+	//     flat panel plasma displays) are located in the
+	//     operations area of the control room."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_143.txt:39-45
+	//   - "Key process variables are presented via dedicated
+	//     displays."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_143.txt:71-75
+	//   - "Horns, buzzers, bells, etc. Used to attract
+	//     attention to a significant situation. Turned off by
+	//     operator acknowledgement."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:64-67
+	//   - "Auxiliary control panels contain [...] the safety
+	//     systems and functions which are arranged in
+	//     stations each dedicated to a single train of
+	//     safeguard systems and equipment."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:61-67
+
+	// ControlRoomGraphicDisplayCount is the number of
+	// graphical display devices at the PCC.
+	// "Over a dozen graphical display devices (CRTs and
+	// flat panel plasma displays) are located in the
+	// operations area of the control room."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_143.txt:39-42
+	ControlRoomGraphicDisplayCount = 12
+
+	// ControlRoomDedicatedDisplayCount is the number of
+	// dedicated displays for key process variables. The
+	// spec does not state an exact number; 24 is assumed.
+	// "key process variables are presented via dedicated
+	// displays."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_143.txt:71-75
+	ControlRoomDedicatedDisplayCount = 24
+
+	// ControlRoomAnnunciatorWindowCount is the number of
+	// annunciator windows in the control room. The spec
+	// does not state an exact number; 120 is assumed.
+	// "A grouping of status lights to indicate malfunction
+	// conditions."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:69-72
+	ControlRoomAnnunciatorWindowCount = 120
+
+	// ControlRoomAlarmAckDelay is the assumed operator
+	// alarm-acknowledgement delay (seconds). The spec
+	// states the alarm is "Turned off by operator
+	// acknowledgement" without a numerical deadline.
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:64-67
+	ControlRoomAlarmAckDelay = 5.0
+
+	// ControlRoomSafetyStationCount is the number of safety
+	// system stations on the auxiliary panels. The spec
+	// describes stations per safeguard train without a
+	// fixed count; four is the simplified model's
+	// representation (SIS A/B, EFWS A/B).
+	// "arranged in stations each dedicated to a single
+	// train of safeguard systems and equipment."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:65-67
+	ControlRoomSafetyStationCount = 4
 )
 
 // PlantElectricalSystems models the plant electrical power
@@ -4322,6 +4383,102 @@ type PlantElectricalSystems struct {
 	// StationBlackout is true when both offsite power and
 	// both diesel generators are unavailable.
 	StationBlackout bool
+}
+
+// PlantControlRoom models the plant control room operator
+// interface. The simplified model tracks display and
+// control availability, alarm state, and operator
+// acknowledgement. It does not model human factors,
+// cognitive load, panel layout, or decision-support
+// algorithms.
+//
+// Spec justification:
+//   - Control room purpose: "display and control hardware
+//     needed to operate a nuclear power plant in a safe,
+//     efficient, and reliable manner."
+//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_143.txt:4-9
+//   - ACR function: "optimizes the generation and display of
+//     useful plant information to enable rapid
+//     understanding of plant condition."
+//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_143.txt:16-20
+//   - NSSS-BOP integration: "effective man-machine
+//     interface which is consistent for all plant systems."
+//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:1-5
+//   - PCC scope: "all controls, displays and instrumentation
+//     required for normal power operation."
+//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:23-40
+//   - Auxiliary panels: "safety systems and functions which
+//     are arranged in stations each dedicated to a single
+//     train of safeguard systems and equipment."
+//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:61-67
+type PlantControlRoom struct {
+	Part
+
+	// PowerAvailable is true when the control room has
+	// electrical power for displays and controls (from
+	// p27's PlantElectricalSystems).
+	PowerAvailable bool
+
+	// PCCAvailable is true when the Primary Control Center
+	// is operational.
+	// "The PCC is the location for all controls, displays
+	// and instrumentation required for normal power
+	// operation."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:23-26
+	PCCAvailable bool
+
+	// AuxiliaryPanelsAvailable is true when the auxiliary
+	// control panels are operational.
+	// "The auxiliary control panels contain all the
+	// controls, displays and instrumentation less
+	// frequently used and not mounted at the PCC."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:61-65
+	AuxiliaryPanelsAvailable bool
+
+	// GraphicDisplaysAvailable is true when CRT and flat
+	// panel graphic displays are operational.
+	// "Over a dozen graphical display devices (CRTs and
+	// flat panel plasma displays) are located in the
+	// operations area of the control room."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_143.txt:39-42
+	GraphicDisplaysAvailable bool
+
+	// DedicatedDisplaysAvailable is true when dedicated
+	// displays for key process variables are operational.
+	// "Key process variables are presented via dedicated
+	// displays."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_143.txt:71-75
+	DedicatedDisplaysAvailable bool
+
+	// AnnunciatorAlarm is true when an annunciator panel
+	// is signalling an abnormal condition.
+	// "Horns, buzzers, bells, etc. Used to attract
+	// attention to a significant situation."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:64-66
+	AnnunciatorAlarm bool
+
+	// AlarmAcknowledged is true when the operator has
+	// acknowledged the annunciator alarm.
+	// "Turned off by operator acknowledgement."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:66-67
+	AlarmAcknowledged bool
+
+	// ControlInputsAvailable is true when operator
+	// control inputs (switches, pushbuttons, keyboards)
+	// are operational.
+	// "Controls have been segregated into operating
+	// areas which optimize the location of frequently
+	// used and important controls."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_146.txt:1-6
+	ControlInputsAvailable bool
+
+	// SafetySystemStationsAvailable is true when
+	// auxiliary panel safety system stations are
+	// operational.
+	// "arranged in stations each dedicated to a single
+	// train of safeguard systems and equipment."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:65-67
+	SafetySystemStationsAvailable bool
 }
 
 

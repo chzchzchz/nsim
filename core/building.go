@@ -286,6 +286,24 @@ type ReactorBuilding struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:56-59
 	StationTransformer StationTransformer
 
+	// PlantControlRoom models the operator interface for
+	// monitoring and controlling all plant systems
+	// (plans/p28_1.txt). Includes the Primary Control
+	// Center, auxiliary panels, graphic and dedicated
+	// displays, and the annunciator alarm system.
+	//
+	// Spec justification:
+	//   - Integrates NSSS and BOP into unified
+	//     man-machine interface.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:1-5
+	//   - PCC: all controls, displays, instrumentation for
+	//     normal operation.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:23-40
+	//   - Auxiliary panels: safety systems arranged in
+	//     stations per train.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:61-67
+	PlantControlRoom PlantControlRoom
+
 	// PlantElectricalSystems models the plant electrical
 	// power distribution, including offsite power, diesel
 	// generators, and 6600-volt engineered safety features
