@@ -3565,4 +3565,262 @@ var ServiceWaterInletTemp Temperature = u.NewValue(
 	ServiceWaterSourceTemp, u.Fahrenheit,
 )
 
+// RefuelingOperations models the refueling operation cycle for
+// the plant. The simplified model tracks cavity flooding depth,
+// spent fuel pit water level and boron concentration, fuel
+// assembly counts in core / pit / shipped, and the five-phase
+// state machine (preparation → reactor disassembly → fuel
+// handling → reactor reassembly → preoperational checks /
+// startup). It does not model refueling-machine kinematics,
+// stud-tensioner hydraulics, individual tools, or radiation-dose
+// tracking; those are deferred to a higher fidelity band.
+//
+// Spec justification:
+//   - Spent fuel handled underwater: "Spent fuel is handled
+//     underwater from the time it leaves the reactor vessel
+//     until it is placed in a cask for shipment from the site."
+//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:13-16
+//   - Water functions: "provides an effective, economical, and
+//     transparent radiation shield as well as a reliable medium
+//     for decay heat removal. Boric acid is added to the water
+//     to ensure subcritical conditions during refueling."
+//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:16-19
+//   - Two facility types: "the refueling cavity and fuel
+//     transfer canal, which are flooded only during the
+//     refueling shutdown, and (2) the fuel storage pit, which is
+//     kept full of water and is always accessible to operating
+//     personnel."
+//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:23-29
+//   - Cavity flood depth: "filled to a depth of approximately 24
+//     feet (731 cm) of water when a fuel assembly is being
+//     transferred between the reactor and the fuel transfer
+//     system."
+//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:43-46
+//   - Five-phase cycle: "The refueling operation is divided
+//     into five major phases: preparation, reactor disassembly,
+//     fuel handling, reactor reassembly, and preoperational
+//     checks, tests, and startup."
+//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_183.txt:32-34
+//   - Pit capacity: "Fuel assembly storage racks to accommodate
+//     a minimum of 1-1/3 times the number of assemblies in a
+//     core are located on the pit floor."
+//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_176.txt:32-34
+//   - 110% weight safety interlock on the refueling-machine
+//     gripper: "excess of 110 percent of a fuel assembly
+//     weight automatically stops the winch drive from moving in
+//     the up direction."
+//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_178.txt:109-111
+//   - First-core assembly count: "Of the 193 fuel assemblies
+//     contained in a fourloop reactor first core."
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_040.txt:37-39
+type RefuelingOperations struct {
+	Part
+
+	// Phase is the current refueling phase: 0 = preparation,
+	// 1 = reactor disassembly, 2 = fuel handling, 3 = reactor
+	// reassembly, 4 = preoperational checks / startup, 5 =
+	// complete.
+	Phase int
+
+	// PhaseTimer tracks elapsed time in the current phase
+	// (seconds). Reset to zero when Phase advances.
+	PhaseTimer float64
+
+	// CavityFloodDepth is the current water depth in the
+	// refueling cavity (feet). 0 during normal operation;
+	// ramps to ~24 feet during flooding.
+	CavityFloodDepth float64
+
+	// CavityFlooding is true when the cavity is currently
+	// being flooded (depth rising). False when draining or
+	// idle.
+	CavityFlooding bool
+
+	// CavityDraining is true when the cavity is currently
+	// being drained (depth falling). False when flooding or
+	// idle.
+	CavityDraining bool
+
+	// CavityFlooded is true when the refueling cavity contains
+	// sufficient water for fuel transfer (≥
+	// RefuelingCavityMaxDepth).
+	CavityFlooded bool
+
+	// PitWaterLevel is the spent fuel pit water level (feet).
+	// The simplified model tracks the steady full state; an
+	// empty pit would be a leak event outside scope.
+	PitWaterLevel float64
+
+	// PitBoronConcentration is the boric acid concentration in
+	// the spent fuel pit water (ppm). Matches the refueling
+	// cavity concentration to ensure subcriticality.
+	PitBoronConcentration float64
+
+	// FuelAssembliesInCore is the number of fuel assemblies
+	// currently in the reactor vessel.
+	FuelAssembliesInCore int
+
+	// FuelAssembliesInPit is the number of spent fuel
+	// assemblies in the spent fuel storage pit.
+	FuelAssembliesInPit int
+
+	// FuelAssembliesShipped is the number of spent fuel
+	// assemblies removed from the site in casks.
+	FuelAssembliesShipped int
+
+	// HeadRemoved is true when the reactor vessel head has
+	// been lifted off during reactor disassembly.
+	HeadRemoved bool
+
+	// InternalsRemoved is true when the reactor vessel upper
+	// internals have been lifted out during reactor
+	// disassembly.
+	InternalsRemoved bool
+
+	// WeightSafetyTripped is the refueling-machine 110% weight
+	// interlock latch. True when the suspended load exceeded
+	// RefuelingWeightSafetyFactor × nominal fuel assembly
+	// weight; the winch cannot move in the up direction until
+	// the operator clears it.
+	WeightSafetyTripped bool
+
+	// FuelTransferred is a one-shot latch set true when the
+	// mid-phase batch transfer of FuelAssembliesPerRefuelingOutage
+	// assemblies has been performed during the fuel-handling
+	// phase. Reset only on a full cycle reset.
+	FuelTransferred bool
+}
+
+// Refueling operations design constants (plans/p24_1.txt).
+//
+// Spec justification:
+//   - Cavity flood depth: "filled to a depth of approximately 24
+//     feet (731 cm) of water."
+//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:43-45
+//   - Spent fuel pit always full of water: "the fuel storage
+//     pit, which is kept full of water and is always accessible
+//     to operating personnel."
+//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:25-29
+//   - Borated water for subcriticality: "Boric acid is added to
+//     the water to ensure subcritical conditions during
+//     refueling."
+//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:17-19
+//   - 110% weight safety interlock on the refueling machine
+//     gripper: "excess of 110 percent of a fuel assembly weight
+//     automatically stops the winch drive from moving in the up
+//     direction."
+//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_178.txt:109-111
+//   - First-core assembly count: "Of the 193 fuel assemblies
+//     contained in a fourloop reactor first core."
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_040.txt:37-39
+const (
+	// RefuelingCavityMaxDepth is the depth to which the
+	// refueling cavity is filled during fuel transfer (feet).
+	// "filled to a depth of approximately 24 feet (731 cm) of
+	// water"
+	// specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:43-44
+	RefuelingCavityMaxDepth float64 = 24.0
+
+	// RefuelingCavityFloodRate is the rate at which the cavity
+	// fills during the flooding phase (feet per minute). The
+	// spec does not state a value; 1 ft/min gives a ~24 minute
+	// fill, a reasonable estimate for a four-loop plant.
+	RefuelingCavityFloodRate float64 = 1.0
+
+	// RefuelingCavityDrainRate is the rate at which the cavity
+	// drains during the draining phase (feet per minute). The
+	// spec does not state a value; matches the flood rate.
+	RefuelingCavityDrainRate float64 = 1.0
+
+	// RefuelingPitBoronConcentration is the boric acid
+	// concentration held in the spent fuel pit water (ppm).
+	// The spec does not state a numeric value; 1000 ppm is
+	// representative of the refueling-cavity concentration
+	// typically used in Westinghouse PWRs.
+	RefuelingPitBoronConcentration float64 = 1000.0
+
+	// RefuelingWeightSafetyFactor is the load fraction of
+	// nominal fuel assembly weight at which the winch
+	// auto-stops in the up direction. The spec states "110
+	// percent of a fuel assembly weight".
+	// specs/the_westinghouse_pressurized_water_react/chapter_13/page_178.txt:109-111
+	RefuelingWeightSafetyFactor float64 = 1.10
+)
+
+// Refueling phase design constants (plans/p24_1.txt).
+//
+// Spec justification:
+//   - Five phases: "The refueling operation is divided into
+//     five major phases: preparation, reactor disassembly, fuel
+//     handling, reactor reassembly, and preoperational checks,
+//     tests, and startup."
+//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_183.txt:32-34
+const (
+	// RefuelingPhasePreparation is the phase index for the
+	// preparation phase.
+	RefuelingPhasePreparation = 0
+
+	// RefuelingPhaseDisassembly is the phase index for the
+	// reactor disassembly phase.
+	RefuelingPhaseDisassembly = 1
+
+	// RefuelingPhaseFuelHandling is the phase index for the
+	// fuel handling phase.
+	RefuelingPhaseFuelHandling = 2
+
+	// RefuelingPhaseReassembly is the phase index for the
+	// reactor reassembly phase.
+	RefuelingPhaseReassembly = 3
+
+	// RefuelingPhaseStartup is the phase index for the
+	// preoperational checks / startup phase.
+	RefuelingPhaseStartup = 4
+
+	// RefuelingPhaseComplete marks completion of the cycle.
+	RefuelingPhaseComplete = 5
+)
+
+// Refueling phase durations (hours). The spec does not state
+// exact per-phase times; the table below uses typical values for
+// a four-loop plant. Phase durations are wall-clock hours; the
+// phase timer advances TimeStep seconds per step.
+//
+// Spec justification:
+//   - Five phases listed (timing not specified per-phase).
+//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_183.txt:32-34
+var RefuelingPhaseDurations = [6]float64{
+	4 * 3600,  // preparation
+	12 * 3600, // reactor disassembly
+	18 * 3600, // fuel handling
+	14 * 3600, // reactor reassembly
+	8 * 3600,  // preoperational checks / startup
+	0,         // complete (terminal)
+}
+
+// FuelAssembliesPerReactor is the nominal number of fuel
+// assemblies in a four-loop Westinghouse first core. The same
+// value applies in steady state after each refueling outage (the
+// refueling cycle replaces some assemblies but does not change
+// the total count).
+//
+// Spec justification:
+//   - "Of the 193 fuel assemblies contained in a fourloop
+//     reactor first core."
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_040.txt:37-39
+const FuelAssembliesPerReactor = 193
+
+// FuelAssembliesPerRefuelingOutage is the typical number of
+// assemblies replaced during a single refueling outage (≈1/3 of
+// the core). The spec describes the standard 1/3-core
+// replacement strategy; the simplified model collapses to 64.
+//
+// Spec justification:
+//   - First-core composition (65 low, 64 intermediate, 64 high
+//     enrichment): "Of the 193 fuel assemblies contained in a
+//     fourloop reactor first core, approximately 65 are of a
+//     low enrichment [...], 64 are an intermediate enrichment
+//     [...], and 64 are a high enrichment [...]."
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_040.txt:37-41
+const FuelAssembliesPerRefuelingOutage = 64
+
 

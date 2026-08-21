@@ -217,6 +217,23 @@ type ReactorBuilding struct {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:43-44
 	SpentFuelPoolCoolingSystem SpentFuelPoolCoolingSystem
 
+	// RefuelingOperations models the refueling operation cycle
+	// — the five-phase state machine that tracks cavity
+	// flooding, fuel assembly replacement, and spent fuel pit
+	// management.
+	//
+	// Spec justification:
+	//   - Five phases: "The refueling operation is divided into
+	//     five major phases: preparation, reactor disassembly,
+	//     fuel handling, reactor reassembly, and preoperational
+	//     checks, tests, and startup."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_183.txt:32-34
+	//   - Two facility types: refueling cavity (flooded only
+	//     during refueling) and fuel storage pit (kept full of
+	//     water).
+	//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:23-29
+	RefuelingOperations RefuelingOperations
+
 	// ReactorMakeupControlValve is the makeup valve between the
 	// refueling-water storage tank and the volume control tank.
 	// Its Flow attribute is the per-step volume of fresh borated

@@ -434,6 +434,26 @@ func (p *Plant) Step() {
 
 	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step()
 
+	// Refueling operations step. The phase machine advances
+	// based on phase-relative time; the cavity flood/drain
+	// booleans are operator-driven inputs (set by the test
+	// harness or higher-fidelity HMI). The pit water level
+	// and boron concentration are held constant at the
+	// refueling-cavity values per the spec.
+	//
+	// Spec justification:
+	//   - Five-phase cycle: "The refueling operation is divided
+	//     into five major phases: preparation, reactor
+	//     disassembly, fuel handling, reactor reassembly, and
+	//     preoperational checks, tests, and startup."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_183.txt:32-34
+	//   - Pit always full of water: "the fuel storage pit,
+	//     which is kept full of water and is always accessible
+	//     to operating personnel."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:25-29
+	p.nextPlant.ReactorBuilding.RefuelingOperations =
+		p.nextPlant.ReactorBuilding.RefuelingOperations.Step()
+
 	// SIS actuation: receipt of the safety-injection signal
 	// starts the HHSI pumps and aligns them to the RWST. The
 	// signal is the same DieselStartSafetyInjection that
@@ -1241,6 +1261,37 @@ func MakePlant() Plant {
 		HeaderPressure:    SFPCPressureNormalMin,
 		PoolTemp:          u.NewValue(100.0, u.Fahrenheit),
 		PurificationFlow:  SFPCPurificationFlow,
+	}
+
+	// Refueling operations defaults (plans/p24_1.txt). At
+	// construction the cycle is complete (Phase 5), no cavity
+	// flooding, no head/internals removed, the pit is full of
+	// borated water at the refueling-cavity concentration,
+	// and the core carries FuelAssembliesPerReactor
+	// assemblies. A refueling outage starts by operator
+	// action (reset Phase to RefuelingPhasePreparation and
+	// set CavityFlooding).
+	//
+	// Spec justification:
+	//   - Pit always full of water:
+	//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:25-29
+	//   - Borated water for subcriticality:
+	//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:17-19
+	//   - First-core assembly count:
+	//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_040.txt:37-39
+	p.ReactorBuilding.RefuelingOperations = RefuelingOperations{
+		Phase:                  RefuelingPhaseComplete,
+		CavityFloodDepth:       0,
+		CavityFlooded:          false,
+		PitWaterLevel:          RefuelingCavityMaxDepth,
+		PitBoronConcentration:  RefuelingPitBoronConcentration,
+		FuelAssembliesInCore:   FuelAssembliesPerReactor,
+		FuelAssembliesInPit:    0,
+		FuelAssembliesShipped:  0,
+		HeadRemoved:            false,
+		InternalsRemoved:       false,
+		WeightSafetyTripped:    false,
+		FuelTransferred:        false,
 	}
 
 	// Reactor makeup control valve defaults: closed at startup
