@@ -316,6 +316,66 @@ const (
 	// percent load."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:82-83
 	GeneratorSetpointResolution float64 = 0.005
+
+	// Generator excitation and cooling design constants
+	// (plans/p30_1.txt).
+	//
+	// Spec justification:
+	//   - "Hydrogen pressure: 60 or 75 psig"
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:20
+	//   - "Four hydrogen coolers are mounted horizontally at
+	//     the top of the generator."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:46-47
+	//   - "Demineralized cooling water is provided for the
+	//     stator by a closed recirculating water system."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:48-50
+	//   - "Redundancy is provided in the water pumps, water
+	//     coolers, and the alarm system so that safe, reliable
+	//     operation is assured under all conditions."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:55-61
+
+	// GeneratorSCCWDesignFlow is the design flow rate of the
+	// stator coil cooling water circuit (gal/s). The spec does
+	// not give a numeric value; 5 gal/s is sized for a 1370 MVA
+	// hydrogen-cooled generator's stator water circuit.
+	// "Demineralized cooling water is provided for the stator
+	// by a closed recirculating water system."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:48-50
+	GeneratorSCCWDesignFlow float64 = 5.0
+
+	// GeneratorNumHydrogenCoolers is the number of hydrogen
+	// coolers.
+	// "Four hydrogen coolers are mounted horizontally at the
+	// top of the generator."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:46-47
+	GeneratorNumHydrogenCoolers = 4
+
+	// GeneratorDesignHydrogenPressurePsig is the design
+	// hydrogen pressure inside the generator enclosure.
+	// "Hydrogen pressure: 60 or 75 psig"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:20
+	GeneratorDesignHydrogenPressurePsig float64 = 72.5
+
+	// GeneratorSCCWPumpMinFlow is the minimum stable coolant
+	// flow below which the SCCW protective trip is asserted
+	// (gal/s). The spec does not state a setpoint; 1 gal/s
+	// (20% of design) is the simplified model's assumed
+	// threshold.
+	GeneratorSCCWPumpMinFlow float64 = 1.0
+
+	// GeneratorCooldownTimeConstant is the thermal time
+	// constant for stator winding temperature to equilibrate
+	// after a coolant flow change (s). The spec gives no number;
+	// 60 s is sized for a 1370 MVA stator with significant
+	// thermal mass.
+	GeneratorCooldownTimeConstant float64 = 60.0
+
+	// GeneratorExciterFieldForcingFraction is the per-step
+	// fraction of the voltage error that the simplified
+	// voltage regulator closes. Sized at 5%/step so the
+	// terminal voltage builds up to rated within ~20 steps
+	// when the exciter is active.
+	GeneratorExciterFieldForcingFraction float64 = 0.05
 )
 
 // Station electrical design constants (plans/p13_1.txt).
@@ -790,8 +850,19 @@ type PowerGenerator struct {
 	// BreakerClosed is true when the generator breaker is
 	// closed and the generator is connected to the grid. The
 	// operator closes it after synchronisation; it opens on an
-	// OPC trip, operator manual trip, or grid fault.
+	// OPC trip, operator manual trip, grid fault, or SCCW-loss
+	// trip (plans/p30_1.txt).
 	BreakerClosed bool
+
+	// GeneratorExcitationSystem embeds the Westinghouse Mark III
+	// brushless-exciter / WTA-300 voltage regulator model
+	// (plans/p30_1.txt). Reachable as gen.ExciterOutput, etc.
+	GeneratorExcitationSystem
+
+	// GeneratorCoolingSystem embeds the dual cooling-circuit
+	// model (hydrogen internal gas + stator coil cooling water)
+	// (plans/p30_1.txt). Reachable as gen.SCCWFlow, etc.
+	GeneratorCoolingSystem
 }
 
 // Condenser models the main condenser (chapter 15.3). The shell-
@@ -4291,6 +4362,76 @@ const (
 	// train of safeguard systems and equipment."
 	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:65-67
 	ControlRoomSafetyStationCount = 4
+
+	// Plant computer system design constants.
+	//
+	// Spec justification:
+	//   - "The computer collects data from many locations
+	//     within the plant and then processes it to provide
+	//     a variety of information."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_150.txt:6-12
+	//   - Table 9-1 lists computer information devices and
+	//     formats (mimic, bar chart, tabular, graphical, data
+	//     trends, polar graphical, mixed, video, typer, line
+	//     printer, bell, pen recorder, lights, meters, magnetic
+	//     tape).
+	//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_151.txt:104-202
+	//   - "Provides more effective display format such as
+	//     mimic diagrams, graphs, and bar charts."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_153.txt:11-12
+	//   - "Safety Parameter Display System – Presents a
+	//     succinct display account of the overall plant
+	//     safety status."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_157.txt:34-35
+
+	// PlantComputerScanRate is the assumed analog input
+	// scan rate (samples per second). The spec does not
+	// state a numerical rate; 100 Hz is a typical value.
+	// "Analog/digital conversions of signals from a variety
+	// of analog sensors."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_151.txt:45-46
+	PlantComputerScanRate = 100
+
+	// PlantComputerDisplayFormatCount is the number of
+	// display formats supported (from Table 9-1).
+	PlantComputerDisplayFormatCount = 12
+
+	// PlantComputerMimicDisplayCount is the number of
+	// mimic displays available (system diagram + key
+	// parameters). The spec does not state a count; 16 is
+	// assumed.
+	// "the mimic display is defined as a display combining
+	// a diagrammatic representation of a system and the
+	// values of key parameters in the system."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_151.txt:23-26
+	PlantComputerMimicDisplayCount = 16
+
+	// PlantComputerSPDSRefreshRate is the assumed refresh
+	// rate of the Safety Parameter Display System (Hz).
+	// "Safety Parameter Display System – Presents a
+	// succinct display account of the overall plant safety
+	// status."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_157.txt:34-35
+	PlantComputerSPDSRefreshRate = 1.0
+
+	// PlantComputerAlarmProcessingDelay is the assumed
+	// delay for the computer to process and display an
+	// alarm (seconds). The spec does not state a numerical
+	// value; 0.5 s is typical for an analog scan-to-display
+	// latency.
+	// "Alarming – Checks for individual parameters
+	// exceeding limits."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_157.txt:32-33
+	PlantComputerAlarmProcessingDelay = 0.5
+
+	// PlantComputerSequenceOfEventsBufferSize is the
+	// assumed buffer size for sequence of events
+	// recording (events). The spec does not state a count;
+	// 1000 is assumed.
+	// "Post-trip review – Prints a history of parameter
+	// values before and after a trip."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_156.txt:1-3
+	PlantComputerSequenceOfEventsBufferSize = 1000
 )
 
 // PlantElectricalSystems models the plant electrical power
@@ -4479,6 +4620,253 @@ type PlantControlRoom struct {
 	// train of safeguard systems and equipment."
 	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:65-67
 	SafetySystemStationsAvailable bool
+}
+
+// PlantComputer models the plant computer system for data
+// collection, processing, display formatting, and malfunction
+// detection. The simplified model tracks data acquisition
+// availability, display format availability, supervision
+// status, and alarm state. It does not model scan rates,
+// calibration procedures, or detailed human factors.
+//
+// Spec justification:
+//   - Computer mission: "collects data from many locations
+//     within the plant and then processes it to provide a
+//     variety of information."
+//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_150.txt:6-12
+//   - Display formats (Table 9-1): mimic, bar chart, tabular,
+//     graphical, data trends, polar graphical, mixed.
+//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_151.txt:104-202
+//     and specs/the_westinghouse_pressurized_water_react/chapter_9/page_153.txt:6-12
+//   - Reactor control and protection supervision:
+//     "enhance the reactor control and protection systems by
+//     reporting on their status, by duplicating or checking
+//     some of their calculations."
+//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_155.txt:3-8
+//   - NSSS process supervision: "provide data about the
+//     operation of the nuclear power plant."
+//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_155.txt:34-36
+//   - Safety Parameter Display System: "Presents a succinct
+//     display account of the overall plant safety status."
+//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_157.txt:34-35
+type PlantComputer struct {
+	Part
+
+	// DataAcquisitionAvailable is true when the computer is
+	// powered and operational.
+	// "The plant interrogates the plant's parameters by:
+	// Analog/digital conversions of signals from a variety
+	// of analog sensors."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_151.txt:43-46
+	DataAcquisitionAvailable bool
+
+	// MimicDisplaysAvailable is true when the mimic display
+	// format is available (diagram + key parameters).
+	// "the mimic display is defined as a display combining
+	// a diagrammatic representation of a system and the
+	// values of key parameters in the system."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_151.txt:23-26
+	MimicDisplaysAvailable bool
+
+	// BarChartDisplaysAvailable is true when bar chart format
+	// is available.
+	// "Provides a sense of relative values."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_151.txt:123-126
+	BarChartDisplaysAvailable bool
+
+	// TabularDisplaysAvailable is true when tabular format
+	// is available for large data sets.
+	// "Effective method of presenting large quantities of
+	// data."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_151.txt:128-131
+	TabularDisplaysAvailable bool
+
+	// GraphicalDisplaysAvailable is true when graphical
+	// format is available.
+	// "Aids in comprehension of relationships."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_151.txt:133-136
+	GraphicalDisplaysAvailable bool
+
+	// DataTrendsAvailable is true when data trend format is
+	// available.
+	// "Aids in comprehension of time related changes."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_151.txt:138-140
+	DataTrendsAvailable bool
+
+	// PolarDisplaysAvailable is true when polar graphical
+	// format is available.
+	// "Shape changes indicate abnormal situations."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_151.txt:142-145
+	PolarDisplaysAvailable bool
+
+	// SPCSActive is true when the Safety Parameter Display
+	// System is active and displaying overall plant safety
+	// status.
+	// "Safety Parameter Display System – Presents a succinct
+	// display account of the overall plant safety status."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_157.txt:34-35
+	SPCSActive bool
+
+	// PostTripReviewPrinted is true when the post-trip review
+	// has been printed.
+	// "Post-trip review – Prints a history of parameter
+	// values before and after a trip."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_156.txt:1-3
+	PostTripReviewPrinted bool
+
+	// SequenceOfEventsRecording is true when sequence of
+	// events recording is active.
+	// "Sequence of Events Recording – Records the sequence
+	// of events during a transient."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_156.txt:5-7
+	SequenceOfEventsRecording bool
+
+	// AlarmActive is true when the computer has detected a
+	// parameter exceeding its limit.
+	// "Alarming – Checks for individual parameters exceeding
+	// limits."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_157.txt:32-33
+	AlarmActive bool
+
+	// BypassedInoperableStatusIndication is true when the
+	// Bypassed and Inoperable Status Indication display is
+	// active.
+	// "Bypassed and Inoperable Status Indication (BISI) –
+	// Indicates which pieces of equipment have been
+	// bypassed or are inoperable."
+	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_156.txt:9-12
+	BypassedInoperableStatusIndication bool
+}
+
+// GeneratorExcitationSystem models the Westinghouse Mark III
+// brushless exciter and its Type WTA-300 voltage regulator
+// (chapter 15.2). The simplified model collapses the rotating
+// rectifier bridge to a dimensionless ExciterOutput (0..1)
+// that scales GeneratorRatedVoltage into the actual terminal
+// voltage. It does not model the regulator's solid-state
+// transfer function or individual rectifier diodes.
+//
+// Spec justification:
+//   - Exciter type: "Excitation: Shaft-driven, air-cooled
+//     brushless exciter of the rotating rectifier type."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:23-24
+//   - All high-power components on the shaft: "all high-power
+//     components are mounted on the shaft. This eliminates the
+//     need for troublesome carbon brushes."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:64-69
+//   - Voltage regulator: "The Type WTA-300 voltage regulating
+//     system is of the latest design incorporating all solid
+//     state circuitry."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_212.txt:5-7
+//   - Rectifier output: "The exciter output is thus rectified
+//     and the resultant direct current is carried by rotating
+//     components on the shaft to the main generator field
+//     winding."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_212.txt:21-26
+//   - Pilot exciter: "The high-frequency permanent magnet
+//     generator provides power to the automatic voltage
+//     regulator which regulates and controls the output of the
+//     exciter."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_212.txt:27-30
+//   - Brushless-exciter parts: "consists of three basic parts:
+//     a permanent magnet pilot exciter, a main ac exciter, and
+//     a rectifier wheel."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_212.txt:14-17
+type GeneratorExcitationSystem struct {
+	Part
+
+	// ExciterOutput is the exciter DC output fraction (0..1)
+	// scaling GeneratorRatedVoltage into the field voltage
+	// applied to the main generator rotor winding.
+	ExciterOutput float64
+
+	// ExciterActive is true when the exciter is producing
+	// field current. Cannot be active when the shaft is not
+	// turning (the brushless exciter is shaft-driven).
+	ExciterActive bool
+
+	// RegulatorVoltageSetpoint is the voltage the WTA-300
+	// regulates toward. Fixed at GeneratorRatedVoltage for
+	// the simplified model; a real DEHM would fold in
+	// power-factor correction and VAR demand.
+	RegulatorVoltageSetpoint float64
+
+	// PilotExciterFrequency is the high-frequency permanent-
+	// magnet pilot-exciter output frequency, proportional to
+	// shaft speed. Diagnostic indicator only; not load-bearing
+	// for the simplified model.
+	// "The high-frequency permanent magnet generator provides
+	// power to the automatic voltage regulator."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_212.txt:27-30
+	PilotExciterFrequency float64
+}
+
+// GeneratorCoolingSystem models the dual independent cooling
+// circuits for the main generator (chapter 15.2):
+//
+//   1. Hydrogen gas circulated by a shaft-driven blower
+//      through four hydrogen coolers.
+//   2. Stator coil cooling water (SCCW) closed demineralized-
+//      water loop with redundant pumps and coolers.
+//
+// The simplified model tracks flow availability and per-cooler
+// effectiveness; it does not model H₂ circulation kinetics,
+// rotor hot-spot temperatures, or SCCW chemistry.
+//
+// Spec justification:
+//   - H₂ circulation: "The hydrogen gas is circulated by a
+//     blower mounted on the generator rotor."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:27-28
+//   - Four H₂ coolers: "Four hydrogen coolers are mounted
+//     horizontally at the top of the generator."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:46-47
+//   - Two sections per cooler: "The cooler consists of two
+//     separate sections to permit temporary operation at
+//     reduced load with one section out of service."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:47-49
+//   - SCCW: "Demineralized cooling water is provided for the
+//     stator by a closed recirculating water system."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:48-50
+//   - SCCW redundancy: "Redundancy is provided in the water
+//     pumps, water coolers, and the alarm system so that safe,
+//     reliable operation is assured under all conditions."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:55-61
+type GeneratorCoolingSystem struct {
+	Part
+
+	// HydrogenCoolerEffectiveness is the per-cooler heat-
+	// rejection effectiveness (0..1) for each of the four
+	// hydrogen coolers. A value of 0 means the cooler is
+	// fully degraded; 1.0 means design heat rejection.
+	// Four independent values support the spec's two-section
+	// per cooler redundancy.
+	// "Four hydrogen coolers are mounted horizontally at
+	// the top of the generator. The cooler consists of two
+	// separate sections to permit temporary operation at
+	// reduced load with one section out of service."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:46-49
+	HydrogenCoolerEffectiveness [4]float64
+
+	// SCCWFlow is the demineralized water flow rate through
+	// the stator coil cooling water circuit (gal/s). Zero
+	// means the SCCW pump is not running; non-zero indicates
+	// the cooling circuit is active.
+	SCCWFlow float64
+
+	// SCCWPumpRunning is true when at least one SCCW pump is
+	// running. The spec describes redundant pumps; this flag
+	// represents at least one pump in service.
+	// "Redundancy is provided in the water pumps, water
+	// coolers, and the alarm system."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:55-57
+	SCCWPumpRunning bool
+
+	// HydrogenPressure is the containment pressure of the
+	// hydrogen gas inside the generator enclosure (psig).
+	// The spec quotes 60 or 75 psig as design values.
+	// "Hydrogen pressure: 60 or 75 psig"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:20
+	HydrogenPressure float64
 }
 
 

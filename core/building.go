@@ -286,6 +286,26 @@ type ReactorBuilding struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:56-59
 	StationTransformer StationTransformer
 
+	// PlantComputer models the data collection, processing,
+	// display formatting, and malfunction detection system
+	// (plans/p29_1.txt). The simplified model treats the
+	// computer as a passive aggregator that derives
+	// availability flags from electrical power and major
+	// safety-system status.
+	//
+	// Spec justification:
+	//   - Computer mission: "collects data from many
+	//     locations within the plant and then processes it
+	//     to provide a variety of information."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_150.txt:6-12
+	//   - Display formats: mimic, bar chart, tabular,
+	//     graphical, data trends, polar graphical.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_151.txt:104-202
+	//   - SPDS: succinct display of overall plant safety
+	//     status.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_157.txt:34-35
+	PlantComputer PlantComputer
+
 	// PlantControlRoom models the operator interface for
 	// monitoring and controlling all plant systems
 	// (plans/p28_1.txt). Includes the Primary Control
@@ -401,6 +421,26 @@ type TurbineBuilding struct {
 
 	SecondStageHeaterDrainTank Tank
 	SecondStageHeaterDrainPump Pump
+
+	// GeneratorExcitationAvailable is true when the turbine
+	// shaft is turning and the brushless exciter is producing
+	// field current (plans/p30_1.txt). Mirrors
+	// Generator.ExciterActive for plant-level consumers.
+	// "Excitation: Shaft-driven, air-cooled brushless exciter
+	// of the rotating rectifier type."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:23-24
+	GeneratorExcitationAvailable bool
+
+	// GeneratorSCCWAlarm is true when stator coil cooling
+	// water flow has fallen below GeneratorSCCWPumpMinFlow
+	// while the pump is running (plans/p30_1.txt). Latches
+	// the SCCW-loss alarm before the trip threshold.
+	GeneratorSCCWAlarm bool
+
+	// GeneratorSCCWTrip is true when SCCW flow has been
+	// lost completely; the generator breaker is opened as
+	// the protective action (plans/p30_1.txt).
+	GeneratorSCCWTrip bool
 
 	/*
 	   MainFeedRegValve Valve

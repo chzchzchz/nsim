@@ -263,6 +263,68 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 		&stopOpen,
 	)
 
+	// Generator excitation system. The brushless exciter is
+	// shaft-driven: it can only produce field current when
+	// the rotor is turning.
+	//
+	// Spec justification:
+	//   - "Excitation: Shaft-driven, air-cooled brushless
+	//     exciter of the rotating rectifier type."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:23-24
+	//   - "The Type WTA-300 voltage regulating system is of
+	//     the latest design incorporating all solid state
+	//     circuitry."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_212.txt:5-7
+	ret.Generator.GeneratorExcitationSystem =
+		ret.Generator.GeneratorExcitationSystem.Step(
+			float64(ret.Turbine.Velocity),
+		)
+	ret.GeneratorExcitationAvailable =
+		ret.Generator.ExciterActive
+
+	// Generator cooling system. SCCW pump mirrors the
+	// feedwater/condensate pump availability in the
+	// simplified model (real plant has dedicated redundant
+	// pumps; for p30 the gating flag is "at least one
+	// pump-running boolean").
+	//
+	// Spec justification:
+	//   - "Demineralized cooling water is provided for the
+	//     stator by a closed recirculating water system."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:48-50
+	//   - "Redundancy is provided in the water pumps, water
+	//     coolers, and the alarm system so that safe,
+	//     reliable operation is assured under all conditions."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:55-61
+	ret.Generator.SCCWPumpRunning = ret.MainFeedwaterPump.Running ||
+		ret.CondensatePump.Running
+	// H₂ blower fraction tracks shaft speed relative to
+	// rated; the four cooler effectiveness slots scale
+	// linearly with this fraction.
+	h2Blower := float64(ret.Turbine.Velocity) /
+		float64(TurbineRatedSpeed)
+	if h2Blower > 1 {
+		h2Blower = 1
+	}
+	if h2Blower < 0 {
+		h2Blower = 0
+	}
+	ret.Generator.GeneratorCoolingSystem =
+		ret.Generator.GeneratorCoolingSystem.Step(h2Blower)
+
+	// SCCW alarm and trip gating (plans/p30_1.txt). When
+	// the SCCW circuit is active but the flow has dropped
+	// below the minimum stable threshold, the alarm is
+	// raised. Total loss of flow while the pump is
+	// commanded running drops the generator breaker.
+	sccwState := SCCWAlarm(ret.Generator.SCCWPumpRunning,
+		ret.Generator.SCCWFlow)
+	ret.GeneratorSCCWAlarm = sccwState.Alarm
+	ret.GeneratorSCCWTrip = sccwState.Trip
+	if ret.GeneratorSCCWTrip && ret.Generator.BreakerClosed {
+		ret.Generator.BreakerClosed = false
+	}
+
 	// Generator terminal state. Voltage and frequency track rated
 	// values whenever the breaker is closed and the rotor is at
 	// speed; otherwise they decay to zero (the generator has no
@@ -275,9 +337,24 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:22
 	rated := ret.Turbine.State == TurbineRunning &&
 		float64(ret.Turbine.Velocity) >= float64(TurbineRatedSpeed)*0.99
-	if ret.Generator.BreakerClosed && rated {
+	if ret.Generator.BreakerClosed && rated && ret.Generator.ExciterActive {
 		ret.Generator.Voltage = GeneratorRatedVoltage
 		ret.Generator.Frequency = GeneratorRatedFrequency
+	} else if ret.Generator.BreakerClosed && ret.Generator.ExciterActive {
+		// Rotor spinning up: terminal voltage builds
+		// toward rated at the regulator's forcing rate.
+		// "The high-frequency permanent magnet generator
+		// provides power to the automatic voltage
+		// regulator which regulates and controls the
+		// output of the exciter."
+		// specs/the_westinghouse_pressurized_water_react/chapter_15/page_212.txt:27-30
+		voltageTarget := GeneratorRatedVoltage
+		ret.Generator.Voltage += (voltageTarget - ret.Generator.Voltage) *
+			GeneratorExciterFieldForcingFraction
+		if ret.Generator.Voltage > GeneratorRatedVoltage*0.99 {
+			ret.Generator.Voltage = GeneratorRatedVoltage
+		}
+		ret.Generator.Frequency = 0
 	} else {
 		ret.Generator.Voltage = 0
 		ret.Generator.Frequency = 0
@@ -929,13 +1006,58 @@ func (p *Plant) Step() {
 	alarmCondition :=
 		p.nextPlant.ReactorBuilding.ReactorProtectionSystem.ReactorTripped ||
 			p.nextPlant.ReactorBuilding.ContainmentBuilding.
-				HydrogenDetectionSuppression.HydrogenAlarm
+				HydrogenDetectionSuppression.HydrogenAlarm ||
+			p.nextPlant.TurbineBuilding.GeneratorSCCWAlarm ||
+			p.nextPlant.TurbineBuilding.GeneratorSCCWTrip
 	pcrIn := p.ReactorBuilding.PlantControlRoom
 	pcrIn.PowerAvailable = pes.InverterPowerAvailable
 	p.nextPlant.ReactorBuilding.PlantControlRoom = pcrIn.Step(
 		alarmCondition,
 		pes.ESFBus1Available,
 		pes.ESFBus2Available,
+	)
+
+	// Plant computer step (plans/p29_1.txt). The computer
+	// is a passive aggregator: it derives data-acquisition
+	// availability from the control-room power state, drives
+	// its SPDS from the aggregate safety-system status, and
+	// arms the post-trip review / sequence-of-events
+	// recording on a reactor trip.
+	//
+	// Spec justification:
+	//   - Computer mission: "collects data from many
+	//     locations within the plant and then processes it
+	//     to provide a variety of information."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_150.txt:6-12
+	//   - SPDS: "Presents a succinct display account of the
+	//     overall plant safety status."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_157.txt:34-35
+	//   - Post-trip review:
+	//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_156.txt:1-3
+	pcIn := p.ReactorBuilding.PlantComputer
+	pcPower := p.nextPlant.ReactorBuilding.
+		PlantElectricalSystems.InverterPowerAvailable
+	rps = p.nextPlant.ReactorBuilding.ReactorProtectionSystem
+	pcAlarm := rps.ReactorTripped ||
+		p.nextPlant.ReactorBuilding.ContainmentBuilding.
+			HydrogenDetectionSuppression.HydrogenAlarm ||
+		p.nextPlant.TurbineBuilding.GeneratorSCCWAlarm ||
+		p.nextPlant.TurbineBuilding.GeneratorSCCWTrip
+	// Aggregate "safety systems available" is the AND of the
+	// RPS being operable, both ESF buses being energised,
+	// and the major safeguard systems being active. The
+	// simplified model collapses per-system availability
+	// flags into this single boolean.
+	safetyAvailable := !rps.ReactorTripped &&
+		pes.ESFBus1Available && pes.ESFBus2Available
+	p.nextPlant.ReactorBuilding.PlantComputer = pcIn.Step(
+		pcPower,
+		rps.ReactorTripped,
+		rps.ReactorTripped && !rps.ManualTrip,
+		pcAlarm,
+		safetyAvailable,
+		p.nextPlant.ReactorBuilding.
+			PlantControlRoom.AlarmAcknowledged,
 	)
 
 	// Station transformer and house load. The station transformer
@@ -1127,6 +1249,38 @@ func MakePlant() Plant {
 	p.TurbineBuilding.Generator.BreakerClosed = false
 	p.TurbineBuilding.Generator.PowerFactor = GeneratorPowerFactor
 	p.TurbineBuilding.Generator.RatedMVA = GeneratorRatedMVA
+
+	// Generator excitation and cooling defaults (plans/p30_1.txt).
+	// At construction the exciter is not producing field current
+	// (rotor not turning), the SCCW pump is not running, all four
+	// hydrogen coolers are at full effectiveness, and the
+	// design hydrogen pressure is held. The GeneratorExcitation
+	// System and GeneratorCoolingSystem are embedded structs so
+	// these assignments reach into the PowerGenerator directly.
+	//
+	// Spec justification:
+	//   - "Excitation: Shaft-driven, air-cooled brushless
+	//     exciter of the rotating rectifier type."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:23-24
+	//   - "Hydrogen pressure: 60 or 75 psig"
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:20
+	//   - "Demineralized cooling water is provided for the
+	//     stator by a closed recirculating water system."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:48-50
+	p.TurbineBuilding.Generator.RegulatorVoltageSetpoint =
+		GeneratorRatedVoltage
+	p.TurbineBuilding.Generator.ExciterOutput = 0
+	p.TurbineBuilding.Generator.ExciterActive = false
+	p.TurbineBuilding.Generator.PilotExciterFrequency = 0
+	p.TurbineBuilding.Generator.SCCWPumpRunning = false
+	p.TurbineBuilding.Generator.SCCWFlow = 0
+	p.TurbineBuilding.Generator.HydrogenPressure =
+		GeneratorDesignHydrogenPressurePsig
+	for i := range p.TurbineBuilding.Generator.
+		HydrogenCoolerEffectiveness {
+		p.TurbineBuilding.Generator.
+			HydrogenCoolerEffectiveness[i] = 1.0
+	}
 
 	// Turbine setpoint defaults: 1.0 (full-load demand) when the
 	// operator closes the breaker and 0.0 when off-line.
@@ -1527,6 +1681,34 @@ func MakePlant() Plant {
 		AlarmAcknowledged:             false,
 		ControlInputsAvailable:        true,
 		SafetySystemStationsAvailable: true,
+	}
+
+	// Plant Computer defaults (plans/p29_1.txt). At
+	// construction the computer is on, all display formats
+	// are active, SPDS is active, post-trip review has not
+	// fired, and no alarm is sounding.
+	//
+	// Spec justification:
+	//   - "The computer collects data from many locations
+	//     within the plant and then processes it to provide
+	//     a variety of information."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_150.txt:6-12
+	//   - SPDS: "Presents a succinct display account of the
+	//     overall plant safety status."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_9/page_157.txt:34-35
+	p.ReactorBuilding.PlantComputer = PlantComputer{
+		DataAcquisitionAvailable:             true,
+		MimicDisplaysAvailable:               true,
+		BarChartDisplaysAvailable:            true,
+		TabularDisplaysAvailable:             true,
+		GraphicalDisplaysAvailable:           true,
+		DataTrendsAvailable:                  true,
+		PolarDisplaysAvailable:               true,
+		SPCSActive:                           true,
+		PostTripReviewPrinted:                false,
+		SequenceOfEventsRecording:            true,
+		AlarmActive:                          false,
+		BypassedInoperableStatusIndication:   true,
 	}
 
 	// Reactor makeup control valve defaults: closed at startup
