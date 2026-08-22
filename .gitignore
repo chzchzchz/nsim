@@ -1,5 +1,6 @@
 plans/
 specs/
+cmd/nsim/nsim
 *.swp
 
 # web/ build artifacts
