@@ -39,17 +39,17 @@
 <circle id="tank-cst-anchor-side" cx="45" cy="0" r="2" fill="none" stroke="none"/>
 </symbol>
 
-<symbol id="tank-accumulator" viewBox="-20 -40 40 80">
+<symbol id="tank-accumulator" viewBox="-24 -55 48 110">
 <title>Accumulator (SI)</title>
-<path d="M -16 -32 Q -16 -40 0 -40 Q 16 -40 16 -32" fill="#e6e6e6" stroke="black"/>
-<rect x="-16" y="-32" width="32" height="64" fill="#e6e6e6" stroke="black"/>
-<path d="M -16 32 Q -16 40 0 40 Q 16 40 16 32" fill="#e6e6e6" stroke="black"/>
-<rect x="-3" y="-44" width="6" height="4" fill="#cccccc" stroke="black"/>
-<text x="0" y="-46" text-anchor="middle" font-size="6">N₂</text>
-<rect x="-4" y="40" width="8" height="6" fill="#cccccc" stroke="black"/>
-<rect id="tank-accumulator-level" x="-14" y="-30" width="28" height="60" fill="#aad4ff" fill-opacity="0.5" stroke="none"/>
-<circle id="acc-anchor-top" cx="0" cy="-44" r="2" fill="none" stroke="none"/>
-<circle id="acc-anchor-discharge" cx="0" cy="46" r="2" fill="none" stroke="none"/>
+<path d="M -20 -40 Q -20 -55 0 -55 Q 20 -55 20 -40" fill="#e6e6e6" stroke="black"/>
+<rect x="-20" y="-40" width="40" height="80" fill="#e6e6e6" stroke="black"/>
+<path d="M -20 40 Q -20 55 0 55 Q 20 55 20 40" fill="#e6e6e6" stroke="black"/>
+<rect x="-3" y="-54" width="6" height="4" fill="#cccccc" stroke="black"/>
+<text x="0" y="-58" text-anchor="middle" font-size="6">N₂</text>
+<rect x="-4" y="50" width="8" height="6" fill="#cccccc" stroke="black"/>
+<rect id="tank-accumulator-level" x="-18" y="-38" width="36" height="72" fill="#aad4ff" fill-opacity="0.5" stroke="none"/>
+<circle id="acc-anchor-top" cx="0" cy="-54" r="2" fill="none" stroke="none"/>
+<circle id="acc-anchor-discharge" cx="0" cy="56"  r="2" fill="none" stroke="none"/>
 </symbol>
 
 <symbol id="tank-sfp" viewBox="-200 -100 400 200">
