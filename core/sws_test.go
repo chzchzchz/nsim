@@ -13,7 +13,7 @@ import (
 // design source temperature.
 func TestSWS_InitialStateHasAllPumpsRunning(t *testing.T) {
 	p := MakePlant()
-	sws := p.ReactorBuilding.ServiceWaterSystem
+	sws := p.Outside.ServiceWaterSystem
 	assert.True(t, sws.PumpRunning,
 		"want PumpRunning=true at startup, got %v", sws.PumpRunning)
 	assert.InDelta(t, ServiceWaterDesignFlow, sws.Flow, 1e-9,
@@ -136,7 +136,7 @@ func TestSFPCS_StoppedPumpsZeroPurificationFlow(t *testing.T) {
 func TestSWS_EndToEndSteadyState(t *testing.T) {
 	p := MakePlant()
 	stepN(&p, int(15*time.Second/TimeStep))
-	sws := p.ReactorBuilding.ServiceWaterSystem
+	sws := p.Outside.ServiceWaterSystem
 	sf := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
 	assert.True(t, sws.PumpRunning,
 		"want SWS PumpRunning=true after stepping, got %v",

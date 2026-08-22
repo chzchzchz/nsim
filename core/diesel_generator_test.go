@@ -28,7 +28,7 @@ func enoughFuel() DieselGenerator {
 // it to Off.
 func TestDieselStartSafetyInjection(t *testing.T) {
 	p := MakePlant()
-	p.ServiceWaterPump.Running = true
+	p.Outside.ServiceWaterSystem.PumpRunning = true
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 
@@ -45,7 +45,7 @@ func TestDieselStartSafetyInjection(t *testing.T) {
 // rated kW.
 func TestDieselGeneratorReachesRatedOutputIn10s(t *testing.T) {
 	p := MakePlant()
-	p.ServiceWaterPump.Running = true
+	p.Outside.ServiceWaterSystem.PumpRunning = true
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
 
@@ -66,7 +66,7 @@ func TestDieselGeneratorReachesRatedOutputIn10s(t *testing.T) {
 // DriveReady follows the bus.
 func TestESFBusEnergizedByDiesel(t *testing.T) {
 	p := MakePlant()
-	p.ServiceWaterPump.Running = true
+	p.Outside.ServiceWaterSystem.PumpRunning = true
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 
 	require.False(t, p.Electrical.ESFBusA.Energized, "precondition: ESFBusA should start unenergized")

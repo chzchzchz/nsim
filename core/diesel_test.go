@@ -32,7 +32,7 @@ func stepN(p *Plant, n int) {
 
 func TestDiesel_FSM_StartAndReachReady(t *testing.T) {
 	p := MakePlant()
-	p.ServiceWaterPump.Running = true
+	p.Outside.ServiceWaterSystem.PumpRunning = true
 
 	p.AuxiliaryBuilding.DieselGenerator = newDiesel(500)
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
@@ -61,7 +61,7 @@ func TestDiesel_NoStartWithoutSignal(t *testing.T) {
 
 func TestDiesel_FuelOnlyDecreasesWhileRunning(t *testing.T) {
 	p := MakePlant()
-	p.ServiceWaterPump.Running = true
+	p.Outside.ServiceWaterSystem.PumpRunning = true
 	p.AuxiliaryBuilding.DieselGenerator = newDiesel(500)
 	levelAtRest := p.AuxiliaryBuilding.DieselGenerator.Fuel.Level.Float()
 
@@ -80,7 +80,7 @@ func TestDiesel_FuelOnlyDecreasesWhileRunning(t *testing.T) {
 
 func TestDiesel_TripsOnFuelExhaustion(t *testing.T) {
 	p := MakePlant()
-	p.ServiceWaterPump.Running = true
+	p.Outside.ServiceWaterSystem.PumpRunning = true
 	p.AuxiliaryBuilding.DieselGenerator = newDiesel(0.0001) // tiny sliver
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
 
@@ -90,7 +90,7 @@ func TestDiesel_TripsOnFuelExhaustion(t *testing.T) {
 
 func TestDiesel_TripsOnCoolantOverTemp(t *testing.T) {
 	p := MakePlant()
-	p.ServiceWaterPump.Running = false // no cooling
+	p.Outside.ServiceWaterSystem.PumpRunning = false // no cooling
 	p.AuxiliaryBuilding.DieselGenerator = newDiesel(500)
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
 
@@ -112,4 +112,39 @@ func TestDiesel_TripsOnCoolantOverTemp(t *testing.T) {
 	}
 	require.Failf(t, "want Tripped on loss of cooling within %v, state=%v",
 		"simulated %v, final state=%v", maxSim, p.AuxiliaryBuilding.DieselGenerator.State)
+}
+
+// Service Water flowing should pull the coolant back toward ambient.
+// Regression for the bug where AuxiliaryBuilding.Step read the legacy
+// ServiceWaterPump.Running instead of the user-facing
+// Outside.ServiceWaterSystem.PumpRunning, so toggling the SW
+// pump in the UI did not cool the diesel.
+//
+// Spec justification:
+//   - "Diesel generator coolers" listed as a Service Water System load.
+//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89
+func TestDiesel_CoolantCoolsWhenServiceWaterFlows(t *testing.T) {
+	p := MakePlant()
+	p.Outside.ServiceWaterSystem.PumpRunning = true
+	p.AuxiliaryBuilding.DieselGenerator = newDiesel(500)
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
+
+	// Crank to running.
+	stepN(&p, int(10*time.Second/TimeStep))
+	require.Equal(t, DieselRunning, p.AuxiliaryBuilding.DieselGenerator.State, "expected Running")
+
+	// Force the coolant above ambient so cooling is observable.
+	hot := u.NewValue(150, u.Fahrenheit)
+	p.AuxiliaryBuilding.DieselGenerator.CoolantTemp = hot
+	initial := p.AuxiliaryBuilding.DieselGenerator.CoolantTemp.Float()
+
+	// Step a few tau (dieselCoolingTau = 30 s) so the exponential
+	// decay is well past the noise floor. The diesel is also
+	// drifting upward while running, but the SW term dominates at
+	// this gap; we only assert a drop.
+	stepN(&p, int(2*time.Minute/TimeStep))
+
+	final := p.AuxiliaryBuilding.DieselGenerator.CoolantTemp.Float()
+	assert.Less(t, final, initial,
+		"want coolant to drop with SW flowing (initial=%v final=%v)", initial, final)
 }

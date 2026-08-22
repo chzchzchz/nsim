@@ -36,8 +36,25 @@ type Outside struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
 	CoolingTower
 
-	// Transformer, ServiceWaterPump, and DieselGenerator were
-	// moved to the AuxiliaryBuilding per plans/x/aux.md.
+	// ServiceWaterSystem models the SWS — the ultimate heat
+	// sink for the plant. The pumps live in a separate
+	// intake house per
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:48-50.
+	//
+	// Spec justification:
+	//   - "The Service Water System supplies all the cooling
+	//     water for the plant, including that required for
+	//     emergency shutdown. Consequently, high reliability
+	//     and redundancy is required."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:16-19
+	//   - "The pumps are frequently located in a separate
+	//     intake house."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:48-50
+	//   - "The three essential service water pumps for each
+	//     unit are typically rated at approximately 20,000
+	//     gpm."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:46-48
+	ServiceWaterSystem ServiceWaterSystem
 
 	RiverTemp Temperature
 }

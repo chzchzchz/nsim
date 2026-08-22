@@ -25,6 +25,7 @@ export const UNITS: Record<string, UnitInfo> = {
     psig:        { unit: "psig", range: null },
     fahrenheit:  { unit: "°F",   range: null },
     gallon:      { unit: "gal",  range: null },
+    gpm:         { unit: "gpm",  range: null },
     watt:        { unit: "W",    range: null },
     ppm:         { unit: "ppm",  range: null },
     volt:        { unit: "V",    range: null },
@@ -46,7 +47,7 @@ export function rangeFor(kind: string): string | null {
 // (bool, enum, string) keep their raw string form.
 const NUMERIC_KINDS = new Set([
     "normalized", "percent", "rpm", "psig", "fahrenheit",
-    "gallon", "watt", "ppm", "volt", "hz",
+    "gallon", "gpm", "watt", "ppm", "volt", "hz",
 ]);
 
 // formatSensorValue caps a numeric sensor value at two decimal

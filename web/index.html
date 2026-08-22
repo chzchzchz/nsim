@@ -60,7 +60,7 @@
         #pid svg { max-width: 100%; height: auto; display: block; }
         #tiles {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
             gap: 12px;
         }
         .tile {
@@ -69,6 +69,7 @@
             border-radius: 4px;
             padding: 8px;
             font-size: 12px;
+            min-width: 0;
         }
         .tile > h2 {
             margin: 0 0 8px 0;
@@ -78,8 +79,8 @@
         }
         .tile-body {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            gap: 12px;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
         }
         .tile-body > div { min-width: 0; }
         .tile-body h3 {

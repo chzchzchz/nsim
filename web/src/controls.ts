@@ -53,9 +53,17 @@ function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
     text.textContent = label;
     row.appendChild(text);
 
+    // Read the control's current value once so the UI reflects
+    // live plant state on initial render. Get returns "0"/"1"
+    // for bool, the raw string for enum/string, and the
+    // canonical numeric string for everything else.
+    const current = plant.getControlValue(e.id);
+    const initial = typeof current === "string" ? current : "";
+
     if (kind === "bool") {
         const cb = document.createElement("input");
         cb.type = "checkbox";
+        cb.checked = initial === "1" || initial === "true";
         cb.addEventListener("change", () => {
             plant.setControl(e.id, cb.checked ? "1" : "0");
         });
@@ -63,12 +71,42 @@ function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
         return row;
     }
 
-    if (kind === "enum" || kind === "string") {
-        // The bridge accepts whatever string the user passes; we
-        // present a free text input rather than guessing the set.
+    if (kind === "enum") {
+        // When the Go backend populated bridge.Control.Enum we
+        // get a labelled <select>; otherwise fall back to a
+        // free-text input (preserves the legacy behaviour for
+        // enum controls that haven't been annotated yet).
+        if (e.meta.enum && e.meta.enum.length > 0) {
+            const sel = document.createElement("select");
+            for (let i = 0; i < e.meta.enum.length; i++) {
+                const opt = document.createElement("option");
+                opt.value = String(i);
+                opt.textContent = e.meta.enum[i];
+                sel.appendChild(opt);
+            }
+            sel.value = initial;
+            sel.addEventListener("change", () => {
+                plant.setControl(e.id, sel.value);
+            });
+            row.appendChild(sel);
+        } else {
+            const inp = document.createElement("input");
+            inp.type = "text";
+            inp.size = 8;
+            inp.value = initial;
+            inp.addEventListener("change", () => {
+                plant.setControl(e.id, inp.value);
+            });
+            row.appendChild(inp);
+        }
+        return row;
+    }
+
+    if (kind === "string") {
         const inp = document.createElement("input");
         inp.type = "text";
         inp.size = 8;
+        inp.value = initial;
         inp.addEventListener("change", () => {
             plant.setControl(e.id, inp.value);
         });
@@ -88,7 +126,7 @@ function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
             num.max = m[2];
         }
     }
-    num.value = "0";
+    num.value = initial === "" ? "0" : initial;
     num.addEventListener("change", () => {
         plant.setControl(e.id, num.value);
     });

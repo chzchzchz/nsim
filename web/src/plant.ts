@@ -8,6 +8,12 @@ export interface BridgeMeta {
     part: string;
     label: string;
     kind: string;
+    // enum is present only for Kind === "enum" controls that
+    // populate the optional bridge.Control.Enum slice. The
+    // array index of each label is the value the Go Set
+    // callback receives (matches the iota order in the Go
+    // backend).
+    enum?: string[];
 }
 
 export interface PlantHandle {
@@ -16,6 +22,7 @@ export interface PlantHandle {
     sensorKeys(): string[];
     getMeta(id: string): BridgeMeta | Error;
     setControl(id: string, value: string): Error | null;
+    getControlValue(id: string): string | Error;
     sensorJSON(id: string): string | Error;
     getSvg(): string | Error;
     simTimeMs(): number;

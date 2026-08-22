@@ -315,7 +315,7 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 	// located on physically separated portions of the main control
 	// board."
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:2-4
-	// Cause taxonomy in core/parts.go:1069-1077:
+	// Cause taxonomy in core/parts.go:1071-1077:
 	//   0 = None, 1 = Manual, 2 = SafetyInjection,
 	//   3 = LossOfOffsitePower, 4 = Test.
 	// "The onsite emergency diesel generators are started."
@@ -325,10 +325,20 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 	// supplied from physically and electrically independent diesel
 	// generators located on the site."
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:28-36
+	// Enum advertises the human-readable labels so the bridge
+	// renders a dropdown instead of a text input. The indices
+	// match the iota order at core/parts.go:1071-1077.
 	m["AuxiliaryBuilding/DieselGenerator/StartSignal"] = &bridge.Control{
 		Part:  "AuxiliaryBuilding/DieselGenerator",
 		Label: "StartSignal",
 		Kind:  "enum",
+		Enum: []string{
+			"None",
+			"Manual",
+			"Safety Injection",
+			"Loss of Offsite Power",
+			"Test",
+		},
 		Get: func() string {
 			return fmt.Sprintf("%d",
 				p.AuxiliaryBuilding.DieselGenerator.StartSignal)
@@ -450,6 +460,65 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 				return err
 			}
 			p.Electrical.ESFBusB.BreakerClosed = v
+			return nil
+		},
+	}
+
+	// Service Water pump run command (chapter 12):
+	// "The Service Water System supplies all the cooling water
+	// for the plant, including that required for emergency
+	// shutdown. Consequently, high reliability and redundancy
+	// is required."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:16-19
+	// "The three essential service water pumps for each unit
+	// are typically rated at approximately 20,000 gpm
+	// (4500 m3/hr)."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:46-48
+	// PumpRunning is the lumped "at least one essential SW
+	// pump running" flag. With this set true, the simplified
+	// model drives Flow = ServiceWaterDesignFlow and cools the
+	// diesel jacket water via core/auxiliary.go:119.
+	m["ReactorBuilding/ServiceWaterSystem/PumpRunning"] = &bridge.Control{
+		Part:  "ReactorBuilding/ServiceWaterSystem",
+		Label: "PumpRunning",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.Outside.ServiceWaterSystem.PumpRunning)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.Outside.ServiceWaterSystem.PumpRunning = v
+			return nil
+		},
+	}
+
+	// Service Water nonessential-header isolation (chapter 12):
+	// "The nonessential equipment coolers are fed from
+	// separate branch headers that can be isolated from the
+	// main headers under accident conditions to conserve
+	// water."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:23-26
+	// Operator flips the isolation valves during accident
+	// conditions; the simplified model records the boolean
+	// directly.
+	m["ReactorBuilding/ServiceWaterSystem/NonessentialIsolated"] = &bridge.Control{
+		Part:  "ReactorBuilding/ServiceWaterSystem",
+		Label: "NonessentialIsolated",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.Outside.ServiceWaterSystem.NonessentialIsolated)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.Outside.ServiceWaterSystem.NonessentialIsolated = v
 			return nil
 		},
 	}
@@ -953,6 +1022,107 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("volt",
 				p.ReactorBuilding.Grid.Voltage)
+		},
+	}
+
+	// Service Water System flow (chapter 12):
+	// "The three essential service water pumps for each unit
+	// are typically rated at approximately 20,000 gpm
+	// (4500 m3/hr)."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:46-48
+	// "The discharge of the service water pumps passes
+	// through two strainers typically with 1/8-inch (0.3 cm)
+	// openings to a common header."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:51-54
+	// The simplified model collapses the three pumps into a
+	// single lumped Flow value (gpm); we use the bridge
+	// "gallon" kind as the closest analog (no "gpm" kind
+	// exists in bridge/convert.go).
+	m["ReactorBuilding/ServiceWaterSystem/Flow"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ServiceWaterSystem",
+		Label: "Flow",
+		Kind:  "gpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gpm",
+				p.Outside.ServiceWaterSystem.Flow)
+		},
+	}
+
+	// Service Water inlet temperature (chapter 12):
+	// "The Service Water System supplies all the cooling water
+	// for the plant, including that required for emergency
+	// shutdown. Consequently, high reliability and redundancy
+	// is required."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:16-19
+	// InletTemp is the river/lake/ocean intake temperature;
+	// held constant at ServiceWaterSourceTemp (70°F) by the
+	// simplified model.
+	m["ReactorBuilding/ServiceWaterSystem/InletTemp"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ServiceWaterSystem",
+		Label: "InletTemp",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.Outside.ServiceWaterSystem.InletTemp.Float())
+		},
+	}
+
+	// Service Water outlet temperature (chapter 12):
+	// The outlet temperature rises above the inlet as the
+	// water picks up heat from the essential equipment
+	// coolers it serves.
+	// "The Service Water System supplies all the cooling water
+	// for the plant, including that required for emergency
+	// shutdown."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:16-18
+	// "Diesel generator coolers" are typical SWS loads whose
+	// heat load drives the outlet rise.
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:88-89
+	m["ReactorBuilding/ServiceWaterSystem/OutletTemp"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ServiceWaterSystem",
+		Label: "OutletTemp",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.Outside.ServiceWaterSystem.OutletTemp.Float())
+		},
+	}
+
+	// Circulating Water System flow (chapter 12):
+	// "Circulating water for each main condenser is supplied
+	// by vertical, mixed flow, volute type circulating water
+	// pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_170.txt:51-53
+	// The spec does not quote a numeric gpm for the CWS pumps;
+	// the simplified model uses an order-of-magnitude number
+	// (550,000 gpm per pump) sized to deliver ~1.1 million
+	// gpm for two pumps, consistent with a 4-loop Westinghouse
+	// plant. See core/parts.go:1293-1303 for the sizing
+	// rationale.
+	m["Outside/CirculatingWaterSystem/Flow"] = &bridge.Sensor{
+		Part:  "Outside/CirculatingWaterSystem",
+		Label: "Flow",
+		Kind:  "gpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gpm",
+				p.Outside.CirculatingWaterSystem.FlowGPM)
+		},
+	}
+
+	// Spent Fuel Pool purification flow (chapter 12):
+	// "passing approximately 100 gpm (23 m3/hr) of each
+	// loop's flow through a filter and demineralizer."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:68-71
+	// PurificationFlow is the per-loop cleanup flow through
+	// the filter and demineralizer; the simplified model
+	// collapses it into a single value (100 gpm).
+	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PurificationFlow"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
+		Label: "PurificationFlow",
+		Kind:  "gpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gpm",
+				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PurificationFlow)
 		},
 	}
 

@@ -608,7 +608,8 @@ func (p *Plant) Step() {
 	// nextPlant (where the fresh state is being written), not
 	// at p (the current state being read).
 	p.nextPlant.Outside = p.Outside.Step()
-	p.nextPlant.AuxiliaryBuilding = p.AuxiliaryBuilding.Step()
+	p.nextPlant.AuxiliaryBuilding = p.AuxiliaryBuilding.Step(
+		p.Outside.ServiceWaterSystem.PumpRunning)
 	p.ReactorBuilding.Aux = &p.nextPlant.AuxiliaryBuilding
 	p.Electrical.DieselGenA = &p.nextPlant.AuxiliaryBuilding.DieselGenerator
 	p.Electrical.DieselGenB = &p.nextPlant.AuxiliaryBuilding.DieselGenerator
@@ -891,8 +892,8 @@ func (p *Plant) Step() {
 	//     "Containment for ventilation coolers" are typical
 	//     SWS loads.
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:81-93
-	p.nextPlant.ReactorBuilding.ServiceWaterSystem =
-		p.nextPlant.ReactorBuilding.ServiceWaterSystem.Step(rcfcHeatOut)
+	p.nextPlant.Outside.ServiceWaterSystem =
+		p.nextPlant.Outside.ServiceWaterSystem.Step(rcfcHeatOut)
 
 	// SFPCS: pump auto-start and purification-flow update.
 	//
@@ -1729,7 +1730,7 @@ func MakePlant() Plant {
 	//     separate branch headers that can be isolated from
 	//     the main headers under accident conditions."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:23-26
-	p.ReactorBuilding.ServiceWaterSystem = ServiceWaterSystem{
+	p.Outside.ServiceWaterSystem = ServiceWaterSystem{
 		PumpRunning:           true,
 		Flow:                 ServiceWaterDesignFlow,
 		InletTemp:            ServiceWaterInletTemp,

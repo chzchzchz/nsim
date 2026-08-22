@@ -118,20 +118,9 @@ type ReactorBuilding struct {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_107.txt:43-51
 	ContainmentBuilding ContainmentBuilding
 
-	// ServiceWaterSystem models the SWS — the ultimate heat
-	// sink for the plant. All safety-grade coolers (CCWS HX,
-	// RCFC coils, diesel coolers) depend on it.
-	//
-	// Spec justification:
-	//   - "The Service Water System supplies all the cooling
-	//     water for the plant, including that required for
-	//     emergency shutdown. Consequently, high reliability
-	//     and redundancy is required."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:16-19
-	//   - "The three essential service water pumps for each unit
-	//     are typically rated at approximately 20,000 gpm."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:46-48
-	ServiceWaterSystem ServiceWaterSystem
+	// ServiceWaterSystem lives on Outside — see core/outside.go.
+	// The pumps are in a separate intake house per
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:48-50.
 
 	// RefuelingOperations models the refueling operation cycle
 	// — the five-phase state machine that tracks cavity

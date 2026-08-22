@@ -87,6 +87,19 @@ func (h *plantHandle) setControl(id, value string) error {
 	return c.Set(value)
 }
 
+// getControlValue returns the current Get() result for the
+// control, or an Error if the id is unknown. The TS side uses
+// this to seed the initial UI state (checkbox checked/unchecked,
+// number input value, dropdown selected option).
+func (h *plantHandle) getControlValue(id string) (string, error) {
+	cm := h.p.GetControlMap()
+	c, ok := cm[id]
+	if !ok {
+		return "", fmt.Errorf("unknown control %q", id)
+	}
+	return c.Get(), nil
+}
+
 // sensorJSON returns the sensor value as a JSON-quoted string.
 // The TypeScript side parses it with JSON.parse.
 func (h *plantHandle) sensorJSON(id string) (string, error) {
@@ -123,29 +136,36 @@ func jsStringSlice(s []string) js.Value {
 	return arr
 }
 
-// jsMeta returns {part, label, kind} for the given bridge entry,
-// or an Error if the id is unknown. The TypeScript UI uses this
-// to label, group, and unit-tag controls and sensors instead of
-// reverse-engineering the id string. The two closures extract
-// Part/Label/Kind from the bridge.Control and bridge.Sensor
-// structs, which differ in map type but share these fields.
+// jsMeta returns {part, label, kind, enum?} for the given
+// bridge entry, or an Error if the id is unknown. The
+// TypeScript UI uses this to label, group, and unit-tag
+// controls and sensors instead of reverse-engineering the id
+// string. The two closures extract Part/Label/Kind from the
+// bridge.Control and bridge.Sensor structs, which differ in
+// map type but share these fields. Enum is only set for
+// controls that populate the optional bridge.Control.Enum
+// slice; nil slices are skipped so the TS side can use a
+// presence test.
 func jsMeta(
 	id string,
 	getControl func(string) (*bridge.Control, bool),
 	getSensor func(string) (*bridge.Sensor, bool),
 ) js.Value {
-	meta := func(part, label, kind string) js.Value {
+	meta := func(part, label, kind string, enumVals []string) js.Value {
 		obj := js.Global().Get("Object").New()
 		obj.Set("part", part)
 		obj.Set("label", label)
 		obj.Set("kind", kind)
+		if len(enumVals) > 0 {
+			obj.Set("enum", jsStringSlice(enumVals))
+		}
 		return obj
 	}
 	if c, ok := getControl(id); ok {
-		return meta(c.Part, c.Label, c.Kind)
+		return meta(c.Part, c.Label, c.Kind, c.Enum)
 	}
 	if s, ok := getSensor(id); ok {
-		return meta(s.Part, s.Label, s.Kind)
+		return meta(s.Part, s.Label, s.Kind, nil)
 	}
 	return js.Global().Get("Error").New(fmt.Sprintf("unknown id %q", id))
 }
@@ -173,6 +193,13 @@ func jsHandle(h *plantHandle) js.Value {
 			return js.Global().Get("Error").New(err.Error())
 		}
 		return nil
+	}))
+	obj.Set("getControlValue", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		v, err := h.getControlValue(args[0].String())
+		if err != nil {
+			return js.Global().Get("Error").New(err.Error())
+		}
+		return v
 	}))
 	obj.Set("sensorJSON", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		v, err := h.sensorJSON(args[0].String())

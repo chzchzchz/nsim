@@ -83,15 +83,6 @@ type AuxiliaryBuilding struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:45-49
 	Transformer
 
-	// ServiceWaterPump models the SW pump that supplies
-	// cooling water to the CCWS heat exchangers and diesel
-	// coolers.
-	// "The Service Water System supplies all the cooling
-	// water for the plant, including that required for
-	// emergency shutdown."
-	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:16-19
-	ServiceWaterPump Pump
-
 	// SpentFuelPoolCoolingSystem models the SFP cooling.
 	// The spent fuel pool is in a separate compartment on
 	// the common base mat adjacent to the auxiliary
@@ -109,13 +100,16 @@ type AuxiliaryBuilding struct {
 // heat-exchanger inlet) are wired by Plant.Step before and after this
 // call. EFWSFeedwaterFlow (the per-step flow to the steam generators)
 // stays on ReactorBuilding because the SG consumes it inside the
-// containment.
-func (a *AuxiliaryBuilding) Step() AuxiliaryBuilding {
+// containment. swRunning is the previous-step Service Water pump state
+// from Outside.ServiceWaterSystem.PumpRunning, fed in
+// explicitly by Plant.Step so this step does not have to reach into
+// another building.
+func (a *AuxiliaryBuilding) Step(swRunning bool) AuxiliaryBuilding {
 	ret := *a
 	ret.ComponentCoolingWaterSystem =
 		ret.ComponentCoolingWaterSystem.Step()
 	ret.SpentFuelPoolCoolingSystem =
 		ret.SpentFuelPoolCoolingSystem.Step()
-	ret.DieselGenerator = ret.DieselGenerator.Step(ret.ServiceWaterPump.Running)
+	ret.DieselGenerator = ret.DieselGenerator.Step(swRunning)
 	return ret
 }

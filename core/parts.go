@@ -1134,7 +1134,7 @@ type DieselGenerator struct {
 	// 0..1. Set by the operator between steps.
 	RunningFraction float32
 
-	// Cooling state — driven by ServiceWaterPump.Running
+	// Cooling state — driven by Outside.ServiceWaterSystem.PumpRunning
 	// (specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89).
 	CoolantTemp Temperature
 
