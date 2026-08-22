@@ -529,6 +529,23 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 	// The control body is an AlarmID string; the operator
 	// (or HMI auto-loop) pushes one ID at a time. There is
 	// no read-back value — Get returns empty.
+	// AcknowledgeAll is a convenience control that acknowledges
+	// every active alarm at once. The control body is unused;
+	// Set ignores the value and calls AcknowledgeAll() directly.
+	// "Turned off by operator acknowledgement."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:66-67
+	m["Alarms/AcknowledgeAll"] = &bridge.Control{
+		Part:  "Plant",
+		Label: "AcknowledgeAll",
+		Kind:  "enum",
+		Enum:  []string{"Acknowledge"},
+		Get:   func() string { return "0" },
+		Set: func(_ string) error {
+			p.ReactorBuilding.PlantControlRoom.AcknowledgeAll()
+			return nil
+		},
+	}
+
 	m["Alarms/Reset"] = &bridge.Control{
 		Part:  "Plant",
 		Label: "ResetAlarm",
@@ -795,6 +812,50 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
 				p.AuxiliaryBuilding.ContainmentSpraySystem.SprayHeaderOpen)
+		},
+	}
+
+	// Alarms aggregate the current active alarm conditions
+	// across all plant subsystems. Kind "alarm" signals the
+	// TypeScript HMI to render structured alarm rows instead
+	// of a scalar sensor readout.
+	m["Plant/Alarms"] = &bridge.Sensor{
+		Part:  "Plant",
+		Label: "Alarms",
+		Kind:  "alarm",
+		Get: func() (string, error) {
+			list := p.Alarms()
+			type alarmJSON struct {
+				ID           string  `json:"id"`
+				Description  string  `json:"description"`
+				Severity    string  `json:"severity"`
+				Active      bool    `json:"active"`
+				Acknowledged bool   `json:"acknowledged"`
+				TimeS       float64 `json:"time_s"`
+			}
+			out := make([]alarmJSON, len(list))
+			for i, a := range list {
+				sev := "info"
+				switch a.Severity {
+				case SeverityWarning:
+					sev = "warning"
+				case SeverityTrip:
+					sev = "trip"
+				}
+				out[i] = alarmJSON{
+					ID:           string(a.ID),
+					Description:  a.Description,
+					Severity:    sev,
+					Active:      a.Active,
+					Acknowledged: a.Acknowledged,
+					TimeS:       a.Timestamp.Seconds(),
+				}
+			}
+			b, err := json.Marshal(out)
+			if err != nil {
+				return "", err
+			}
+			return string(b), nil
 		},
 	}
 

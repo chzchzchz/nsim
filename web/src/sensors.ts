@@ -6,6 +6,7 @@
 import type { Entry, PartBinding, PartDisplay } from "./bindings";
 import type { PlantHandle } from "./plant";
 import { formatSensorValue, unitFor } from "./units";
+import { isAlarmKind } from "./alarms";
 
 export interface SensorRow {
     id: string;
@@ -27,7 +28,10 @@ export function renderReadout(
 
     const rows: SensorRow[] = [];
     for (const part of sensorParts) {
-        host.appendChild(renderPartTable(part, rows, display));
+        // alarm-kind sensors are rendered in the dedicated alarm
+        // panel; skip them here so no raw JSON leaks into the table.
+        const scalar = part.sensors.filter((e) => !isAlarmKind(e.meta.kind));
+        rows.push(...renderPartTable(part, rows, scalar, display));
     }
     return rows;
 }
@@ -35,6 +39,7 @@ export function renderReadout(
 function renderPartTable(
     part: PartBinding,
     rows: SensorRow[],
+    sensors: Entry[],
     display: PartDisplay,
 ): HTMLElement {
     const wrap = document.createElement("div");
@@ -53,7 +58,7 @@ function renderPartTable(
     table.appendChild(tbody);
     wrap.appendChild(table);
 
-    for (const e of part.sensors) {
+    for (const e of sensors) {
         tbody.appendChild(renderSensorRow(e, rows));
     }
     return wrap;

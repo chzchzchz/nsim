@@ -5,6 +5,7 @@ import { newPlant } from "./plant";
 import { mountPlant } from "./svg";
 import { renderPanel } from "./controls";
 import { renderReadout, refreshSensors, type SensorRow } from "./sensors";
+import { renderAlarms, type AlarmEntry, isAlarmKind } from "./alarms";
 import { buildBindings, displayPart, groupByPrefix, type PartBinding } from "./bindings";
 import { Sim } from "./sim";
 
@@ -23,6 +24,7 @@ async function main(): Promise<void> {
 
     const pidEl = document.getElementById("pid") as HTMLElement;
     const tilesEl = document.getElementById("tiles") as HTMLElement;
+    const alarmsEl = document.getElementById("alarms") as HTMLElement;
     const startBtn = document.getElementById("btn-start") as HTMLButtonElement;
     const stepBtn = document.getElementById("btn-step") as HTMLButtonElement;
     const resetBtn = document.getElementById("btn-reset") as HTMLButtonElement;
@@ -50,6 +52,26 @@ async function main(): Promise<void> {
     };
     rebuildTiles();
 
+    // Alarm panel: fetches the "alarm"-kind sensor and renders
+    // structured rows; double-click a row to acknowledge it.
+    let alarmPanel: HTMLElement | null = null;
+    function initAlarms(): void {
+        alarmsEl.innerHTML = "";
+        const raw = sim.plant.sensorJSON("Plant/Alarms");
+        const initial: AlarmEntry[] =
+            typeof raw === "string"
+                ? (JSON.parse(raw) as AlarmEntry[])
+                : [];
+        alarmPanel = renderAlarms(alarmsEl, sim.plant, initial);
+    }
+    initAlarms();
+
+    window.addEventListener("ack-alarm", (ev: Event) => {
+        const a = (ev as CustomEvent<AlarmEntry>).detail;
+        const err = sim.plant.setControl("Alarms/Reset", a.id);
+        if (err) console.error("ack failed:", err);
+    });
+
     sim.attachUI({
         startBtn,
         stepBtn,
@@ -64,6 +86,7 @@ async function main(): Promise<void> {
             }
             mountPlant(pidEl, svg);
             rebuildTiles();
+            initAlarms();
         },
     });
 
@@ -73,6 +96,11 @@ async function main(): Promise<void> {
             sim.plant.step(sim.ticksPerFrame);
         }
         refreshSensors(sensorRows, sim.plant);
+        // Refresh alarm panel from the structured sensor JSON.
+        const alarmJson = sim.plant.sensorJSON("Plant/Alarms");
+        if (typeof alarmJson === "string" && alarmPanel?.refresh) {
+            alarmPanel.refresh(alarmJson);
+        }
         if (performance.now() - lastSvg > 1000) {
             const svg = sim.plant.getSvg();
             if (typeof svg === "string") {
