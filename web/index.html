@@ -55,9 +55,11 @@
             border: 1px solid #ccc;
             border-radius: 4px;
             overflow: auto;
-            max-height: calc(100vh - 100px);
+            display: flex;
+            justify-content: center;
+            max-height: 50vh;
         }
-        #pid svg { max-width: 100%; height: auto; display: block; }
+        #pid svg { max-height: 50vh; max-width: 100%; width: auto; height: auto; display: block; }
         #tiles {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));

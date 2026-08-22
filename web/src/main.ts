@@ -69,13 +69,31 @@ async function main(): Promise<void> {
 
     copyBtn.title = "Copy plant state JSON to clipboard";
     copyBtn.addEventListener("click", async () => {
+        const json = sim.plant.toJSON();
         try {
-            const json = sim.plant.toJSON();
             await navigator.clipboard.writeText(json);
-            copyBtn.textContent = "📋 Copied!";
-            setTimeout(() => { copyBtn.textContent = "📋"; }, 1000);
-        } catch (err) {
-            console.error("copy failed:", err);
+            copyBtn.textContent = "✓";
+            setTimeout(() => { copyBtn.textContent = "📋"; }, 1500);
+        } catch {
+            const ta = document.createElement("textarea");
+            ta.value = json;
+            ta.style.position = "fixed";
+            ta.style.left = "-9999px";
+            ta.style.opacity = "0";
+            ta.readOnly = false;
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            const ok = document.execCommand("copy");
+            document.body.removeChild(ta);
+            if (ok) {
+                copyBtn.textContent = "✓";
+                setTimeout(() => { copyBtn.textContent = "📋"; }, 1500);
+            } else {
+                copyBtn.textContent = "!";
+                setTimeout(() => { copyBtn.textContent = "📋"; }, 2000);
+                console.error("copy returned false");
+            }
         }
     });
 
