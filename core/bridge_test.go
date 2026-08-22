@@ -84,7 +84,7 @@ func TestBridge_ReliefAndIsolationValveSensors(t *testing.T) {
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingFlow",
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownFlow",
 		"ReactorBuilding/ReactorMakeupControlValve/Flow",
-		"ReactorBuilding/ReactorPressureVessel/ControlRods/Position",
+		"ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion",
 	} {
 		s, ok := m[id]
 		require.Truef(t, ok, "want sensor %q registered", id)

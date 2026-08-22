@@ -758,20 +758,20 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 		},
 	}
 
-	// Control rod position (chapter 7):
+	// Control rod insertion (chapter 7):
 	// "The control rods are then manually withdrawn to achieve criticality"
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:155-156
 	// The Set path writes the operator's demand to
-	// DemandPosition; ReactorBuilding.Step rate-limits the
-	// actual transition from Position toward DemandPosition
+	// DemandInsertion; ReactorBuilding.Step rate-limits the
+	// actual transition from Insertion toward DemandInsertion
 	// at RodInsertionSpeed (plans/x/fission_controls.md).
-	m["ReactorBuilding/ReactorPressureVessel/ControlRods/Position"] = &bridge.Control{
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion"] = &bridge.Control{
 		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
-		Label: "Position",
+		Label: "Insertion",
 		Kind:  "normalized",
 		Get: func() string {
 			return fmt.Sprintf("%v",
-				p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position)
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion)
 		},
 		Set: func(s string) error {
 			validated, err := bridge.ConvertControlValue("normalized", s)
@@ -782,7 +782,7 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 			if err != nil {
 				return err
 			}
-			p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandPosition = v
+			p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = v
 			return nil
 		},
 	}
@@ -1420,22 +1420,22 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		},
 	}
 
-	// Control-rod actual position (chapter 2 RCC operation):
+	// Control-rod actual insertion (chapter 2 RCC operation):
 	// "Rod cluster control (RCC) assemblies are used for reactor
 	// startup or shutdown, to follow load changes, and to
 	// control small transient changes in reactivity."
 	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_035.txt:90-93
-	// Position=1 means fully withdrawn (normal operation);
-	// Position=0 means fully inserted.
+	// Insertion=0 means fully withdrawn (normal operation);
+	// Insertion=1 means fully inserted.
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:43
 	// "rod position [...] provides operational reactivity control"
-	m["ReactorBuilding/ReactorPressureVessel/ControlRods/Position"] = &bridge.Sensor{
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion"] = &bridge.Sensor{
 		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
-		Label: "Position",
+		Label: "Insertion",
 		Kind:  "normalized",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("normalized",
-				p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position)
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion)
 		},
 	}
 

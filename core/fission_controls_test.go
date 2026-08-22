@@ -11,75 +11,97 @@ import (
 // plans/x/fission_controls.md acceptance tests.
 //
 // The rod-drive rate limit and operator-facing bindings
-// (Position clamp, BoronSetpoint, RPV/SG/RCP sensors) are
+// (Insertion clamp, BoronSetpoint, RPV/SG/RCP sensors) are
 // exposed through the bridge. These tests verify each entry
 // exists, the rate limit fires, and the thermal model sees
 // the resulting reactivity change.
 
 // At a single 1 ms timestep the rod can move by no more than
 // RodInsertionSpeed * TimeStep = 5e-5 fraction. A demand jump
-// from 1.0 to 0.0 is therefore rate-limited to that exact
-// amount per call, not the full 1.0. Step moves Position
-// toward DemandPosition.
+// from 0.0 to 1.0 (withdrawn to fully inserted) is therefore
+// rate-limited to that exact amount per call, not the full
+// 1.0. Step moves Insertion toward DemandInsertion.
 func TestControlRods_StepRateLimits(t *testing.T) {
-	c := ControlRods{Position: 1, DemandPosition: 0}
+	c := ControlRods{Insertion: 0, DemandInsertion: 1}
 	out := c.Step()
 	want := RodInsertionSpeed * TimeStep.Seconds()
-	assert.InDelta(t, want, 1-out.Position, 1e-12,
-		"want 1-Position = %v after one Step from full-withdrawal, got %v",
-		want, 1-out.Position)
+	assert.InDelta(t, want, out.Insertion, 1e-12,
+		"want Insertion = %v after one Step from full-withdrawal, got %v",
+		want, out.Insertion)
 
-	// 20 s of stepping should drive 1.0 → 0.0; the rate limit
+	// 20 s of stepping should drive 0.0 → 1.0; the rate limit
 	// is 5% of travel per second, so 20 s covers the full
 	// travel with margin.
-	c2 := ControlRods{Position: 1, DemandPosition: 0}
+	c2 := ControlRods{Insertion: 0, DemandInsertion: 1}
 	for i := 0; i < int(20*time.Second/TimeStep); i++ {
 		c2 = c2.Step()
 	}
-	assert.InDelta(t, 0, c2.Position, 1e-9,
-		"want Position=0 after 20 s of stepping, got %v", c2.Position)
+	assert.InDelta(t, 1, c2.Insertion, 1e-9,
+		"want Insertion=1 after 20 s of stepping, got %v", c2.Insertion)
 }
 
 // Step clamps the result to [0,1] so a malicious or
-// out-of-range demand cannot drive Position outside the
+// out-of-range demand cannot drive Insertion outside the
 // physical rod travel.
 func TestControlRods_StepClamps(t *testing.T) {
-	high := ControlRods{Position: 0.5, DemandPosition: 2.0}
+	high := ControlRods{Insertion: 0.5, DemandInsertion: 2.0}
 	for i := 0; i < int(60*time.Second/TimeStep); i++ {
 		high = high.Step()
 	}
-	assert.LessOrEqual(t, high.Position, 1.0,
-		"want Position <= 1, got %v", high.Position)
+	assert.LessOrEqual(t, high.Insertion, 1.0,
+		"want Insertion <= 1, got %v", high.Insertion)
 
-	low := ControlRods{Position: 0.5, DemandPosition: -1.0}
+	low := ControlRods{Insertion: 0.5, DemandInsertion: -1.0}
 	for i := 0; i < int(60*time.Second/TimeStep); i++ {
 		low = low.Step()
 	}
-	assert.GreaterOrEqual(t, low.Position, 0.0,
-		"want Position >= 0, got %v", low.Position)
+	assert.GreaterOrEqual(t, low.Insertion, 0.0,
+		"want Insertion >= 0, got %v", low.Insertion)
 }
 
-// The bridge Position control rejects values outside [0,1] so
+// The bridge Insertion control rejects values outside [0,1] so
 // the rate-limit machinery is never bypassed by an out-of-range
-// demand. Get returns the actual Position (after rate-limit),
-// so a successful Set only takes effect after enough Plant
-// steps have advanced the rod drive.
-func TestBridge_RodPositionControlClamps(t *testing.T) {
+// demand. Get returns the actual Insertion, so the rate-limit
+// applied by ControlRods.Step drives the visible value over
+// multiple Plant steps. The per-step rate-limit machinery is
+// covered exhaustively by TestControlRods_StepRateLimits; here
+// we verify the bridge path: Set writes DemandInsertion, and
+// ControlRods.Step moves Insertion toward it.
+//
+// The full Plant.Step is avoided here because the cold-plant
+// initial state would trip the RPS on rising SG level
+// (cold-leg trickle flow from the RPV), and the trip clamp
+// (plans/x/trip.md) would then coerce Insertion to 1.0 and
+// mask the rate-limit. We drive ControlRods.Step directly to
+// observe the bridge integration without that interaction.
+func TestBridge_RodInsertionControlClamps(t *testing.T) {
 	p := MakePlant()
-	c := GetControlMap(&p)["ReactorBuilding/ReactorPressureVessel/ControlRods/Position"]
-	require.NotNil(t, c, "want rod position control registered")
+	rods := &p.ReactorBuilding.ReactorPressureVessel.ControlRods
+	rods.Insertion = 0.5
+	c := GetControlMap(&p)["ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion"]
+	require.NotNil(t, c, "want rod insertion control registered")
 	require.Error(t, c.Set("-0.1"),
 		"want Set(-0.1) to error, got nil")
 	require.Error(t, c.Set("1.2"),
 		"want Set(1.2) to error, got nil")
-	require.NoError(t, c.Set("1"))
-	stepN(&p, int(30*time.Second/TimeStep))
-	assert.Equal(t, "1", c.Get(),
-		"want Position=1 after Set(1) and 30 s of stepping, got %q", c.Get())
-	require.NoError(t, c.Set("0"))
-	stepN(&p, int(30*time.Second/TimeStep))
-	assert.Equal(t, "0", c.Get(),
-		"want Position=0 after Set(0) and 30 s of stepping, got %q", c.Get())
+
+	// Test rate-limit toward intermediate withdrawal.
+	require.NoError(t, c.Set("0.1"))
+	for i := 0; i < int(20*time.Second/TimeStep); i++ {
+		*rods = rods.Step()
+	}
+	assert.InDelta(t, 0.1, rods.Insertion, 0.01,
+		"want Insertion≈0.1 after Set(0.1) and 20 s of ControlRods.Step, got %v",
+		rods.Insertion)
+
+	// Test rate-limit toward intermediate insertion.
+	require.NoError(t, c.Set("0.9"))
+	for i := 0; i < int(20*time.Second/TimeStep); i++ {
+		*rods = rods.Step()
+	}
+	assert.InDelta(t, 0.9, rods.Insertion, 0.01,
+		"want Insertion≈0.9 after Set(0.9) and 20 s of ControlRods.Step, got %v",
+		rods.Insertion)
 }
 
 // BoronSetpoint writes through to CVCS so the next step's
@@ -125,30 +147,37 @@ func TestBridge_SensorsReflectState(t *testing.T) {
 // core/svg/svg_test.go (TestSVG_RPVTempOverlay) so it can
 // access the package-private constants.
 
-// Withdrawing the rods raises outlet temperature: at higher
-// rod-bank position the rodReactivity term becomes less
-// negative, the power correction rises, and the outlet relaxes
-// to a higher target. The test runs two plants at different
-// starting rod positions and compares after 5 s of simulated
-// time. DemandPosition is set equal to Position so the rod
-// drive does not move during the test.
+// Withdrawing the rods raises outlet temperature: at lower
+// rod insertion the rodReactivity term becomes less negative,
+// the power correction rises, and the outlet relaxes to a
+// higher target. The test runs two plants at different starting
+// rod insertions and compares after 5 s of simulated time.
+// DemandInsertion is set equal to Insertion so the rod drive
+// does not move during the test. Both plants are seeded at
+// CoreRatedThermalPower so the rod reactivity term modulates
+// power from step 1; otherwise a cold plant (power=0) would
+// have no power for the rod term to affect.
 func TestThermal_RodWithdrawalRaisesOutlet(t *testing.T) {
 	const steps = int(5 * time.Second / TimeStep)
 
+	// Insertion 0.7 = rods 30% withdrawn (mostly inserted).
 	low := MakePlant()
-	low.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 0.3
-	low.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandPosition = 0.3
+	low.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0.7
+	low.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0.7
+	low.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
 	stepN(&low, steps)
 
+	// Insertion 0.2 = rods 80% withdrawn (mostly out).
 	high := MakePlant()
-	high.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 0.8
-	high.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandPosition = 0.8
+	high.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0.2
+	high.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0.2
+	high.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
 	stepN(&high, steps)
 
 	lowOut := low.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 	highOut := high.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 	assert.Less(t, lowOut, highOut,
-		"want outlet at rods=0.3 (%v) < outlet at rods=0.8 (%v)",
+		"want outlet at Insertion=0.7 (%v) < outlet at Insertion=0.2 (%v)",
 		lowOut, highOut)
 }
 

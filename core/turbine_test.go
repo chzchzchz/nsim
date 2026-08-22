@@ -315,7 +315,7 @@ func TestPowerGenerator_DefaultsMatchSpec(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
 func TestPowerGenerator_ReactivePowerMatchesPowerFactor(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
 	p.TurbineBuilding.Generator.BreakerClosed = true
 	p.TurbineBuilding.Turbine.Setpoint = 1.0

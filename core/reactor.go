@@ -58,6 +58,17 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {
 	ret := *r
 	dt := TimeStep
 
+	// 0) Trip forces full rod insertion per the scram definition:
+	// "reactor trip — When control rods are rapidly inserted into
+	// the core to quickly take the reactor to a subcritical state."
+	// specs/the_westinghouse_pressurized_water_react/glossary.md:142
+	// While Trip is asserted, Insertion coerces to 1.0 (a gravity
+	// scram, bypassing the operator's slow rate-limited drive)
+	// regardless of DemandInsertion.
+	if ret.Trip {
+		ret.ControlRods.Insertion = 1.0
+	}
+
 	// 1) Time-since-trip accumulation.
 	if ret.Trip {
 		ret.TimeSinceTrip += dt
@@ -124,7 +135,20 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {
 	// at low power (BOL), and [...] the boron concentration
 	// changes significantly with fuel depletion."
 	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
-	rodReactivity := (1 - float32(ret.ControlRods.Position)) * CoreRodWorthABCD
+	// Rod insertion adds negative reactivity proportional to the
+	// inserted fraction (Insertion=1 on a trip yields the full
+	// shutdown worth). Conversely withdrawing (Insertion→0) removes
+	// that negative margin so the core approaches criticality and
+	// output can rise; see plans/x/trip.md.
+	//
+	// Spec: "reactor trip — When control rods are rapidly inserted
+	// into the core to quickly take the reactor to a subcritical
+	// state."
+	// specs/the_westinghouse_pressurized_water_react/glossary.md:142
+	//   - "Withdraw rods to criticality and raise output to power
+	//     range level."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_223.txt:172
+	rodReactivity := float32(ret.ControlRods.Insertion) * CoreRodWorthABCD
 	dopplerDeltaF := outletF - float64(CoreDopplerReferenceTempF)
 	dopplerPcm := float32(dopplerDeltaF * CoreDopplerPcmPerDegF)
 	boronDelta := (ret.ControlRods.BoronConcentration - CVCSInitialBoron) / 100.0

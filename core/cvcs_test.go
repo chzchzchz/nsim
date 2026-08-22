@@ -174,7 +174,7 @@ func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
 func TestCVCS_BorationIncreasesBoronAtExpectedRate(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
 	stepN(&p, int(1*time.Second/TimeStep))
 	boronBefore := p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration
@@ -203,7 +203,7 @@ func TestCVCS_BorationIncreasesBoronAtExpectedRate(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:26-30
 func TestCVCS_DilutionDecreasesBoronAtExpectedRate(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
 	stepN(&p, int(1*time.Second/TimeStep))
 	boronBefore := p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration
@@ -234,7 +234,7 @@ func TestCVCS_DilutionDecreasesBoronAtExpectedRate(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:17
 func TestCVCS_MakeupValveRaisesVCTLevel(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
 	// Stop the charging pump and letdown valve so the VCT is
 	// not being depleted by charging-pump suction; then

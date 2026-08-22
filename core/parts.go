@@ -617,8 +617,8 @@ var ReactorMakeupDesignFlow Volume = u.NewValue(60, u.Gallon)
 type FuelRods struct{ Part }
 
 // ControlRods models the rod cluster control (RCC) assemblies.
-// Position=1 means fully withdrawn (normal operation);
-// Position=0 means fully inserted (reactor tripped).
+// Insertion=0 means fully withdrawn (normal operation);
+// Insertion=1 means fully inserted (reactor tripped).
 //
 // Spec justification:
 //   - "Rod cluster control (RCC) assemblies are used for reactor
@@ -630,20 +630,27 @@ type FuelRods struct{ Part }
 //     the reactor down at all times, even with the most reactive RCC
 //     stuck out of the core."
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_035.txt:108-114
+//   - "reactor trip — When control rods are rapidly inserted into the
+//     core to quickly take the reactor to a subcritical state."
+//     specs/the_westinghouse_pressurized_water_react/glossary.md:142
 //   - Glossary "rod worth — The reactivity change per unit change in
 //     control rod position."
 //     specs/the_westinghouse_pressurized_water_react/back_matter/page_244.txt:46-47
 type ControlRods struct {
 	Part
-	Position float64 // 0..1 fraction of withdrawal (actual)
+	Insertion float64 // 0..1 fraction of rod insertion (actual)
 
-	// DemandPosition is the operator's requested position,
+	// DemandInsertion is the operator's requested rod insertion,
 	// written by the bridge Control.Set. Step rate-limits
-	// Position toward DemandPosition. This split mirrors the
+	// Insertion toward DemandInsertion. This split mirrors the
 	// plan's intent that the operator's demand be visible
 	// while the actual rod position catches up at the
 	// mechanical drive speed.
-	DemandPosition float64
+	//
+	// "Withdraw rods to criticality and raise output to power
+	// range level."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_223.txt:172
+	DemandInsertion float64
 
 	// BoronConcentration is the RCS boron concentration in
 	// ppm. Plant.Step propagates CVCS.BoronConcentration here
@@ -661,35 +668,37 @@ type ControlRods struct {
 	BoronConcentration float64
 }
 
-// Step advances Position toward DemandPosition at the rate
+// Step advances Insertion toward DemandInsertion at the rate
 // limit (RodInsertionSpeed). The bridge Set path writes the
-// operator's request into DemandPosition; this step rate-limits
+// operator's request into DemandInsertion; this step rate-limits
 // the actual transition so the thermal model sees incremental
 // reactivity changes rather than an instantaneous scram. Without
 // the limit the operator could drop all rods in one tick,
-// which defeats the transient response.
+// which defeats the transient response. A reactor trip bypasses
+// this rate limit: the trip clamp in ReactorPressureVessel.Step
+// forces Insertion=1.0 directly (see plans/x/trip.md).
 //
-// The previous-step Position is read from the receiver (c.Position)
+// The previous-step Insertion is read from the receiver (c.Insertion)
 // and the rate-limited target written into the returned copy.
 // The clamp at [0,1] mirrors the normalised-kind validation in
 // the bridge Set path.
 func (c ControlRods) Step() ControlRods {
 	ret := c
-	demand := ret.DemandPosition
+	demand := ret.DemandInsertion
 	if demand < 0 {
 		demand = 0
 	}
 	if demand > 1 {
 		demand = 1
 	}
-	delta := demand - c.Position
+	delta := demand - c.Insertion
 	maxStep := RodInsertionSpeed * TimeStep.Seconds()
 	if delta > maxStep {
-		ret.Position = c.Position + maxStep
+		ret.Insertion = c.Insertion + maxStep
 	} else if delta < -maxStep {
-		ret.Position = c.Position - maxStep
+		ret.Insertion = c.Insertion - maxStep
 	} else {
-		ret.Position = demand
+		ret.Insertion = demand
 	}
 	return ret
 }

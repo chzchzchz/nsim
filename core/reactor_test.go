@@ -13,7 +13,7 @@ import (
 // to the Doppler correction; we assert it stays in a sane band).
 func TestReactor_RunningProducesRatedPower(t *testing.T) {
 	r := ReactorPressureVessel{
-		ControlRods:  ControlRods{Position: 1, DemandPosition: 1},
+		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0},
 		ThermalPower: CoreRatedThermalPower,
 		Inlet:        u.NewValue(CoreReferenceInletF, u.Fahrenheit),
 		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
@@ -32,7 +32,7 @@ func TestReactor_RunningProducesRatedPower(t *testing.T) {
 // near the shutdown fraction of rated.
 func TestReactor_TripDropsPowerToDecayHeat(t *testing.T) {
 	r := ReactorPressureVessel{
-		ControlRods:  ControlRods{Position: 1, DemandPosition: 1},
+		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0},
 		ThermalPower: CoreRatedThermalPower,
 		Inlet:        u.NewValue(CoreReferenceInletF, u.Fahrenheit),
 		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
@@ -56,13 +56,13 @@ func TestReactor_TripDropsPowerToDecayHeat(t *testing.T) {
 // Reactivity negative relative to the baseline.
 func TestReactor_DopplerShiftsReactivityNegative(t *testing.T) {
 	ref := ReactorPressureVessel{
-		ControlRods:  ControlRods{Position: 1, DemandPosition: 1},
+		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0},
 		Outlet:       u.NewValue(float64(CoreDopplerReferenceTempF), u.Fahrenheit),
 		ThermalPower: CoreRatedThermalPower,
 	}
 	ref = ref.Step(RCPRatedSpeed)
 	hot := ReactorPressureVessel{
-		ControlRods:  ControlRods{Position: 1, DemandPosition: 1},
+		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0},
 		Outlet:       u.NewValue(float64(CoreDopplerReferenceTempF)+30, u.Fahrenheit),
 		ThermalPower: CoreRatedThermalPower,
 	}
@@ -77,7 +77,7 @@ func TestReactor_DopplerShiftsReactivityNegative(t *testing.T) {
 // well within an hour of simulated time.
 func TestReactor_TripWithRodsOutKeepsDecayHeatFloor(t *testing.T) {
 	r := ReactorPressureVessel{
-		ControlRods:  ControlRods{Position: 1, DemandPosition: 1},
+		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0},
 		Trip:         true,
 		Inlet:        u.NewValue(CoreReferenceInletF, u.Fahrenheit),
 		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
@@ -101,7 +101,7 @@ func TestReactor_TripWithRodsOutKeepsDecayHeatFloor(t *testing.T) {
 // Allow a tiny tolerance for the single-step transient.
 func TestReactor_OutletAtReferenceGivesZeroDoppler(t *testing.T) {
 	r := ReactorPressureVessel{
-		ControlRods:  ControlRods{Position: 1, DemandPosition: 1},
+		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0},
 		Outlet:       u.NewValue(float64(CoreDopplerReferenceTempF), u.Fahrenheit),
 		ThermalPower: 0,
 	}
@@ -116,7 +116,7 @@ func TestReactor_OutletAtReferenceGivesZeroDoppler(t *testing.T) {
 // CoreReferenceOutletF on the PrimaryThermalTimeConstant.
 func TestReactor_OutletTracksThermalPower(t *testing.T) {
 	r := ReactorPressureVessel{
-		ControlRods:  ControlRods{Position: 1, DemandPosition: 1},
+		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0},
 		ThermalPower: CoreRatedThermalPower,
 		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
 		Inlet:        u.NewValue(CoreReferenceInletF, u.Fahrenheit),
@@ -137,7 +137,7 @@ func TestReactor_OutletTracksThermalPower(t *testing.T) {
 // power — within a few hundred steps it should drop appreciably.
 func TestReactor_OutletDropsAfterTrip(t *testing.T) {
 	r := ReactorPressureVessel{
-		ControlRods:  ControlRods{Position: 1, DemandPosition: 1},
+		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0},
 		ThermalPower: CoreRatedThermalPower,
 		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
 		Inlet:        u.NewValue(CoreReferenceInletF, u.Fahrenheit),
@@ -148,7 +148,7 @@ func TestReactor_OutletDropsAfterTrip(t *testing.T) {
 	}
 	start := r.Outlet.Float()
 	r.Trip = true
-	r.ControlRods.Position = 0
+	r.ControlRods.Insertion = 1
 	for i := 0; i < int(time.Minute/TimeStep); i++ {
 		r = r.Step(RCPRatedSpeed)
 	}
@@ -160,7 +160,7 @@ func TestReactor_OutletDropsAfterTrip(t *testing.T) {
 // (pump off = no cold-leg turnover).
 func TestReactor_InletFrozenWhenRCPOff(t *testing.T) {
 	r := ReactorPressureVessel{
-		ControlRods:  ControlRods{Position: 1, DemandPosition: 1},
+		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0},
 		ThermalPower: CoreRatedThermalPower,
 		Inlet:        u.NewValue(420, u.Fahrenheit),
 		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
@@ -178,7 +178,7 @@ func TestReactor_InletFrozenWhenRCPOff(t *testing.T) {
 // where rcpRunning bool was the gate rather than the actual speed.
 func TestReactor_InletFrozenWhenRCPSpeedZero(t *testing.T) {
 	r := ReactorPressureVessel{
-		ControlRods:  ControlRods{Position: 1, DemandPosition: 1},
+		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0},
 		ThermalPower: CoreRatedThermalPower,
 		Inlet:        u.NewValue(420, u.Fahrenheit),
 		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),

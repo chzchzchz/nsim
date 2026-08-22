@@ -86,10 +86,12 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 
 	// Control-rod drive rate limit (plans/x/fission_controls.md).
 	// The bridge writes the operator's demand directly into
-	// ControlRods.Position; this step rate-limits the
+	// ControlRods.DemandInsertion; this step rate-limits the
 	// transition toward that demand so the thermal model sees
 	// incremental reactivity changes rather than an
-	// instantaneous scram.
+	// instantaneous scram. A latched trip supersedes both and
+	// forces full insertion inside ReactorPressureVessel.Step
+	// (plans/x/trip.md).
 	//   "Rod cluster control (RCC) assemblies are used for
 	//   reactor startup or shutdown, to follow load changes,
 	//   and to control small transient changes in reactivity."
@@ -2038,6 +2040,10 @@ func MakePlant() Plant {
 
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration =
 		CVCSInitialBoron
+	// Control rods start fully withdrawn (Insertion=0) for normal
+	// operation. A trip forces full insertion (Insertion=1.0) via
+	// the clamp in ReactorPressureVessel.Step (plans/x/trip.md).
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0.0
 
 	// Main Feedwater Control System defaults (plans/p22_1.txt).
 	// At construction the main feedwater control valve is

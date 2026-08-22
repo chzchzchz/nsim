@@ -24,7 +24,7 @@ import (
 func TestPlant_ReactorTripCascadesToTurbine(t *testing.T) {
 	p := MakePlant()
 	// Bring the reactor to rated power; let the SG build pressure.
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
 	stepN(&p, int(2*time.Second/TimeStep))
 	// Manually trip the reactor.
@@ -119,7 +119,7 @@ func TestPlant_HeaterTrainRaisesFeedwaterTemperature(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:28-34
 func TestPlant_ReactorTripOpensBreaker(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
 	p.TurbineBuilding.Generator.BreakerClosed = true
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
@@ -142,7 +142,7 @@ func TestPlant_ReactorTripOpensBreaker(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
 func TestPlant_BreakerOpenZerosRealPower(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
 	p.TurbineBuilding.Generator.BreakerClosed = false
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
@@ -166,7 +166,7 @@ func TestPlant_BreakerOpenZerosRealPower(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:57-58
 func TestPlant_BreakerCloseEnergizesUATAndSubtractsHouseLoad(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
 	p.TurbineBuilding.Generator.BreakerClosed = true
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
@@ -203,7 +203,7 @@ func TestPlant_BreakerCloseEnergizesUATAndSubtractsHouseLoad(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:58-59
 func TestPlant_ReactorTripTransfersHouseLoadToSAT(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
 	p.TurbineBuilding.Generator.BreakerClosed = true
 	p.TurbineBuilding.Turbine.Setpoint = 1.0

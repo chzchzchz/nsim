@@ -135,7 +135,7 @@ func TestTurbineExtractionSteamFlow_ScalesWithLoad(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:81-83
 func TestMSR_HalfLoadPowerGivesSuperheatedLPInlet(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
 
 	stepN(&p, int(5*time.Second/TimeStep))
@@ -163,7 +163,7 @@ func TestMSR_HalfLoadPowerGivesSuperheatedLPInlet(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:62-63
 func TestMSR_DrainFlowsToHotwell(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 1
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
 	hotwellBefore := p.TurbineBuilding.Condenser.HotwellLevel.Float()
 

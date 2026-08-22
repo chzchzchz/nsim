@@ -72,7 +72,7 @@ func TestFluidFlow_ValveOpen_MovesWater(t *testing.T) {
 	// the rods at full insertion so HeatInput collapses to the
 	// decay-heat floor within one step.
 	p.ReactorBuilding.ReactorPressureVessel.Trip = true
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = 0
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 1
 	p.ReactorBuilding.ReactorPressureVessel.Pressure = 100
 	p.TurbineBuilding.MakeupValve.Open = 1.0
 	p.ReactorBuilding.SteamGenerator.Pressure = 100
