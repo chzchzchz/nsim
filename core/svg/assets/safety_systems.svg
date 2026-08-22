@@ -3,7 +3,7 @@
 <title>PWR safety-system symbols</title>
 <desc>SIS accumulators, EFWS tank and pumps, CCWS heat exchanger, and RHRS train symbols. Source-of-truth citations live in plans/svg/safety_systems.md.</desc>
 
-<symbol id="sis-accumulators" viewBox="-100 -40 200 80">
+<symbol id="sis-accumulators" viewBox="-110 -50 240 100">
 <title>SIS Accumulators (4 RCS loops)</title>
 <use href="#tank-accumulator" x="-90" y="0" width="40" height="80"/>
 <use href="#tank-accumulator" x="-30" y="0" width="40" height="80"/>

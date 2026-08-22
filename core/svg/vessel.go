@@ -90,7 +90,7 @@ const PressurizerSymbol = `<symbol id="pressurizer" viewBox="-30 -160 60 320">` 
 
 // SteamGeneratorSymbol is the SVG markup for the steam
 // generator (vertical U-tube + integral steam drum).
-const SteamGeneratorSymbol = `<symbol id="steam_generator" viewBox="-70 -200 140 400">` +
+const SteamGeneratorSymbol = `<symbol id="steam_generator" viewBox="-95 -215 190 430">` +
 	`<title>Steam Generator (Model F, vertical U-tube)</title>` +
 	// channel head (lower)
 	`<path d="M -65 110 Q -65 140 -45 140 L 45 140 Q 65 140 65 110 Z" ` +
