@@ -13,6 +13,7 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/chzchzchz/nsim/bridge"
 	"github.com/chzchzchz/nsim/core"
 	"github.com/chzchzchz/nsim/core/svg"
 )
@@ -63,6 +64,20 @@ func (h *plantHandle) sensorKeys() []string {
 	return keys
 }
 
+// lookupControl and lookupSensor look up an entry by id in the
+// corresponding map. They return (nil, false) when the id is
+// absent, which jsMeta uses to fall through to the other map and
+// ultimately to an error.
+func (h *plantHandle) lookupControl(id string) (*bridge.Control, bool) {
+	c, ok := h.p.GetControlMap()[id]
+	return c, ok
+}
+
+func (h *plantHandle) lookupSensor(id string) (*bridge.Sensor, bool) {
+	s, ok := h.p.GetSensorMap()[id]
+	return s, ok
+}
+
 func (h *plantHandle) setControl(id, value string) error {
 	cm := h.p.GetControlMap()
 	c, ok := cm[id]
@@ -108,6 +123,33 @@ func jsStringSlice(s []string) js.Value {
 	return arr
 }
 
+// jsMeta returns {part, label, kind} for the given bridge entry,
+// or an Error if the id is unknown. The TypeScript UI uses this
+// to label, group, and unit-tag controls and sensors instead of
+// reverse-engineering the id string. The two closures extract
+// Part/Label/Kind from the bridge.Control and bridge.Sensor
+// structs, which differ in map type but share these fields.
+func jsMeta(
+	id string,
+	getControl func(string) (*bridge.Control, bool),
+	getSensor func(string) (*bridge.Sensor, bool),
+) js.Value {
+	meta := func(part, label, kind string) js.Value {
+		obj := js.Global().Get("Object").New()
+		obj.Set("part", part)
+		obj.Set("label", label)
+		obj.Set("kind", kind)
+		return obj
+	}
+	if c, ok := getControl(id); ok {
+		return meta(c.Part, c.Label, c.Kind)
+	}
+	if s, ok := getSensor(id); ok {
+		return meta(s.Part, s.Label, s.Kind)
+	}
+	return js.Global().Get("Error").New(fmt.Sprintf("unknown id %q", id))
+}
+
 // jsHandle boxes the *plantHandle as a JS object whose methods
 // the TypeScript wrapper invokes directly.
 func jsHandle(h *plantHandle) js.Value {
@@ -122,6 +164,9 @@ func jsHandle(h *plantHandle) js.Value {
 	}))
 	obj.Set("sensorKeys", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		return jsStringSlice(h.sensorKeys())
+	}))
+	obj.Set("getMeta", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		return jsMeta(args[0].String(), h.lookupControl, h.lookupSensor)
 	}))
 	obj.Set("setControl", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if err := h.setControl(args[0].String(), args[1].String()); err != nil {

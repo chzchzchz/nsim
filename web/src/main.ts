@@ -5,6 +5,7 @@ import { newPlant } from "./plant";
 import { mountPlant } from "./svg";
 import { renderPanel } from "./controls";
 import { renderReadout, refreshSensors, type SensorRow } from "./sensors";
+import { buildBindings, displayPart, groupByPrefix, type PartBinding } from "./bindings";
 import { Sim } from "./sim";
 
 declare global {
@@ -21,8 +22,7 @@ async function main(): Promise<void> {
     await loadWasm();
 
     const pidEl = document.getElementById("pid") as HTMLElement;
-    const controlsEl = document.getElementById("controls") as HTMLElement;
-    const readoutEl = document.getElementById("readout") as HTMLElement;
+    const tilesEl = document.getElementById("tiles") as HTMLElement;
     const startBtn = document.getElementById("btn-start") as HTMLButtonElement;
     const stepBtn = document.getElementById("btn-step") as HTMLButtonElement;
     const resetBtn = document.getElementById("btn-reset") as HTMLButtonElement;
@@ -31,14 +31,24 @@ async function main(): Promise<void> {
 
     const sim = new Sim(newPlant);
 
-    // Initial SVG mount + panel + readout.
+    // Initial SVG mount + tiles. Each top-level prefix gets its
+    // own tile; the tile splits into Controls | Sensors columns.
     const initialSvg = sim.plant.getSvg();
     if (typeof initialSvg !== "string") {
         throw new Error(`failed to render initial svg: ${(initialSvg as Error).message}`);
     }
     mountPlant(pidEl, initialSvg);
-    renderPanel(controlsEl, sim.plant);
-    let sensorRows = renderReadout(readoutEl, sim.plant);
+
+    let sensorRows: SensorRow[] = [];
+    const rebuildTiles = (): void => {
+        const bindings = buildBindings(sim.plant);
+        tilesEl.innerHTML = "";
+        sensorRows = [];
+        for (const group of groupByPrefix(bindings)) {
+            tilesEl.appendChild(renderTile(group.prefix, group.bindings, sim.plant, sensorRows));
+        }
+    };
+    rebuildTiles();
 
     sim.attachUI({
         startBtn,
@@ -53,8 +63,7 @@ async function main(): Promise<void> {
                 throw new Error(`failed to render svg on reset: ${(svg as Error).message}`);
             }
             mountPlant(pidEl, svg);
-            renderPanel(controlsEl, sim.plant);
-            sensorRows = renderReadout(readoutEl, sim.plant);
+            rebuildTiles();
         },
     });
 
@@ -84,3 +93,43 @@ main().catch((err) => {
         statusEl.textContent = `init failed: ${err}`;
     }
 });
+
+// renderTile assembles one tile (one top-level prefix) with a
+// Controls column and a Sensors column. New rows for the global
+// refresh loop are pushed into the shared sensorRows accumulator.
+function renderTile(
+    prefix: string,
+    bindings: PartBinding[],
+    plant: import("./plant").PlantHandle,
+    sensorRows: SensorRow[],
+): HTMLElement {
+    const tile = document.createElement("div");
+    tile.className = "tile";
+    const h = document.createElement("h2");
+    h.textContent = prefix || "(other)";
+    tile.appendChild(h);
+
+    const body = document.createElement("div");
+    body.className = "tile-body";
+    tile.appendChild(body);
+
+    const ctlCol = document.createElement("div");
+    const ctlH = document.createElement("h3");
+    ctlH.textContent = "Controls";
+    ctlCol.appendChild(ctlH);
+    const ctlHost = document.createElement("div");
+    ctlCol.appendChild(ctlHost);
+    renderPanel(ctlHost, bindings, plant, displayPart(prefix));
+
+    const senCol = document.createElement("div");
+    const senH = document.createElement("h3");
+    senH.textContent = "Sensors";
+    senCol.appendChild(senH);
+    const senHost = document.createElement("div");
+    senCol.appendChild(senHost);
+    sensorRows.push(...renderReadout(senHost, bindings, plant, displayPart(prefix)));
+
+    body.appendChild(ctlCol);
+    body.appendChild(senCol);
+    return tile;
+}

@@ -1,49 +1,112 @@
-// controls.ts — build the control panel. Each bridge.Control
-// entry becomes an <input>/<select> bound to plant.setControl.
+// controls.ts — build the control panel from PartBinding[]. Each
+// bridge.Control becomes a checkbox / number / enum picker driven
+// by its Kind; controls are grouped under a part-level heading
+// that reads "Part.Label".
 
+import type { Entry, PartBinding, PartDisplay } from "./bindings";
 import type { PlantHandle } from "./plant";
+import { rangeFor, unitFor } from "./units";
 
-export function renderPanel(host: HTMLElement, plant: PlantHandle): void {
+export function renderPanel(
+    host: HTMLElement,
+    bindings: PartBinding[],
+    plant: PlantHandle,
+    display: PartDisplay,
+): void {
     host.innerHTML = "";
-    const controls = plant.controlKeys();
-    if (controls.length === 0) {
+    const controlParts = bindings.filter((b) => b.controls.length > 0);
+    if (controlParts.length === 0) {
         host.textContent = "(no controls)";
         return;
     }
 
-    // We need the Kind for each control; read it back via
-    // setControl with the current value to obtain the existing
-    // kind from the bridge. Since we don't expose kinds
-    // directly through wasm, we infer the widget type from the
-    // id string: anything with "_Running" or boolean-sounding
-    // labels is bool; everything else is normalized.
-    for (const id of controls) {
-        const label = id.slice(id.lastIndexOf("/") + 1);
-        const field = document.createElement("fieldset");
-        const lg = document.createElement("legend");
-        lg.textContent = label;
-        field.appendChild(lg);
-
-        const isBool = label === "Running" || label === "HeatersOn";
-        if (isBool) {
-            const cb = document.createElement("input");
-            cb.type = "checkbox";
-            cb.addEventListener("change", () => {
-                plant.setControl(id, cb.checked ? "1" : "0");
-            });
-            field.appendChild(cb);
-        } else {
-            const num = document.createElement("input");
-            num.type = "number";
-            num.step = "0.01";
-            num.min = "0";
-            num.max = "1";
-            num.value = "0";
-            num.addEventListener("change", () => {
-                plant.setControl(id, num.value);
-            });
-            field.appendChild(num);
-        }
-        host.appendChild(field);
+    for (const part of controlParts) {
+        host.appendChild(renderPart(part, plant, display));
     }
+}
+
+function renderPart(
+    part: PartBinding,
+    plant: PlantHandle,
+    display: PartDisplay,
+): HTMLElement {
+    const fs = document.createElement("fieldset");
+    const lg = document.createElement("legend");
+    lg.textContent = display(part.part);
+    fs.appendChild(lg);
+
+    for (const e of part.controls) {
+        fs.appendChild(renderControl(e, plant));
+    }
+    return fs;
+}
+
+function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
+    const { kind, label } = e.meta;
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.alignItems = "center";
+    row.style.gap = "6px";
+    row.style.margin = "2px 0";
+
+    const text = document.createElement("span");
+    text.textContent = label;
+    row.appendChild(text);
+
+    if (kind === "bool") {
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.addEventListener("change", () => {
+            plant.setControl(e.id, cb.checked ? "1" : "0");
+        });
+        row.appendChild(cb);
+        return row;
+    }
+
+    if (kind === "enum" || kind === "string") {
+        // The bridge accepts whatever string the user passes; we
+        // present a free text input rather than guessing the set.
+        const inp = document.createElement("input");
+        inp.type = "text";
+        inp.size = 8;
+        inp.addEventListener("change", () => {
+            plant.setControl(e.id, inp.value);
+        });
+        row.appendChild(inp);
+        return row;
+    }
+
+    // Numeric kinds.
+    const num = document.createElement("input");
+    num.type = "number";
+    num.step = "0.01";
+    const r = rangeFor(kind);
+    if (r) {
+        const m = r.match(/^\[(-?[\d.]+),\s*(-?[\d.]+)\]$/);
+        if (m) {
+            num.min = m[1];
+            num.max = m[2];
+        }
+    }
+    num.value = "0";
+    num.addEventListener("change", () => {
+        plant.setControl(e.id, num.value);
+    });
+    row.appendChild(num);
+
+    const u = unitFor(kind);
+    if (u) {
+        const unit = document.createElement("span");
+        unit.textContent = u;
+        unit.style.opacity = "0.6";
+        row.appendChild(unit);
+    }
+    if (r) {
+        const hint = document.createElement("span");
+        hint.textContent = r;
+        hint.style.opacity = "0.4";
+        hint.style.fontSize = "10px";
+        row.appendChild(hint);
+    }
+    return row;
 }

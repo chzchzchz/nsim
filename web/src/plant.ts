@@ -4,10 +4,17 @@
 // syscall/js. The TypeScript side treats it as opaque except
 // for the methods declared below.
 
+export interface BridgeMeta {
+    part: string;
+    label: string;
+    kind: string;
+}
+
 export interface PlantHandle {
     step(ticks: number): void;
     controlKeys(): string[];
     sensorKeys(): string[];
+    getMeta(id: string): BridgeMeta | Error;
     setControl(id: string, value: string): Error | null;
     sensorJSON(id: string): string | Error;
     getSvg(): string | Error;

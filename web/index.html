@@ -45,8 +45,8 @@
             border-radius: 4px;
         }
         main {
-            display: grid;
-            grid-template-columns: 1fr 320px;
+            display: flex;
+            flex-direction: column;
             gap: 16px;
             padding: 16px;
         }
@@ -58,18 +58,46 @@
             max-height: calc(100vh - 100px);
         }
         #pid svg { max-width: 100%; height: auto; display: block; }
-        aside {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
+        #tiles {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 12px;
         }
-        #controls fieldset {
+        .tile {
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 8px;
+            font-size: 12px;
+        }
+        .tile > h2 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 4px;
+        }
+        .tile-body {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 12px;
+        }
+        .tile-body > div { min-width: 0; }
+        .tile-body h3 {
+            margin: 0 0 4px 0;
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #555;
+        }
+        #controls fieldset,
+        .tile fieldset {
             margin: 0 0 8px 0;
             padding: 4px 8px;
             border: 1px solid #ccc;
             border-radius: 4px;
         }
-        #controls legend { font-weight: bold; font-size: 12px; }
+        #controls legend,
+        .tile legend { font-weight: bold; font-size: 12px; }
+        .tile td { padding: 2px 6px; border-bottom: 1px solid #eee; }
         #readout {
             background: white;
             border: 1px solid #ccc;
@@ -100,10 +128,7 @@
     </header>
     <main>
         <div id="pid"></div>
-        <aside>
-            <div id="controls"></div>
-            <div id="readout"></div>
-        </aside>
+        <div id="tiles"></div>
     </main>
     <script src="/wasm_exec.js"></script>
     <script type="module" src="/src/main.ts"></script>

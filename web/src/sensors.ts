@@ -1,49 +1,96 @@
-// sensors.ts — build the sensor read-out table and provide a
-// refresh path that writes into <td data-sensor> cells.
+// sensors.ts — build the sensor read-out table from PartBinding[].
+// Each bridge.Sensor becomes a row under a part-level heading that
+// reads "Part.Label"; the value cell is updated in place by
+// refreshSensors() on every animation frame.
 
+import type { Entry, PartBinding, PartDisplay } from "./bindings";
 import type { PlantHandle } from "./plant";
+import { formatSensorValue, unitFor } from "./units";
 
 export interface SensorRow {
     id: string;
-    label: string;
     cell: HTMLElement;
 }
 
-export function renderReadout(host: HTMLElement, plant: PlantHandle): SensorRow[] {
+export function renderReadout(
+    host: HTMLElement,
+    bindings: PartBinding[],
+    plant: PlantHandle,
+    display: PartDisplay,
+): SensorRow[] {
     host.innerHTML = "";
-    const rows: SensorRow[] = [];
-    const ids = plant.sensorKeys();
-    if (ids.length === 0) {
+    const sensorParts = bindings.filter((b) => b.sensors.length > 0);
+    if (sensorParts.length === 0) {
         host.textContent = "(no sensors)";
-        return rows;
+        return [];
     }
+
+    const rows: SensorRow[] = [];
+    for (const part of sensorParts) {
+        host.appendChild(renderPartTable(part, rows, display));
+    }
+    return rows;
+}
+
+function renderPartTable(
+    part: PartBinding,
+    rows: SensorRow[],
+    display: PartDisplay,
+): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.style.marginBottom = "8px";
+    const h = document.createElement("div");
+    h.textContent = display(part.part);
+    h.style.fontWeight = "bold";
+    h.style.borderBottom = "1px solid #ccc";
+    h.style.marginBottom = "2px";
+    wrap.appendChild(h);
+
     const table = document.createElement("table");
     table.style.width = "100%";
     table.style.borderCollapse = "collapse";
-    const thead = document.createElement("thead");
-    thead.innerHTML = `<tr><th align="left">Sensor</th><th align="left">Value</th></tr>`;
-    table.appendChild(thead);
     const tbody = document.createElement("tbody");
     table.appendChild(tbody);
-    host.appendChild(table);
+    wrap.appendChild(table);
 
-    for (const id of ids) {
-        const tr = document.createElement("tr");
-        const td1 = document.createElement("td");
-        td1.textContent = id.slice(id.lastIndexOf("/") + 1);
-        const td2 = document.createElement("td");
-        td2.setAttribute("data-sensor", id);
-        tr.appendChild(td1);
-        tr.appendChild(td2);
-        tbody.appendChild(tr);
-        rows.push({ id, label: td1.textContent ?? "", cell: td2 });
+    for (const e of part.sensors) {
+        tbody.appendChild(renderSensorRow(e, rows));
     }
-    return rows;
+    return wrap;
+}
+
+function renderSensorRow(e: Entry, rows: SensorRow[]): HTMLElement {
+    const { label, kind } = e.meta;
+    const tr = document.createElement("tr");
+
+    const td1 = document.createElement("td");
+    td1.textContent = label;
+    td1.style.padding = "2px 6px";
+    td1.style.borderBottom = "1px solid #eee";
+    tr.appendChild(td1);
+
+    const td2 = document.createElement("td");
+    td2.setAttribute("data-sensor", e.id);
+    td2.style.padding = "2px 6px";
+    td2.style.borderBottom = "1px solid #eee";
+    td2.style.fontFamily = "monospace";
+    td2.textContent = unitFor(kind) ? `… ${unitFor(kind)}` : "…";
+    tr.appendChild(td2);
+
+    rows.push({ id: e.id, cell: td2 });
+    return tr;
 }
 
 export function refreshSensors(rows: SensorRow[], plant: PlantHandle): void {
     for (const r of rows) {
         const v = plant.sensorJSON(r.id);
-        r.cell.textContent = typeof v === "string" ? v : `(error: ${(v as Error).message})`;
+        const m = plant.getMeta(r.id);
+        const u = m instanceof Error ? "" : unitFor(m.kind);
+        if (typeof v === "string") {
+            const formatted = m instanceof Error ? v : formatSensorValue(m.kind, v);
+            r.cell.textContent = u ? `${formatted} ${u}` : formatted;
+        } else {
+            r.cell.textContent = `(error: ${(v as Error).message})`;
+        }
     }
 }
