@@ -17,7 +17,7 @@ WASM_EXEC_DST_SRC := src/wasm_exec.js
 
 .PHONY: all build wasm wasm-exec typecheck dev clean
 
-all: build
+all: build wasm-exec
 
 build: wasm typecheck
 	@echo "build complete (run \`make dev\` to serve, or use public/ + dist/ for static hosting)"
@@ -25,7 +25,7 @@ build: wasm typecheck
 wasm: $(WASM_OUT)
 
 $(WASM_OUT): $(WASM_SRC)/main.go ../core ../bridge ../core/svg
-	GOOS=js GOARCH=wasm $(GO) build -o $(WASM_OUT) $(WASM_SRC)
+	GOOS=js GOARCH=wasm $(GO) build -o $(WASM_OUT) ./$(WASM_SRC)
 	@echo "wrote $(WASM_OUT)"
 
 wasm-exec: $(WASM_EXEC_DST_PUBLIC) $(WASM_EXEC_DST_SRC)
