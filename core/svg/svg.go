@@ -11,14 +11,14 @@
 //     contains a reactor coolant pump and a steam generator. The RCS also
 //     includes a pressurizer, safety and relief valves, a pressurizer relief
 //     tank [...]"
-//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_043.txt:12-24
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_043.txt:12-18
 //   - "A flow diagram of a typical steam, condensate, and feedwater system is
 //     shown in Figure 15.3-1."
-//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:64-72
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:27-28
 //   - "The containment building [...] is a cylindrical, steel lined, concrete
 //     pressure vessel with a hemispherical top closure and stepped flat
 //     bottom. The building encloses the reactor coolant system [...]"
-//     specs/the_westinghouse_pressurized_water_react/chapter_1/page_025.txt:28-38
+//     specs/the_westinghouse_pressurized_water_react/chapter_1/page_025.txt:28-42
 //   - "The main steam lines are provided with a stop valve and a check valve in
 //     each line just outside the containment."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:70-73
@@ -88,7 +88,7 @@ const (
 	// Turbine island — right of containment with separation gap
 	// for main steam stop valves ("just outside the containment").
 	TurbineX, TurbineY     float64 = 900, 470
-	GeneratorX, GeneratorY float64 = 1070, 470
+	GeneratorX, GeneratorY float64 = 1150, 470
 	CondenserX, CondenserY float64 = 1010, 710
 
 	// Feedwater chain — ladder above the turbine.
@@ -126,6 +126,32 @@ const (
 	ESFBusAX, ESFBusAY                   float64 = 400, 860
 	ESFBusBX, ESFBusBY                   float64 = 450, 860
 	GridX, GridY                         float64 = 1100, 80
+
+	// Building footprints — simple rectangles behind the symbols.
+	// Spec references:
+	//   - "auxiliary building around the containment"
+	//     specs/the_westinghouse_pressurized_water_react/chapter_1/page_025.txt:76-78
+	//   - "turbine building houses the turbine-generator"
+	//     specs/the_westinghouse_pressurized_water_react/chapter_1/page_027.txt:18
+	//   - "several pump houses"
+	//     specs/the_westinghouse_pressurized_water_react/chapter_1/page_025.txt:77-78
+	//   - "spent fuel into the fuel handling building"
+	//     specs/the_westinghouse_pressurized_water_react/chapter_13/page_173.txt:28-29
+	AuxBuildingX, AuxBuildingY float64 = 20, 120
+	AuxBuildingW             float64 = 660
+	AuxBuildingH             float64 = 770
+
+	TurbineBuildingX, TurbineBuildingY float64 = 580, 40
+	TurbineBuildingW                   float64 = 620
+	TurbineBuildingH                   float64 = 810
+
+	PumpHouseX, PumpHouseY float64 = 480, 660
+	PumpHouseW             float64 = 240
+	PumpHouseH             float64 = 70
+
+	FuelHandlingX, FuelHandlingY float64 = 520, 710
+	FuelHandlingW               float64 = 200
+	FuelHandlingH               float64 = 120
 )
 
 // anchor describes the document-space coordinate of a part's
@@ -222,6 +248,27 @@ func WritePlantSVG(w io.Writer, p *core.Plant) error {
 				`width="%.0f" height="%.0f"/>`,
 			sym, x, y, w, h)
 	}
+	writeLabel := func(x, y float64, text string) {
+		fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="10" `+
+			`text-anchor="middle">%s</text>`+"\n", x, y, text)
+	}
+	writeBuilding := func(x, y, w, h float64, label string) {
+		fmt.Fprintf(&b, `<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" `+
+			`fill="#f5f5f5" stroke="#999" stroke-width="1.5"/>`+"\n",
+			x, y, w, h)
+		if label != "" {
+			fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="8" `+
+				`fill="#666" text-anchor="middle">%s</text>`+"\n",
+				x+w/2, y+h/2+3, label)
+		}
+	}
+
+	// Building footprints.
+	// specs/the_westinghouse_pressurized_water_react/chapter_1/page_025.txt:75-78
+	writeBuilding(AuxBuildingX, AuxBuildingY, AuxBuildingW, AuxBuildingH, "")
+	writeBuilding(TurbineBuildingX, TurbineBuildingY, TurbineBuildingW, TurbineBuildingH, "")
+	writeBuilding(PumpHouseX, PumpHouseY, PumpHouseW, PumpHouseH, "")
+	writeBuilding(FuelHandlingX, FuelHandlingY, FuelHandlingW, FuelHandlingH, "")
 
 	// Background: containment dome on the left, large enough to
 	// enclose the nuclear island (RPV, pressurizer, SG, RCP).
@@ -230,6 +277,7 @@ func WritePlantSVG(w io.Writer, p *core.Plant) error {
 		useAt("containment-dome",
 			ContainmentX-ContainmentW/2, ContainmentY-ContainmentH/2,
 			ContainmentW, ContainmentH))
+	writeLabel(ContainmentX, ContainmentY-ContainmentH/2-10, "Containment")
 
 	// CSS spray headers overlay inside the dome.
 	writePart("ReactorBuilding/ContainmentBuilding",
@@ -249,118 +297,148 @@ func WritePlantSVG(w io.Writer, p *core.Plant) error {
 	// RPV at the centre of the reactor building.
 	writePart("ReactorBuilding/ReactorPressureVessel",
 		useAt("reactor_vessel", RPVX-50, RPVY-120, 100, 240))
+	writeLabel(RPVX, RPVY+130, "RPV")
 
-	// Pressurizer to the upper-right of the RPV (inside containment).
-	// Height reduced to 260 px so the dome fits under the arch.
+	// Pressurizer to the upper-right of the RPV, fully inside
+	// the dome arch (top at domeTop+30, bottom aligns with RPV centre).
 	writePart("ReactorBuilding/Pressurizer",
-		useAt("pressurizer", PressurizerX-30, PressurizerY-130, 60, 260))
+		useAt("pressurizer", PressurizerX-30,
+			ContainmentY-ContainmentH/2+30, 60, 200))
+	writeLabel(PressurizerX, ContainmentY-ContainmentH/2+250, "PZR")
 
-	// Pressurizer relief tank to the right of the pressurizer.
+	// Pressurizer relief tank to the right of the pressurizer,
+	// inside the dome.
 	writePart("ReactorBuilding/PressurizedReliefTank",
-		useAt("tank-vertical", PRTX-30, PRTY-50, 60, 100))
+		useAt("tank-vertical", PRTX-30,
+			ContainmentY-ContainmentH/2+30, 60, 80))
 	fmt.Fprintf(&b,
 		`<text x="%.0f" y="%.0f" font-size="10" `+
 			`text-anchor="middle">PRT</text>`+"\n",
-		PRTX, PRTY)
+		PRTX, ContainmentY-ContainmentH/2+30+50)
 
 	// RCP between RPV and SG.
 	writePart("ReactorBuilding/ReactorCoolantPump",
 		useAt("pump-rcp", RCPX-25, RCPY-80, 50, 160))
+	writeLabel(RCPX, RCPY-100, "RCP")
 
 	// SG to the right of the RCP.
 	writePart("ReactorBuilding/SteamGenerator",
 		useAt("steam_generator", SGX-70, SGY-200, 140, 400))
+	writeLabel(SGX, SGY+240, "SG (x4)")
 	fmt.Fprintf(&b,
 		`<text x="%.0f" y="%.0f" font-size="10" `+
 			`text-anchor="middle">(x4)</text>`+"\n",
 		SGX, SGY+220)
 
-	// Pressurizer safety + relief valves (3 + 2).
+	// Pressurizer safety + relief valves.
 	for i := 0; i < 3; i++ {
 		writePart("ReactorBuilding/Pressurizer",
 			useAt("valve-safety",
 				PressurizerX-22+float64(i)*14,
-			PressurizerY-146, 20, 20))
+				ContainmentY-ContainmentH/2+20, 20, 20))
 	}
 	for i := 0; i < 2; i++ {
 		writePart("ReactorBuilding/Pressurizer",
 			useAt("valve-porv",
 				PressurizerX-12+float64(i)*14,
-				PressurizerY-156, 24, 20))
+				ContainmentY-ContainmentH/2+14, 24, 20))
 	}
 
 	// Turbine, generator, condenser.
 	writePart("TurbineBuilding/Turbine",
 		useAt("turbine-main", TurbineX-180, TurbineY-100, 360, 200))
+	writeLabel(TurbineX, TurbineY-110, "Turbine")
 	writePart("TurbineBuilding/Generator",
 		useAt("generator-main", GeneratorX-110, GeneratorY-70, 220, 140))
+	writeLabel(GeneratorX, GeneratorY-85, "Generator")
 	writePart("TurbineBuilding/Condenser",
 		useAt("condenser", CondenserX-200, CondenserY-50, 400, 100))
+	writeLabel(CondenserX, CondenserY+70, "Condenser")
 
 	// Feedwater chain: CST -> condensate pump -> LP heater ->
 	// HDT (deaerator) -> feed pump -> HP heater -> SG.
 	writePart("TurbineBuilding/CondensateStorageTank",
 		useAt("tank-cst", CSTX-50, CSTY-65, 100, 130))
+	writeLabel(CSTX, CSTY-75, "CST")
 	writePart("TurbineBuilding/CondensatePump",
 		useAt("pump-horizontal", CondPumpX-30, CondPumpY-20, 60, 40))
 	writePart("TurbineBuilding/HeaterDrainTank",
 		useAt("heat-exchanger-vertical", LPHeaterX-25, LPHeaterY-50, 50, 100))
+	writeLabel(LPHeaterX, LPHeaterY-60, "LP Heater")
 	writePart("TurbineBuilding/HeaterDrainTank",
 		useAt("tank-horizontal", HDTX-50, HDTY-25, 100, 50))
+	writeLabel(HDTX, HDTY-35, "HDT")
 	writePart("TurbineBuilding/HeaterDrainPump",
 		useAt("pump-horizontal", HPPumpX-30, HPPumpY-20, 60, 40))
+	writeLabel(HPPumpX, HPPumpY-30, "Feed Pump")
 	writePart("TurbineBuilding/HeaterDrainTank",
 		useAt("heat-exchanger-vertical", HPHeaterX-25, HPHeaterY-50, 50, 100))
+	writeLabel(HPHeaterX, HPHeaterY-60, "HP Heater")
 
 	// Main feedwater control valve (modulating) on the
 	// SG-inlet pipe.
 	writePart("TurbineBuilding/MainFeedwaterControlValve",
 		useAt("valve-modulating", FWCtrlX-12, FWCtrlY-10, 24, 20))
+	writeLabel(FWCtrlX, FWCtrlY-15, "FW Ctrl")
 
 	// AFW pumps near the SG inlet.
 	writePart("Outside/TurbineAFWPump",
 		useAt("pump-turbine", TurbineAFWX-30, TurbineAFWY-20, 60, 40))
+	writeLabel(TurbineAFWX, TurbineAFWY-28, "AFW TD")
 	writePart("Outside/MotorAFWPump",
 		useAt("pump-horizontal", MotorAFWX-30, MotorAFWY-20, 60, 40))
+	writeLabel(MotorAFWX, MotorAFWY-28, "AFW MD")
 	writePart("Outside/DieselAFWPump",
 		useAt("pump-horizontal", DieselAFWX-30, DieselAFWY-20, 60, 40))
+	writeLabel(DieselAFWX, DieselAFWY-28, "AFW Diesel")
 
 	// SIS accumulators (one cluster of 4).
 	writePart("ReactorBuilding/SafetyInjectionSystem",
 		useAt("sis-accumulators", SISX-100, SISY-40, 200, 80))
+	writeLabel(SISX, SISY-50, "SIS Acc")
 
 	// EFWS tank.
 	writePart("ReactorBuilding/EmergencyFeedwaterSystem",
 		useAt("efws-tank", EFWSTankX-40, EFWSTankY-50, 80, 100))
+	writeLabel(EFWSTankX, EFWSTankY-60, "EFWS")
 
 	// CCWS heat exchanger.
 	writePart("ReactorBuilding/ComponentCoolingWaterSystem",
 		useAt("ccws-hx", CCWSHXX-50, CCWSHXY-25, 100, 50))
+	writeLabel(CCWSHXX, CCWSHXY-35, "CCWS HX")
 
 	// RHRS trains.
 	writePart("ReactorBuilding/ResidualHeatRemovalSystem",
 		useAt("rhrs-train", RHRSTrainAX-100, RHRSTrainAY-40, 200, 80))
+	writeLabel(RHRSTrainAX, RHRSTrainAY-50, "RHRS A")
 	writePart("ReactorBuilding/ResidualHeatRemovalSystem",
 		useAt("rhrs-train", RHRSTrainBX-100, RHRSTrainBY-40, 200, 80))
+	writeLabel(RHRSTrainBX, RHRSTrainBY-50, "RHRS B")
 
 	// SFP.
 	writePart("ReactorBuilding/SpentFuelPool",
 		useAt("tank-sfp", SFPX-100, SFPY-50, 200, 100))
+	writeLabel(SFPX, SFPY+60, "SFP")
 
 	// Electrical: diesel + fuel tank, station transformer,
 	// ESF buses, grid.
 	writePart("Outside/DieselGenerator",
 		useAt("diesel-generator", DieselX-100, DieselY-50, 200, 100))
+	writeLabel(DieselX, DieselY-60, "Diesel")
 	writePart("Outside/DieselGenerator",
 		useAt("fuel-tank", FuelTankX-15, FuelTankY-20, 30, 40))
 	writePart("Outside/StationTransformer",
 		useAt("transformer-2w", StationTransformerX-25, StationTransformerY-25, 50, 50))
+	writeLabel(StationTransformerX, StationTransformerY-35, "Xformer")
 	writePart("Outside/ESFBus",
 		useAt("esf-bus", ESFBusAX-60, ESFBusAY-10, 120, 20))
+	writeLabel(ESFBusAX, ESFBusAY-15, "ESF Bus A")
 	writePart("Outside/ESFBus",
 		useAt("esf-bus", ESFBusBX-60, ESFBusBY-10, 120, 20))
+	writeLabel(ESFBusBX, ESFBusBY-15, "ESF Bus B")
 	writePart("Outside/Grid",
 		useAt("grid-bus", GridX-15, GridY-25, 30, 50))
+	writeLabel(GridX, GridY-35, "Grid")
 
 	// Pipes + inline valves / pumps. Walk the build graph so
 	// the diagram is faithful to the simulator's actual edge
