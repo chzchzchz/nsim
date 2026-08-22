@@ -19,7 +19,7 @@ func TestReactor_RunningProducesRatedPower(t *testing.T) {
 		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
 	}
 	for i := 0; i < int(time.Second/TimeStep); i++ {
-		r = r.Step(true)
+		r = r.Step(RCPRatedSpeed)
 	}
 	assert.Positive(t, r.ThermalPower, "want ThermalPower > 0 at running")
 	assert.LessOrEqual(t, r.ThermalPower, CoreRatedThermalPower,
@@ -38,11 +38,11 @@ func TestReactor_TripDropsPowerToDecayHeat(t *testing.T) {
 		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
 	}
 	for i := 0; i < int(time.Second/TimeStep); i++ {
-		r = r.Step(true)
+		r = r.Step(RCPRatedSpeed)
 	}
 	r.Trip = true
 	for i := 0; i < int(2*time.Minute/TimeStep); i++ {
-		r = r.Step(true)
+		r = r.Step(RCPRatedSpeed)
 	}
 	assert.Less(t, r.ThermalPower, CoreRatedThermalPower,
 		"want ThermalPower < rated after trip, got %v", r.ThermalPower)
@@ -60,13 +60,13 @@ func TestReactor_DopplerShiftsReactivityNegative(t *testing.T) {
 		Outlet:       u.NewValue(float64(CoreDopplerReferenceTempF), u.Fahrenheit),
 		ThermalPower: CoreRatedThermalPower,
 	}
-	ref = ref.Step(true)
+	ref = ref.Step(RCPRatedSpeed)
 	hot := ReactorPressureVessel{
 		ControlRods:  ControlRods{Position: 1, DemandPosition: 1},
 		Outlet:       u.NewValue(float64(CoreDopplerReferenceTempF)+30, u.Fahrenheit),
 		ThermalPower: CoreRatedThermalPower,
 	}
-	hot = hot.Step(true)
+	hot = hot.Step(RCPRatedSpeed)
 	assert.Less(t, hot.Reactivity, ref.Reactivity,
 		"Doppler feedback: want hot.Reactivity < ref.Reactivity, got hot=%v ref=%v",
 		hot.Reactivity, ref.Reactivity)
@@ -84,7 +84,7 @@ func TestReactor_TripWithRodsOutKeepsDecayHeatFloor(t *testing.T) {
 		ThermalPower: CoreRatedThermalPower,
 	}
 	for i := 0; i < int(5*time.Minute/TimeStep); i++ {
-		r = r.Step(true)
+		r = r.Step(RCPRatedSpeed)
 	}
 	assert.Positive(t, r.ThermalPower,
 		"want non-zero ThermalPower during decay, got %v", r.ThermalPower)
@@ -105,7 +105,7 @@ func TestReactor_OutletAtReferenceGivesZeroDoppler(t *testing.T) {
 		Outlet:       u.NewValue(float64(CoreDopplerReferenceTempF), u.Fahrenheit),
 		ThermalPower: 0,
 	}
-	r = r.Step(true)
+	r = r.Step(RCPRatedSpeed)
 	assert.GreaterOrEqual(t, r.Reactivity, float32(-1),
 		"want near-zero Reactivity, got %v", r.Reactivity)
 	assert.LessOrEqual(t, r.Reactivity, float32(1),
@@ -125,7 +125,7 @@ func TestReactor_OutletTracksThermalPower(t *testing.T) {
 	// model is on the right side of the operating curve. With Outlet
 	// at the reference, Doppler ≈ 0 and the cascade doesn't halve.
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		r = r.Step(true)
+		r = r.Step(RCPRatedSpeed)
 	}
 	// After 10 s of full power the outlet should still be near the
 	// design reference (within the model noise).
@@ -144,13 +144,13 @@ func TestReactor_OutletDropsAfterTrip(t *testing.T) {
 	}
 	// Settle at full power briefly so Outlet converges to ~621°F.
 	for i := 0; i < int(time.Second/TimeStep); i++ {
-		r = r.Step(true)
+		r = r.Step(RCPRatedSpeed)
 	}
 	start := r.Outlet.Float()
 	r.Trip = true
 	r.ControlRods.Position = 0
 	for i := 0; i < int(time.Minute/TimeStep); i++ {
-		r = r.Step(true)
+		r = r.Step(RCPRatedSpeed)
 	}
 	assert.Less(t, r.Outlet.Float(), start,
 		"want Outlet < %v after 1 min of decay, got %v", start, r.Outlet.Float())
@@ -166,8 +166,27 @@ func TestReactor_InletFrozenWhenRCPOff(t *testing.T) {
 		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
 	}
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		r = r.Step(false) // RCP off
+		r = r.Step(0) // RCP off
 	}
 	assert.Equal(t, 420.0, r.Inlet.Float(),
 		"want Inlet frozen at 420°F with RCP off, got %v", r.Inlet.Float())
+}
+
+// Even with the RCP latch (Running) "on" by convention, if the
+// rotor speed is zero (e.g. breaker just opened) the Step function
+// must not drive the inlet-outlet blend. Regression for the bug
+// where rcpRunning bool was the gate rather than the actual speed.
+func TestReactor_InletFrozenWhenRCPSpeedZero(t *testing.T) {
+	r := ReactorPressureVessel{
+		ControlRods:  ControlRods{Position: 1, DemandPosition: 1},
+		ThermalPower: CoreRatedThermalPower,
+		Inlet:        u.NewValue(420, u.Fahrenheit),
+		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
+	}
+	// Step with rcpSpeed = 0 (pump latch on, but rotor coasting).
+	for i := 0; i < int(10*time.Second/TimeStep); i++ {
+		r = r.Step(0)
+	}
+	assert.Equal(t, 420.0, r.Inlet.Float(),
+		"want Inlet frozen at 420°F with rcpSpeed=0, got %v", r.Inlet.Float())
 }

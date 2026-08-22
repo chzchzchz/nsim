@@ -816,6 +816,41 @@ type SteamGenerator struct {
 	// candidate). When zero the SG does not generate steam on its
 	// own; the fluid graph dominates the inventory.
 	HeatInput Watts
+
+	// MainSteamIsolationValve is the operator-controlled
+	// isolation valve on the SG outlet steam line. Closing
+	// it isolates the SG secondary side from the turbine and
+	// steam dump. The bridge exposes this as the MSIV
+	// control; closing it on a high-steam-line-break
+	// signal is one of the reactor-protection-system
+	// isolation paths.
+	// "Each steam generator has isolation valves [...]
+	// upstream of the main steam line."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	MainSteamIsolationValve Valve
+
+	// SafetyValve is the lumped ASME-Code spring-loaded
+	// safety valve on the SG outlet steam line, upstream of
+	// the MSIV. The valve self-actuates when SG pressure
+	// exceeds SafetyValveSetpoint; the bridge exposes
+	// Open for visibility.
+	// "Safety valves in each steam generator outlet main
+	// steam line."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:42-45
+	SafetyValve Valve
+
+	// AtmosphericDumpValve is the power-operated atmospheric
+	// dump valve (also called the "steam dump to
+	// atmosphere") on the SG outlet steam line, upstream
+	// of the MSIV. The operator (or the turbine-runback
+	// interlock) opens it to dump excess steam to
+	// atmosphere when the turbine cannot accept the SG
+	// steam flow (e.g. turbine trip, load rejection).
+	// "ASME Code safety valves and power operated relief
+	// and atmospheric dump valves are located on each
+	// steam line upstream of the stop valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	AtmosphericDumpValve Valve
 }
 
 func (s *SteamGenerator) Update() SteamGenerator {
@@ -2054,7 +2089,7 @@ type CVCS struct {
 
 	// ChargingFlow is the flow rate from the charging pumps
 	// into the RCS cold legs (gal). Set to CVCSDesignChargingFlow
-	// when a pump is running; zero otherwise.
+	// when ChargingPumpRunning is true; zero otherwise.
 	// "The charging pumps take the coolant from the volume
 	// control tank [...]"
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:79-80
@@ -2062,6 +2097,21 @@ type CVCS struct {
 	// flow control."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:96-97
 	ChargingFlow Volume
+
+	// ChargingPumpRunning is the operator latch on the charging
+	// pumps. The CVCS Step sets ChargingFlow from this field.
+	// The pumps are centrifugal and feed from the engineered
+	// safety features bus during accident conditions (see
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-80),
+	// so the auto-start logic in Plant.Step drives this latch
+	// independently of the reactor coolant pumps.
+	ChargingPumpRunning bool
+
+	// LetdownValveOpen is the operator latch on the letdown
+	// isolation valve. The CVCS Step sets LetdownFlow from this
+	// field combined with the operating mode (CVCSLetdown mode
+	// forces letdown closed).
+	LetdownValveOpen bool
 
 	// LetdownFlow is the flow rate from the RCS letdown tap
 	// through the letdown chiller and demineralizers back to

@@ -9,6 +9,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"syscall/js"
 	"time"
@@ -127,6 +128,14 @@ func (h *plantHandle) simTimeMs() int64 {
 	return h.simTimeNs / int64(time.Millisecond)
 }
 
+func (h *plantHandle) plantJSON() (string, error) {
+	b, err := json.Marshal(h.p)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 // jsStringSlice converts a Go []string into a JS Array<string>.
 func jsStringSlice(s []string) js.Value {
 	arr := js.Global().Get("Array").New(len(s))
@@ -217,6 +226,13 @@ func jsHandle(h *plantHandle) js.Value {
 	}))
 	obj.Set("simTimeMs", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		return h.simTimeMs()
+	}))
+	obj.Set("toJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		s, err := h.plantJSON()
+		if err != nil {
+			return js.Global().Get("Error").New(err.Error())
+		}
+		return s
 	}))
 	return obj
 }

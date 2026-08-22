@@ -54,7 +54,7 @@ import (
 //     (6.15 m3/sec) Design head 280 ft (85.3 m)"
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_056.txt:124-130
 //     (cited for context; not directly used in the model).
-func (r *ReactorPressureVessel) Step(rcpRunning bool) ReactorPressureVessel {
+func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {
 	ret := *r
 	dt := TimeStep
 
@@ -80,8 +80,18 @@ func (r *ReactorPressureVessel) Step(rcpRunning bool) ReactorPressureVessel {
 	}
 	ret.Outlet = u.NewValue(outletF, u.Fahrenheit)
 
-	if rcpRunning {
-		blend := CoreInletBlendFraction * powerFrac
+	// The cold-leg / downcomer inlet temperature only blends
+	// with the outlet when the RCP is actually spinning. The
+	// gate is the actual rotor speed, not the operator latch:
+	// if the ESF breaker opens the pump coasts down to zero
+	// speed even though Running=true is latched, and there is
+	// no flow to drive the inlet-outlet blend.
+	rcpFlowFrac := float64(rcpSpeed) / float64(RCPRatedSpeed)
+	if rcpFlowFrac < 0 {
+		rcpFlowFrac = 0
+	}
+	if rcpFlowFrac > 0 {
+		blend := CoreInletBlendFraction * powerFrac * rcpFlowFrac
 		targetInlet := CoreReferenceInletF*(1-blend) + outletF*blend
 		inletF := ret.Inlet.Float()
 		inletF += (targetInlet - inletF) * (dt.Seconds() / PrimaryInletTimeConstant)

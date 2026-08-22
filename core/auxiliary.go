@@ -100,16 +100,18 @@ type AuxiliaryBuilding struct {
 // heat-exchanger inlet) are wired by Plant.Step before and after this
 // call. EFWSFeedwaterFlow (the per-step flow to the steam generators)
 // stays on ReactorBuilding because the SG consumes it inside the
-// containment. swRunning is the previous-step Service Water pump state
-// from Outside.ServiceWaterSystem.PumpRunning, fed in
-// explicitly by Plant.Step so this step does not have to reach into
-// another building.
-func (a *AuxiliaryBuilding) Step(swRunning bool) AuxiliaryBuilding {
+// containment. swFlowGPM is the prior-step Service Water flow rate
+// from Outside.ServiceWaterSystem.Flow (in gpm), fed in explicitly
+// by Plant.Step so this step does not have to reach into another
+// building. The diesel jacket cooler only sees cooling water when
+// the SWS pumps have developed actual flow — PumpRunning alone is
+// not enough if the ESF bus is de-energised.
+func (a *AuxiliaryBuilding) Step(swFlowGPM float64) AuxiliaryBuilding {
 	ret := *a
 	ret.ComponentCoolingWaterSystem =
 		ret.ComponentCoolingWaterSystem.Step()
 	ret.SpentFuelPoolCoolingSystem =
 		ret.SpentFuelPoolCoolingSystem.Step()
-	ret.DieselGenerator = ret.DieselGenerator.Step(swRunning)
+	ret.DieselGenerator = ret.DieselGenerator.Step(swFlowGPM)
 	return ret
 }

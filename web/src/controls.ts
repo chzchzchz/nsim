@@ -118,6 +118,13 @@ function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
     const num = document.createElement("input");
     num.type = "number";
     num.step = "0.01";
+    // Bound the rendered width: a 6-character box fits ppm,
+    // gpm, °F, etc. without growing to the browser default
+    // (~20 chars) when the live value happens to be a long
+    // integer. maxLength is a soft cap against accidental
+    // paste of oversized values.
+    num.size = 6;
+    num.maxLength = 8;
     const r = rangeFor(kind);
     if (r) {
         const m = r.match(/^\[(-?[\d.]+),\s*(-?[\d.]+)\]$/);

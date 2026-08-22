@@ -71,16 +71,14 @@ import (
 //     control system and depletes by (charging flow + BTRS
 //     recirculation). The letdown path returns coolant to the
 //     VCT so it does not directly drain VCTLevel.
-//   - ChargingFlow = CVCSDesignChargingFlow when chargingPumpRunning,
-//     else 0.
-//   - LetdownFlow = CVCSDesignLetdownFlow when letdownValveOpen,
-//     else 0 (further clamped to 0 in CVCSLetdown mode).
+//   - ChargingFlow = CVCSDesignChargingFlow when
+//     ChargingPumpRunning, else 0.
+//   - LetdownFlow = CVCSDesignLetdownFlow when LetdownValveOpen
+//     and the mode is not CVCSLetdown, else 0.
 //   - In CVCSBoration / CVCSDilution modes the
 //     BTRSRecirculationPump must be running (set by operator);
 //     BorationRate / DilutionRate are populated accordingly.
 func (c *CVCS) Step(
-	chargingPumpRunning bool,
-	letdownValveOpen bool,
 	makeupFlow Volume,
 ) CVCS {
 	ret := *c
@@ -90,15 +88,20 @@ func (c *CVCS) Step(
 	ret.BorationRate = 0
 	ret.DilutionRate = 0
 
-	// Charging flow depends on pump state.
-	if chargingPumpRunning {
+	// Charging flow depends on the charging-pump latch (not
+	// the reactor coolant pumps — CVCS charging is an
+	// independent path). The pumps are fed from the
+	// engineered safety features bus during accident
+	// conditions; see
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-80.
+	if ret.ChargingPumpRunning {
 		ret.ChargingFlow = CVCSDesignChargingFlow
 	} else {
 		ret.ChargingFlow = u.NewValue(0, u.Gallon)
 	}
 
 	// Letdown flow depends on valve state.
-	if letdownValveOpen && ret.Mode != CVCSLetdown {
+	if ret.LetdownValveOpen && ret.Mode != CVCSLetdown {
 		ret.LetdownFlow = CVCSDesignLetdownFlow
 	} else {
 		ret.LetdownFlow = u.NewValue(0, u.Gallon)

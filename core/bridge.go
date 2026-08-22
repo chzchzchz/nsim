@@ -78,6 +78,157 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 		},
 	}
 
+	// RHRS Train A hot-leg suction isolation valve pair.
+	// Two series motor-operated valves on the RCS hot-leg
+	// suction line; both must be open for the train to take
+	// suction from the RCS. The bridge exposes the first
+	// valve (Valve 1 of 2) — closing it disables the train.
+	// "series isolation valves providing the isolation [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_084.txt:18
+	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve1/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA",
+		Label: "SuctionValve1",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.SuctionValves[0].Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.SuctionValves[0].Open = v
+			return nil
+		},
+	}
+
+	// RHRS Train A hot-leg suction isolation valve pair
+	// (second valve).
+	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve2/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA",
+		Label: "SuctionValve2",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.SuctionValves[1].Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.SuctionValves[1].Open = v
+			return nil
+		},
+	}
+
+	// RHRS Train B hot-leg suction isolation valve pair
+	// (first valve).
+	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve1/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB",
+		Label: "SuctionValve1",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.SuctionValves[0].Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.SuctionValves[0].Open = v
+			return nil
+		},
+	}
+
+	// RHRS Train B hot-leg suction isolation valve pair
+	// (second valve).
+	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve2/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB",
+		Label: "SuctionValve2",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.SuctionValves[1].Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.SuctionValves[1].Open = v
+			return nil
+		},
+	}
+
+	// RHRS Train A bypass flow-control valve (around the RHR
+	// heat exchanger). Open=1 means full bypass (no heat
+	// rejection); Open=0 means full flow through the HX.
+	// "A second flow control valve [...] bypass valve [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:58-66
+	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/BypassValve/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA",
+		Label: "BypassValve",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.BypassValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.BypassValve.Open = v
+			return nil
+		},
+	}
+
+	// RHRS Train B bypass flow-control valve.
+	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/BypassValve/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB",
+		Label: "BypassValve",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.BypassValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.BypassValve.Open = v
+			return nil
+		},
+	}
+
 	// EFWS motor-driven pump manual control. Auto-starts on
 	// SI / low-low SG level; the operator manually stops it
 	// when main feedwater is restored and manually starts it
@@ -259,6 +410,97 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 		},
 	}
 
+	// Steam generator main steam isolation valve (chapter 15):
+	// The MSIV isolates the SG secondary side from the
+	// turbine and steam dump on a steam-line-break signal
+	// or operator command.
+	// "ASME Code safety valves and power operated relief and
+	// atmospheric dump valves are located on each steam
+	// line upstream of the stop valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	m["ReactorBuilding/SteamGenerator/MainSteamIsolationValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/SteamGenerator/MainSteamIsolationValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open = v
+			return nil
+		},
+	}
+
+	// Steam generator atmospheric dump valve (chapter 15).
+	// The atmospheric dump valve (also called "steam dump to
+	// atmosphere") is the operator handle for dumping excess
+	// SG steam when the turbine is unavailable (load
+	// rejection, turbine trip).
+	// "ASME Code safety valves and power operated relief and
+	// atmospheric dump valves are located on each steam
+	// line upstream of the stop valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	m["ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/SteamGenerator/AtmosphericDumpValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open = v
+			return nil
+		},
+	}
+
+	// Steam generator safety valve (chapter 15).
+	// Self-actuating ASME-Code spring-loaded safety valve;
+	// the bridge exposes it as a control for completeness
+	// (the Step function will also auto-trip it on
+	// overpressure).
+	// "Safety valves in each steam generator outlet main
+	// steam line."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:42-45
+	m["ReactorBuilding/SteamGenerator/SafetyValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/SteamGenerator/SafetyValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.SteamGenerator.SafetyValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SteamGenerator.SafetyValve.Open = v
+			return nil
+		},
+	}
+
 	// Feedwater regulator valve demand (chapter 15):
 	// "Feedwater flow to each steam generator is controlled by
 	// a feedwater regulator in each feedwater line."
@@ -355,6 +597,93 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 				return err
 			}
 			p.ReactorBuilding.Pressurizer.HeatersOn = v
+			return nil
+		},
+	}
+
+	// Pressurizer power-operated relief valve (chapter 3
+	// pressure-limiting train):
+	// "Reductions in plant electrical load with resultant
+	// pressure increases beyond the pressure-limiting
+	// capability of the pressurizer spray system cause the
+	// air-operated relief valves to open. These valves are
+	// automatically opened at a pressure below system design
+	// pressure. They can also be opened manually from a control
+	// console in the control room."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:23-30
+	m["ReactorBuilding/PORV/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/PORV",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.ReactorBuilding.PORV.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.PORV.Open = v
+			return nil
+		},
+	}
+
+	// Pressurizer ASME-code safety valves (chapter 3):
+	// "If system pressure continues to rise, self-actuating
+	// ASME-code safety valves will open. Steam from the
+	// safety and/or relief valves is piped to the pressurizer
+	// relief tank."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:30-34
+	// These are spring-loaded and self-actuating; the bridge
+	// exposes the aggregate state for visibility. The Step
+	// function auto-trips the safety valve when pressure
+	// exceeds PressurizerPORVTrip.
+	m["ReactorBuilding/SafetyValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/SafetyValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.ReactorBuilding.SafetyValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SafetyValve.Open = v
+			return nil
+		},
+	}
+
+	// Reactor coolant loop block valve (chapter 3):
+	// "Reactor coolant loop isolation valves may be closed
+	// to isolate a loop."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_071.txt:145
+	m["ReactorBuilding/BlockValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/BlockValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.ReactorBuilding.BlockValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.BlockValve.Open = v
 			return nil
 		},
 	}
@@ -497,6 +826,52 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 			// does not overwrite the operator's demand.
 			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = v
 			p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = v
+			return nil
+		},
+	}
+
+	// CVCS charging-pump running latch. The CVCS Step reads
+	// ChargingPumpRunning to decide ChargingFlow — this is the
+	// operator-visible handle.
+	// "The charging pump flow and low-pressure letdown valve
+	// are controlled manually during plant startup and
+	// cooldown."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115-116
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "ChargingPumpRunning",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = v
+			return nil
+		},
+	}
+
+	// CVCS letdown valve-open latch. The CVCS Step reads
+	// LetdownValveOpen to decide LetdownFlow (in conjunction
+	// with the operating mode — CVCSLetdown forces it closed).
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "LetdownValveOpen",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = v
 			return nil
 		},
 	}
@@ -980,6 +1355,53 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("gallon",
 				p.ReactorBuilding.SteamGenerator.Volume.Float())
+		},
+	}
+
+	// Main steam isolation valve (chapter 15 steam system):
+	// "ASME Code safety valves and power operated relief and
+	// atmospheric dump valves are located on each steam line
+	// upstream of the stop valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	// The bridge sensor exposes the actual Open fraction for
+	// visibility — the Step function uses it to gate the SG-to-
+	// turbine steam path.
+	m["ReactorBuilding/SteamGenerator/MainSteamIsolationValve/Open"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator/MainSteamIsolationValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open)
+		},
+	}
+
+	// Steam generator safety valve (chapter 15):
+	// "Safety valves in each steam generator outlet main
+	// steam line."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:42-45
+	m["ReactorBuilding/SteamGenerator/SafetyValve/Open"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator/SafetyValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.SteamGenerator.SafetyValve.Open)
+		},
+	}
+
+	// Steam generator atmospheric dump valve (chapter 15):
+	// "ASME Code safety valves and power operated relief and
+	// atmospheric dump valves are located on each steam line
+	// upstream of the stop valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	m["ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator/AtmosphericDumpValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open)
 		},
 	}
 

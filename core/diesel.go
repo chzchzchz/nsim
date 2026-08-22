@@ -34,7 +34,7 @@ var (
 // integration all run on the 1 ms plant step defined in core/units.go:16.
 //
 // Spec justification for each block is inline below.
-func (d *DieselGenerator) Step(swRunning bool) DieselGenerator {
+func (d *DieselGenerator) Step(swFlowGPM float64) DieselGenerator {
 	ret := *d
 	dt := TimeStep
 
@@ -124,15 +124,19 @@ func (d *DieselGenerator) Step(swRunning bool) DieselGenerator {
 
 	// 4) Cooling integration. Service Water flowing -> approach ambient;
 	// Service Water off -> drift upward while running, cool while stopped.
+	// The gate is the actual delivered flow in gpm, not the PumpRunning
+	// latch: if the ESF breaker is open the pumps cannot develop flow
+	// even though PumpRunning was latched, so the jacket cooler goes dry.
 	//
 	// Spec: "Diesel generator coolers" / "Containment spray pump diesel
 	// engine coolers" are Service Water System loads.
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89,
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_170.txt:84,
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:8-9
+	swFlowing := swFlowGPM > 0
 	ambient := ret.Fuel.Part.Temperature.Float() // proxy for ambient
 	gap := ret.CoolantTemp.Float() - ambient
-	if swRunning {
+	if swFlowing {
 		ret.CoolantTemp = u.NewValue(ret.CoolantTemp.Float()-gap*(dt.Seconds()/dieselCoolingTau.Seconds()), u.Fahrenheit)
 	} else {
 		if ret.State == DieselRunning {

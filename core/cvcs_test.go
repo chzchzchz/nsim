@@ -17,10 +17,12 @@ import (
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
 func TestCVCS_VolumeControlKeepsBoronSteady(t *testing.T) {
 	c := (&CVCS{
-		Mode:               CVCSVolumeControl,
-		VCTLevel:           u.NewValue(VCTDesignLevel, u.Gallon),
-		BoronConcentration: CVCSInitialBoron,
-	}).Step(true, true, u.NewValue(0, u.Gallon))
+		Mode:                CVCSVolumeControl,
+		VCTLevel:            u.NewValue(VCTDesignLevel, u.Gallon),
+		BoronConcentration:  CVCSInitialBoron,
+		ChargingPumpRunning: true,
+		LetdownValveOpen:    true,
+	}).Step(u.NewValue(0, u.Gallon))
 	assert.Equal(t, CVCSInitialBoron, c.BoronConcentration,
 		"want BoronConcentration unchanged in VolumeControl, got %v",
 		c.BoronConcentration)
@@ -45,7 +47,9 @@ func TestCVCS_BorationIncreasesBoronConcentration(t *testing.T) {
 		VCTLevel:                     u.NewValue(VCTDesignLevel, u.Gallon),
 		BoronConcentration:           CVCSInitialBoron,
 		BTRSRecirculationPumpRunning: true,
-	}).Step(true, true, u.NewValue(0, u.Gallon))
+		ChargingPumpRunning:          true,
+		LetdownValveOpen:             true,
+	}).Step(u.NewValue(0, u.Gallon))
 	assert.InDelta(t, CVCSBorationRate, c.BorationRate, 1e-9,
 		"want BorationRate=CVCSBorationRate, got %v", c.BorationRate)
 	assert.Greater(t, c.BoronConcentration, CVCSInitialBoron,
@@ -68,7 +72,9 @@ func TestCVCS_DilutionDecreasesBoronConcentration(t *testing.T) {
 		VCTLevel:                     u.NewValue(VCTDesignLevel, u.Gallon),
 		BoronConcentration:           CVCSInitialBoron,
 		BTRSRecirculationPumpRunning: true,
-	}).Step(true, true, u.NewValue(0, u.Gallon))
+		ChargingPumpRunning:          true,
+		LetdownValveOpen:             true,
+	}).Step(u.NewValue(0, u.Gallon))
 	assert.InDelta(t, CVCSDilutionRate, c.DilutionRate, 1e-9,
 		"want DilutionRate=CVCSDilutionRate, got %v", c.DilutionRate)
 	assert.Less(t, c.BoronConcentration, CVCSInitialBoron,
@@ -88,10 +94,12 @@ func TestCVCS_DilutionDecreasesBoronConcentration(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
 func TestCVCS_HighVCTLevelSwitchesToLetdownMode(t *testing.T) {
 	c := (&CVCS{
-		Mode:               CVCSVolumeControl,
-		VCTLevel:           u.NewValue(VCTHighLevel+1, u.Gallon),
-		BoronConcentration: CVCSInitialBoron,
-	}).Step(true, true, u.NewValue(0, u.Gallon))
+		Mode:                CVCSVolumeControl,
+		VCTLevel:            u.NewValue(VCTHighLevel+1, u.Gallon),
+		BoronConcentration:  CVCSInitialBoron,
+		ChargingPumpRunning: true,
+		LetdownValveOpen:    true,
+	}).Step(u.NewValue(0, u.Gallon))
 	assert.Equal(t, CVCSLetdown, c.Mode,
 		"want CVCSLetdown with VCTLevel>VCTHighLevel, got %v", c.Mode)
 	assert.Zero(t, c.ChargingFlow.Float(),
@@ -115,12 +123,14 @@ func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 	steps := int(1 * time.Second / TimeStep)
 	// Charging pump only.
 	c := CVCS{
-		Mode:               CVCSVolumeControl,
-		VCTLevel:           u.NewValue(initial, u.Gallon),
-		BoronConcentration: CVCSInitialBoron,
+		Mode:                CVCSVolumeControl,
+		VCTLevel:            u.NewValue(initial, u.Gallon),
+		BoronConcentration:  CVCSInitialBoron,
+		ChargingPumpRunning: true,
+		LetdownValveOpen:    true,
 	}
 	for i := 0; i < steps; i++ {
-		c = c.Step(true, true, u.NewValue(0, u.Gallon))
+		c = c.Step(u.NewValue(0, u.Gallon))
 	}
 	wantLoss := CVCSDesignChargingFlow.Float() * 1.0
 	assert.InDelta(t, initial-wantLoss, c.VCTLevel.Float(), 1e-3,
@@ -133,9 +143,11 @@ func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 		VCTLevel:                     u.NewValue(initial, u.Gallon),
 		BoronConcentration:           CVCSInitialBoron,
 		BTRSRecirculationPumpRunning: true,
+		ChargingPumpRunning:          true,
+		LetdownValveOpen:             true,
 	}
 	for i := 0; i < steps; i++ {
-		c = c.Step(true, true, u.NewValue(0, u.Gallon))
+		c = c.Step(u.NewValue(0, u.Gallon))
 	}
 	wantLossBoth := (CVCSDesignChargingFlow.Float() + VCTBTRSCirculation) * 1.0
 	assert.InDelta(t, initial-wantLossBoth, c.VCTLevel.Float(), 1e-3,
@@ -227,9 +239,8 @@ func TestCVCS_MakeupValveRaisesVCTLevel(t *testing.T) {
 	// Stop the charging pump and letdown valve so the VCT is
 	// not being depleted by charging-pump suction; then
 	// opening the makeup valve should be the only inflow.
-	p.ReactorBuilding.ReactorCoolantPump.Running = false
-	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownFlow =
-		u.NewValue(0, u.Gallon)
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = false
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = false
 	stepN(&p, int(1*time.Second/TimeStep))
 	vctBefore := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
 
@@ -242,4 +253,40 @@ func TestCVCS_MakeupValveRaisesVCTLevel(t *testing.T) {
 	assert.InDelta(t, wantRise, vctAfter-vctBefore, wantRise*0.1,
 		"want VCT rise ≈ %v gal after 5 s at 0.5 makeup, got %v (before=%v after=%v)",
 		wantRise, vctAfter-vctBefore, vctBefore, vctAfter)
+}
+
+// The CVCS charging pump is independent of the reactor coolant
+// pumps: the plant used to plumb ReactorCoolantPump.Running as
+// the CVCS charging-pump gate, which made RCP shutdown kill CVCS
+// charging and vice versa. The Step function now reads
+// CVCS.ChargingPumpRunning directly.
+//
+// Spec justification:
+//   - "Centrifugal charging pumps (CVCS) [...] supplied from
+//     [the 6600V engineered safety features bus]."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_103.txt:11-13,
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-80
+func TestCVCS_ChargingPumpIndependentOfRCP(t *testing.T) {
+	// Charging pump on, RCP off.
+	c := (&CVCS{
+		Mode:                CVCSVolumeControl,
+		VCTLevel:            u.NewValue(VCTDesignLevel, u.Gallon),
+		BoronConcentration:  CVCSInitialBoron,
+		ChargingPumpRunning: true,
+		LetdownValveOpen:    true,
+	}).Step(u.NewValue(0, u.Gallon))
+	assert.InDelta(t, CVCSDesignChargingFlow.Float(),
+		c.ChargingFlow.Float(), 1e-9,
+		"want ChargingFlow>0 with ChargingPumpRunning=true regardless of RCP")
+
+	// Charging pump off, RCP would be on.
+	c = (&CVCS{
+		Mode:                CVCSVolumeControl,
+		VCTLevel:            u.NewValue(VCTDesignLevel, u.Gallon),
+		BoronConcentration:  CVCSInitialBoron,
+		ChargingPumpRunning: false,
+		LetdownValveOpen:    true,
+	}).Step(u.NewValue(0, u.Gallon))
+	assert.Zero(t, c.ChargingFlow.Float(),
+		"want ChargingFlow=0 with ChargingPumpRunning=false regardless of RCP")
 }

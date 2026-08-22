@@ -29,6 +29,7 @@ async function main(): Promise<void> {
     const stepBtn = document.getElementById("btn-step") as HTMLButtonElement;
     const resetBtn = document.getElementById("btn-reset") as HTMLButtonElement;
     const tickRateSel = document.getElementById("tick-rate") as HTMLSelectElement;
+    const copyBtn = document.getElementById("btn-copy") as HTMLButtonElement;
     const statusEl = document.getElementById("sim-status") as HTMLElement;
 
     const sim = new Sim(newPlant);
@@ -65,6 +66,18 @@ async function main(): Promise<void> {
         alarmPanel = renderAlarms(alarmsEl, sim.plant, initial);
     }
     initAlarms();
+
+    copyBtn.title = "Copy plant state JSON to clipboard";
+    copyBtn.addEventListener("click", async () => {
+        try {
+            const json = sim.plant.toJSON();
+            await navigator.clipboard.writeText(json);
+            copyBtn.textContent = "📋 Copied!";
+            setTimeout(() => { copyBtn.textContent = "📋"; }, 1000);
+        } catch (err) {
+            console.error("copy failed:", err);
+        }
+    });
 
     window.addEventListener("ack-alarm", (ev: Event) => {
         const a = (ev as CustomEvent<AlarmEntry>).detail;

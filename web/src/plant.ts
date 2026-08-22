@@ -26,6 +26,7 @@ export interface PlantHandle {
     sensorJSON(id: string): string | Error;
     getSvg(): string | Error;
     simTimeMs(): number;
+    toJSON(): string;
 }
 
 // nsimNewPlant is the only top-level wasm export. It returns a

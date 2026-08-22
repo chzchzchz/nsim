@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"io"
 
 	u "github.com/bcicen/go-units"
@@ -34,10 +35,7 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	// determined by comparison of the measured Tc (cold leg
 	// temperature) with the programmed (function of power) Tc."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
-	letdownValveOpen := ret.Aux.ChemicalVolumeControlSystem.LetdownFlow.Float() > 0
 	ret.Aux.ChemicalVolumeControlSystem = ret.Aux.ChemicalVolumeControlSystem.Step(
-		ret.ReactorCoolantPump.Running,
-		letdownValveOpen,
 		ret.ReactorMakeupControlValve.Flow,
 	)
 	// Propagate the CVCS boron concentration into the
@@ -99,7 +97,7 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	ret.ReactorPressureVessel.ControlRods =
 		ret.ReactorPressureVessel.ControlRods.Step()
 
-	rpv := ret.ReactorPressureVessel.Step(ret.ReactorCoolantPump.Running)
+	rpv := ret.ReactorPressureVessel.Step(ret.ReactorCoolantPump.Velocity)
 	ret.ReactorPressureVessel = rpv
 
 	// RCP velocity dynamics (plans/p33_1.txt). Exponential
@@ -621,8 +619,14 @@ func (p *Plant) Step() {
 	// nextPlant (where the fresh state is being written), not
 	// at p (the current state being read).
 	p.nextPlant.Outside = p.Outside.Step()
+	// SWS flow at this point is the prior step's delivered flow
+	// in gpm (the SWS Step runs later, after the cross-building
+	// DriveReady wiring). PumpRunning alone is not enough — the
+	// 6600V ESF breaker must be closed for the pump motor to
+	// develop flow, so the diesel jacket cooler sees Flow > 0
+	// only when power is actually delivered to the pump.
 	p.nextPlant.AuxiliaryBuilding = p.AuxiliaryBuilding.Step(
-		p.Outside.ServiceWaterSystem.PumpRunning)
+		p.Outside.ServiceWaterSystem.Flow)
 	p.ReactorBuilding.Aux = &p.nextPlant.AuxiliaryBuilding
 	p.Electrical.DieselGenA = &p.nextPlant.AuxiliaryBuilding.DieselGenerator
 	p.Electrical.DieselGenB = &p.nextPlant.AuxiliaryBuilding.DieselGenerator
@@ -1601,13 +1605,14 @@ func MakePlant() Plant {
 	// temperature) with the programmed (function of power) Tc."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem = CVCS{
-		Mode:               CVCSVolumeControl,
-		VCTLevel:           u.NewValue(VCTDesignLevel, u.Gallon),
-		BoronConcentration: CVCSInitialBoron,
+		Mode:                CVCSVolumeControl,
+		VCTLevel:            u.NewValue(VCTDesignLevel, u.Gallon),
+		BoronConcentration:  CVCSInitialBoron,
+		ChargingPumpRunning: true,
+		LetdownValveOpen:    true,
 	}
-	// Letdown is flowing at construction (set LetdownFlow so
-	// the Step function's letdownValveOpen sentinel works).
-	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownFlow = CVCSDesignLetdownFlow
+	// Charging/letdown balance is the normal steady-state; the
+	// flows are populated from the field on the first Step.
 
 	// RHRS defaults (plans/p15_1.txt). Both pumps are off and
 	// the hot-leg isolation valves are closed at construction;
@@ -2101,6 +2106,28 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	edge("TurbineAFWPump", "SG", &target.Outside.TurbineAFWPump.ServiceWaterValve, nil)
 
 	return g
+}
+
+// MarshalJSON omits the internal nextPlant pointer to avoid
+// circular references. All public state is included.
+func (p *Plant) MarshalJSON() ([]byte, error) {
+	type plant Plant
+	p2 := plant(*p)
+	p2.nextPlant = nil
+	return json.Marshal(&p2)
+}
+
+// UnmarshalJSON restores a Plant from JSON. The internal
+// nextPlant pointer is left nil (rebuilt by Step).
+func (p *Plant) UnmarshalJSON(data []byte) error {
+	type plant Plant
+	var p2 plant
+	if err := json.Unmarshal(data, &p2); err != nil {
+		return err
+	}
+	*p = Plant(p2)
+	p.nextPlant = nil
+	return nil
 }
 
 // ExportDot writes the plant's graph in Graphviz DOT format.

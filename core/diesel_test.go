@@ -115,10 +115,11 @@ func TestDiesel_TripsOnCoolantOverTemp(t *testing.T) {
 }
 
 // Service Water flowing should pull the coolant back toward ambient.
-// Regression for the bug where AuxiliaryBuilding.Step read the legacy
-// ServiceWaterPump.Running instead of the user-facing
-// Outside.ServiceWaterSystem.PumpRunning, so toggling the SW
-// pump in the UI did not cool the diesel.
+// Regression for the bug where the diesel step read
+// Outside.ServiceWaterSystem.PumpRunning (the operator latch) instead
+// of the actual delivered flow, so a PumpRunning=true flag with the
+// ESF bus de-energised still cooled the jacket — the SWS pump could
+// not develop flow without bus power.
 //
 // Spec justification:
 //   - "Diesel generator coolers" listed as a Service Water System load.
@@ -147,4 +148,56 @@ func TestDiesel_CoolantCoolsWhenServiceWaterFlows(t *testing.T) {
 	final := p.AuxiliaryBuilding.DieselGenerator.CoolantTemp.Float()
 	assert.Less(t, final, initial,
 		"want coolant to drop with SW flowing (initial=%v final=%v)", initial, final)
+}
+
+// Counterpart to TestDiesel_CoolantCoolsWhenServiceWaterFlows:
+// PumpRunning=true with the ESF bus de-energised must NOT cool the
+// jacket, because the SWS pumps cannot develop flow without bus power.
+// We verify both the model invariant (Flow stays at 0 gpm) and the
+// physical invariant (coolant does not decay toward ambient during
+// the time window the engine is running and heating up).
+//
+// Spec justification:
+//   - "The larger auxiliaries such as the service water pumps [...]
+//     are fed directly from the 6600-volt [engineered safety features]
+//     buses."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-80
+func TestDiesel_CoolantDoesNotCoolWhenBreakerOpen(t *testing.T) {
+	p := MakePlant()
+	p.Outside.ServiceWaterSystem.PumpRunning = true
+	// Open both ESF breakers so the SWS pump motors are unpowered.
+	p.Electrical.ESFBusA.BreakerClosed = false
+	p.Electrical.ESFBusB.BreakerClosed = false
+	p.AuxiliaryBuilding.DieselGenerator = newDiesel(500)
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
+
+	// Crank to running.
+	stepN(&p, int(10*time.Second/TimeStep))
+	require.Equal(t, DieselRunning, p.AuxiliaryBuilding.DieselGenerator.State, "expected Running")
+	require.Zero(t, p.Outside.ServiceWaterSystem.Flow,
+		"sanity: SWS flow must be 0 gpm with both ESF breakers open")
+
+	// Sample Flow over a short window and confirm it stays zero
+	// (the gate that drives the diesel cooler).
+	for i := 0; i < int(5*time.Second/TimeStep); i++ {
+		p.Step()
+		p.Update()
+		require.Zero(t, p.Outside.ServiceWaterSystem.Flow,
+			"SWS flow must stay at 0 gpm with both ESF breakers open")
+	}
+
+	// Force the coolant above ambient so heating vs cooling is
+	// observable. We sample over a short window so the diesel
+	// doesn't trip on its own over-temperature: 8 s of
+	// uncooled-running drift is ~40 °F (dieselAmbientRate*100
+	// °F/s), well below the 220 °F trip threshold.
+	hot := u.NewValue(150, u.Fahrenheit)
+	p.AuxiliaryBuilding.DieselGenerator.CoolantTemp = hot
+	initial := p.AuxiliaryBuilding.DieselGenerator.CoolantTemp.Float()
+
+	stepN(&p, int(8*time.Second/TimeStep))
+
+	final := p.AuxiliaryBuilding.DieselGenerator.CoolantTemp.Float()
+	assert.GreaterOrEqual(t, final, initial,
+		"want coolant to NOT drop with SW breaker open (initial=%v final=%v)", initial, final)
 }
