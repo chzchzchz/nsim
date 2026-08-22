@@ -758,12 +758,12 @@ func (p *Plant) Step() {
 			DieselStartSafetyInjection ||
 			p.nextPlant.ReactorBuilding.ReactorProtectionSystem.AuxiliaryFeedPumpsStartActuated ||
 			sgWaterLow {
-			if !efws.SubsystemA.MotorPumpRunning {
-				efws.SubsystemA.MotorPumpRunning = true
+			if !efws.SubsystemA.MotorPump.Running {
+				efws.SubsystemA.MotorPump.Running = true
 				efws.MotorPumpStartCount++
 			}
-			if !efws.SubsystemB.MotorPumpRunning {
-				efws.SubsystemB.MotorPumpRunning = true
+			if !efws.SubsystemB.MotorPump.Running {
+				efws.SubsystemB.MotorPump.Running = true
 				efws.MotorPumpStartCount++
 			}
 			efws.Active = true
@@ -772,12 +772,12 @@ func (p *Plant) Step() {
 			// Single-SG low-low simultaneously satisfies
 			// the "two SG" condition in the simplified
 			// model, so the turbine pump starts too.
-			if !efws.SubsystemA.TurbinePumpRunning {
-				efws.SubsystemA.TurbinePumpRunning = true
+			if !efws.SubsystemA.TurbinePump.Running {
+				efws.SubsystemA.TurbinePump.Running = true
 				efws.TurbinePumpStartCount++
 			}
-			if !efws.SubsystemB.TurbinePumpRunning {
-				efws.SubsystemB.TurbinePumpRunning = true
+			if !efws.SubsystemB.TurbinePump.Running {
+				efws.SubsystemB.TurbinePump.Running = true
 				efws.TurbinePumpStartCount++
 			}
 		}

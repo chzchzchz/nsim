@@ -72,10 +72,10 @@ func (e *EFWS) Step(
 	//     the EFWS is secured."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:101-104
 	if ret.Active && rpvOutlet.Float() <= EFWSSecureTemp && rhrsActive {
-		ret.SubsystemA.MotorPumpRunning = false
-		ret.SubsystemA.TurbinePumpRunning = false
-		ret.SubsystemB.MotorPumpRunning = false
-		ret.SubsystemB.TurbinePumpRunning = false
+		ret.SubsystemA.MotorPump.Running = false
+			ret.SubsystemA.TurbinePump.Running = false
+			ret.SubsystemB.MotorPump.Running = false
+			ret.SubsystemB.TurbinePump.Running = false
 		ret.Active = false
 		return ret
 	}
@@ -117,11 +117,11 @@ func (e *EFWS) Step(
 //     flow loss and treats all pump discharge as tank drawdown
 //     against the SG header demand.
 func depleteEFWSSubsystemTank(sub EFWSSubsystem, dt time.Duration) EFWSSubsystem {
-	if !sub.MotorPumpRunning && !sub.TurbinePumpRunning {
+	if !sub.MotorPump.Running && !sub.TurbinePump.Running {
 		return sub
 	}
 	flow := EFWSMotorPumpFlow
-	if sub.TurbinePumpRunning {
+	if sub.TurbinePump.Running {
 		flow = EFWSTurbinePumpFlow
 	}
 	dV := flow.Float() * dt.Seconds()
@@ -153,11 +153,11 @@ func depleteEFWSSubsystemTank(sub EFWSSubsystem, dt time.Duration) EFWSSubsystem
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:46-47
 func (sub *EFWSSubsystem) EFWSSubsystemFlow() float64 {
 	var total float64
-	if sub.MotorPumpRunning && sub.MotorPump.DriveReady {
+	if sub.MotorPump.Running && sub.MotorPump.DriveReady {
 		total += EFWSMotorPumpFlow.Float() *
 			sub.MotorPump.FlowModulatingValve.Open
 	}
-	if sub.TurbinePumpRunning && sub.TurbinePump.DriveReady {
+	if sub.TurbinePump.Running && sub.TurbinePump.DriveReady {
 		total += EFWSTurbinePumpFlow.Float() *
 			sub.TurbinePump.FlowModulatingValve.Open
 	}

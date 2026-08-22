@@ -247,14 +247,14 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 		Kind:  "bool",
 		Get: func() string {
 			return bridge.BoolToStr(
-				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPumpRunning)
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.Running)
 		},
 		Set: func(s string) error {
 			v, err := bridge.StrToBool(s)
 			if err != nil {
 				return err
 			}
-			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPumpRunning = v
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.Running = v
 			return nil
 		},
 	}
@@ -264,14 +264,14 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 		Kind:  "bool",
 		Get: func() string {
 			return bridge.BoolToStr(
-				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPumpRunning)
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPump.Running)
 		},
 		Set: func(s string) error {
 			v, err := bridge.StrToBool(s)
 			if err != nil {
 				return err
 			}
-			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPumpRunning = v
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPump.Running = v
 			return nil
 		},
 	}
@@ -281,14 +281,14 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 		Kind:  "bool",
 		Get: func() string {
 			return bridge.BoolToStr(
-				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePumpRunning)
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.Running)
 		},
 		Set: func(s string) error {
 			v, err := bridge.StrToBool(s)
 			if err != nil {
 				return err
 			}
-			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePumpRunning = v
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.Running = v
 			return nil
 		},
 	}
@@ -298,14 +298,14 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 		Kind:  "bool",
 		Get: func() string {
 			return bridge.BoolToStr(
-				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePumpRunning)
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.Running)
 		},
 		Set: func(s string) error {
 			v, err := bridge.StrToBool(s)
 			if err != nil {
 				return err
 			}
-			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePumpRunning = v
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.Running = v
 			return nil
 		},
 	}
@@ -1725,7 +1725,7 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Kind:  "bool",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
-				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPumpRunning)
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.Running)
 		},
 	}
 	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/MotorPumpRunning"] = &bridge.Sensor{
@@ -1734,7 +1734,7 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Kind:  "bool",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
-				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPumpRunning)
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPump.Running)
 		},
 	}
 	// EFWS turbine-driven pump running. Auto-started on low-low
@@ -1748,7 +1748,7 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Kind:  "bool",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
-				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePumpRunning)
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.Running)
 		},
 	}
 	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePumpRunning"] = &bridge.Sensor{
@@ -1757,7 +1757,7 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Kind:  "bool",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
-				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePumpRunning)
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.Running)
 		},
 	}
 

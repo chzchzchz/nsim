@@ -46,6 +46,12 @@ type Pump struct {
 	DriveReady bool
 }
 
+// IsRunning reports whether the pump is effectively running: the
+// operator has commanded it on and the upstream drive is ready.
+func (p *Pump) IsRunning() bool {
+	return p.Running && p.DriveReady
+}
+
 type Turbine struct {
 	Part
 	Velocity
@@ -2760,11 +2766,6 @@ type EFWSSubsystem struct {
 	// TurbinePump is the turbine-driven emergency feedwater
 	// pump.
 	TurbinePump EFWSPump
-
-	// MotorPumpRunning and TurbinePumpRunning are the per-step
-	// running states set by the auto-start logic in Plant.Step.
-	MotorPumpRunning   bool
-	TurbinePumpRunning bool
 }
 
 // EFWS models the complete Emergency Feedwater System: two

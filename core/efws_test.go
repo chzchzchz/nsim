@@ -17,18 +17,18 @@ func TestEFWS_InitialStateIsIdle(t *testing.T) {
 	assert.False(t, efws.Active,
 		"want EFWSActive=false at startup, got %v",
 		efws.Active)
-	assert.False(t, efws.SubsystemA.MotorPumpRunning,
-		"want SubsystemA.MotorPumpRunning=false at startup, got %v",
-		efws.SubsystemA.MotorPumpRunning)
-	assert.False(t, efws.SubsystemA.TurbinePumpRunning,
-		"want SubsystemA.TurbinePumpRunning=false at startup, got %v",
-		efws.SubsystemA.TurbinePumpRunning)
-	assert.False(t, efws.SubsystemB.MotorPumpRunning,
-		"want SubsystemB.MotorPumpRunning=false at startup, got %v",
-		efws.SubsystemB.MotorPumpRunning)
-	assert.False(t, efws.SubsystemB.TurbinePumpRunning,
-		"want SubsystemB.TurbinePumpRunning=false at startup, got %v",
-		efws.SubsystemB.TurbinePumpRunning)
+	assert.False(t, efws.SubsystemA.MotorPump.Running,
+		"want SubsystemA.MotorPump.Running=false at startup, got %v",
+		efws.SubsystemA.MotorPump.Running)
+	assert.False(t, efws.SubsystemA.TurbinePump.Running,
+		"want SubsystemA.TurbinePump.Running=false at startup, got %v",
+		efws.SubsystemA.TurbinePump.Running)
+	assert.False(t, efws.SubsystemB.MotorPump.Running,
+		"want SubsystemB.MotorPump.Running=false at startup, got %v",
+		efws.SubsystemB.MotorPump.Running)
+	assert.False(t, efws.SubsystemB.TurbinePump.Running,
+		"want SubsystemB.TurbinePump.Running=false at startup, got %v",
+		efws.SubsystemB.TurbinePump.Running)
 	assert.InDelta(t, EFWSPrimaryTankCapacity.Float(),
 		efws.SubsystemA.Tank.Level.Float(), 1e-9,
 		"want SubsystemA.Tank.Level=EFWSPrimaryTankCapacity at startup, got %v",
@@ -59,12 +59,12 @@ func TestEFWS_MotorPumpsStartOnSafetyInjection(t *testing.T) {
 	assert.True(t, efws.Active,
 		"want EFWSActive=true after SI signal, got %v",
 		efws.Active)
-	assert.True(t, efws.SubsystemA.MotorPumpRunning,
-		"want SubsystemA.MotorPumpRunning=true, got %v",
-		efws.SubsystemA.MotorPumpRunning)
-	assert.True(t, efws.SubsystemB.MotorPumpRunning,
-		"want SubsystemB.MotorPumpRunning=true, got %v",
-		efws.SubsystemB.MotorPumpRunning)
+	assert.True(t, efws.SubsystemA.MotorPump.Running,
+		"want SubsystemA.MotorPump.Running=true, got %v",
+		efws.SubsystemA.MotorPump.Running)
+	assert.True(t, efws.SubsystemB.MotorPump.Running,
+		"want SubsystemB.MotorPump.Running=true, got %v",
+		efws.SubsystemB.MotorPump.Running)
 	assert.GreaterOrEqual(t, efws.MotorPumpStartCount, 2,
 		"want MotorPumpStartCount>=2, got %v",
 		efws.MotorPumpStartCount)
@@ -93,18 +93,18 @@ func TestEFWS_TurbinePumpsStartOnLowLowSGLevel(t *testing.T) {
 	assert.True(t, efws.Active,
 		"want EFWSActive=true after SG low-low, got %v",
 		efws.Active)
-	assert.True(t, efws.SubsystemA.MotorPumpRunning,
-		"want SubsystemA.MotorPumpRunning=true, got %v",
-		efws.SubsystemA.MotorPumpRunning)
-	assert.True(t, efws.SubsystemA.TurbinePumpRunning,
-		"want SubsystemA.TurbinePumpRunning=true, got %v",
-		efws.SubsystemA.TurbinePumpRunning)
-	assert.True(t, efws.SubsystemB.MotorPumpRunning,
-		"want SubsystemB.MotorPumpRunning=true, got %v",
-		efws.SubsystemB.MotorPumpRunning)
-	assert.True(t, efws.SubsystemB.TurbinePumpRunning,
-		"want SubsystemB.TurbinePumpRunning=true, got %v",
-		efws.SubsystemB.TurbinePumpRunning)
+	assert.True(t, efws.SubsystemA.MotorPump.Running,
+		"want SubsystemA.MotorPump.Running=true, got %v",
+		efws.SubsystemA.MotorPump.Running)
+	assert.True(t, efws.SubsystemA.TurbinePump.Running,
+		"want SubsystemA.TurbinePump.Running=true, got %v",
+		efws.SubsystemA.TurbinePump.Running)
+	assert.True(t, efws.SubsystemB.MotorPump.Running,
+		"want SubsystemB.MotorPump.Running=true, got %v",
+		efws.SubsystemB.MotorPump.Running)
+	assert.True(t, efws.SubsystemB.TurbinePump.Running,
+		"want SubsystemB.TurbinePump.Running=true, got %v",
+		efws.SubsystemB.TurbinePump.Running)
 }
 
 // While the EFWS is active and pumps are running the primary
@@ -126,7 +126,7 @@ func TestEFWS_PrimaryTankDepletesWhilePumpsRunning(t *testing.T) {
 				IsPrimary:  true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
-			MotorPumpRunning: true,
+			MotorPump: (func() EFWSPump { var p EFWSPump; p.Running = true; return p }() ),
 		},
 		SubsystemB: EFWSSubsystem{
 			Tank: EFWSTank{
@@ -135,7 +135,7 @@ func TestEFWS_PrimaryTankDepletesWhilePumpsRunning(t *testing.T) {
 				IsPrimary:  true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
-			MotorPumpRunning: true,
+			MotorPump: (func() EFWSPump { var p EFWSPump; p.Running = true; return p }() ),
 		},
 	}
 	dt := TimeStep.Seconds()
@@ -169,8 +169,8 @@ func TestEFWS_TurbinePumpDominatesTankDepletionWhenBothRunning(t *testing.T) {
 				IsPrimary:  true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
-			MotorPumpRunning:   true,
-			TurbinePumpRunning: true,
+			MotorPump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
+			TurbinePump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
 		},
 	}
 	dt := TimeStep.Seconds()
@@ -208,8 +208,8 @@ func TestEFWS_SecuredWhenHotLegBelow350FAndRHRSActive(t *testing.T) {
 				IsPrimary:  true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
-			MotorPumpRunning:   true,
-			TurbinePumpRunning: true,
+			MotorPump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
+			TurbinePump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
 		},
 		SubsystemB: EFWSSubsystem{
 			Tank: EFWSTank{
@@ -218,8 +218,8 @@ func TestEFWS_SecuredWhenHotLegBelow350FAndRHRSActive(t *testing.T) {
 				IsPrimary:  true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
-			MotorPumpRunning:   true,
-			TurbinePumpRunning: true,
+			MotorPump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
+			TurbinePump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
 		},
 	}
 	e2 := e.Step(
@@ -229,18 +229,18 @@ func TestEFWS_SecuredWhenHotLegBelow350FAndRHRSActive(t *testing.T) {
 	assert.False(t, e2.Active,
 		"want EFWSActive=false after secured condition, got %v",
 		e2.Active)
-	assert.False(t, e2.SubsystemA.MotorPumpRunning,
-		"want SubsystemA.MotorPumpRunning=false after secured, got %v",
-		e2.SubsystemA.MotorPumpRunning)
-	assert.False(t, e2.SubsystemA.TurbinePumpRunning,
-		"want SubsystemA.TurbinePumpRunning=false after secured, got %v",
-		e2.SubsystemA.TurbinePumpRunning)
-	assert.False(t, e2.SubsystemB.MotorPumpRunning,
-		"want SubsystemB.MotorPumpRunning=false after secured, got %v",
-		e2.SubsystemB.MotorPumpRunning)
-	assert.False(t, e2.SubsystemB.TurbinePumpRunning,
-		"want SubsystemB.TurbinePumpRunning=false after secured, got %v",
-		e2.SubsystemB.TurbinePumpRunning)
+	assert.False(t, e2.SubsystemA.MotorPump.Running,
+		"want SubsystemA.MotorPump.Running=false after secured, got %v",
+		e2.SubsystemA.MotorPump.Running)
+	assert.False(t, e2.SubsystemA.TurbinePump.Running,
+		"want SubsystemA.TurbinePump.Running=false after secured, got %v",
+		e2.SubsystemA.TurbinePump.Running)
+	assert.False(t, e2.SubsystemB.MotorPump.Running,
+		"want SubsystemB.MotorPump.Running=false after secured, got %v",
+		e2.SubsystemB.MotorPump.Running)
+	assert.False(t, e2.SubsystemB.TurbinePump.Running,
+		"want SubsystemB.TurbinePump.Running=false after secured, got %v",
+		e2.SubsystemB.TurbinePump.Running)
 }
 
 // End-to-end via Plant.Step: a safety-injection actuation
@@ -267,12 +267,12 @@ func TestEFWS_EndToEndSafetyInjectionStartsFeedwaterDelivery(t *testing.T) {
 	assert.True(t, efws.Active,
 		"want EFWSActive=true after SI signal, got %v",
 		efws.Active)
-	assert.True(t, efws.SubsystemA.MotorPumpRunning,
-		"want SubsystemA.MotorPumpRunning=true, got %v",
-		efws.SubsystemA.MotorPumpRunning)
-	assert.True(t, efws.SubsystemB.MotorPumpRunning,
-		"want SubsystemB.MotorPumpRunning=true, got %v",
-		efws.SubsystemB.MotorPumpRunning)
+	assert.True(t, efws.SubsystemA.MotorPump.Running,
+		"want SubsystemA.MotorPump.Running=true, got %v",
+		efws.SubsystemA.MotorPump.Running)
+	assert.True(t, efws.SubsystemB.MotorPump.Running,
+		"want SubsystemB.MotorPump.Running=true, got %v",
+		efws.SubsystemB.MotorPump.Running)
 
 	assert.Less(t, efws.SubsystemA.Tank.Level.Float(), tankA,
 		"want SubsystemA.Tank.Level < %v after 1 s, got %v",
