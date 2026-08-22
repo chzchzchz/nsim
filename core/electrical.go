@@ -44,10 +44,16 @@ type Electrical struct {
 //     this matches the diesel-generator "ready to begin accepting load"
 //     deadline of 10 s.
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:50
+//   - BreakerClosed — operator control to isolate one train of the ESF
+//     system. The spec does not name a "bus breaker" explicitly, but the
+//     two trains are required to be "physically and electrically
+//     independent" up to the bus (page_165.txt:23-29), which presumes
+//     some operator-controlled disconnect. Default true: closed.
 type ESFBus struct {
 	Part
-	Voltage   float64
-	Energized bool
+	Voltage      float64
+	Energized    bool
+	BreakerClosed bool
 }
 
 // esfbusPickupVoltage is the minimum source voltage at which an ESF bus
@@ -66,6 +72,11 @@ func (e *Electrical) Step() Electrical {
 }
 
 func stepESFBus(b ESFBus, offsite, main *PowerGenerator, diesel *DieselGenerator) ESFBus {
+	if !b.BreakerClosed {
+		b.Voltage = 0
+		b.Energized = false
+		return b
+	}
 	src := firstEnergized(offsite, main, dieselSource(diesel))
 	if src != nil && src.Voltage >= esfbusPickupVoltage && src.BreakerClosed {
 		b.Voltage = src.Voltage

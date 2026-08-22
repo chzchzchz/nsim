@@ -308,6 +308,151 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 		},
 	}
 
+	// Diesel generator start signal (chapter 11):
+	// "controls for the governor, voltage regulator, generator
+	// breaker, and synchronization for each diesel generator are
+	// located on physically separated portions of the main control
+	// board."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:2-4
+	// Cause taxonomy in core/parts.go:1069-1077:
+	//   0 = None, 1 = Manual, 2 = SafetyInjection,
+	//   3 = LossOfOffsitePower, 4 = Test.
+	// "The onsite emergency diesel generators are started."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:18-22
+	// "In the event of total loss of auxiliary power from off-site
+	// sources, auxiliary power required for safe shutdown will be
+	// supplied from physically and electrically independent diesel
+	// generators located on the site."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:28-36
+	m["Outside/DieselGenerator/StartSignal"] = &bridge.Control{
+		Part:  "Outside/DieselGenerator",
+		Label: "StartSignal",
+		Kind:  "enum",
+		Get: func() string {
+			return fmt.Sprintf("%d",
+				p.Outside.DieselGenerator.StartSignal)
+		},
+		Set: func(s string) error {
+			switch s {
+			case "0":
+				p.Outside.DieselGenerator.StartSignal = DieselStartNone
+			case "1":
+				p.Outside.DieselGenerator.StartSignal = DieselStartManual
+			case "2":
+				p.Outside.DieselGenerator.StartSignal = DieselStartSafetyInjection
+			case "3":
+				p.Outside.DieselGenerator.StartSignal = DieselStartLossOfOffsitePower
+			case "4":
+				p.Outside.DieselGenerator.StartSignal = DieselStartTest
+			default:
+				return fmt.Errorf("invalid StartSignal %q (want 0..4)", s)
+			}
+			return nil
+		},
+	}
+
+	// Diesel generator load fraction (chapter 11):
+	// "Loads are automatically sequenced on the diesel generator
+	// buses over a short period of time to preclude the possibility
+	// of overload trip due to simultaneous starting loads."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:137-140
+	// The plant state machine multiplies fuel burn and generator
+	// real power by this fraction
+	// (core/diesel.go:114,173).
+	m["Outside/DieselGenerator/RunningFraction"] = &bridge.Control{
+		Part:  "Outside/DieselGenerator",
+		Label: "RunningFraction",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.Outside.DieselGenerator.RunningFraction)
+		},
+		Set: func(s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			if f < 0 || f > 1 {
+				return fmt.Errorf("normalized %v out of range [0,1]", f)
+			}
+			p.Outside.DieselGenerator.RunningFraction = float32(f)
+			return nil
+		},
+	}
+
+	// Diesel generator breaker (chapter 11):
+	// "controls for the governor, voltage regulator, generator
+	// breaker, and synchronization for each diesel generator are
+	// located on physically separated portions of the main control
+	// board."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:2-4
+	// Without BreakerClosed the diesel cannot feed the ESF bus:
+	// core/electrical.go:70 requires src.Voltage >= pickup AND
+	// src.BreakerClosed.
+	m["Outside/DieselGenerator/Generator/BreakerClosed"] = &bridge.Control{
+		Part:  "Outside/DieselGenerator/Generator",
+		Label: "BreakerClosed",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.Outside.DieselGenerator.Generator.BreakerClosed)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.Outside.DieselGenerator.Generator.BreakerClosed = v
+			return nil
+		},
+	}
+
+	// Engineered Safety Features bus A breaker (chapter 11):
+	// "Each power source, diesel generator and offsite, up to the
+	// point of connection to the engineered safety features system
+	// power buses, is physically and electrically independent."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:29-36
+	// "The engineered safety features buses are normally energized
+	// from system auxiliary transformers."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:81-82
+	// Bus pickup (core/electrical.go) requires this breaker closed
+	// before a source can deliver voltage to the train.
+	m["Electrical/ESFBusA/BreakerClosed"] = &bridge.Control{
+		Part:  "Electrical/ESFBusA",
+		Label: "BreakerClosed",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(p.Electrical.ESFBusA.BreakerClosed)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.Electrical.ESFBusA.BreakerClosed = v
+			return nil
+		},
+	}
+
+	// Engineered Safety Features bus B breaker (chapter 11):
+	// Same justification as ESF bus A above.
+	m["Electrical/ESFBusB/BreakerClosed"] = &bridge.Control{
+		Part:  "Electrical/ESFBusB",
+		Label: "BreakerClosed",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(p.Electrical.ESFBusB.BreakerClosed)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.Electrical.ESFBusB.BreakerClosed = v
+			return nil
+		},
+	}
+
 	return m
 }
 
@@ -533,6 +678,22 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
 				p.Outside.DieselGenerator.ReadyToLoad)
+		},
+	}
+
+	// Diesel fuel oil tank level (chapter 11):
+	// "Each diesel generator is provided with a fuel oil day tank
+	// and a fuel storage tank. The onsite supply of fuel for each
+	// diesel generator is sufficient to allow continuous rated load
+	// operation for a minimum of seven days."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:118-122
+	m["Outside/DieselGenerator/Fuel"] = &bridge.Sensor{
+		Part:  "Outside/DieselGenerator",
+		Label: "Fuel",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.Outside.DieselGenerator.Fuel.Level.Float())
 		},
 	}
 

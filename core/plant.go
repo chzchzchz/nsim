@@ -1324,9 +1324,16 @@ func MakePlant() Plant {
 		DieselGenerator: DieselGenerator{
 			Speed: 0,
 			Fuel: Tank{
-				Level: u.NewValue(0, u.Gallon),
-				// Can run feed pump for 24 hours
-				// Can run generators for 4 days
+				// Initialise full so the diesel can crank on the
+				// first manual start. The state machine
+				// (core/diesel.go:47) requires Fuel.Level > 0 to
+				// transition Off -> Cranking.
+				// Spec minimum "450 gallons at start of day"
+				// (core/parts.go:1110-1111); the capacity is sized
+				// above that so we leave head-room for the 7-day
+				// continuous-rated-load requirement
+				// (page_165.txt:120-122).
+				Level:    u.NewValue(500, u.Gallon),
 				Capacity: u.NewValue(500, u.Gallon),
 				Part:     Part{Temperature: u.NewValue(80, u.Fahrenheit)},
 			},
@@ -1383,6 +1390,17 @@ func MakePlant() Plant {
 	p.TurbineBuilding.Generator.BreakerClosed = false
 	p.TurbineBuilding.Generator.PowerFactor = GeneratorPowerFactor
 	p.TurbineBuilding.Generator.RatedMVA = GeneratorRatedMVA
+
+	// Engineered Safety Features bus defaults.
+	// "The engineered safety features buses are normally energized
+	// from system auxiliary transformers."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:81-82
+	// Both train breakers default to closed so the buses follow the
+	// spec's "automatic transfer of supplies" path
+	// (page_165.txt:57-59) out of the box; the operator can open one
+	// to isolate a train.
+	p.Electrical.ESFBusA.BreakerClosed = true
+	p.Electrical.ESFBusB.BreakerClosed = true
 
 	// Generator excitation and cooling defaults (plans/p30_1.txt).
 	// At construction the exciter is not producing field current
