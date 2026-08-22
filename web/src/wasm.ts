@@ -12,5 +12,9 @@ export async function loadWasm(): Promise<void> {
     }
     const buf = await resp.arrayBuffer();
     const { instance } = await WebAssembly.instantiate(buf, go.importObject);
-    await go.run(instance);
+    // Fire-and-forget: Go's main() blocks on `select {}`, so go.run()
+    // would never resolve. The export (window.nsimNewPlant) is
+    // installed synchronously by js.Global().Set during the wasm
+    // `run` export, before go.run() awaits its exit promise.
+    go.run(instance);
 }
