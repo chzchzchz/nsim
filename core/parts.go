@@ -1587,6 +1587,14 @@ var SteamGeneratorFullLoadHeatInput Watts = Watts(480 * float64(LatentHeatOfStea
 // specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:8-9).
 var DieselCoolantTripTemp = u.NewValue(220, u.Fahrenheit)
 
+// DieselLowFuelLevel is the low-fuel warning threshold, sized
+// to fire well before the diesel trips on fuel exhaustion.
+// The diesel day-tank is 500 gal at MakePlant
+// (core/plant.go:1336-1353); 50 gal is 10% — enough headroom
+// for an operator response without nuisance warnings during
+// normal rated-load burn.
+var DieselLowFuelLevel = u.NewValue(50, u.Gallon)
+
 // Reactor core sizing. The spec gives steam-flow and pressure data
 // (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56,
 // specs/the_westinghouse_pressurized_water_react/chapter_3/page_066.txt:80-82)
@@ -4738,6 +4746,14 @@ type PlantControlRoom struct {
 	// "Turned off by operator acknowledgement."
 	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:66-67
 	AlarmAcknowledged bool
+
+	// AlarmSet is the per-condition acknowledgement map keyed
+	// by AlarmID. Step() merges incoming alarms into this map;
+	// ResetAlarm() / AcknowledgeAll() flip the Acknowledged
+	// flag on individual entries.
+	// "Turned off by operator acknowledgement."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:66-67
+	AlarmSet map[AlarmID]Alarm
 
 	// ControlInputsAvailable is true when operator
 	// control inputs (switches, pushbuttons, keyboards)

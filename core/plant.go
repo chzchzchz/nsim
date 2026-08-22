@@ -1081,6 +1081,7 @@ func (p *Plant) Step() {
 	pcrIn.PowerAvailable = pes.InverterPowerAvailable
 	p.nextPlant.ReactorBuilding.PlantControlRoom = pcrIn.Step(
 		alarmCondition,
+		p.Alarms(),
 		pes.ESFBus1Available,
 		pes.ESFBus2Available,
 	)
@@ -1289,6 +1290,7 @@ func (p *Plant) Update() {
 
 func MakePlant() Plant {
 	p := Plant{nextPlant: &Plant{}}
+	p.ReactorBuilding.PlantControlRoom.AlarmSet = make(map[AlarmID]Alarm)
 	p.ReactorBuilding.SteamGenerator.Volume = u.NewValue(100000, u.Gallon)
 	p.ReactorBuilding.SteamGenerator.Water = u.NewValue(80000, u.Gallon)
 	// Initialise the RCS to the design full-load operating point so

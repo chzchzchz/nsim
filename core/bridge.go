@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -449,6 +450,23 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 				return err
 			}
 			p.Electrical.ESFBusB.BreakerClosed = v
+			return nil
+		},
+	}
+
+	// Alarm reset (chapter 8 annunciator):
+	// "Turned off by operator acknowledgement."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:66-67
+	// The control body is an AlarmID string; the operator
+	// (or HMI auto-loop) pushes one ID at a time. There is
+	// no read-back value — Get returns empty.
+	m["Alarms/Reset"] = &bridge.Control{
+		Part:  "Plant",
+		Label: "ResetAlarm",
+		Kind:  "string",
+		Get:   func() string { return "" },
+		Set: func(s string) error {
+			p.ReactorBuilding.PlantControlRoom.ResetAlarm(AlarmID(s))
 			return nil
 		},
 	}
@@ -935,6 +953,31 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("volt",
 				p.ReactorBuilding.Grid.Voltage)
+		},
+	}
+
+	// Active alarms (chapter 8 annunciator):
+	// "Turned off by operator acknowledgement."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:66-67
+	// The sensor returns the alarm list as a JSON-encoded
+	// string; the bridge Kind is "string" because the bridge
+	// format layer (bridge/convert.go) does not know how to
+	// serialise a slice of structs directly. The HMI side is
+	// responsible for parsing the JSON back into objects.
+	m["Alarms/Active"] = &bridge.Sensor{
+		Part:  "Plant",
+		Label: "ActiveAlarms",
+		Kind:  "string",
+		Get: func() (string, error) {
+			list := p.Alarms()
+			if list == nil {
+				list = []Alarm{}
+			}
+			b, err := json.Marshal(list)
+			if err != nil {
+				return "", err
+			}
+			return string(b), nil
 		},
 	}
 

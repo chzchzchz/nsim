@@ -533,8 +533,20 @@ func writeLiveOverlays(b *strings.Builder, p *core.Plant) {
 			ContainmentX, ContainmentY)
 	}
 
-	// Turbine red ring on trip.
-	if p.TurbineBuilding.Turbine.State == core.TurbineTripped {
+	// Alarm-driven rings (plans/x/alarms.md). Each ring
+	// corresponds to a trip-severity alarm aggregated in
+	// p.Alarms(); the data-driven loop replaces the
+	// earlier hand-written conditionals so adding a new
+	// alarm does not require touching this overlay.
+	hasAlarm := func(id core.AlarmID) bool {
+		for _, a := range p.Alarms() {
+			if a.ID == id {
+				return true
+			}
+		}
+		return false
+	}
+	if hasAlarm(core.AlarmIDOPCTrip) {
 		fmt.Fprintf(b,
 			`<circle cx="%.0f" cy="%.0f" r="110" `+
 				`fill="none" stroke="red" stroke-width="3"/>`+"\n",
@@ -549,11 +561,22 @@ func writeLiveOverlays(b *strings.Builder, p *core.Plant) {
 			DieselX, DieselY)
 	}
 
-	// Reactor trip red ring.
-	if p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped {
+	// Reactor trip red ring driven by AlarmSet.
+	if hasAlarm(core.AlarmIDReactorTrip) {
 		fmt.Fprintf(b,
 			`<circle cx="%.0f" cy="%.0f" r="60" `+
 				`fill="none" stroke="red" stroke-width="3"/>`+"\n",
 			RPVX, RPVY)
+	}
+
+	// Diesel trip red ring (covers overspeed, coolant
+	// over-temperature, loss of fuel, loss of lube oil;
+	// the simplified model collapses them into one
+	// latch in core/diesel.go:62-71,121,147).
+	if hasAlarm(core.AlarmIDDieselTripped) {
+		fmt.Fprintf(b,
+			`<circle cx="%.0f" cy="%.0f" r="55" `+
+				`fill="none" stroke="red" stroke-width="3"/>`+"\n",
+			DieselX, DieselY)
 	}
 }

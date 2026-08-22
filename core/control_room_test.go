@@ -14,7 +14,7 @@ func TestControlRoom_InitialStateHasPowerAndOperational(t *testing.T) {
 	c := PlantControlRoom{
 		PowerAvailable: true,
 	}
-	c = c.Step(false, true, true)
+	c = c.Step(false, nil, true, true)
 	assert.True(t, c.PCCAvailable,
 		"want PCCAvailable=true with power, got %v", c.PCCAvailable)
 	assert.True(t, c.AuxiliaryPanelsAvailable,
@@ -44,7 +44,7 @@ func TestControlRoom_NoPowerDegradesAllSubsystems(t *testing.T) {
 	c := PlantControlRoom{
 		PowerAvailable: false,
 	}
-	c = c.Step(false, true, true)
+	c = c.Step(false, nil, true, true)
 	assert.False(t, c.PCCAvailable,
 		"want PCCAvailable=false without power, got %v",
 		c.PCCAvailable)
@@ -71,7 +71,7 @@ func TestControlRoom_NoPowerDegradesAllSubsystems(t *testing.T) {
 // stay latched.
 func TestControlRoom_AlarmLatchesAndAcknowledges(t *testing.T) {
 	c := PlantControlRoom{PowerAvailable: true}
-	c = c.Step(true, true, true)
+	c = c.Step(true, nil, true, true)
 	assert.True(t, c.AnnunciatorAlarm,
 		"want AnnunciatorAlarm=true with alarm condition, got %v",
 		c.AnnunciatorAlarm)
@@ -79,7 +79,7 @@ func TestControlRoom_AlarmLatchesAndAcknowledges(t *testing.T) {
 	// Operator acknowledges the alarm; the alarm clears
 	// because the condition has stopped.
 	c.AcknowledgeAlarm()
-	c = c.Step(false, true, true)
+	c = c.Step(false, nil, true, true)
 	assert.False(t, c.AnnunciatorAlarm,
 		"want AnnunciatorAlarm=false after ack and condition cleared, got %v",
 		c.AnnunciatorAlarm)
@@ -90,14 +90,14 @@ func TestControlRoom_AlarmLatchesAndAcknowledges(t *testing.T) {
 // the new condition).
 func TestControlRoom_NewAlarmAfterAckRetriggers(t *testing.T) {
 	c := PlantControlRoom{PowerAvailable: true}
-	c = c.Step(true, true, true)
+	c = c.Step(true, nil, true, true)
 	c.AcknowledgeAlarm()
-	c = c.Step(false, true, true)
+	c = c.Step(false, nil, true, true)
 	assert.False(t, c.AnnunciatorAlarm,
 		"want AnnunciatorAlarm=false after ack, got %v",
 		c.AnnunciatorAlarm)
 
-	c = c.Step(true, true, true)
+	c = c.Step(true, nil, true, true)
 	assert.True(t, c.AnnunciatorAlarm,
 		"want AnnunciatorAlarm=true on new condition, got %v",
 		c.AnnunciatorAlarm)
@@ -110,11 +110,11 @@ func TestControlRoom_NewAlarmAfterAckRetriggers(t *testing.T) {
 // panels are powered and at least one ESF bus is energized.
 func TestControlRoom_SafetyStationsTrackESFBuses(t *testing.T) {
 	c := PlantControlRoom{PowerAvailable: true}
-	c = c.Step(false, false, true)
+	c = c.Step(false, nil, false, true)
 	assert.True(t, c.SafetySystemStationsAvailable,
 		"want SafetySystemStationsAvailable=true with ESF B on, got %v",
 		c.SafetySystemStationsAvailable)
-	c = c.Step(false, false, false)
+	c = c.Step(false, nil, false, false)
 	assert.False(t, c.SafetySystemStationsAvailable,
 		"want SafetySystemStationsAvailable=false with no ESF bus, got %v",
 		c.SafetySystemStationsAvailable)

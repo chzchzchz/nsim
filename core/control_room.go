@@ -38,9 +38,13 @@ package core
 //     specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:65-67
 func (c *PlantControlRoom) Step(
 	alarmCondition bool,
+	alarms []Alarm,
 	esfBus1Available, esfBus2Available bool,
 ) PlantControlRoom {
 	ret := *c
+	if ret.AlarmSet == nil {
+		ret.AlarmSet = make(map[AlarmID]Alarm)
+	}
 
 	// Power-gated availability. When the control room has
 	// electrical power all six operator-interface subsystems
@@ -62,22 +66,85 @@ func (c *PlantControlRoom) Step(
 		ret.SafetySystemStationsAvailable = false
 	}
 
-	// Annunciator alarm handling. The alarm latches when
-	// the monitored condition is true and not yet
-	// acknowledged; an acknowledgement clears the alarm
-	// unless the condition persists.
-	if alarmCondition {
-		// A new alarm condition after acknowledgement
-		// re-triggers the alarm (the operator must
-		// re-acknowledge the new condition).
-		if ret.AlarmAcknowledged {
+	// Merge incoming per-component alarms into AlarmSet.
+	// Each alarm's Active field drives whether the entry
+	// stays in the set; acknowledged entries persist one
+	// extra step so the operator can see "this just cleared".
+	//
+	// Two-pass merge:
+	//   1. For each incoming alarm, update or insert.
+	//   2. For each existing entry not present in the
+	//      incoming list and not Active (the incoming list
+	//      is the authoritative view), drop it. This handles
+	//      the case where the operator clears a condition
+	//      and the next step arrives with no alarms.
+	for _, a := range alarms {
+		existing, ok := ret.AlarmSet[a.ID]
+		if !a.Active {
+			if !ok {
+				continue
+			}
+			if existing.Acknowledged {
+				delete(ret.AlarmSet, a.ID)
+			} else {
+				delete(ret.AlarmSet, a.ID)
+			}
+			continue
+		}
+		if !ok || existing.Timestamp != a.Timestamp {
+			ret.AlarmSet[a.ID] = a
+		}
+	}
+	// Drop entries whose ID is no longer present and whose
+	// Active flag cannot be re-derived from the incoming
+	// list. This is the second pass: any entry whose ID is
+	// missing AND was Active is now cleared.
+	if len(alarms) > 0 {
+		seen := make(map[AlarmID]bool, len(alarms))
+		for _, a := range alarms {
+			seen[a.ID] = true
+		}
+		for id, existing := range ret.AlarmSet {
+			if seen[id] {
+				continue
+			}
+			if existing.Active {
+				delete(ret.AlarmSet, id)
+			}
+		}
+	}
+
+	// Annunciator alarm handling.
+	//
+	// Two input modes are supported:
+	//   1. Legacy callers pass alarmCondition=true/false with
+	//      no per-alarm list. The boolean drives the
+	//      annunciator latch directly.
+	//   2. Plant.Step passes the full p.Alarms() slice and
+	//      the annunciator is derived from the AlarmSet
+	//      trip-severity entries.
+	// Mixing both: any active trip-severity alarm keeps the
+	// annunciator ringing regardless of the boolean.
+	if len(alarms) == 0 {
+		if alarmCondition {
+			if ret.AlarmAcknowledged {
+				ret.AlarmAcknowledged = false
+			}
+			ret.AnnunciatorAlarm = true
+		} else if ret.AlarmAcknowledged {
+			ret.AnnunciatorAlarm = false
+		}
+	} else {
+		if alarmCondition && ret.AlarmAcknowledged {
 			ret.AlarmAcknowledged = false
 		}
-		ret.AnnunciatorAlarm = true
-	} else if ret.AlarmAcknowledged {
-		// Operator acknowledged and the condition has
-		// cleared.
 		ret.AnnunciatorAlarm = false
+		for _, a := range ret.AlarmSet {
+			if a.Active && a.Severity == SeverityTrip {
+				ret.AnnunciatorAlarm = true
+				break
+			}
+		}
 	}
 
 	// Safety system station status. The simplified model
@@ -94,7 +161,12 @@ func (c *PlantControlRoom) Step(
 // AcknowledgeAlarm is the operator-initiated entry point
 // that latches the AnnunciatorAlarm field to false. The
 // alarm will re-trigger on the next alarm condition.
+//
+// Retained for backwards compatibility with the flat
+// acknowledgement bit; new code should call AcknowledgeAll()
+// or ResetAlarm(id) instead.
 func (c *PlantControlRoom) AcknowledgeAlarm() {
 	c.AlarmAcknowledged = true
 	c.AnnunciatorAlarm = false
+	c.AcknowledgeAll()
 }
