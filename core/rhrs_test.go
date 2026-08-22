@@ -93,6 +93,7 @@ func TestRHRS_DoesNotStartAboveTempThreshold(t *testing.T) {
 func TestRHRS_WarmupTimerKeepsSuctionClosed(t *testing.T) {
 	tr := RHRSTrain{
 		Pump:          Pump{Running: true},
+		DriveReady:    true,
 		SuctionValves: [2]Valve{{Open: 0}, {Open: 1}},
 	}
 	rcsHot := u.NewValue(350, u.Fahrenheit)
@@ -126,6 +127,7 @@ func TestRHRS_WarmupTimerKeepsSuctionClosed(t *testing.T) {
 func TestRHRS_MinimumFlowRecircAlwaysPresent(t *testing.T) {
 	tr := RHRSTrain{
 		Pump:           Pump{Running: true},
+		DriveReady:     true,
 		BypassValve:    Valve{Open: 0},
 		WarmupComplete: true,
 	}
@@ -158,6 +160,7 @@ func TestRHRS_BypassValveKeepsReturnFlowConstant(t *testing.T) {
 	mk := func(open float64) *RHRSTrain {
 		return &RHRSTrain{
 			Pump:           Pump{Running: true},
+			DriveReady:     true,
 			BypassValve:    Valve{Open: open},
 			WarmupComplete: true,
 		}
@@ -214,6 +217,7 @@ func TestRHRS_EndToEndCooldownTransfersHeatFromRCS(t *testing.T) {
 	r := &p.AuxiliaryBuilding.ResidualHeatRemovalSystem
 	r.TrainA = RHRSTrain{
 		Pump:           Pump{Running: true},
+		DriveReady:     true,
 		BypassValve:    Valve{Open: 0},
 		WarmupComplete: true,
 		SuctionValves:  [2]Valve{{Open: 1}, {Open: 1}},

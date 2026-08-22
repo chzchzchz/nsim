@@ -49,7 +49,12 @@ import (
 func (c *CCWS) Step() CCWS {
 	ret := *c
 
-	if !ret.PumpRunning {
+	// DriveReady reflects whether the ESF bus that feeds
+	// the CCWS pumps is energised. Without bus power the
+	// pumps cannot deliver flow even if PumpRunning was
+	// latched by the safeguards auto-start.
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_103.txt:135-138
+	if !ret.PumpRunning || !ret.DriveReady {
 		ret.OutletTemp = ret.InletTemp
 		return ret
 	}

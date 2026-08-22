@@ -128,6 +128,7 @@ func TestSIS_AccumulatorDischargesBelowPrecharge(t *testing.T) {
 func TestSIS_HHSIPumpDepletesRWST(t *testing.T) {
 	s := (&SIS{
 		HHSIPumpRunning: true,
+		HHSIDriveReady:  true,
 		HHSISuction:     SISSuctionRWST,
 		RWSTLevel:       u.NewValue(SISRWSTCapacity, u.Gallon),
 	}).Step(100)
@@ -163,6 +164,7 @@ func TestSIS_HHSIPumpDepletesRWST(t *testing.T) {
 func TestSIS_RecirculationSwitchoverAlignsToSump(t *testing.T) {
 	s := SIS{
 		HHSIPumpRunning: true,
+		HHSIDriveReady:  true,
 		HHSISuction:     SISSuctionRWST,
 		RWSTLevel:       u.NewValue(SISRWSTLowLevel-1, u.Gallon),
 	}

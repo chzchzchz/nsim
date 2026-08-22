@@ -61,6 +61,7 @@ func TestCCWS_PumpsOffFreezeInletAndOutletEqualInlet(t *testing.T) {
 func TestCCWS_PumpsRunningInletRecoversTowardSetpoint(t *testing.T) {
 	c := CCWS{
 		PumpRunning: true,
+		DriveReady:  true,
 		InletTemp:   u.NewValue(120.0, u.Fahrenheit),
 		OutletTemp:  u.NewValue(120.0, u.Fahrenheit),
 	}
@@ -85,6 +86,7 @@ func TestCCWS_PumpsRunningInletRecoversTowardSetpoint(t *testing.T) {
 func TestCCWS_PumpsRunningOutletAboveInletByApproachTemp(t *testing.T) {
 	c := CCWS{
 		PumpRunning: true,
+		DriveReady:  true,
 		InletTemp:   u.NewValue(110.0, u.Fahrenheit),
 		OutletTemp:  u.NewValue(110.0, u.Fahrenheit),
 	}
@@ -109,6 +111,7 @@ func TestCCWS_PumpsRunningOutletAboveInletByApproachTemp(t *testing.T) {
 func TestCCWS_InletRecoversWithinFourHours(t *testing.T) {
 	c := CCWS{
 		PumpRunning: true,
+		DriveReady:  true,
 		InletTemp:   u.NewValue(120.0, u.Fahrenheit),
 		OutletTemp:  u.NewValue(120.0, u.Fahrenheit),
 	}

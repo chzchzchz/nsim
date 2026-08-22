@@ -49,7 +49,13 @@ func (t *RHRSTrain) Step(
 	ret := *t
 	dt := TimeStep
 
-	if !ret.Pump.Running {
+	// DriveReady is wired from the per-train ESF bus by
+	// Plant.Step. RHR pumps need bus power to deliver flow;
+	// the gate follows the AFWPump / CCWS / SWS pattern so
+	// an unenergised bus drops the train back to "intent
+	// without power" without operator action.
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:33-36
+	if !ret.Pump.Running || !ret.DriveReady {
 		ret.ReturnFlow = u.NewValue(0, u.Gallon)
 		ret.HeatExchanger.HeatTransferRate = 0
 		return ret

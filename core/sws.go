@@ -36,7 +36,14 @@ import (
 func (s *ServiceWaterSystem) Step(heatLoad Watts) ServiceWaterSystem {
 	ret := *s
 
-	if !ret.PumpRunning {
+	// DriveReady reflects whether the 6600V ESF bus that
+	// feeds the SWS pump motors is energised. Without bus
+	// power the pumps spin down to zero flow even if
+	// PumpRunning was latched by the safety-injection auto-
+	// start; the latch is preserved so the operator can
+	// recover flow once power returns.
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-80
+	if !ret.PumpRunning || !ret.DriveReady {
 		ret.Flow = 0
 		ret.OutletTemp = ret.InletTemp
 		return ret

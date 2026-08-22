@@ -2178,6 +2178,14 @@ type RHRSTrain struct {
 	// has finished and the hot-leg block valves may be opened.
 	WarmupComplete bool
 
+	// DriveReady is true when this train's ESF bus is
+	// energised — TrainA on BusA, TrainB on BusB.
+	// "Loads important to plant safety are split and
+	// diversified between independent engineered safety
+	// features system switchgear groups."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:33-36
+	DriveReady bool
+
 	// WarmupTimer tracks the warmup duration.
 	WarmupTimer time.Duration
 
@@ -2476,6 +2484,16 @@ type SIS struct {
 	// injection actuation signal). For this fidelity a single
 	// flag models both pumps.
 	HHSIPumpRunning bool
+
+	// HHSIDriveReady is true when at least one ESF bus is
+	// energised — the HHSI pump motors are fed from the 6600V
+	// ESF buses, one per train. The SIS Step gates the actual
+	// injection flow on this flag.
+	// "The larger auxiliaries such as the [...] safety
+	// injection pumps are fed directly from the 6600-volt
+	// [engineered safety features] buses."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-80
+	HHSIDriveReady bool
 
 	// HHSISuction is the active suction source for the HHSI
 	// pumps. SISSuctionRWST during the injection phase;
@@ -2871,6 +2889,16 @@ type CCWS struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:93-94
 	PumpRunning bool
 
+	// DriveReady is true when at least one ESF bus is energised;
+	// without bus power the CCW pump motors cannot spin. The Step
+	// function uses this to gate the recovery-lag integration.
+	// "The CCWS Safeguards subsystem is considered an
+	// engineered safeguards system because it is required to
+	// remove decay heat during postaccident and to provide
+	// cooling water to safeguards equipment."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_103.txt:135-138
+	DriveReady bool
+
 	// InletTemp is the CCW inlet temperature (°F). During normal
 	// cooldown this is permitted to rise to 120°F but must
 	// recover to 105°F within four hours.
@@ -3027,6 +3055,15 @@ type ContainmentSpraySystem struct {
 
 	// Running is true when at least one CSS pump is running.
 	Running bool
+
+	// DriveReady is true when at least one ESF bus is energised;
+	// the CSS pump motors are fed from the 6600V ESF buses.
+	// "Containment spray is initiated automatically in response
+	// to a containment high pressure signal. This signal starts
+	// the spray pumps, opens the spray header isolation valves
+	// "A", and opens the SAT isolation valves "B"."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-61
+	DriveReady bool
 
 	// SprayHeaderOpen is true when the spray header isolation
 	// valves "A" are open and spray is being delivered to the
@@ -3605,6 +3642,15 @@ type ServiceWaterSystem struct {
 	// flow of ServiceWaterPumpFlow × 3 is reached when this
 	// flag is set.
 	PumpRunning bool
+
+	// DriveReady is true when at least one ESF bus is
+	// energised — without bus power the pump motors cannot
+	// spin. The Step function uses this to gate actual flow.
+	// "The larger auxiliaries such as the service water pumps
+	// [...] are fed directly from the 6600-volt [engineered
+	// safety features] buses."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-80
+	DriveReady bool
 
 	// Flow is the total essential service water flow rate
 	// (gpm). Calculated as ServiceWaterPumpFlow × number of

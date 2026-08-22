@@ -74,7 +74,7 @@ function renderSensorRow(e: Entry, rows: SensorRow[]): HTMLElement {
     td2.style.padding = "2px 6px";
     td2.style.borderBottom = "1px solid #eee";
     td2.style.fontFamily = "monospace";
-    td2.textContent = unitFor(kind) ? `… ${unitFor(kind)}` : "…";
+    td2.textContent = kind === "bool" ? "…" : (unitFor(kind) ? `… ${unitFor(kind)}` : "…");
     tr.appendChild(td2);
 
     rows.push({ id: e.id, cell: td2 });
@@ -85,12 +85,21 @@ export function refreshSensors(rows: SensorRow[], plant: PlantHandle): void {
     for (const r of rows) {
         const v = plant.sensorJSON(r.id);
         const m = plant.getMeta(r.id);
-        const u = m instanceof Error ? "" : unitFor(m.kind);
-        if (typeof v === "string") {
-            const formatted = m instanceof Error ? v : formatSensorValue(m.kind, v);
-            r.cell.textContent = u ? `${formatted} ${u}` : formatted;
-        } else {
-            r.cell.textContent = `(error: ${(v as Error).message})`;
+        if (m instanceof Error) {
+            r.cell.textContent = "(unknown)";
+            continue;
         }
+        if (typeof v !== "string") {
+            r.cell.textContent = `(error: ${(v as Error).message})`;
+            continue;
+        }
+        if (m.kind === "bool") {
+            const on = v === "true" || v === "1";
+            r.cell.textContent = on ? "✅" : "❌";
+            continue;
+        }
+        const formatted = formatSensorValue(m.kind, v);
+        const u = unitFor(m.kind);
+        r.cell.textContent = u ? `${formatted} ${u}` : formatted;
     }
 }

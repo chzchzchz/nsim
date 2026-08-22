@@ -63,7 +63,12 @@ func (c *ContainmentSpraySystem) Step() ContainmentSpraySystem {
 	ret := *c
 	dt := TimeStep.Seconds()
 
-	if !ret.Running {
+	// DriveReady reflects whether the ESF bus that feeds
+	// the spray pumps is energised. Without bus power the
+	// pumps cannot deliver spray even if Running was latched
+	// by the high-pressure auto-start.
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-61
+	if !ret.Running || !ret.DriveReady {
 		ret.SprayFlow = 0
 		return ret
 	}

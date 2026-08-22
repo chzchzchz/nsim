@@ -614,6 +614,24 @@ func (p *Plant) Step() {
 	p.Electrical.DieselGenA = &p.nextPlant.AuxiliaryBuilding.DieselGenerator
 	p.Electrical.DieselGenB = &p.nextPlant.AuxiliaryBuilding.DieselGenerator
 
+	// Step the ESF buses early so the cross-building DriveReady
+	// wiring into the nextPlant parts below reflects this
+	// step's bus Energized state (otherwise it lags by one step
+	// and ReactorBuilding.Step would see last step's values).
+	p.nextPlant.Electrical = p.Electrical.Step()
+
+	// RHR TrainA on BusA, TrainB on BusB. The spec assigns
+	// RHR pumps to their own ESF train, mirroring the EFWS
+	// motor-pump assignment.
+	// "Loads important to plant safety are split and
+	// diversified between independent engineered safety
+	// features system switchgear groups."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:33-36
+	p.nextPlant.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.DriveReady =
+		p.nextPlant.Electrical.ESFBusA.Energized
+	p.nextPlant.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.DriveReady =
+		p.nextPlant.Electrical.ESFBusB.Energized
+
 	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step()
 
 	// Refueling operations step. The phase machine advances
@@ -652,6 +670,16 @@ func (p *Plant) Step() {
 	//     directly from the RWST."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
 	if p.AuxiliaryBuilding.DieselGenerator.StartSignal == DieselStartSafetyInjection {
+		// HHSI pumps need ESF bus power; DriveReady
+		// reflects whether at least one ESF bus is
+		// energised. The actual injection flow is gated
+		// on HHSIPumpRunning && HHSIDriveReady, so the
+		// auto-start latches PumpRunning on the safety
+		// signal (operator intent) and the bus-energised
+		// state decides whether flow actually develops.
+		p.nextPlant.ReactorBuilding.SafetyInjectionSystem.HHSIDriveReady =
+			p.nextPlant.Electrical.ESFBusA.Energized ||
+				p.nextPlant.Electrical.ESFBusB.Energized
 		p.nextPlant.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = true
 		if p.nextPlant.ReactorBuilding.SafetyInjectionSystem.HHSISuction !=
 			SISSuctionSump {
@@ -737,19 +765,24 @@ func (p *Plant) Step() {
 		efws.SubsystemA.TurbinePump.DriveReady = true
 		efws.SubsystemB.TurbinePump.DriveReady = true
 	}
-	// Motor-driven pump DriveReady tracks the ESF bus (wired
-	// by the existing AFWPump.DriveReady path through the
-	// diesel). When the diesel reaches RatedToLoad the bus is
-	// energised; the motor-driven pump's DriveReady follows.
-	if p.AuxiliaryBuilding.DieselGenerator.ReadyToLoad {
-		efws.SubsystemA.MotorPump.DriveReady = true
-		efws.SubsystemB.MotorPump.DriveReady = true
-	}
+	// Motor-driven pump DriveReady tracks the ESF bus for
+	// each subsystem. The spec assigns each subsystem's
+	// motor pump to its corresponding ESF train.
+	// "Each subsystem [of the EFWS] receives electrical power
+	// from one of two separate Safety Class 1E electrical power
+	// trains."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:61-65
+	efws.SubsystemA.MotorPump.DriveReady =
+		p.nextPlant.Electrical.ESFBusA.Energized
+	efws.SubsystemB.MotorPump.DriveReady =
+		p.nextPlant.Electrical.ESFBusB.Energized
 
 	// CCWS pumps derive power from the ESF bus; the diesel
 	// energises them through the same path as the EFWS motor
-	// pumps. Set PumpRunning when the diesel is ready so the
-	// CCWS Step applies the recovery-lag to the inlet.
+	// pumps. DriveReady reflects whether at least one ESF bus
+	// is energised; PumpRunning auto-latches when the bus is
+	// up so the CCWS Step applies the recovery-lag to the
+	// inlet.
 	//
 	// Spec justification:
 	//   - "The CCWS Safeguards subsystem is considered an
@@ -757,17 +790,25 @@ func (p *Plant) Step() {
 	//     to remove decay heat during postaccident and to
 	//     provide cooling water to safeguards equipment."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_103.txt:135-138
-	if p.AuxiliaryBuilding.DieselGenerator.ReadyToLoad {
+	ccwsDriveReady := p.nextPlant.Electrical.ESFBusA.Energized ||
+		p.nextPlant.Electrical.ESFBusB.Energized
+	p.nextPlant.AuxiliaryBuilding.ComponentCoolingWaterSystem.DriveReady =
+		ccwsDriveReady
+	// CCWS pump auto-start: latch PumpRunning on first entry
+	// to "DriveReady=true" so the Step applies the recovery-
+	// lag. DriveReady stays true only while an ESF bus is
+	// energised, so power loss simply drops the pump back
+	// to "intent without power" without operator action.
+	if ccwsDriveReady &&
+		!p.nextPlant.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning {
 		p.nextPlant.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning = true
 	}
 
 	// CSS auto-start: containment spray is initiated in
-	// response to a containment high-pressure signal. The
-	// cross-building pass has access to the live
-	// ContainmentPressure (computed by ReactorBuilding.Step
-	// above) and the diesel state. With pumps ready, the CSS
-	// transitions to the Initial Injection Mode (Running=true,
-	// SprayHeaderOpen=true, SAT isolation valves "B" open).
+	// response to a containment high-pressure signal. DriveReady
+	// requires at least one ESF bus energised (CSS pumps are
+	// 6600V ESF loads); the auto-start only fires when both the
+	// actuation signal is present AND DriveReady is true.
 	//
 	// Spec justification:
 	//   - "Initial Injection Mode – Containment spray is
@@ -777,12 +818,62 @@ func (p *Plant) Step() {
 	//     and opens the SAT isolation valves "B"."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-61
 	css := &p.nextPlant.AuxiliaryBuilding.ContainmentSpraySystem
+	cssDriveReady := p.nextPlant.Electrical.ESFBusA.Energized ||
+		p.nextPlant.Electrical.ESFBusB.Energized
+	css.DriveReady = cssDriveReady
+	// CSS auto-start: latch on the actuation signal
+	// regardless of bus state; DriveReady gates the actual
+	// spray contribution in the Step function. This matches
+	// the AFWPump pattern (latch Running on the start signal;
+	// DriveReady gates effective flow).
 	if !css.Running &&
 		(p.ReactorBuilding.ContainmentPressure > CSSContainmentPressureSetpoint ||
-			p.nextPlant.ReactorBuilding.ReactorProtectionSystem.ContainmentSprayActuated) &&
-		p.AuxiliaryBuilding.DieselGenerator.ReadyToLoad {
+			p.nextPlant.ReactorBuilding.ReactorProtectionSystem.ContainmentSprayActuated) {
 		css.Running = true
 		css.SprayHeaderOpen = true
+	}
+
+	// SWS pumps are fed from the 6600V engineered safety
+	// features bus, so they receive power automatically when
+	// the diesel (or off-site power) energises the bus on a
+	// safety-injection signal. The simplified model latches
+	// PumpRunning when the SI signal is present, so the
+	// diesel jacket cooling and the RCFC / CCWS heat-rejection
+	// paths become active without operator action.
+	//
+	// The operator control (Outside/ServiceWaterSystem/PumpRunning)
+	// remains the manual-test override for normal operation.
+	//
+	// Spec justification:
+	//   - "The larger auxiliaries such as the service water
+	//     pumps [...] are fed directly from the 6600-volt
+	//     [engineered safety features] buses."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-80
+	//   - "The onsite emergency diesel generators are
+	//     started. [...] The HHSI pumps are started." (SI
+	//     actuation list — SWS pumps follow the same ESF
+	//     bus-energised path.)
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:109-118
+	//   - "The system auxiliary transformers and the standby
+	//     diesel generator constitute the normal and redundant
+	//     sources of power for the engineered safety features
+	//     system."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:91-94
+	sws := &p.nextPlant.Outside.ServiceWaterSystem
+	swsDriveReady := p.nextPlant.Electrical.ESFBusA.Energized ||
+		p.nextPlant.Electrical.ESFBusB.Energized
+	sws.DriveReady = swsDriveReady
+	// SWS pumps are fed from the 6600V ESF bus, so they
+	// only develop flow when the bus is energised. The
+	// auto-start latches PumpRunning on the safety signal
+	// (operator intent); the actual flow contribution is
+	// gated on PumpRunning && DriveReady in SWS.Step.
+	if !sws.PumpRunning &&
+		(p.AuxiliaryBuilding.DieselGenerator.StartSignal ==
+			DieselStartSafetyInjection ||
+			p.AuxiliaryBuilding.DieselGenerator.StartSignal ==
+				DieselStartLossOfOffsitePower) {
+		sws.PumpRunning = true
 	}
 
 	// RCFC step: each running unit integrates heat rejection
@@ -1414,6 +1505,22 @@ func MakePlant() Plant {
 	// to isolate a train.
 	p.Electrical.ESFBusA.BreakerClosed = true
 	p.Electrical.ESFBusB.BreakerClosed = true
+
+	// Offsite-source generators (one per train). At construction
+	// both offsite supplies are available and energised, so the
+	// ESF buses are powered from offsite; the diesel acts as a
+	// redundant backup if offsite is lost.
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:23-36
+	p.Electrical.OffsiteSourceA = PowerGenerator{
+		Voltage:      DieselRatedVoltage,
+		BreakerClosed: true,
+	}
+	p.Electrical.OffsiteSourceB = PowerGenerator{
+		Voltage:      DieselRatedVoltage,
+		BreakerClosed: true,
+	}
+	p.Electrical.OffsiteA = &p.Electrical.OffsiteSourceA
+	p.Electrical.OffsiteB = &p.Electrical.OffsiteSourceB
 
 	// Generator excitation and cooling defaults (plans/p30_1.txt).
 	// At construction the exciter is not producing field current

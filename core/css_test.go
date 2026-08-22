@@ -50,6 +50,7 @@ func TestCSS_InitialStateIsIdle(t *testing.T) {
 func TestCSS_CSSTDepletesWhileRunning(t *testing.T) {
 	c := ContainmentSpraySystem{
 		Running:         true,
+		DriveReady:      true,
 		SprayHeaderOpen: true,
 		CSSTLevel:       CSSTCapacity,
 		SATLevel:        SATCapacity,
@@ -75,6 +76,7 @@ func TestCSS_CSSTDepletesWhileRunning(t *testing.T) {
 func TestCSS_SATDepletesProportionallyWithCSST(t *testing.T) {
 	c := ContainmentSpraySystem{
 		Running:         true,
+		DriveReady:      true,
 		SprayHeaderOpen: true,
 		CSSTLevel:       CSSTCapacity,
 		SATLevel:        SATCapacity,
@@ -99,6 +101,7 @@ func TestCSS_SATDepletesProportionallyWithCSST(t *testing.T) {
 func TestCSS_MiniflowReducesCSSTDrainWhenHeaderClosed(t *testing.T) {
 	openHeader := ContainmentSpraySystem{
 		Running:         true,
+		DriveReady:      true,
 		SprayHeaderOpen: true,
 		CSSTLevel:       CSSTCapacity,
 		SATLevel:        SATCapacity,
@@ -133,6 +136,7 @@ func TestCSS_MiniflowReducesCSSTDrainWhenHeaderClosed(t *testing.T) {
 func TestCSS_SumpPHAdjustedLatchesBelowLoLo(t *testing.T) {
 	c := ContainmentSpraySystem{
 		Running:         true,
+		DriveReady:      true,
 		SprayHeaderOpen: true,
 		CSSTLevel:       u.NewValue(CSSLowLevelSetpoint-10, u.Gallon),
 		SATLevel:        u.NewValue(SATCapacity.Float()/CSSTCapacity.Float()*(CSSLowLevelSetpoint-10), u.Gallon),
@@ -157,6 +161,7 @@ func TestCSS_SumpPHAdjustedLatchesBelowLoLo(t *testing.T) {
 func TestCSS_SwitchoverToSumpStopsCSSTDrain(t *testing.T) {
 	c := ContainmentSpraySystem{
 		Running:         true,
+		DriveReady:      true,
 		SprayHeaderOpen: true,
 		CSSTLevel:       u.NewValue(CSSLowLevelSetpoint-10, u.Gallon),
 		SATLevel:        u.NewValue(100, u.Gallon),
@@ -178,6 +183,7 @@ func TestCSS_SwitchoverToSumpStopsCSSTDrain(t *testing.T) {
 func TestCSS_SprayFlowTracksHeaderState(t *testing.T) {
 	c := ContainmentSpraySystem{
 		Running:         true,
+		DriveReady:      true,
 		SprayHeaderOpen: true,
 		CSSTLevel:       CSSTCapacity,
 		SATLevel:        SATCapacity,

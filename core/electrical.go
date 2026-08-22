@@ -30,6 +30,20 @@ type Electrical struct {
 	MainGenB   *PowerGenerator
 	DieselGenA *DieselGenerator
 	DieselGenB *DieselGenerator
+
+	// OffsiteSource is the simplified offsite auxiliary-power
+	// representation used to keep the ESF buses "normally
+	// energised" at construction. The model does not track the
+	// offsite grid in detail; this struct holds a single
+	// energised PowerGenerator per train that the ESF bus can
+	// pull from as long as OffsitePowerAvailable is true. When
+	// the plant operator declares a loss of offsite power
+	// (PlantElectricalSystems.OffsitePowerAvailable=false) the
+	// model drops Voltage to zero, mirroring the spec's
+	// "automatic transfer of supplies" path
+	// (specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:56-59).
+	OffsiteSourceA PowerGenerator
+	OffsiteSourceB PowerGenerator
 }
 
 // ESFBus is one train of the Engineered Safety Features bus.

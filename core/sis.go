@@ -102,8 +102,10 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 	// HHSI pump flow splits: the SISHHSIMiniFlowFraction
 	// recirculates back to the RWST via the continuous minimum-
 	// flow path so the pump cannot deadhead, and the
-	// remainder goes into the RCS cold legs.
-	if ret.HHSIPumpRunning && ret.HHSISuction == SISSuctionRWST {
+	// remainder goes into the RCS cold legs. HHSI pumps
+	// need ESF bus power; DriveReady is wired from
+	// ESFBusA.Energized || ESFBusB.Energized by Plant.Step.
+	if ret.HHSIPumpRunning && ret.HHSIDriveReady && ret.HHSISuction == SISSuctionRWST {
 		dW := SISHHSIDesignFlow.Float() * dt.Seconds()
 		newRWST := ret.RWSTLevel.Float() - dW
 		if newRWST < 0 {
@@ -113,7 +115,7 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 		netFlow := SISHHSIDesignFlow.Float() *
 			(1.0 - SISHHSIMiniFlowFraction)
 		ret.HHSIInjectionFlow = u.NewValue(netFlow, u.Gallon)
-	} else if ret.HHSIPumpRunning && ret.HHSISuction == SISSuctionSump {
+	} else if ret.HHSIPumpRunning && ret.HHSIDriveReady && ret.HHSISuction == SISSuctionSump {
 		netFlow := SISHHSIDesignFlow.Float() *
 			(1.0 - SISHHSIMiniFlowFraction)
 		ret.HHSIInjectionFlow = u.NewValue(netFlow, u.Gallon)
@@ -129,8 +131,10 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 	// switchover completes after SISRecirculationSwitchoverDelay
 	// seconds to model the protection-logic + valve-stroke
 	// latency. The result is latched so the alignment does
-	// not toggle.
+	// not toggle. HHSIDriveReady is required so the
+	// switchover only progresses while the bus is energised.
 	if !ret.SwitchoverComplete && ret.HHSIPumpRunning &&
+		ret.HHSIDriveReady &&
 		ret.RWSTLevel.Float() < SISRWSTLowLevel {
 		ret.SwitchoverTimer += dt
 		if ret.SwitchoverTimer.Seconds() >=

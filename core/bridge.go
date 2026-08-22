@@ -37,6 +37,179 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 		},
 	}
 
+	// RHR train-A pump manual stop / start. The operator stops
+	// the RHR pumps when plant startup begins; during cooldown
+	// one train runs on miniflow until RCS is below 350°F.
+	// "The RHR pumps are stopped when the plant startup
+	// begins."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_085.txt:46-48
+	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/PumpRunning"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA",
+		Label: "PumpRunning",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Running)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Running = v
+			return nil
+		},
+	}
+	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/PumpRunning"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB",
+		Label: "PumpRunning",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.Running)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.Running = v
+			return nil
+		},
+	}
+
+	// EFWS motor-driven pump manual control. Auto-starts on
+	// SI / low-low SG level; the operator manually stops it
+	// when main feedwater is restored and manually starts it
+	// for plant cooldown.
+	// "Normal feedwater flow to the steam generators by the
+	// main feedwater system is resumed and the emergency
+	// feedwater pumps are manually stopped."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:88-91
+	// "the pumps are manually started and the flowrates are
+	// manually controlled by positioning the flow modulating
+	// valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_102.txt:14-18
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPumpRunning"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA",
+		Label: "MotorPumpRunning",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPumpRunning)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPumpRunning = v
+			return nil
+		},
+	}
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/MotorPumpRunning"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB",
+		Label: "MotorPumpRunning",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPumpRunning)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPumpRunning = v
+			return nil
+		},
+	}
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePumpRunning"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA",
+		Label: "TurbinePumpRunning",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePumpRunning)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePumpRunning = v
+			return nil
+		},
+	}
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePumpRunning"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB",
+		Label: "TurbinePumpRunning",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePumpRunning)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePumpRunning = v
+			return nil
+		},
+	}
+
+	// HHSI pump manual start. Manual starting of the HHSI
+	// pumps from the main control board backs up the CVCS
+	// charging pumps for RCS boration.
+	// "Manual starting of the HHSI pumps will result in the
+	// injection of borated water as RCS pressure is decreased
+	// below the shutoff head of the pump."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:159-164
+	m["ReactorBuilding/SafetyInjectionSystem/HHSIPumpRunning"] = &bridge.Control{
+		Part:  "ReactorBuilding/SafetyInjectionSystem",
+		Label: "HHSIPumpRunning",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = v
+			return nil
+		},
+	}
+
+	// Circulating water pump operator control. The operator
+	// varies the number of CW pumps in service from the main
+	// control room.
+	// "Controls, interlocks, and indicators in the main
+	// control room are provided to enable the operator to
+	// modulate the circulating water pump discharge valves and
+	// to vary the number of pumps in service."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:66-70
+	m["Outside/CirculatingWaterSystem/PumpRunning"] = &bridge.Control{
+		Part:  "Outside/CirculatingWaterSystem",
+		Label: "PumpRunning",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.Outside.CirculatingWaterPump.Running)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.Outside.CirculatingWaterPump.Running = v
+			return nil
+		},
+	}
+
 	// Pressurizer spray valve (chapter 7 pressure control):
 	// "The pressurizer pressure control system ... spray ..."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
@@ -477,9 +650,9 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 	// PumpRunning is the lumped "at least one essential SW
 	// pump running" flag. With this set true, the simplified
 	// model drives Flow = ServiceWaterDesignFlow and cools the
-	// diesel jacket water via core/auxiliary.go:119.
-	m["ReactorBuilding/ServiceWaterSystem/PumpRunning"] = &bridge.Control{
-		Part:  "ReactorBuilding/ServiceWaterSystem",
+	// diesel jacket water (see Plant.Step -> AuxiliaryBuilding.Step).
+	m["Outside/ServiceWaterSystem/PumpRunning"] = &bridge.Control{
+		Part:  "Outside/ServiceWaterSystem",
 		Label: "PumpRunning",
 		Kind:  "bool",
 		Get: func() string {
@@ -505,8 +678,8 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 	// Operator flips the isolation valves during accident
 	// conditions; the simplified model records the boolean
 	// directly.
-	m["ReactorBuilding/ServiceWaterSystem/NonessentialIsolated"] = &bridge.Control{
-		Part:  "ReactorBuilding/ServiceWaterSystem",
+	m["Outside/ServiceWaterSystem/NonessentialIsolated"] = &bridge.Control{
+		Part:  "Outside/ServiceWaterSystem",
 		Label: "NonessentialIsolated",
 		Kind:  "bool",
 		Get: func() string {
@@ -798,6 +971,193 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		},
 	}
 
+	// Containment spray pump running.
+	// "Containment spray is initiated automatically in response
+	// to a containment high pressure signal. This signal starts
+	// the spray pumps [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-60
+	m["AuxiliaryBuilding/ContainmentSpraySystem/PumpRunning"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ContainmentSpraySystem",
+		Label: "PumpRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.ContainmentSpraySystem.Running)
+		},
+	}
+
+	// CCWS pump running. One component cooling pump is in
+	// service per train during normal operation; a standby pump
+	// in each train auto-starts on pump failure.
+	// "During normal full power operation, one component
+	// cooling safeguards train and the component cooling
+	// auxiliary subsystem (each operating with one pump and one
+	// heat exchanger) are required to accommodate the heat
+	// removal loads."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:71-77
+	// "Failure of a pump will not affect the time required for
+	// cooldown because a standby pump in each train of the
+	// Safeguards subsystem is provided."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_106.txt:1-4
+	m["AuxiliaryBuilding/ComponentCoolingWaterSystem/PumpRunning"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ComponentCoolingWaterSystem",
+		Label: "PumpRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning)
+		},
+	}
+
+	// HHSI pump running. Auto-started on safety injection; also
+	// manually started from the main control board for
+	// RCS boration backup.
+	// "The receipt of the safety injection signal initiates
+	// the following emergency core cooling actions: [...] The
+	// HHSI pumps are started."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:109-118
+	// "Manual starting of the HHSI pumps will result in the
+	// injection of borated water as RCS pressure is decreased
+	// below the shutoff head of the pump."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:159-164
+	m["ReactorBuilding/SafetyInjectionSystem/HHSIPumpRunning"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SafetyInjectionSystem",
+		Label: "HHSIPumpRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning)
+		},
+	}
+
+	// RHR train-A pump running. The RHR pumps are stopped
+	// when plant startup begins and run on the miniflow
+	// circuit during cooldown.
+	// "One reactor coolant pump is kept running to provide for
+	// uniform cooldown of all loops until the cooling
+	// temperature is below 160°F."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:37-40
+	// "The RHR pumps are stopped when the plant startup
+	// begins."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_085.txt:46-48
+	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/PumpRunning"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA",
+		Label: "PumpRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Running)
+		},
+	}
+	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/PumpRunning"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB",
+		Label: "PumpRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.Running)
+		},
+	}
+
+	// EFWS motor-driven pump running. Auto-started on
+	// safety-injection signal or low-low SG level; manually
+	// stopped when main feedwater is restored.
+	// "Signal / Pumps Started [...] Low-low level in 2/4
+	// level channels in any one steam generator / Motor
+	// driven pumps. [...] Safety injection / Motor driven
+	// pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:69-81
+	// "Normal feedwater flow to the steam generators by the
+	// main feedwater system is resumed and the emergency
+	// feedwater pumps are manually stopped."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:88-91
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPumpRunning"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA",
+		Label: "MotorPumpRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPumpRunning)
+		},
+	}
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/MotorPumpRunning"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB",
+		Label: "MotorPumpRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPumpRunning)
+		},
+	}
+	// EFWS turbine-driven pump running. Auto-started on low-low
+	// level in two steam generators.
+	// "Low-low level in 2/4 level channels in any two steam
+	// generators / Turbine drive pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:82-85
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePumpRunning"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA",
+		Label: "TurbinePumpRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePumpRunning)
+		},
+	}
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePumpRunning"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB",
+		Label: "TurbinePumpRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePumpRunning)
+		},
+	}
+
+	// SFPCS pump running. Two pumps normal, third standby.
+	// "Normal operation requires two pumps with the third pump
+	// serving as a standby."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:43-44
+	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PumpRunning"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
+		Label: "PumpRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PumpRunning)
+		},
+	}
+	// SFPCS standby pump auto-started at low header pressure.
+	// "the third pump automatically starts at a header
+	// pressure of 50 psig (4.5 bar)."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:47-48
+	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/StandbyRunning"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
+		Label: "StandbyRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.StandbyRunning)
+		},
+	}
+
+	// Circulating water pump running. The operator modulates
+	// the CW pump discharge valves and varies the number of
+	// pumps in service from the main control room.
+	// "Controls, interlocks, and indicators in the main
+	// control room are provided to enable the operator to
+	// modulate the circulating water pump discharge valves and
+	// to vary the number of pumps in service."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:66-70
+	m["Outside/CirculatingWaterSystem/PumpRunning"] = &bridge.Sensor{
+		Part:  "Outside/CirculatingWaterSystem",
+		Label: "PumpRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.Outside.CirculatingWaterPump.Running)
+		},
+	}
+
 	// Turbine velocity (chapter 15 design data):
 	// "Speed: 1800 rpm"
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:22
@@ -1038,8 +1398,8 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 	// single lumped Flow value (gpm); we use the bridge
 	// "gallon" kind as the closest analog (no "gpm" kind
 	// exists in bridge/convert.go).
-	m["ReactorBuilding/ServiceWaterSystem/Flow"] = &bridge.Sensor{
-		Part:  "ReactorBuilding/ServiceWaterSystem",
+	m["Outside/ServiceWaterSystem/Flow"] = &bridge.Sensor{
+		Part:  "Outside/ServiceWaterSystem",
 		Label: "Flow",
 		Kind:  "gpm",
 		Get: func() (string, error) {
@@ -1057,8 +1417,8 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 	// InletTemp is the river/lake/ocean intake temperature;
 	// held constant at ServiceWaterSourceTemp (70°F) by the
 	// simplified model.
-	m["ReactorBuilding/ServiceWaterSystem/InletTemp"] = &bridge.Sensor{
-		Part:  "ReactorBuilding/ServiceWaterSystem",
+	m["Outside/ServiceWaterSystem/InletTemp"] = &bridge.Sensor{
+		Part:  "Outside/ServiceWaterSystem",
 		Label: "InletTemp",
 		Kind:  "fahrenheit",
 		Get: func() (string, error) {
@@ -1078,8 +1438,8 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 	// "Diesel generator coolers" are typical SWS loads whose
 	// heat load drives the outlet rise.
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:88-89
-	m["ReactorBuilding/ServiceWaterSystem/OutletTemp"] = &bridge.Sensor{
-		Part:  "ReactorBuilding/ServiceWaterSystem",
+	m["Outside/ServiceWaterSystem/OutletTemp"] = &bridge.Sensor{
+		Part:  "Outside/ServiceWaterSystem",
 		Label: "OutletTemp",
 		Kind:  "fahrenheit",
 		Get: func() (string, error) {

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // At construction all three essential service water pumps are
@@ -51,6 +52,7 @@ func TestSWS_StoppedPumpsHaveZeroFlow(t *testing.T) {
 func TestSWS_OutletTempRisesWithHeatLoad(t *testing.T) {
 	s := ServiceWaterSystem{
 		PumpRunning: true,
+		DriveReady:  true,
 		Flow:       ServiceWaterDesignFlow,
 		InletTemp:  ServiceWaterInletTemp,
 	}
@@ -150,4 +152,42 @@ func TestSWS_EndToEndSteadyState(t *testing.T) {
 		sf.PurificationFlow, 1e-9,
 		"want SFPCS PurificationFlow=SFPCPurificationFlow, got %v",
 		sf.PurificationFlow)
+}
+
+// SI / loss-of-offsite-power signals energise the ESF bus and the
+// 6600V SWS pump motors with it; the simplified model latches
+// PumpRunning so the operator doesn't have to start the pumps by
+// hand during an accident. Manual / Test starts must NOT auto-start
+// the SWS (those are operator-initiated tests, not safety signals).
+//
+// Spec justification:
+//   - SWS pumps fed from the 6600V ESF bus:
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-80
+//   - SI starts diesel + HHSI; SWS follows the same bus path:
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:109-118
+func TestSWS_PumpAutoStartsOnSafetySignal(t *testing.T) {
+	for _, cause := range []DieselStartCause{
+		DieselStartSafetyInjection,
+		DieselStartLossOfOffsitePower,
+	} {
+		p := MakePlant()
+		require.True(t, p.Outside.ServiceWaterSystem.PumpRunning,
+			"precondition: SWS pumps running at construction")
+
+		// Operator stops the SWS pump, then SI signal arrives.
+		p.Outside.ServiceWaterSystem.PumpRunning = false
+		p.AuxiliaryBuilding.DieselGenerator.StartSignal = cause
+		stepN(&p, 1)
+		assert.True(t, p.Outside.ServiceWaterSystem.PumpRunning,
+			"want SWS PumpRunning auto-latched on %v, got false",
+			cause)
+	}
+
+	// Manual / Test starts must NOT auto-start the SWS pump.
+	p := MakePlant()
+	p.Outside.ServiceWaterSystem.PumpRunning = false
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
+	stepN(&p, 1)
+	assert.False(t, p.Outside.ServiceWaterSystem.PumpRunning,
+		"want SWS PumpRunning remain false on DieselStartManual, got true")
 }
