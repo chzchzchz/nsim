@@ -64,3 +64,58 @@ func TestBridge_PumpControlsRoundTrip(t *testing.T) {
 			"want Get %q == 0 after Set, got %q", id, c.Get())
 	}
 }
+
+// Pressure-relief / steam-side / RHR isolation valves are
+// spec-justified in core/bridge.go. These tests verify each
+// entry exists and round-trips through Set/Get.
+func TestBridge_ReliefAndIsolationValveSensors(t *testing.T) {
+	p := MakePlant()
+	m := GetSensorMap(&p)
+	for _, id := range []string{
+		"ReactorBuilding/PORV/Open",
+		"ReactorBuilding/SafetyValve/Open",
+		"ReactorBuilding/BlockValve/Open",
+		"ReactorBuilding/PressurizedReliefTank/Level",
+		"ReactorBuilding/SteamGenerator/MainSteamIsolationValve/Open",
+		"ReactorBuilding/SteamGenerator/SafetyValve/Open",
+		"ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open",
+		"AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingFlow",
+		"AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownFlow",
+		"ReactorBuilding/ReactorMakeupControlValve/Flow",
+		"ReactorBuilding/ReactorPressureVessel/ControlRods/Position",
+	} {
+		s, ok := m[id]
+		require.Truef(t, ok, "want sensor %q registered", id)
+		out, err := s.Get()
+		require.NoErrorf(t, err, "Get %q", id)
+		assert.NotEmptyf(t, out, "want non-empty value from sensor %q", id)
+	}
+}
+
+func TestBridge_ReliefAndIsolationValveControls(t *testing.T) {
+	p := MakePlant()
+	m := GetControlMap(&p)
+	for _, id := range []string{
+		"ReactorBuilding/PORV/Open",
+		"ReactorBuilding/SafetyValve/Open",
+		"ReactorBuilding/BlockValve/Open",
+		"ReactorBuilding/SteamGenerator/MainSteamIsolationValve/Open",
+		"ReactorBuilding/SteamGenerator/SafetyValve/Open",
+		"ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open",
+		"AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve1/Open",
+		"AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve2/Open",
+		"AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve1/Open",
+		"AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve2/Open",
+		"AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/BypassValve/Open",
+		"AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/BypassValve/Open",
+	} {
+		c, ok := m[id]
+		require.Truef(t, ok, "want control %q registered", id)
+		require.NoErrorf(t, c.Set("1"), "Set %q=1", id)
+		assert.Equalf(t, "1", c.Get(),
+			"want Get %q == 1 after Set, got %q", id, c.Get())
+		require.NoErrorf(t, c.Set("0"), "Set %q=0", id)
+		assert.Equalf(t, "0", c.Get(),
+			"want Get %q == 0 after Set, got %q", id, c.Get())
+	}
+}

@@ -1420,6 +1420,72 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		},
 	}
 
+	// Control-rod actual position (chapter 2 RCC operation):
+	// "Rod cluster control (RCC) assemblies are used for reactor
+	// startup or shutdown, to follow load changes, and to
+	// control small transient changes in reactivity."
+	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_035.txt:90-93
+	// Position=1 means fully withdrawn (normal operation);
+	// Position=0 means fully inserted.
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:43
+	// "rod position [...] provides operational reactivity control"
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/Position"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "Position",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position)
+		},
+	}
+
+	// CVCS charging flow rate (chapter 4 CVCS):
+	// "The charging pumps take the coolant from the volume
+	// control tank [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:79-80
+	// "system pressure is maintained by charging and letdown
+	// flow control."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:96-97
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingFlow"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "ChargingFlow",
+		Kind:  "gpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gpm",
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingFlow.Float())
+		},
+	}
+
+	// CVCS letdown flow rate (chapter 4 CVCS):
+	// "The charging pumps take the coolant from the volume
+	// control tank [...]" — the letdown line returns RCS
+	// coolant back to the VCT through the letdown heat
+	// exchanger.
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:79-80
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownFlow"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "LetdownFlow",
+		Kind:  "gpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gpm",
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownFlow.Float())
+		},
+	}
+
+	// Reactor makeup control valve flow (chapter 4 CVCS):
+	// "Because of the influx of makeup water from the reactor
+	// makeup control system [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-6
+	m["ReactorBuilding/ReactorMakeupControlValve/Flow"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorMakeupControlValve",
+		Label: "Flow",
+		Kind:  "gpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gpm",
+				p.ReactorBuilding.ReactorMakeupControlValve.Flow.Float())
+		},
+	}
+
 	// Pressurizer water inventory (chapter 16 startup):
 	// "Drain pressurizer to no-load operating level [...] lower
 	// pressurizer level to the normal range of 20 to 80 percent"
@@ -1431,6 +1497,68 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("gallon",
 				p.ReactorBuilding.Pressurizer.Water.Float())
+		},
+	}
+
+	// Pressurizer PORV position (chapter 3 pressure
+	// limiting):
+	// "Reductions in plant electrical load with resultant
+	// pressure increases beyond the pressure-limiting
+	// capability of the pressurizer spray system cause the
+	// air-operated relief valves to open."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:23-30
+	m["ReactorBuilding/PORV/Open"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/PORV",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.PORV.Open)
+		},
+	}
+
+	// Pressurizer ASME-code safety valve position
+	// (chapter 3):
+	// "If system pressure continues to rise, self-actuating
+	// ASME-code safety valves will open."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:30-31
+	m["ReactorBuilding/SafetyValve/Open"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SafetyValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.SafetyValve.Open)
+		},
+	}
+
+	// Reactor coolant loop block valve position
+	// (chapter 3):
+	// "Reactor coolant loop isolation valves may be closed
+	// to isolate a loop."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_071.txt:145
+	m["ReactorBuilding/BlockValve/Open"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/BlockValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.BlockValve.Open)
+		},
+	}
+
+	// Pressurizer relief tank level (chapter 3):
+	// "Steam from the safety and/or relief valves is piped
+	// to the pressurizer relief tank which contains
+	// sufficient water to condense the steam."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:33-35
+	m["ReactorBuilding/PressurizedReliefTank/Level"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/PressurizedReliefTank",
+		Label: "Level",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.ReactorBuilding.PressurizedReliefTank.Level.Float())
 		},
 	}
 
