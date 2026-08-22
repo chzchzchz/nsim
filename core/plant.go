@@ -636,6 +636,10 @@ func (p *Plant) Step() {
 	// on the 6600 V plant distribution bus fed by UAT or SAT
 	// (see plans/x/uat_sat_gating.md); a blackout drops it.
 	p.nextPlant.Outside.CirculatingWaterPump.DriveReady = plantDriveReady
+	// Latch the RCP DriveReady so the bridge sensor reflects the
+	// actual upstream power state, matching the pattern used for
+	// the CW and SWS pumps.
+	p.nextPlant.ReactorBuilding.ReactorCoolantPump.DriveReady = plantDriveReady
 	// SWS flow at this point is the prior step's delivered flow
 	// in gpm (the SWS Step runs later, after the cross-building
 	// DriveReady wiring). PumpRunning alone is not enough — the
