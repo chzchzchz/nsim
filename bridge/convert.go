@@ -3,6 +3,7 @@ package bridge
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 )
 
@@ -79,8 +80,9 @@ func ConvertControlValue(kind, raw string) (string, error) {
 }
 
 // FormatSensorValue serialises a sensor reading to a string according to the
-// Kind taxonomy. Accepted Go types: bool, float64, float32, string. Other
-// types return an error.
+// Kind taxonomy. Accepted Go types: bool, float64, float32, and any named
+// type whose underlying kind is float64 or float32 (e.g. core.Pressure).
+// Other types return an error.
 func FormatSensorValue(kind string, v any) (string, error) {
 	switch kind {
 	case "bool":
@@ -93,14 +95,9 @@ func FormatSensorValue(kind string, v any) (string, error) {
 		}
 		return "0", nil
 	case "normalized", "percent", "rpm", "psig", "fahrenheit", "gallon", "watt", "ppm", "volt", "hz":
-		var f float64
-		switch x := v.(type) {
-		case float64:
-			f = x
-		case float32:
-			f = float64(x)
-		default:
-			return "", fmt.Errorf("%s kind requires float value, got %T", kind, v)
+		f, err := toFloat(v)
+		if err != nil {
+			return "", err
 		}
 		if kind != "fahrenheit" && f < 0 {
 			return "", fmt.Errorf("%s %v negative", kind, f)
@@ -115,4 +112,24 @@ func FormatSensorValue(kind string, v any) (string, error) {
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnknownKind, kind)
 	}
+}
+
+// toFloat extracts a float64 from either a concrete float64/float32 or any
+// defined type whose underlying kind is one of those. This lets callers pass
+// `core.Pressure` directly without having to call `.Float()` first.
+func toFloat(v any) (float64, error) {
+	switch x := v.(type) {
+	case float64:
+		return x, nil
+	case float32:
+		return float64(x), nil
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Float64:
+		return rv.Float(), nil
+	case reflect.Float32:
+		return rv.Float(), nil
+	}
+	return 0, fmt.Errorf("requires float value, got %T", v)
 }
