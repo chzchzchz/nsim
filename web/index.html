@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>nsim — PWR P&ID dashboard</title>
+    <style>
+        body {
+            font-family: -apple-system, system-ui, sans-serif;
+            margin: 0;
+            background: #f5f5f5;
+            color: #222;
+        }
+        header#sim-bar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding: 8px 16px;
+            background: #2c3e50;
+            color: white;
+            border-bottom: 2px solid #1a252f;
+        }
+        header#sim-bar button {
+            background: #34495e;
+            color: white;
+            border: 1px solid #1a252f;
+            padding: 4px 12px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        header#sim-bar button:hover { background: #4a6178; }
+        header#sim-bar button:disabled {
+            background: #555;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        header#sim-bar select {
+            padding: 4px 6px;
+            font-size: 14px;
+        }
+        header#sim-bar #sim-status {
+            margin-left: auto;
+            font-family: monospace;
+            background: rgba(0,0,0,0.2);
+            padding: 4px 12px;
+            border-radius: 4px;
+        }
+        main {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 16px;
+            padding: 16px;
+        }
+        #pid {
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            overflow: auto;
+            max-height: calc(100vh - 100px);
+        }
+        #pid svg { max-width: 100%; height: auto; display: block; }
+        aside {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        #controls fieldset {
+            margin: 0 0 8px 0;
+            padding: 4px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        #controls legend { font-weight: bold; font-size: 12px; }
+        #readout {
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 8px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+        #readout td { padding: 2px 6px; border-bottom: 1px solid #eee; }
+        #readout th { padding: 2px 6px; border-bottom: 2px solid #ccc; }
+    </style>
+</head>
+<body>
+    <header id="sim-bar">
+        <button id="btn-start">▶ Start</button>
+        <button id="btn-step">⏭ Step</button>
+        <button id="btn-reset">↺ Reset</button>
+        <label>
+            Tick rate
+            <select id="tick-rate">
+                <option value="1">1× (1 ms / frame)</option>
+                <option value="16" selected>16× (16 ms / frame)</option>
+                <option value="100">100× (100 ms / frame)</option>
+                <option value="1000">1000× (1 s / frame)</option>
+            </select>
+        </label>
+        <span id="sim-status">loading…</span>
+    </header>
+    <main>
+        <div id="pid"></div>
+        <aside>
+            <div id="controls"></div>
+            <div id="readout"></div>
+        </aside>
+    </main>
+    <script src="/wasm_exec.js"></script>
+    <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

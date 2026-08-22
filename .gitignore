@@ -1,3 +1,11 @@
 plans/
 specs/
 *.swp
+
+# web/ build artifacts
+web/node_modules/
+web/dist/
+web/.vite/
+web/public/nsim.wasm
+web/public/wasm_exec.js
+web/src/wasm_exec.js
