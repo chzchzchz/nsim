@@ -70,7 +70,7 @@ func TestSWS_OutletTempRisesWithHeatLoad(t *testing.T) {
 // purification flow at the design 100 gpm.
 func TestSFPCS_InitialStateHasTwoPumpsRunning(t *testing.T) {
 	p := MakePlant()
-	sf := p.ReactorBuilding.SpentFuelPoolCoolingSystem
+	sf := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
 	assert.True(t, sf.PumpRunning,
 		"want PumpRunning=true at startup, got %v", sf.PumpRunning)
 	assert.False(t, sf.StandbyRunning,
@@ -137,7 +137,7 @@ func TestSWS_EndToEndSteadyState(t *testing.T) {
 	p := MakePlant()
 	stepN(&p, int(15*time.Second/TimeStep))
 	sws := p.ReactorBuilding.ServiceWaterSystem
-	sf := p.ReactorBuilding.SpentFuelPoolCoolingSystem
+	sf := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
 	assert.True(t, sws.PumpRunning,
 		"want SWS PumpRunning=true after stepping, got %v",
 		sws.PumpRunning)

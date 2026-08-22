@@ -1,6 +1,15 @@
 package core
 
 // ReactorBuilding holds the primary loop, including the steam generator.
+//
+// Aux is a pointer to the auxiliary building subsystem bundle
+// (CVCS, RHRS, CCWS, CSS, RCFC, EFWS, diesel, transformer, SW pump,
+// SFP cooling). Plant.Step sets it before each Step call so the
+// cross-subsystem access in ReactorBuilding.Step can read fresh
+// values. Holding a pointer (rather than embedding) keeps the
+// canonical subsystem instance on Plant.AuxiliaryBuilding so updates
+// from the auxiliary Step and the cross-building Plant.Step logic
+// land in one place.
 type ReactorBuilding struct {
 	ReactorPressureVessel
 	SteamGenerator
@@ -10,6 +19,12 @@ type ReactorBuilding struct {
 	BlockValve            Valve
 	PORV                  Valve
 	PressurizedReliefTank Tank
+
+	// Aux points at the canonical AuxiliaryBuilding that lives on
+	// Plant. The Step function reads CVCS / RHRS / CCWS / CSS /
+	// RCFC / EFWS through this pointer so its single-step writes
+	// stay consistent with Plant.Step's cross-building wiring.
+	Aux *AuxiliaryBuilding
 
 	// ContainmentPressure is the lumped containment atmosphere
 	// pressure (psig). A full thermodynamic model would track
@@ -22,34 +37,6 @@ type ReactorBuilding struct {
 	// signal."
 	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-57
 	ContainmentPressure Pressure
-
-	// ChemicalVolumeControlSystem models the CVCS — the primary
-	// chemistry and volume-regulation loop. Lives on
-	// ReactorBuilding because it is in the nuclear steam supply
-	// system and supplies the RCS cold legs via the charging
-	// pumps.
-	// "The volume control tank (part of the Chemical and
-	// Volume Control System)"
-	// specs/the_westinghouse_pressurized_water_react/chapter_14/page_189.txt:77
-	ChemicalVolumeControlSystem CVCS
-
-	// ResidualHeatRemovalSystem models the RHRS — the post-
-	// shutdown decay-heat removal path. The RHRS takes RCS hot-
-	// leg coolant through two redundant trains, rejects heat to
-	// component cooling water via shell-and-tube heat exchangers,
-	// and returns cooled flow to the RCS cold legs. The system is
-	// gated on RCS temperature ≤ 350°F and pressure < 400 psig.
-	// "The primary function of the Residual Heat Removal System
-	// (RHRS) is to transfer heat energy from the core and
-	// Reactor Coolant System (RCS) during plant cooldown and
-	// refueling operations."
-	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_084.txt:26-29
-	// "When the reactor coolant temperature has dropped to 350°F
-	// (177°C) and the pressure has been reduced to less than
-	// approximately 400 psig (28 bar), the RHR equipment is
-	// placed in operation."
-	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
-	ResidualHeatRemovalSystem RHRS
 
 	// ReactorProtectionSystem models the automatic protection
 	// logic and engineered safeguards actuation — the "brain"
@@ -101,93 +88,16 @@ type ReactorBuilding struct {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:56-60
 	SafetyInjectionSystem SIS
 
-	// EmergencyFeedwaterSystem is the secondary-side counterpart
-	// to the SIS. Two identical subsystems (A and B), each with
-	// one motor-driven and one turbine-driven pump sharing a
-	// primary emergency feedwater tank. The motor-driven pumps
-	// start on low-low SG level or on a safety-injection
-	// signal; the turbine-driven pumps start when two SGs
-	// simultaneously report low-low level.
-	//
-	// Spec justification:
-	//   - "The primary function of the Emergency Feedwater
-	//     System (EFWS) shown in Figure 5.2-1 is to supply
-	//     feedwater to the steam generators following accident
-	//     or transient conditions when the main feedwater
-	//     system is not available. The EFWS thereby maintains
-	//     the capability of the steam generators to remove
-	//     plant stored heat and core decay heat by converting
-	//     the emergency feedwater to steam which is then
-	//     discharged to the condenser or to the atmosphere."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:23-32
-	//   - "The use of both motor driven and turbine driven pumps
-	//     satisfies the requirement that the pumps be powered by
-	//     diverse power sources."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:1-5
-	//   - "The system is designed to supply at least the minimum
-	//     required flow, within one minute of the actuation
-	//     signal, to at least two effective steam generators
-	//     [...], and to continue this delivery for an indefinite
-	//     period without operator action."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:23-28
-	EmergencyFeedwaterSystem EFWS
-
 	// EFWSFeedwaterFlow is the total EFWS feedwater flow rate
 	// delivered to the steam generators (gal/s). Populated by
-	// the EFWS step; consumed by the SG feedwater model.
+	// the EFWS step in Plant.Step (EFWS lives on the
+	// auxiliary building); consumed by the SG feedwater model
+	// inside the containment.
 	EFWSFeedwaterFlow Volume
 
-	// ComponentCoolingWaterSystem models the CCWS — the
-	// intermediate cooling loop that removes heat from
-	// safeguards equipment and rejects it to the service water
-	// system. The simplified model tracks a single lumped
-	// inlet/outlet temperature that the RHRS Step consumes as
-	// its ccwInletTemp argument.
-	//
-	// Spec justification:
-	//   - "The Safeguards subsystem is divided into two separate
-	//     and redundant safeguards trains and provides cooling
-	//     water to safeguards equipment such as the residual
-	//     heat removal heat exchangers [...] Each safeguards
-	//     train is sized to supply 100-percent post-accident
-	//     component cooling flow requirements."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:33-42
-	//   - "The CCWS pumps, heat exchangers of the Safeguards
-	//     subsystem and its associated piping, valves and
-	//     instrumentations are seismically qualified as required
-	//     for an engineered safeguards system."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:116-120
-	ComponentCoolingWaterSystem CCWS
-
-	// ContainmentSpraySystem models the CSS — the engineered
-	// safeguard that limits peak containment pressure and
-	// removes airborne fission products following a LOCA.
-	//
-	// Spec justification:
-	//   - "The Containment Spray System (CSS) (Figure 6-4) is an
-	//     engineered safeguard designed to limit the peak
-	//     pressure in the reactor containment building to a
-	//     pressure less than the containment design pressure,
-	//     in the event of a loss-of-coolant accident or a steam
-	//     break accident inside the containment."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:75-81
-	//   - CCWS services CSS pump HXs: "containment spray pump
-	//     heat exchangers" are among the safeguards components
-	//     cooled by the CCWS.
-	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:39
-	ContainmentSpraySystem ContainmentSpraySystem
-
-	// RCFCUnits are the four parallel fan units in the Reactor
-	// Containment Fan Cooler System. At least RCFCUnitsRequired
-	// must be running for the safeguard function to be met.
-	//
-	// Spec justification:
-	//   - "the system includes four fan units that operate in
-	//     parallel. A minimum of two units must function to
-	//     satisfy design requirements for both normal operation
-	//     and post-accident operation."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:19-24
-	RCFCUnits [RCFCUnitCount]RCFCUnit
+	// ContainmentSpraySystem and the rest of the safeguard
+	// subsystems (CCWS, RHRS, CSS, RCFC, EFWS, CVCS) live on
+	// the auxiliary building; see core/auxiliary.go.
 
 	// ContainmentBuilding models the reactor containment — the
 	// pressure and temperature boundary that contains the RCS
@@ -222,20 +132,6 @@ type ReactorBuilding struct {
 	//     are typically rated at approximately 20,000 gpm."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:46-48
 	ServiceWaterSystem ServiceWaterSystem
-
-	// SpentFuelPoolCoolingSystem models the SFPCS — the
-	// subsystem that removes decay heat from the spent fuel
-	// pool and maintains water clarity.
-	//
-	// Spec justification:
-	//   - "The Spent Fuel Pool Cooling System is designed to
-	//     remove residual decay heat generated by irradiated
-	//     fuel stored in the spent fuel pool."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_170.txt:124-126
-	//   - "Normal operation requires two pumps with the third
-	//     pump serving as a standby."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:43-44
-	SpentFuelPoolCoolingSystem SpentFuelPoolCoolingSystem
 
 	// RefuelingOperations models the refueling operation cycle
 	// — the five-phase state machine that tracks cavity

@@ -324,26 +324,26 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 	// supplied from physically and electrically independent diesel
 	// generators located on the site."
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:28-36
-	m["Outside/DieselGenerator/StartSignal"] = &bridge.Control{
-		Part:  "Outside/DieselGenerator",
+	m["AuxiliaryBuilding/DieselGenerator/StartSignal"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/DieselGenerator",
 		Label: "StartSignal",
 		Kind:  "enum",
 		Get: func() string {
 			return fmt.Sprintf("%d",
-				p.Outside.DieselGenerator.StartSignal)
+				p.AuxiliaryBuilding.DieselGenerator.StartSignal)
 		},
 		Set: func(s string) error {
 			switch s {
 			case "0":
-				p.Outside.DieselGenerator.StartSignal = DieselStartNone
+				p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartNone
 			case "1":
-				p.Outside.DieselGenerator.StartSignal = DieselStartManual
+				p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
 			case "2":
-				p.Outside.DieselGenerator.StartSignal = DieselStartSafetyInjection
+				p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 			case "3":
-				p.Outside.DieselGenerator.StartSignal = DieselStartLossOfOffsitePower
+				p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartLossOfOffsitePower
 			case "4":
-				p.Outside.DieselGenerator.StartSignal = DieselStartTest
+				p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartTest
 			default:
 				return fmt.Errorf("invalid StartSignal %q (want 0..4)", s)
 			}
@@ -359,13 +359,13 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 	// The plant state machine multiplies fuel burn and generator
 	// real power by this fraction
 	// (core/diesel.go:114,173).
-	m["Outside/DieselGenerator/RunningFraction"] = &bridge.Control{
-		Part:  "Outside/DieselGenerator",
+	m["AuxiliaryBuilding/DieselGenerator/RunningFraction"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/DieselGenerator",
 		Label: "RunningFraction",
 		Kind:  "normalized",
 		Get: func() string {
 			return fmt.Sprintf("%v",
-				p.Outside.DieselGenerator.RunningFraction)
+				p.AuxiliaryBuilding.DieselGenerator.RunningFraction)
 		},
 		Set: func(s string) error {
 			f, err := strconv.ParseFloat(s, 64)
@@ -375,7 +375,7 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 			if f < 0 || f > 1 {
 				return fmt.Errorf("normalized %v out of range [0,1]", f)
 			}
-			p.Outside.DieselGenerator.RunningFraction = float32(f)
+			p.AuxiliaryBuilding.DieselGenerator.RunningFraction = float32(f)
 			return nil
 		},
 	}
@@ -389,20 +389,20 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 	// Without BreakerClosed the diesel cannot feed the ESF bus:
 	// core/electrical.go:70 requires src.Voltage >= pickup AND
 	// src.BreakerClosed.
-	m["Outside/DieselGenerator/Generator/BreakerClosed"] = &bridge.Control{
-		Part:  "Outside/DieselGenerator/Generator",
+	m["AuxiliaryBuilding/DieselGenerator/Generator/BreakerClosed"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/DieselGenerator/Generator",
 		Label: "BreakerClosed",
 		Kind:  "bool",
 		Get: func() string {
 			return bridge.BoolToStr(
-				p.Outside.DieselGenerator.Generator.BreakerClosed)
+				p.AuxiliaryBuilding.DieselGenerator.Generator.BreakerClosed)
 		},
 		Set: func(s string) error {
 			v, err := bridge.StrToBool(s)
 			if err != nil {
 				return err
 			}
-			p.Outside.DieselGenerator.Generator.BreakerClosed = v
+			p.AuxiliaryBuilding.DieselGenerator.Generator.BreakerClosed = v
 			return nil
 		},
 	}
@@ -533,13 +533,13 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 	// are equipped with instrumentation to monitor all
 	// important parameters"
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:99-101
-	m["Outside/DieselGenerator/CoolantTemp"] = &bridge.Sensor{
-		Part:  "Outside/DieselGenerator",
+	m["AuxiliaryBuilding/DieselGenerator/CoolantTemp"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/DieselGenerator",
 		Label: "CoolantTemp",
 		Kind:  "fahrenheit",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("fahrenheit",
-				p.Outside.DieselGenerator.CoolantTemp.Float())
+				p.AuxiliaryBuilding.DieselGenerator.CoolantTemp.Float())
 		},
 	}
 
@@ -548,13 +548,13 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 	// components during normal cooldown is permitted to increase
 	// to 120°F (49°C)"
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-110
-	m["ReactorBuilding/ComponentCoolingWaterSystem/OutletTemp"] = &bridge.Sensor{
-		Part:  "ReactorBuilding/ComponentCoolingWaterSystem",
+	m["AuxiliaryBuilding/ComponentCoolingWaterSystem/OutletTemp"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ComponentCoolingWaterSystem",
 		Label: "OutletTemp",
 		Kind:  "fahrenheit",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("fahrenheit",
-				p.ReactorBuilding.ComponentCoolingWaterSystem.OutletTemp.Float())
+				p.AuxiliaryBuilding.ComponentCoolingWaterSystem.OutletTemp.Float())
 		},
 	}
 
@@ -671,13 +671,13 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 	// "designed to reach rated speed and be ready to
 	// begin accepting load within 10 seconds"
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:48-49
-	m["Outside/DieselGenerator/ReadyToLoad"] = &bridge.Sensor{
-		Part:  "Outside/DieselGenerator",
+	m["AuxiliaryBuilding/DieselGenerator/ReadyToLoad"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/DieselGenerator",
 		Label: "ReadyToLoad",
 		Kind:  "bool",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
-				p.Outside.DieselGenerator.ReadyToLoad)
+				p.AuxiliaryBuilding.DieselGenerator.ReadyToLoad)
 		},
 	}
 
@@ -687,13 +687,13 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 	// diesel generator is sufficient to allow continuous rated load
 	// operation for a minimum of seven days."
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:118-122
-	m["Outside/DieselGenerator/Fuel"] = &bridge.Sensor{
-		Part:  "Outside/DieselGenerator",
+	m["AuxiliaryBuilding/DieselGenerator/Fuel"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/DieselGenerator",
 		Label: "Fuel",
 		Kind:  "gallon",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("gallon",
-				p.Outside.DieselGenerator.Fuel.Level.Float())
+				p.AuxiliaryBuilding.DieselGenerator.Fuel.Level.Float())
 		},
 	}
 
@@ -701,13 +701,13 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 	// "This signal starts the spray pumps, opens the spray header
 	// isolation valves "A""
 	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:59-60
-	m["ReactorBuilding/ContainmentSpraySystem/SprayHeaderOpen"] = &bridge.Sensor{
-		Part:  "ReactorBuilding/ContainmentSpraySystem",
+	m["AuxiliaryBuilding/ContainmentSpraySystem/SprayHeaderOpen"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ContainmentSpraySystem",
 		Label: "SprayHeaderOpen",
 		Kind:  "bool",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
-				p.ReactorBuilding.ContainmentSpraySystem.SprayHeaderOpen)
+				p.AuxiliaryBuilding.ContainmentSpraySystem.SprayHeaderOpen)
 		},
 	}
 
@@ -868,26 +868,26 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 	// "The diesel generators are provided with static-type brushless
 	// excitation and field flashing for rapid voltage buildup."
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:46-47
-	m["Outside/DieselGenerator/Generator/Voltage"] = &bridge.Sensor{
-		Part:  "Outside/DieselGenerator/Generator",
+	m["AuxiliaryBuilding/DieselGenerator/Generator/Voltage"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/DieselGenerator/Generator",
 		Label: "Voltage",
 		Kind:  "volt",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("volt",
-				p.Outside.DieselGenerator.Generator.Voltage)
+				p.AuxiliaryBuilding.DieselGenerator.Generator.Voltage)
 		},
 	}
 
 	// Diesel generator output frequency (chapter 11):
 	// "60 Hz output which feeds its corresponding"
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_168.txt:15
-	m["Outside/DieselGenerator/Generator/Frequency"] = &bridge.Sensor{
-		Part:  "Outside/DieselGenerator/Generator",
+	m["AuxiliaryBuilding/DieselGenerator/Generator/Frequency"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/DieselGenerator/Generator",
 		Label: "Frequency",
 		Kind:  "hz",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("hz",
-				p.Outside.DieselGenerator.Generator.Frequency)
+				p.AuxiliaryBuilding.DieselGenerator.Generator.Frequency)
 		},
 	}
 
@@ -901,13 +901,13 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 	// "capable of carrying rated load within 30 seconds after
 	// receipt of a start signal"
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:133-136
-	m["Outside/DieselGenerator/Generator/RealPower"] = &bridge.Sensor{
-		Part:  "Outside/DieselGenerator/Generator",
+	m["AuxiliaryBuilding/DieselGenerator/Generator/RealPower"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/DieselGenerator/Generator",
 		Label: "RealPower",
 		Kind:  "watt",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("watt",
-				p.Outside.DieselGenerator.Generator.RealPower)
+				p.AuxiliaryBuilding.DieselGenerator.Generator.RealPower)
 		},
 	}
 

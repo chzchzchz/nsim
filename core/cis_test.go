@@ -164,7 +164,7 @@ func TestCIS_IsIsolatedReportsEitherPhase(t *testing.T) {
 // ContainmentBuilding field.
 func TestPlant_CIS_PhaseALatchesOnLOCA(t *testing.T) {
 	p := MakePlant()
-	p.Outside.DieselGenerator.StartSignal = DieselStartSafetyInjection
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 	p.Step()
 	p.Update()
 	cis := p.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem

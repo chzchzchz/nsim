@@ -15,7 +15,7 @@ import (
 func TestRCFC_InitialStateAllUnitsRunning(t *testing.T) {
 	p := MakePlant()
 	for i := 0; i < RCFCUnitCount; i++ {
-		u0 := p.ReactorBuilding.RCFCUnits[i]
+		u0 := p.AuxiliaryBuilding.RCFCUnits[i]
 		assert.True(t, u0.Running,
 			"want RCFCUnits[%d].Running=true at startup, got %v",
 			i, u0.Running)
@@ -36,12 +36,12 @@ func TestRCFC_InitialStateAllUnitsRunning(t *testing.T) {
 	// rate equals RCFCDesignHeatRejection.
 	cbTemp := p.ReactorBuilding.ContainmentBuilding.Temperature
 	for i := 0; i < RCFCUnitCount; i++ {
-		p.ReactorBuilding.RCFCUnits[i] =
-			p.ReactorBuilding.RCFCUnits[i].Step(false, cbTemp)
+		p.AuxiliaryBuilding.RCFCUnits[i] =
+			p.AuxiliaryBuilding.RCFCUnits[i].Step(false, cbTemp)
 	}
 	sum := 0.0
 	for i := 0; i < RCFCUnitCount; i++ {
-		sum += p.ReactorBuilding.RCFCUnits[i].HeatTransferRate
+		sum += p.AuxiliaryBuilding.RCFCUnits[i].HeatTransferRate
 	}
 	assert.InDelta(t, RCFCDesignHeatRejection*RCFCUnitCount,
 		sum, 1e-9,
@@ -161,13 +161,13 @@ func TestContainmentBuilding_TemperatureAndPressureTrackHeatBalance(t *testing.T
 // runaway heating.
 func TestRCFC_EndToEndLOCAStartsLowSpeed(t *testing.T) {
 	p := MakePlant()
-	p.Outside.DieselGenerator = enoughFuel()
-	p.Outside.DieselGenerator.StartSignal = DieselStartSafetyInjection
+	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 	// Step long enough for the diesel to reach ReadyToLoad.
 	stepN(&p, int(15*time.Second/TimeStep))
 	lowCount := 0
 	for i := 0; i < RCFCUnitCount; i++ {
-		if p.ReactorBuilding.RCFCUnits[i].LowSpeed {
+		if p.AuxiliaryBuilding.RCFCUnits[i].LowSpeed {
 			lowCount++
 		}
 	}

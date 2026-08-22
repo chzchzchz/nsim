@@ -211,7 +211,7 @@ func TestRHRS_EndToEndCooldownTransfersHeatFromRCS(t *testing.T) {
 		u.NewValue(RHRSTempThreshold, u.Fahrenheit)
 	p.ReactorBuilding.Pressurizer.Pressure = RHRSPressureThreshold - 50
 
-	r := &p.ReactorBuilding.ResidualHeatRemovalSystem
+	r := &p.AuxiliaryBuilding.ResidualHeatRemovalSystem
 	r.TrainA = RHRSTrain{
 		Pump:           Pump{Running: true},
 		BypassValve:    Valve{Open: 0},

@@ -167,8 +167,8 @@ func TestCVCS_BorationIncreasesBoronAtExpectedRate(t *testing.T) {
 	stepN(&p, int(1*time.Second/TimeStep))
 	boronBefore := p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration
 
-	p.ReactorBuilding.ChemicalVolumeControlSystem.Mode = CVCSBoration
-	p.ReactorBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSBoration
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
 	stepN(&p, int(10*time.Second/TimeStep))
 	boronAfter := p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration
 
@@ -196,8 +196,8 @@ func TestCVCS_DilutionDecreasesBoronAtExpectedRate(t *testing.T) {
 	stepN(&p, int(1*time.Second/TimeStep))
 	boronBefore := p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration
 
-	p.ReactorBuilding.ChemicalVolumeControlSystem.Mode = CVCSDilution
-	p.ReactorBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSDilution
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
 	stepN(&p, int(10*time.Second/TimeStep))
 	boronAfter := p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration
 
@@ -228,15 +228,15 @@ func TestCVCS_MakeupValveRaisesVCTLevel(t *testing.T) {
 	// not being depleted by charging-pump suction; then
 	// opening the makeup valve should be the only inflow.
 	p.ReactorBuilding.ReactorCoolantPump.Running = false
-	p.ReactorBuilding.ChemicalVolumeControlSystem.LetdownFlow =
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownFlow =
 		u.NewValue(0, u.Gallon)
 	stepN(&p, int(1*time.Second/TimeStep))
-	vctBefore := p.ReactorBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
+	vctBefore := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
 
 	// Open the makeup valve to half-flow.
 	p.ReactorBuilding.ReactorMakeupControlValve.Open = 0.5
 	stepN(&p, int(5*time.Second/TimeStep))
-	vctAfter := p.ReactorBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
+	vctAfter := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
 
 	wantRise := ReactorMakeupDesignFlow.Float() * 0.5 * 5.0
 	assert.InDelta(t, wantRise, vctAfter-vctBefore, wantRise*0.1,

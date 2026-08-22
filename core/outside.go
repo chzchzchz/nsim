@@ -36,10 +36,8 @@ type Outside struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
 	CoolingTower
 
-	Transformer
-
-	ServiceWaterPump Pump
-	DieselGenerator
+	// Transformer, ServiceWaterPump, and DieselGenerator were
+	// moved to the AuxiliaryBuilding per plans/x/aux.md.
 
 	RiverTemp Temperature
 }
@@ -67,6 +65,5 @@ func (o *Outside) Step() Outside {
 	// dedicated cooling-tower fan control can decouple
 	// these flags.
 	ret.CoolingTower = o.CoolingTower.Step(cwRunning)
-	ret.DieselGenerator = o.DieselGenerator.Step(o.ServiceWaterPump.Running)
 	return ret
 }

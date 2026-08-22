@@ -398,20 +398,20 @@ func WritePlantSVG(w io.Writer, p *core.Plant) error {
 	writeLabel(SISX, SISY-50, "SIS Acc")
 
 	// EFWS tank.
-	writePart("ReactorBuilding/EmergencyFeedwaterSystem",
+	writePart("AuxiliaryBuilding/EmergencyFeedwaterSystem",
 		useAt("efws-tank", EFWSTankX-40, EFWSTankY-50, 80, 100))
 	writeLabel(EFWSTankX, EFWSTankY-60, "EFWS")
 
 	// CCWS heat exchanger.
-	writePart("ReactorBuilding/ComponentCoolingWaterSystem",
+	writePart("AuxiliaryBuilding/ComponentCoolingWaterSystem",
 		useAt("ccws-hx", CCWSHXX-50, CCWSHXY-25, 100, 50))
 	writeLabel(CCWSHXX, CCWSHXY-35, "CCWS HX")
 
 	// RHRS trains.
-	writePart("ReactorBuilding/ResidualHeatRemovalSystem",
+	writePart("AuxiliaryBuilding/ResidualHeatRemovalSystem",
 		useAt("rhrs-train", RHRSTrainAX-100, RHRSTrainAY-40, 200, 80))
 	writeLabel(RHRSTrainAX, RHRSTrainAY-50, "RHRS A")
-	writePart("ReactorBuilding/ResidualHeatRemovalSystem",
+	writePart("AuxiliaryBuilding/ResidualHeatRemovalSystem",
 		useAt("rhrs-train", RHRSTrainBX-100, RHRSTrainBY-40, 200, 80))
 	writeLabel(RHRSTrainBX, RHRSTrainBY-50, "RHRS B")
 
@@ -422,10 +422,10 @@ func WritePlantSVG(w io.Writer, p *core.Plant) error {
 
 	// Electrical: diesel + fuel tank, station transformer,
 	// ESF buses, grid.
-	writePart("Outside/DieselGenerator",
+	writePart("AuxiliaryBuilding/DieselGenerator",
 		useAt("diesel-generator", DieselX-100, DieselY-50, 200, 100))
 	writeLabel(DieselX, DieselY-60, "Diesel")
-	writePart("Outside/DieselGenerator",
+	writePart("AuxiliaryBuilding/DieselGenerator",
 		useAt("fuel-tank", FuelTankX-15, FuelTankY-20, 30, 40))
 	writePart("Outside/StationTransformer",
 		useAt("transformer-2w", StationTransformerX-25, StationTransformerY-25, 50, 50))
@@ -542,7 +542,7 @@ func writeLiveOverlays(b *strings.Builder, p *core.Plant) {
 	}
 
 	// Diesel running green ring.
-	if p.Outside.DieselGenerator.State == core.DieselRunning {
+	if p.AuxiliaryBuilding.DieselGenerator.State == core.DieselRunning {
 		fmt.Fprintf(b,
 			`<circle cx="%.0f" cy="%.0f" r="55" `+
 				`fill="none" stroke="green" stroke-width="2"/>`+"\n",

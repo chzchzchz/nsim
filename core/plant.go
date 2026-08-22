@@ -34,8 +34,8 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	// determined by comparison of the measured Tc (cold leg
 	// temperature) with the programmed (function of power) Tc."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
-	letdownValveOpen := ret.ChemicalVolumeControlSystem.LetdownFlow.Float() > 0
-	ret.ChemicalVolumeControlSystem = ret.ChemicalVolumeControlSystem.Step(
+	letdownValveOpen := ret.Aux.ChemicalVolumeControlSystem.LetdownFlow.Float() > 0
+	ret.Aux.ChemicalVolumeControlSystem = ret.Aux.ChemicalVolumeControlSystem.Step(
 		ret.ReactorCoolantPump.Running,
 		letdownValveOpen,
 		ret.ReactorMakeupControlValve.Flow,
@@ -49,7 +49,7 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	// with fuel depletion."
 	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
 	ret.ReactorPressureVessel.ControlRods.BoronConcentration =
-		ret.ChemicalVolumeControlSystem.BoronConcentration
+		ret.Aux.ChemicalVolumeControlSystem.BoronConcentration
 
 	// Reactor Protection System step. Runs before the
 	// ReactorPressureVessel step so the ReactorTripped latch
@@ -154,17 +154,17 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	dt := TimeStep
 	rcsOutletF := ret.ReactorPressureVessel.Outlet.Float()
 	rcsPressure := float64(ret.Pressurizer.Pressure)
-	ret.ComponentCoolingWaterSystem = ret.ComponentCoolingWaterSystem.Step()
-	ret.ResidualHeatRemovalSystem = ret.ResidualHeatRemovalSystem.Step(
+	ret.Aux.ComponentCoolingWaterSystem = ret.Aux.ComponentCoolingWaterSystem.Step()
+	ret.Aux.ResidualHeatRemovalSystem = ret.Aux.ResidualHeatRemovalSystem.Step(
 		ret.ReactorPressureVessel.Outlet,
 		rcsPressure,
-		ret.ComponentCoolingWaterSystem.OutletTemp,
+		ret.Aux.ComponentCoolingWaterSystem.OutletTemp,
 	)
-	if ret.ResidualHeatRemovalSystem.HasTakenOver {
+	if ret.Aux.ResidualHeatRemovalSystem.HasTakenOver {
 		rejectionW := float64(
-			ret.ResidualHeatRemovalSystem.TrainA.HeatExchanger.HeatTransferRate,
+			ret.Aux.ResidualHeatRemovalSystem.TrainA.HeatExchanger.HeatTransferRate,
 		) + float64(
-			ret.ResidualHeatRemovalSystem.TrainB.HeatExchanger.HeatTransferRate,
+			ret.Aux.ResidualHeatRemovalSystem.TrainB.HeatExchanger.HeatTransferRate,
 		)
 		decayW := float64(ret.ReactorPressureVessel.ThermalPower)
 		netW := decayW - rejectionW
@@ -217,12 +217,12 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	//     to 350°F (176.7°C) and the RHRS has been activated,
 	//     the EFWS is secured."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:101-104
-	rhrsActive := ret.ResidualHeatRemovalSystem.Running &&
-		ret.ResidualHeatRemovalSystem.HasTakenOver
-	ret.EmergencyFeedwaterSystem = ret.EmergencyFeedwaterSystem.Step(
+	rhrsActive := ret.Aux.ResidualHeatRemovalSystem.Running &&
+		ret.Aux.ResidualHeatRemovalSystem.HasTakenOver
+	ret.Aux.EmergencyFeedwaterSystem = ret.Aux.EmergencyFeedwaterSystem.Step(
 		ret.ReactorPressureVessel.Outlet, rhrsActive,
 	)
-	ret.EFWSFeedwaterFlow = ret.EmergencyFeedwaterSystem.EFWSFeedwaterFlow()
+	ret.EFWSFeedwaterFlow = ret.Aux.EmergencyFeedwaterSystem.EFWSFeedwaterFlow()
 
 	// CSS: containment pressure model. The simplified
 	// containment pressure rises while the PORV is open (steam
@@ -247,14 +247,14 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 		// fast rising signal that triggers the CSS auto-start.
 		csP += 100.0 * dt.Seconds()
 	}
-	cssRunning := ret.ContainmentSpraySystem.Running
-	if cssRunning && ret.ContainmentSpraySystem.SprayHeaderOpen {
+	cssRunning := ret.Aux.ContainmentSpraySystem.Running
+	if cssRunning && ret.Aux.ContainmentSpraySystem.SprayHeaderOpen {
 		// Spray condenses steam: effectiveness × spray flow
 		// × (P - P_atm) drag toward atmospheric.
 		excess := csP - float64(AtmosphericPressure)
 		if excess > 0 {
 			csP -= CSSSprayEffectiveness *
-				ret.ContainmentSpraySystem.SprayFlow * excess *
+				ret.Aux.ContainmentSpraySystem.SprayFlow * excess *
 				dt.Seconds()
 			if csP < float64(AtmosphericPressure) {
 				csP = float64(AtmosphericPressure)
@@ -262,7 +262,7 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 		}
 	}
 	ret.ContainmentPressure = Pressure(csP)
-	ret.ContainmentSpraySystem = ret.ContainmentSpraySystem.Step()
+	ret.Aux.ContainmentSpraySystem = ret.Aux.ContainmentSpraySystem.Step()
 
 	return ret
 }
@@ -575,6 +575,7 @@ func steamMassFromPower(p Watts) float64 {
 // Plant represents all state relevant to the facility.
 type Plant struct {
 	ReactorBuilding
+	AuxiliaryBuilding
 	TurbineBuilding
 	Outside
 	Electrical
@@ -596,13 +597,21 @@ type Plant struct {
 }
 
 func (p *Plant) Step() {
-	// Run Outside.Step first so the diesel generator state is in
-	// nextPlant by the time Electrical.Step reads it. The cross-building
-	// source pointers must point at nextPlant (where the fresh state is
-	// being written), not at p (the current state being read).
+	// Run Outside.Step first so the CW pump / cooling-tower
+	// state is in nextPlant. Step the AuxiliaryBuilding next so
+	// its diesel / RHRS / CCWS state is fresh for the
+	// ReactorBuilding step (CVCS / RHRS / CCWS / CSS / RCFC /
+	// EFWS live on the auxiliary building and read the
+	// pointer populated below).
+	//
+	// The cross-building source pointers must point at
+	// nextPlant (where the fresh state is being written), not
+	// at p (the current state being read).
 	p.nextPlant.Outside = p.Outside.Step()
-	p.Electrical.DieselGenA = &p.nextPlant.Outside.DieselGenerator
-	p.Electrical.DieselGenB = &p.nextPlant.Outside.DieselGenerator
+	p.nextPlant.AuxiliaryBuilding = p.AuxiliaryBuilding.Step()
+	p.ReactorBuilding.Aux = &p.nextPlant.AuxiliaryBuilding
+	p.Electrical.DieselGenA = &p.nextPlant.AuxiliaryBuilding.DieselGenerator
+	p.Electrical.DieselGenB = &p.nextPlant.AuxiliaryBuilding.DieselGenerator
 
 	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step()
 
@@ -641,7 +650,7 @@ func (p *Plant) Step() {
 	//   - "The HHSI and RHR pumps are aligned to take suction
 	//     directly from the RWST."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
-	if p.Outside.DieselGenerator.StartSignal == DieselStartSafetyInjection {
+	if p.AuxiliaryBuilding.DieselGenerator.StartSignal == DieselStartSafetyInjection {
 		p.nextPlant.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = true
 		if p.nextPlant.ReactorBuilding.SafetyInjectionSystem.HHSISuction !=
 			SISSuctionSump {
@@ -670,7 +679,7 @@ func (p *Plant) Step() {
 	//     and turbine driven pumps satisfies the requirement
 	//     that the pumps be powered by diverse power sources."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:3-5
-	efws := &p.nextPlant.ReactorBuilding.EmergencyFeedwaterSystem
+	efws := &p.nextPlant.AuxiliaryBuilding.EmergencyFeedwaterSystem
 	if !efws.Active {
 		sgWaterLow := p.ReactorBuilding.SteamGenerator.Water.Float() <
 			EFWSLevelLowLow
@@ -680,7 +689,7 @@ func (p *Plant) Step() {
 		// two SGs" becomes equivalent to "low-low in any
 		// one SG". The per-loop SGs are not modelled
 		// separately at this fidelity band.
-		if p.Outside.DieselGenerator.StartSignal ==
+		if p.AuxiliaryBuilding.DieselGenerator.StartSignal ==
 			DieselStartSafetyInjection ||
 			p.nextPlant.ReactorBuilding.ReactorProtectionSystem.AuxiliaryFeedPumpsStartActuated ||
 			sgWaterLow {
@@ -731,7 +740,7 @@ func (p *Plant) Step() {
 	// by the existing AFWPump.DriveReady path through the
 	// diesel). When the diesel reaches RatedToLoad the bus is
 	// energised; the motor-driven pump's DriveReady follows.
-	if p.Outside.DieselGenerator.ReadyToLoad {
+	if p.AuxiliaryBuilding.DieselGenerator.ReadyToLoad {
 		efws.SubsystemA.MotorPump.DriveReady = true
 		efws.SubsystemB.MotorPump.DriveReady = true
 	}
@@ -747,8 +756,8 @@ func (p *Plant) Step() {
 	//     to remove decay heat during postaccident and to
 	//     provide cooling water to safeguards equipment."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_103.txt:135-138
-	if p.Outside.DieselGenerator.ReadyToLoad {
-		p.nextPlant.ReactorBuilding.ComponentCoolingWaterSystem.PumpRunning = true
+	if p.AuxiliaryBuilding.DieselGenerator.ReadyToLoad {
+		p.nextPlant.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning = true
 	}
 
 	// CSS auto-start: containment spray is initiated in
@@ -766,11 +775,11 @@ func (p *Plant) Step() {
 	//     pumps, opens the spray header isolation valves "A",
 	//     and opens the SAT isolation valves "B"."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-61
-	css := &p.nextPlant.ReactorBuilding.ContainmentSpraySystem
+	css := &p.nextPlant.AuxiliaryBuilding.ContainmentSpraySystem
 	if !css.Running &&
 		(p.ReactorBuilding.ContainmentPressure > CSSContainmentPressureSetpoint ||
 			p.nextPlant.ReactorBuilding.ReactorProtectionSystem.ContainmentSprayActuated) &&
-		p.Outside.DieselGenerator.ReadyToLoad {
+		p.AuxiliaryBuilding.DieselGenerator.ReadyToLoad {
 		css.Running = true
 		css.SprayHeaderOpen = true
 	}
@@ -788,19 +797,19 @@ func (p *Plant) Step() {
 	//   - "The cooling coils remove heat from the air with the
 	//     fan providing the required air flow rates."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:84-85
-	locaSensed := p.Outside.DieselGenerator.StartSignal ==
+	locaSensed := p.AuxiliaryBuilding.DieselGenerator.StartSignal ==
 		DieselStartSafetyInjection
 	cbTemp := p.ReactorBuilding.ContainmentBuilding.Temperature
 	for i := 0; i < RCFCUnitCount; i++ {
-		p.nextPlant.ReactorBuilding.RCFCUnits[i] =
-			p.nextPlant.ReactorBuilding.RCFCUnits[i].Step(
+		p.nextPlant.AuxiliaryBuilding.RCFCUnits[i] =
+			p.nextPlant.AuxiliaryBuilding.RCFCUnits[i].Step(
 				locaSensed, cbTemp,
 			)
 	}
 	var rcfcHeatOut Watts
 	for i := 0; i < RCFCUnitCount; i++ {
 		rcfcHeatOut += Watts(
-			p.nextPlant.ReactorBuilding.RCFCUnits[i].HeatTransferRate,
+			p.nextPlant.AuxiliaryBuilding.RCFCUnits[i].HeatTransferRate,
 		)
 	}
 	p.nextPlant.ReactorBuilding.ContainmentBuilding =
@@ -894,8 +903,8 @@ func (p *Plant) Step() {
 	//   - "passing approximately 100 gpm (23 m3/hr) of each
 	//     loop's flow through a filter and demineralizer."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:68-71
-	p.nextPlant.ReactorBuilding.SpentFuelPoolCoolingSystem =
-		p.nextPlant.ReactorBuilding.SpentFuelPoolCoolingSystem.Step()
+	p.nextPlant.AuxiliaryBuilding.SpentFuelPoolCoolingSystem =
+		p.nextPlant.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.Step()
 
 	// Flow-modulating valves: assume full-open during the
 	// first 30 minutes after actuation. After that the
@@ -1201,7 +1210,7 @@ func (p *Plant) Step() {
 	//     […] arranged to fail-open on loss of air or electrical power."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:42-47
 	p.nextPlant.Outside.DieselAFWPump.DriveReady =
-		p.nextPlant.Outside.DieselGenerator.ReadyToLoad
+		p.nextPlant.AuxiliaryBuilding.DieselGenerator.ReadyToLoad
 	p.nextPlant.Outside.MotorAFWPump.DriveReady =
 		p.nextPlant.Electrical.ESFBusA.Energized
 	p.nextPlant.Outside.TurbineAFWPump.DriveReady =
@@ -1257,7 +1266,7 @@ func (p *Plant) Step() {
 		p.nextPlant.ReactorBuilding.ReactorPressureVessel.Pressure,
 		p.nextPlant.ReactorBuilding.ReactorPressureVessel.ThermalPower,
 		CoreRatedThermalPower,
-		p.nextPlant.ReactorBuilding.ResidualHeatRemovalSystem.Running,
+		p.nextPlant.AuxiliaryBuilding.ResidualHeatRemovalSystem.Running,
 		runningRCPs,
 		steamFlowFraction,
 		p.nextPlant.TurbineBuilding.Turbine.Setpoint,
@@ -1271,6 +1280,7 @@ func (p *Plant) Step() {
 
 func (p *Plant) Update() {
 	p.ReactorBuilding = p.nextPlant.ReactorBuilding
+	p.AuxiliaryBuilding = p.nextPlant.AuxiliaryBuilding
 	p.TurbineBuilding = p.nextPlant.TurbineBuilding
 	p.Outside = p.nextPlant.Outside
 	p.Electrical = p.nextPlant.Electrical
@@ -1321,25 +1331,25 @@ func MakePlant() Plant {
 			Capacity: u.NewValue(450000, u.Gallon),
 			Part:     Part{Temperature: u.NewValue(80, u.Fahrenheit)},
 		},
-		DieselGenerator: DieselGenerator{
-			Speed: 0,
-			Fuel: Tank{
-				// Initialise full so the diesel can crank on the
-				// first manual start. The state machine
-				// (core/diesel.go:47) requires Fuel.Level > 0 to
-				// transition Off -> Cranking.
-				// Spec minimum "450 gallons at start of day"
-				// (core/parts.go:1110-1111); the capacity is sized
-				// above that so we leave head-room for the 7-day
-				// continuous-rated-load requirement
-				// (page_165.txt:120-122).
-				Level:    u.NewValue(500, u.Gallon),
-				Capacity: u.NewValue(500, u.Gallon),
-				Part:     Part{Temperature: u.NewValue(80, u.Fahrenheit)},
-			},
-			CoolantTemp: u.NewValue(80, u.Fahrenheit),
-		},
 		RiverTemp: u.NewValue(75, u.Fahrenheit),
+	}
+	p.AuxiliaryBuilding.DieselGenerator = DieselGenerator{
+		Speed: 0,
+		Fuel: Tank{
+			// Initialise full so the diesel can crank on the
+			// first manual start. The state machine
+			// (core/diesel.go:47) requires Fuel.Level > 0 to
+			// transition Off -> Cranking.
+			// Spec minimum "450 gallons at start of day"
+			// (core/parts.go:1110-1111); the capacity is sized
+			// above that so we leave head-room for the 7-day
+			// continuous-rated-load requirement
+			// (page_165.txt:120-122).
+			Level:    u.NewValue(500, u.Gallon),
+			Capacity: u.NewValue(500, u.Gallon),
+			Part:     Part{Temperature: u.NewValue(80, u.Fahrenheit)},
+		},
+		CoolantTemp: u.NewValue(80, u.Fahrenheit),
 	}
 	p.Outside.TurbineAFWPump.DriveSource = DriveSteam
 	p.Outside.MotorAFWPump.DriveSource = DriveElectric
@@ -1467,14 +1477,14 @@ func MakePlant() Plant {
 	// determined by comparison of the measured Tc (cold leg
 	// temperature) with the programmed (function of power) Tc."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
-	p.ReactorBuilding.ChemicalVolumeControlSystem = CVCS{
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem = CVCS{
 		Mode:               CVCSVolumeControl,
 		VCTLevel:           u.NewValue(VCTDesignLevel, u.Gallon),
 		BoronConcentration: CVCSInitialBoron,
 	}
 	// Letdown is flowing at construction (set LetdownFlow so
 	// the Step function's letdownValveOpen sentinel works).
-	p.ReactorBuilding.ChemicalVolumeControlSystem.LetdownFlow = CVCSDesignLetdownFlow
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownFlow = CVCSDesignLetdownFlow
 
 	// RHRS defaults (plans/p15_1.txt). Both pumps are off and
 	// the hot-leg isolation valves are closed at construction;
@@ -1485,7 +1495,7 @@ func MakePlant() Plant {
 	// less than approximately 400 psig (28 bar), the RHR
 	// equipment is placed in operation."
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
-	p.ReactorBuilding.ResidualHeatRemovalSystem = RHRS{
+	p.AuxiliaryBuilding.ResidualHeatRemovalSystem = RHRS{
 		TrainA: RHRSTrain{Pump: Pump{Running: false}},
 		TrainB: RHRSTrain{Pump: Pump{Running: false}},
 	}
@@ -1569,7 +1579,7 @@ func MakePlant() Plant {
 			},
 		}
 	}
-	p.ReactorBuilding.EmergencyFeedwaterSystem = EFWS{
+	p.AuxiliaryBuilding.EmergencyFeedwaterSystem = EFWS{
 		SubsystemA: efwsSubsystem(),
 		SubsystemB: efwsSubsystem(),
 	}
@@ -1591,7 +1601,7 @@ func MakePlant() Plant {
 	//     subsystem is provided. A spare pump is also available
 	//     in the Auxiliary subsystem."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:93-96
-	p.ReactorBuilding.ComponentCoolingWaterSystem = CCWS{
+	p.AuxiliaryBuilding.ComponentCoolingWaterSystem = CCWS{
 		PumpRunning:    false,
 		InletTemp:      u.NewValue(CCWSInletSteadyStateTemp, u.Fahrenheit),
 		OutletTemp:     u.NewValue(CCWSInletSteadyStateTemp, u.Fahrenheit),
@@ -1614,7 +1624,7 @@ func MakePlant() Plant {
 	//   - "(T)he storage tanks are sized to provide approximately
 	//     30 minutes of spray with spray additive."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:16-18
-	p.ReactorBuilding.ContainmentSpraySystem = ContainmentSpraySystem{
+	p.AuxiliaryBuilding.ContainmentSpraySystem = ContainmentSpraySystem{
 		Running:              false,
 		SprayHeaderOpen:      false,
 		CSSTLevel:            CSSTCapacity,
@@ -1642,7 +1652,7 @@ func MakePlant() Plant {
 	//     water system."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:86-87
 	for i := 0; i < RCFCUnitCount; i++ {
-		p.ReactorBuilding.RCFCUnits[i] = RCFCUnit{
+		p.AuxiliaryBuilding.RCFCUnits[i] = RCFCUnit{
 			Running:             true,
 			LowSpeed:            false,
 			HeatTransferRate:    0,
@@ -1736,7 +1746,7 @@ func MakePlant() Plant {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:43-44
 	//   - "The system pressure is maintained at 55 to 75 psig"
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:45-46
-	p.ReactorBuilding.SpentFuelPoolCoolingSystem = SpentFuelPoolCoolingSystem{
+	p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem = SpentFuelPoolCoolingSystem{
 		PumpRunning:       true,
 		StandbyRunning:    false,
 		HeaderPressure:    SFPCPressureNormalMin,

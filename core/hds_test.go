@@ -114,7 +114,7 @@ func TestHDS_VolumePercentClampedAtZero(t *testing.T) {
 // begins to climb.
 func TestPlant_HDS_GenerationActivatesOnLOCA(t *testing.T) {
 	p := MakePlant()
-	p.Outside.DieselGenerator.StartSignal = DieselStartSafetyInjection
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 	stepN(&p, int(time.Second/TimeStep))
 	hds := p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
 	assert.True(t, hds.GenerationActive,

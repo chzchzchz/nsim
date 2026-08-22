@@ -14,7 +14,7 @@ import (
 // sump) and sump pH has not yet been adjusted.
 func TestCSS_InitialStateIsIdle(t *testing.T) {
 	p := MakePlant()
-	css := p.ReactorBuilding.ContainmentSpraySystem
+	css := p.AuxiliaryBuilding.ContainmentSpraySystem
 	assert.False(t, css.Running,
 		"want Running=false at startup, got %v", css.Running)
 	assert.False(t, css.SprayHeaderOpen,
@@ -203,8 +203,8 @@ func TestCSS_SprayFlowTracksHeaderState(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-57
 func TestCSS_EndToEndHighContainmentPressureStartsCSS(t *testing.T) {
 	p := MakePlant()
-	p.Outside.DieselGenerator = enoughFuel()
-	p.Outside.DieselGenerator.StartSignal = DieselStartSafetyInjection
+	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 	// Drive containment pressure above the setpoint by forcing
 	// the PORV open; the ReactorBuilding.Step containment model
 	// rises by 100 psig/s while PORV.Open == 1.
@@ -212,7 +212,7 @@ func TestCSS_EndToEndHighContainmentPressureStartsCSS(t *testing.T) {
 	p.ReactorBuilding.ContainmentPressure = CSSContainmentPressureSetpoint + 10
 	// Step long enough for the diesel to reach ReadyToLoad.
 	stepN(&p, int(15*time.Second/TimeStep))
-	css := p.ReactorBuilding.ContainmentSpraySystem
+	css := p.AuxiliaryBuilding.ContainmentSpraySystem
 	assert.True(t, css.Running,
 		"want Running=true after containment high pressure + diesel ready, got %v",
 		css.Running)

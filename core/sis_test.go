@@ -199,8 +199,8 @@ func TestSIS_RecirculationSwitchoverAlignsToSump(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
 func TestSIS_SafetyInjectionSignalStartsHHSIPumps(t *testing.T) {
 	p := MakePlant()
-	p.Outside.DieselGenerator = enoughFuel()
-	p.Outside.DieselGenerator.StartSignal = DieselStartSafetyInjection
+	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 
 	stepN(&p, 1)
 	assert.True(t, p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning,

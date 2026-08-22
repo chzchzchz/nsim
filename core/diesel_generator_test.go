@@ -29,15 +29,15 @@ func enoughFuel() DieselGenerator {
 func TestDieselStartSafetyInjection(t *testing.T) {
 	p := MakePlant()
 	p.ServiceWaterPump.Running = true
-	p.Outside.DieselGenerator = enoughFuel()
-	p.Outside.DieselGenerator.StartSignal = DieselStartSafetyInjection
+	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 
 	stepN(&p, int(10*time.Second/TimeStep))
-	assert.Equal(t, DieselRunning, p.Outside.DieselGenerator.State, "want DieselRunning via SI")
+	assert.Equal(t, DieselRunning, p.AuxiliaryBuilding.DieselGenerator.State, "want DieselRunning via SI")
 
-	p.Outside.DieselGenerator.StartSignal = DieselStartNone
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartNone
 	stepN(&p, int(30*time.Second/TimeStep))
-	assert.Equal(t, DieselOff, p.Outside.DieselGenerator.State, "want DieselOff after clearing signal")
+	assert.Equal(t, DieselOff, p.AuxiliaryBuilding.DieselGenerator.State, "want DieselOff after clearing signal")
 }
 
 // 10 s after the start signal, the generator side has built up to rated
@@ -46,12 +46,12 @@ func TestDieselStartSafetyInjection(t *testing.T) {
 func TestDieselGeneratorReachesRatedOutputIn10s(t *testing.T) {
 	p := MakePlant()
 	p.ServiceWaterPump.Running = true
-	p.Outside.DieselGenerator = enoughFuel()
-	p.Outside.DieselGenerator.StartSignal = DieselStartManual
+	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
 
 	stepN(&p, int(10*time.Second/TimeStep))
 
-	g := p.Outside.DieselGenerator.Generator
+	g := p.AuxiliaryBuilding.DieselGenerator.Generator
 	assert.True(t, g.BreakerClosed, "want BreakerClosed after 10 s")
 	assert.GreaterOrEqual(t, g.Voltage, DieselRatedVoltage*0.99,
 		"want Voltage ~= %v, got %v", DieselRatedVoltage, g.Voltage)
@@ -67,11 +67,11 @@ func TestDieselGeneratorReachesRatedOutputIn10s(t *testing.T) {
 func TestESFBusEnergizedByDiesel(t *testing.T) {
 	p := MakePlant()
 	p.ServiceWaterPump.Running = true
-	p.Outside.DieselGenerator = enoughFuel()
+	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 
 	require.False(t, p.Electrical.ESFBusA.Energized, "precondition: ESFBusA should start unenergized")
 
-	p.Outside.DieselGenerator.StartSignal = DieselStartManual
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
 	stepN(&p, int(10*time.Second/TimeStep))
 
 	assert.True(t, p.Electrical.ESFBusA.Energized,
@@ -87,7 +87,7 @@ func TestESFBusEnergizedByDiesel(t *testing.T) {
 // fluid flow (computed by the consumer) is gated to zero.
 func TestDieselAFWPumpGatedByDiesel(t *testing.T) {
 	p := MakePlant()
-	p.Outside.DieselGenerator = enoughFuel()
+	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.Outside.DieselAFWPump.Running = true // operator request
 	p.Outside.DieselAFWPump.DriveSource = DriveDiesel
 
@@ -97,7 +97,7 @@ func TestDieselAFWPumpGatedByDiesel(t *testing.T) {
 	assert.False(t, p.Outside.DieselAFWPump.DriveReady,
 		"want DieselAFWPump.DriveReady false before diesel start")
 
-	p.Outside.DieselGenerator.StartSignal = DieselStartManual
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
 	stepN(&p, int(10*time.Second/TimeStep))
 	assert.True(t, p.Outside.DieselAFWPump.DriveReady,
 		"want DieselAFWPump.DriveReady true after diesel ReadyToLoad")

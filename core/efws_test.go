@@ -13,7 +13,7 @@ import (
 // EFWS is not active. The auto-start logic has not fired.
 func TestEFWS_InitialStateIsIdle(t *testing.T) {
 	p := MakePlant()
-	efws := p.ReactorBuilding.EmergencyFeedwaterSystem
+	efws := p.AuxiliaryBuilding.EmergencyFeedwaterSystem
 	assert.False(t, efws.Active,
 		"want EFWSActive=false at startup, got %v",
 		efws.Active)
@@ -51,11 +51,11 @@ func TestEFWS_InitialStateIsIdle(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:94-98
 func TestEFWS_MotorPumpsStartOnSafetyInjection(t *testing.T) {
 	p := MakePlant()
-	p.Outside.DieselGenerator = enoughFuel()
-	p.Outside.DieselGenerator.StartSignal = DieselStartSafetyInjection
+	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 
 	stepN(&p, 1)
-	efws := p.ReactorBuilding.EmergencyFeedwaterSystem
+	efws := p.AuxiliaryBuilding.EmergencyFeedwaterSystem
 	assert.True(t, efws.Active,
 		"want EFWSActive=true after SI signal, got %v",
 		efws.Active)
@@ -89,7 +89,7 @@ func TestEFWS_TurbinePumpsStartOnLowLowSGLevel(t *testing.T) {
 		u.NewValue(EFWSLevelLowLow-100, u.Gallon)
 
 	stepN(&p, 1)
-	efws := p.ReactorBuilding.EmergencyFeedwaterSystem
+	efws := p.AuxiliaryBuilding.EmergencyFeedwaterSystem
 	assert.True(t, efws.Active,
 		"want EFWSActive=true after SG low-low, got %v",
 		efws.Active)
@@ -257,13 +257,13 @@ func TestEFWS_SecuredWhenHotLegBelow350FAndRHRSActive(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:23-26
 func TestEFWS_EndToEndSafetyInjectionStartsFeedwaterDelivery(t *testing.T) {
 	p := MakePlant()
-	p.Outside.DieselGenerator = enoughFuel()
-	p.Outside.DieselGenerator.StartSignal = DieselStartSafetyInjection
+	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 	tankA := EFWSPrimaryTankCapacity.Float()
 	tankB := EFWSPrimaryTankCapacity.Float()
 	stepN(&p, int(time.Second/TimeStep))
 
-	efws := p.ReactorBuilding.EmergencyFeedwaterSystem
+	efws := p.AuxiliaryBuilding.EmergencyFeedwaterSystem
 	assert.True(t, efws.Active,
 		"want EFWSActive=true after SI signal, got %v",
 		efws.Active)
@@ -299,7 +299,7 @@ func TestEFWS_TurbineSteamAdmissionValveOpensWithSGPressure(t *testing.T) {
 	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
 
 	stepN(&p, 1)
-	efws := p.ReactorBuilding.EmergencyFeedwaterSystem
+	efws := p.AuxiliaryBuilding.EmergencyFeedwaterSystem
 	assert.Equal(t, 1.0,
 		float64(efws.SubsystemA.TurbinePump.SteamAdmissionValve.Open),
 		"want SubsystemA.TurbinePump.SteamAdmissionValve.Open=1, got %v",

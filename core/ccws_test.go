@@ -13,7 +13,7 @@ import (
 // is full.
 func TestCCWS_InitialStateIsIdle(t *testing.T) {
 	p := MakePlant()
-	ccws := p.ReactorBuilding.ComponentCoolingWaterSystem
+	ccws := p.AuxiliaryBuilding.ComponentCoolingWaterSystem
 	assert.False(t, ccws.PumpRunning,
 		"want PumpRunning=false at startup, got %v", ccws.PumpRunning)
 	assert.InDelta(t, CCWSInletSteadyStateTemp,
@@ -140,12 +140,12 @@ func TestCCWS_InletRecoversWithinFourHours(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_103.txt:135-138
 func TestCCWS_EndToEndSafetyInjectionStartsPumps(t *testing.T) {
 	p := MakePlant()
-	p.Outside.DieselGenerator = enoughFuel()
-	p.Outside.DieselGenerator.StartSignal = DieselStartSafetyInjection
+	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 	// The diesel takes ~10 s to reach ReadyToLoad in this model
 	// (per existing diesel tests).
 	stepN(&p, int(15*time.Second/TimeStep))
-	ccws := p.ReactorBuilding.ComponentCoolingWaterSystem
+	ccws := p.AuxiliaryBuilding.ComponentCoolingWaterSystem
 	assert.True(t, ccws.PumpRunning,
 		"want CCWS PumpRunning=true after SI+diesel ready, got %v",
 		ccws.PumpRunning)
