@@ -564,8 +564,11 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 	}
 
 	// Turbine real power (chapter 15):
-	// "Rating: 1370 mva"
-	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:15
+	// "Westinghouse supplies nuclear turbinegenerator systems over
+	// a load range of 600 megawatts to 1500 megawatts in three-
+	// and four-cylinder configurations for any light water
+	// reactor."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_197.txt:10-13
 	m["TurbineBuilding/Turbine/RealPower"] = &bridge.Sensor{
 		Part:  "TurbineBuilding/Turbine",
 		Label: "RealPower",
@@ -573,6 +576,27 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("watt",
 				p.TurbineBuilding.Turbine.RealPower)
+		},
+	}
+
+	// Generator net real power (chapter 15):
+	// "The steam by rotating the blades of the turbine elements
+	// (cylinders) rotates the shaft of the generator. The
+	// generator produces the electric power of the power plant."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_197.txt:21-23
+	// DEHM "monitors output power, the power factor, and speed
+	// to ensure that the limits of the generator are not
+	// exceeded."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_203.txt:32-36
+	// Design point: 1370 MVA at 0.9 power factor
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:96-97
+	m["TurbineBuilding/Generator/RealPower"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/Generator",
+		Label: "RealPower",
+		Kind:  "watt",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("watt",
+				p.TurbineBuilding.Generator.RealPower)
 		},
 	}
 
@@ -703,6 +727,26 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("hz",
 				p.Outside.DieselGenerator.Generator.Frequency)
+		},
+	}
+
+	// Diesel generator output real power (chapter 11):
+	// "Each diesel engine's fuel oil system, air starting
+	// system, and the generator output and excitation systems
+	// are equipped with instrumentation to monitor all
+	// important parameters and to annunciate abnormal
+	// conditions."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:97-101
+	// "capable of carrying rated load within 30 seconds after
+	// receipt of a start signal"
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:133-136
+	m["Outside/DieselGenerator/Generator/RealPower"] = &bridge.Sensor{
+		Part:  "Outside/DieselGenerator/Generator",
+		Label: "RealPower",
+		Kind:  "watt",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("watt",
+				p.Outside.DieselGenerator.Generator.RealPower)
 		},
 	}
 
