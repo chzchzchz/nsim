@@ -533,6 +533,19 @@ func writeLiveOverlays(b *strings.Builder, p *core.Plant) {
 			int(p.ReactorBuilding.ReactorCoolantPump.Velocity))
 	}
 
+	// RPV outlet temperature. The primary-side thermal model
+	// integrates Outlet toward CoreReferenceOutletF (621°F)
+	// at full power; the live readout lets the operator see
+	// the result without leaving the diagram.
+	//   "Reactor coolant outlet temperature: 621°F (327°C)"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:61
+	rpv := p.ReactorBuilding.ReactorPressureVessel
+	fmt.Fprintf(b,
+		`<text x="%.0f" y="%.0f" font-size="10" `+
+			`text-anchor="middle">T %.0f°F</text>`+"\n",
+		coX+RPVX+50, coY+RPVY+150,
+		rpv.Outlet.Float())
+
 	// Generator terminal voltage + frequency.
 	g := p.TurbineBuilding.Generator
 	fmt.Fprintf(b,

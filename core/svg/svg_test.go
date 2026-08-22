@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	u "github.com/bcicen/go-units"
 	"github.com/chzchzchz/nsim/core"
 )
 
@@ -11,6 +12,8 @@ import (
 // produces a parseable SVG document.
 func TestWritePlantSVG_ValidXML(t *testing.T) {
 	p := core.MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.Outlet =
+		u.NewValue(621, u.Fahrenheit)
 	var b strings.Builder
 	if err := WritePlantSVG(&b, &p); err != nil {
 		t.Fatalf("WritePlantSVG: %v", err)
@@ -48,6 +51,12 @@ func TestWritePlantSVG_ValidXML(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in SVG output", want)
 		}
+	}
+	// RPV outlet-temperature overlay (plans/x/fission_controls.md).
+	// The writeLiveOverlays routine emits the value as a
+	// "<text>T <n>°F</text>" centred just below the RPV symbol.
+	if !strings.Contains(out, "T 621°F") {
+		t.Errorf("want RPV outlet-temperature overlay containing \"T 621°F\", not found in SVG")
 	}
 }
 

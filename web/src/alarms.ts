@@ -61,7 +61,7 @@ export function renderAlarms(container: HTMLElement, plant: { sensorJSON(id: str
         rowMap.set(a.id, el);
     }
 
-    panel.refresh = (json: string): void => {
+    (panel as any).refresh = (json: string): void => {
         let list: AlarmEntry[];
         try {
             list = JSON.parse(json) as AlarmEntry[];

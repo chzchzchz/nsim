@@ -98,8 +98,8 @@ async function main(): Promise<void> {
         refreshSensors(sensorRows, sim.plant);
         // Refresh alarm panel from the structured sensor JSON.
         const alarmJson = sim.plant.sensorJSON("Plant/Alarms");
-        if (typeof alarmJson === "string" && alarmPanel?.refresh) {
-            alarmPanel.refresh(alarmJson);
+        if (typeof alarmJson === "string" && alarmPanel) {
+            (alarmPanel as any).refresh(alarmJson);
         }
         if (performance.now() - lastSvg > 1000) {
             const svg = sim.plant.getSvg();

@@ -432,6 +432,10 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 	// Control rod position (chapter 7):
 	// "The control rods are then manually withdrawn to achieve criticality"
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:155-156
+	// The Set path writes the operator's demand to
+	// DemandPosition; ReactorBuilding.Step rate-limits the
+	// actual transition from Position toward DemandPosition
+	// at RodInsertionSpeed (plans/x/fission_controls.md).
 	m["ReactorBuilding/ReactorPressureVessel/ControlRods/Position"] = &bridge.Control{
 		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
 		Label: "Position",
@@ -449,7 +453,50 @@ func GetControlMap(p *Plant) bridge.ControlMap {
 			if err != nil {
 				return err
 			}
-			p.ReactorBuilding.ReactorPressureVessel.ControlRods.Position = v
+			p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandPosition = v
+			return nil
+		},
+	}
+
+	// CVCS boron concentration setpoint. The operator writes
+	// the desired RCS boron concentration in ppm directly; this
+	// feeds the reactivity model on the next step. The CVCS
+	// rate dynamics (boration/dilution) still run in their
+	// respective modes; the setpoint is the operator-visible
+	// handle on the slow shim path.
+	//   "The operating mode (boration or dilution) and the
+	//   magnitude of the boron concentration change required
+	//   is determined by comparison of the measured Tc
+	//   (cold leg temperature) with the programmed (function
+	//   of power) Tc."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
+	//   "Operational Reactivity Control — Reactivity control is
+	//   provided by the neutron absorbing control rods and a
+	//   soluble chemical neutron absorber (boric acid) in the
+	//   reactor coolant."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_036.txt:114
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/BoronSetpoint"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "BoronSetpoint",
+		Kind:  "ppm",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("ppm", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			// Write to CVCS so the next step's propagation
+			// (CVCS.BoronConcentration → RPV.ControlRods.BoronConcentration)
+			// does not overwrite the operator's demand.
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = v
+			p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = v
 			return nil
 		},
 	}
@@ -873,6 +920,40 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("fahrenheit",
 				p.ReactorBuilding.ReactorPressureVessel.Inlet.Float())
+		},
+	}
+
+	// Steam generator heat extraction rate (primary-side heat
+	// input from the RPV). The SG is the dominant primary
+	// energy sink; reducing this is the fastest way to stop a
+	// temperature drop once it starts.
+	//   "3,813,000 Ib/hr (480 kg/sec)" steam flow per steam
+	//   generator — Table 3.4-1.
+	//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
+	m["ReactorBuilding/SteamGenerator/HeatInput"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator",
+		Label: "HeatInput",
+		Kind:  "watt",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("watt",
+				p.ReactorBuilding.SteamGenerator.HeatInput)
+		},
+	}
+
+	// RCP shaft speed. The shaft-loss heat enters the primary
+	// coolant; reduced flow raises ΔT, providing a secondary
+	// primary-temperature lever via the coolant pump.
+	//   "Primary temperature is maintained through the
+	//   balanced use of reactor coolant pump heat input and a
+	//   steam dump system."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-111
+	m["ReactorBuilding/ReactorCoolantPump/Speed"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorCoolantPump",
+		Label: "Speed",
+		Kind:  "rpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("rpm",
+				float64(p.ReactorBuilding.ReactorCoolantPump.Velocity))
 		},
 	}
 

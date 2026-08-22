@@ -628,7 +628,15 @@ type FuelRods struct{ Part }
 //     specs/the_westinghouse_pressurized_water_react/back_matter/page_244.txt:46-47
 type ControlRods struct {
 	Part
-	Position float64 // 0..1 fraction of withdrawal
+	Position float64 // 0..1 fraction of withdrawal (actual)
+
+	// DemandPosition is the operator's requested position,
+	// written by the bridge Control.Set. Step rate-limits
+	// Position toward DemandPosition. This split mirrors the
+	// plan's intent that the operator's demand be visible
+	// while the actual rod position catches up at the
+	// mechanical drive speed.
+	DemandPosition float64
 
 	// BoronConcentration is the RCS boron concentration in
 	// ppm. Plant.Step propagates CVCS.BoronConcentration here
@@ -644,6 +652,39 @@ type ControlRods struct {
 	// depletion."
 	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
 	BoronConcentration float64
+}
+
+// Step advances Position toward DemandPosition at the rate
+// limit (RodInsertionSpeed). The bridge Set path writes the
+// operator's request into DemandPosition; this step rate-limits
+// the actual transition so the thermal model sees incremental
+// reactivity changes rather than an instantaneous scram. Without
+// the limit the operator could drop all rods in one tick,
+// which defeats the transient response.
+//
+// The previous-step Position is read from the receiver (c.Position)
+// and the rate-limited target written into the returned copy.
+// The clamp at [0,1] mirrors the normalised-kind validation in
+// the bridge Set path.
+func (c ControlRods) Step() ControlRods {
+	ret := c
+	demand := ret.DemandPosition
+	if demand < 0 {
+		demand = 0
+	}
+	if demand > 1 {
+		demand = 1
+	}
+	delta := demand - c.Position
+	maxStep := RodInsertionSpeed * TimeStep.Seconds()
+	if delta > maxStep {
+		ret.Position = c.Position + maxStep
+	} else if delta < -maxStep {
+		ret.Position = c.Position - maxStep
+	} else {
+		ret.Position = demand
+	}
+	return ret
 }
 type Nozzle struct{ Part }
 
@@ -1636,6 +1677,21 @@ const (
 	//   571°F (300°C)."
 	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:115-116
 	CoreDopplerReferenceTempF float32 = 571
+
+	// RodInsertionSpeed is the maximum fraction-of-withdrawal
+	// change per second the control-rod drive mechanism can
+	// achieve. Derived from the spec's description of RCC
+	// assemblies as the mechanism for "startup or shutdown, to
+	// follow load changes" — implying a finite mechanical speed
+	// rather than instantaneous insertion. At TimeStep=1 ms the
+	// per-tick change is 5e-5, effectively continuous at
+	// control-room time scale but preventing instantaneous
+	// scram.
+	//   "Rod cluster control (RCC) assemblies are used for
+	//   reactor startup or shutdown, to follow load changes,
+	//   and to control small transient changes in reactivity."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_035.txt:88-93
+	RodInsertionSpeed float64 = 0.05 // 5% of full travel per second
 )
 
 // Primary-side thermal model constants (plans/p8_1.txt).

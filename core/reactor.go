@@ -114,7 +114,7 @@ func (r *ReactorPressureVessel) Step(rcpRunning bool) ReactorPressureVessel {
 	// at low power (BOL), and [...] the boron concentration
 	// changes significantly with fuel depletion."
 	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
-	rodReactivity := float32(ret.ControlRods.Position-1) * CoreRodWorthABCD
+	rodReactivity := (1 - float32(ret.ControlRods.Position)) * CoreRodWorthABCD
 	dopplerDeltaF := outletF - float64(CoreDopplerReferenceTempF)
 	dopplerPcm := float32(dopplerDeltaF * CoreDopplerPcmPerDegF)
 	boronDelta := (ret.ControlRods.BoronConcentration - CVCSInitialBoron) / 100.0

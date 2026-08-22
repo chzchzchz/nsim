@@ -86,6 +86,19 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	// decay-heat curve this same step.
 	ret.ReactorPressureVessel.Trip = ret.ReactorProtectionSystem.ReactorTripped
 
+	// Control-rod drive rate limit (plans/x/fission_controls.md).
+	// The bridge writes the operator's demand directly into
+	// ControlRods.Position; this step rate-limits the
+	// transition toward that demand so the thermal model sees
+	// incremental reactivity changes rather than an
+	// instantaneous scram.
+	//   "Rod cluster control (RCC) assemblies are used for
+	//   reactor startup or shutdown, to follow load changes,
+	//   and to control small transient changes in reactivity."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_035.txt:88-93
+	ret.ReactorPressureVessel.ControlRods =
+		ret.ReactorPressureVessel.ControlRods.Step()
+
 	rpv := ret.ReactorPressureVessel.Step(ret.ReactorCoolantPump.Running)
 	ret.ReactorPressureVessel = rpv
 

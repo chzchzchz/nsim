@@ -31,7 +31,7 @@ export function renderReadout(
         // alarm-kind sensors are rendered in the dedicated alarm
         // panel; skip them here so no raw JSON leaks into the table.
         const scalar = part.sensors.filter((e) => !isAlarmKind(e.meta.kind));
-        rows.push(...renderPartTable(part, rows, scalar, display));
+        host.appendChild(renderPartTable(part, rows, scalar, display));
     }
     return rows;
 }
