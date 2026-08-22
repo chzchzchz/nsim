@@ -6,16 +6,22 @@
 // layout grid, the document viewBox, and the entry point that
 // the simulator calls from (*Plant).ExportPlantSVG.
 //
-// Spec justification for the P&ID layout (chapter 3 figure 3-1 +
-// chapter 15 figure 15.3-1):
-//   - "Figure 3-1 is a schematic flow diagram (one-loop) of the
-//     RCS. Each loop contains a reactor coolant pump and a steam
-//     generator. The RCS also includes a pressurizer, safety and
-//     relief valves, a pressurizer relief tank [...]"
-//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_043.txt:7-19
-//   - "A flow diagram of a typical steam, condensate, and
-//     feedwater system is shown in Figure 15.3-1."
-//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:28-29
+// Spec justification for the P&ID layout (chapter 3 figure 3-1 + chapter 15 figure 15.3-1):
+//   - "Figure 3-1 is a schematic flow diagram (one-loop) of the RCS. Each loop
+//     contains a reactor coolant pump and a steam generator. The RCS also
+//     includes a pressurizer, safety and relief valves, a pressurizer relief
+//     tank [...]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_043.txt:12-24
+//   - "A flow diagram of a typical steam, condensate, and feedwater system is
+//     shown in Figure 15.3-1."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:64-72
+//   - "The containment building [...] is a cylindrical, steel lined, concrete
+//     pressure vessel with a hemispherical top closure and stepped flat
+//     bottom. The building encloses the reactor coolant system [...]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_1/page_025.txt:28-38
+//   - "The main steam lines are provided with a stop valve and a check valve in
+//     each line just outside the containment."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:70-73
 package svg
 
 import (
@@ -34,66 +40,92 @@ const (
 )
 
 // Layout grid coordinates for each major component. The grid
-// follows the chapter-3 / chapter-15 figures: nuclear island on
-// the left, turbine island on the right, containment dome on the
-// far left, electrical / diesel at the bottom.
+// follows the chapter-3 / chapter-15 figures: containment on the
+// left enclosing the nuclear island, turbine building radially to
+// the right, feedwater chain as a ladder above the turbine,
+// safety systems inside the containment base, AFW pumps below
+// the containment, and electrical (diesel, transformer, ESF buses)
+// at the bottom-left.
+//
+// The containment dimensions and separation from the turbine are
+// justified by:
+//   - "The containment building and contiguous buildings or compartments
+//     around it house the systems and equipment of the nuclear island."
+//     specs/the_westinghouse_pressurized_water_react/chapter_1/page_025.txt:28-34
+//   - "Of particular note to this view is the radial orientation of the
+//     turbine building to the containment building."
+//     specs/the_westinghouse_pressurized_water_react/chapter_1/page_025.txt:74-78
+//   - Stop valves "just outside the containment" leave a separation gap.
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:70-73
 //
 // The four-loop plant's four SGs and four RCPs are collapsed into
 // a single SG and single RCP, with a "(×4)" label added by the
 // live overlay.
 const (
-	// Reactor building bounds: RPV at the centre, with one
-	// lumped SG (×4) to its right and the RCP in between.
-	RPVX, RPVY             float64 = 350, 450
-	PressurizerX, PressurizerY float64 = 540, 280
-	PRTX, PRTY             float64 = 680, 200
-	RCPX, RCPY             float64 = 540, 530
-	SGX, SGY               float64 = 720, 450
+	// Containment dome dimensions: large enough to enclose the RPV,
+	// pressurizer, SG, and RCP (the nuclear island).
+	ContainmentX, ContainmentY float64 = 260, 500
+	ContainmentW                         float64 = 480 // cylinder width
+	ContainmentH                         float64 = 440 // cylinder + arch height
 
-	// Turbine island.
-	TurbineX, TurbineY         float64 = 900, 450
-	GeneratorX, GeneratorY     float64 = 1050, 450
-	CondenserX, CondenserY     float64 = 950, 700
+	// Reactor pressure vessel — centred inside the containment.
+	RPVX, RPVY float64 = 260, 510
 
-	// Feedwater side: CST far right top, condensate pump +
-	// LP heater + deaerator (HDT) cascade back to the SG.
-	CSTX, CSTY           float64 = 1100, 250
-	CondPumpX, CondPumpY float64 = 1050, 250
-	LPHeaterX, LPHeaterY float64 = 950, 250
-	HDTX, HDTY           float64 = 850, 250
-	HPPumpX, HPPumpY     float64 = 800, 320
-	HPHeaterX, HPHeaterY float64 = 800, 380
-	FWCtrlX, FWCtrlY     float64 = 760, 450
+	// Pressurizer — upper-right quadrant inside the containment,
+	// connected to the RPV hot leg via a short surge line.
+	PressurizerX, PressurizerY float64 = 380, 330
 
-	// Safety systems: SIS accumulators and EFWS tank lower-left.
-	SISX, SISY               float64 = 100, 200
-	EFWSTankX, EFWSTankY     float64 = 100, 350
-	RHRSTrainAX, RHRSTrainAY float64 = 400, 700
-	RHRSTrainBX, RHRSTrainBY float64 = 500, 700
+	// Pressurizer relief tank — above the pressurizer, inside dome.
+	PRTX, PRTY                 float64 = 420, 200
 
-	// Containment dome on the far left.
-	ContainmentX, ContainmentY float64 = 150, 500
+	// Steam generator — right of the RPV, inside containment.
+	// Only one shown; "(×4)" label added by live overlay.
+	SGX, SGY float64 = 430, 500
 
-	// Electrical: diesel generator, station transformer, ESF
-	// buses, grid.
-	DieselX, DieselY                     float64 = 100, 800
-	FuelTankX, FuelTankY                 float64 = 100, 850
-	StationTransformerX, StationTransformerY float64 = 250, 800
-	ESFBusAX, ESFBusAY                   float64 = 400, 850
-	ESFBusBX, ESFBusBY                   float64 = 450, 850
-	GridX, GridY                         float64 = 1100, 100
+	// RCP — between the RPV and SG on the hot leg.
+	RCPX, RCPY float64 = 350, 540
 
-	// AFWPumps inside the EFWS pump building (under the
-	// SG outlets).
-	DieselAFWX, DieselAFWY   float64 = 600, 380
-	MotorAFWX, MotorAFWY     float64 = 620, 360
-	TurbineAFWX, TurbineAFWY float64 = 640, 340
+	// Turbine island — right of containment with separation gap
+	// for main steam stop valves ("just outside the containment").
+	TurbineX, TurbineY     float64 = 900, 470
+	GeneratorX, GeneratorY float64 = 1070, 470
+	CondenserX, CondenserY float64 = 1010, 710
 
-	// CCWS heat exchanger (one for the safeguards train).
-	CCWSHXX, CCWSHXY float64 = 250, 720
+	// Feedwater chain — ladder above the turbine.
+	CSTX, CSTY           float64 = 1090, 170
+	CondPumpX, CondPumpY float64 = 1020, 170
+	LPHeaterX, LPHeaterY float64 = 940, 170
+	HDTX, HDTY           float64 = 850, 200
+	HPPumpX, HPPumpY     float64 = 770, 290
+	HPHeaterX, HPHeaterY float64 = 700, 360
+	FWCtrlX, FWCtrlY     float64 = 580, 420
 
-	// SFP at the lower-centre.
-	SFPX, SFPY float64 = 700, 780
+	// Safety systems — inside the containment dome.
+	SISX, SISY           float64 = 140, 180
+	EFWSTankX, EFWSTankY float64 = 120, 370
+
+	// AFW pumps — below the containment base, near the SG inlets.
+	DieselAFWX, DieselAFWY   float64 = 530, 690
+	MotorAFWX, MotorAFWY     float64 = 590, 690
+	TurbineAFWX, TurbineAFWY float64 = 650, 690
+
+	// CCWS heat exchanger — bottom-left, just inside the base.
+	CCWSHXX, CCWSHXY float64 = 200, 700
+
+	// RHRS trains — bottom-centre, just inside the base.
+	RHRSTrainAX, RHRSTrainAY float64 = 360, 700
+	RHRSTrainBX, RHRSTrainBY float64 = 480, 700
+
+	// Spent fuel pool — below the containment, right side.
+	SFPX, SFPY float64 = 620, 770
+
+	// Electrical — bottom-left.
+	DieselX, DieselY                     float64 = 100, 820
+	FuelTankX, FuelTankY                 float64 = 100, 870
+	StationTransformerX, StationTransformerY float64 = 250, 820
+	ESFBusAX, ESFBusAY                   float64 = 400, 860
+	ESFBusBX, ESFBusBY                   float64 = 450, 860
+	GridX, GridY                         float64 = 1100, 80
 )
 
 // anchor describes the document-space coordinate of a part's
@@ -191,13 +223,17 @@ func WritePlantSVG(w io.Writer, p *core.Plant) error {
 			sym, x, y, w, h)
 	}
 
-	// Background: containment dome on the far left.
+	// Background: containment dome on the left, large enough to
+	// enclose the nuclear island (RPV, pressurizer, SG, RCP).
+	// specs/the_westinghouse_pressurized_water_react/chapter_1/page_025.txt:28-34
 	writePart("ReactorBuilding/ContainmentBuilding",
-		useAt("containment-dome", ContainmentX-140, ContainmentY-140, 280, 280))
+		useAt("containment-dome",
+			ContainmentX-ContainmentW/2, ContainmentY-ContainmentH/2,
+			ContainmentW, ContainmentH))
 
 	// CSS spray headers overlay inside the dome.
 	writePart("ReactorBuilding/ContainmentBuilding",
-		useAt("css-spray-headers", ContainmentX-120, ContainmentY-130, 240, 160))
+		useAt("css-spray-headers", ContainmentX-120, ContainmentY-110, 240, 120))
 
 	// Four RCFC units in a 2x2 grid inside the dome.
 	for dy := 0; dy < 2; dy++ {
@@ -205,7 +241,7 @@ func WritePlantSVG(w io.Writer, p *core.Plant) error {
 			writePart("ReactorBuilding/ContainmentBuilding",
 				useAt("rcfc-unit",
 					ContainmentX-90+float64(dx)*70,
-					ContainmentY-40+float64(dy)*70,
+					ContainmentY-60+float64(dy)*70,
 					40, 40))
 		}
 	}
@@ -214,9 +250,10 @@ func WritePlantSVG(w io.Writer, p *core.Plant) error {
 	writePart("ReactorBuilding/ReactorPressureVessel",
 		useAt("reactor_vessel", RPVX-50, RPVY-120, 100, 240))
 
-	// Pressurizer to the upper-right of the RPV.
+	// Pressurizer to the upper-right of the RPV (inside containment).
+	// Height reduced to 260 px so the dome fits under the arch.
 	writePart("ReactorBuilding/Pressurizer",
-		useAt("pressurizer", PressurizerX-30, PressurizerY-160, 60, 320))
+		useAt("pressurizer", PressurizerX-30, PressurizerY-130, 60, 260))
 
 	// Pressurizer relief tank to the right of the pressurizer.
 	writePart("ReactorBuilding/PressurizedReliefTank",
@@ -243,13 +280,13 @@ func WritePlantSVG(w io.Writer, p *core.Plant) error {
 		writePart("ReactorBuilding/Pressurizer",
 			useAt("valve-safety",
 				PressurizerX-22+float64(i)*14,
-				PressurizerY-176, 20, 20))
+			PressurizerY-146, 20, 20))
 	}
 	for i := 0; i < 2; i++ {
 		writePart("ReactorBuilding/Pressurizer",
 			useAt("valve-porv",
 				PressurizerX-12+float64(i)*14,
-				PressurizerY-186, 24, 20))
+				PressurizerY-156, 24, 20))
 	}
 
 	// Turbine, generator, condenser.
