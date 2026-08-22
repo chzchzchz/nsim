@@ -140,3 +140,91 @@ func TestESFGating_RHRTrainGatedByOwnBus(t *testing.T) {
 		"want TrainB ReturnFlow>0 with BusB on, got %v",
 		p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.ReturnFlow.Float())
 }
+
+// With both ESF buses off, the CW pump cannot develop flow even
+// though the operator latch Running=true is preserved. The CFW
+// pumps ride on the 6600 V plant distribution bus fed by UAT or
+// SAT, mirroring the SWS readiness gate
+// (plans/x/uat_sat_gating.md); a blackout drops the bus so the
+// pump spins down and the cooling-tower fan stops.
+func TestESFGating_CWNoFlowWithBusesOff(t *testing.T) {
+	p := MakePlant()
+	p.Electrical.ESFBusA.BreakerClosed = false
+	p.Electrical.ESFBusB.BreakerClosed = false
+	p.Outside.CirculatingWaterPump.Running = true
+	stepN(&p, 1)
+	assert.False(t, p.Outside.CirculatingWaterPump.DriveReady,
+		"want CW pump DriveReady=false with buses off, got true")
+	assert.Zero(t, p.Outside.CirculatingWaterSystem.FlowGPM,
+		"want CW FlowGPM=0 with buses off, got %v",
+		p.Outside.CirculatingWaterSystem.FlowGPM)
+	assert.Zero(t, p.Outside.CirculatingWaterSystem.PumpsInService,
+		"want CW PumpsInService=0 with buses off, got %v",
+		p.Outside.CirculatingWaterSystem.PumpsInService)
+	assert.False(t, p.Outside.CoolingTower.FanRunning,
+		"want cooling-tower FanRunning=false with buses off, got true")
+	assert.True(t, p.Outside.CirculatingWaterPump.Running,
+		"want CW pump Running latch preserved (operator intent), got false")
+}
+
+// With one ESF bus (ESFBusB) still energised the CW pump
+// develops full design flow: the plant distribution bus is fed
+// by an OR of the two ESF buses, so a single-bus supply keeps
+// the CW pump motors energised.
+func TestESFGating_CWFlowsWithOneBusOn(t *testing.T) {
+	p := MakePlant()
+	p.Electrical.ESFBusA.BreakerClosed = false
+	p.Outside.CirculatingWaterPump.Running = true
+	stepN(&p, 1)
+	assert.True(t, p.Outside.CirculatingWaterPump.DriveReady,
+		"want CW pump DriveReady=true with ESFBusB on, got false")
+	assert.InDelta(t, CirculatingWaterDesignFlowGPM,
+		p.Outside.CirculatingWaterSystem.FlowGPM, 1e-9,
+		"want CW FlowGPM=design with one bus on, got %v",
+		p.Outside.CirculatingWaterSystem.FlowGPM)
+}
+
+// With both ESF buses off the SFPCS pump loses power: the 480 V
+// MCC downstream of an ESF bus is de-energised, so
+// PurificationFlow drops to zero and the standby auto-start is
+// cleared even though PumpRunning stays latched
+// (plans/x/uat_sat_gating.md).
+func TestESFGating_SFPCSNoFlowWithBusesOff(t *testing.T) {
+	p := MakePlant()
+	p.Electrical.ESFBusA.BreakerClosed = false
+	p.Electrical.ESFBusB.BreakerClosed = false
+	sf := &p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
+	sf.PumpRunning = true
+	stepN(&p, 1)
+	assert.False(t, p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.DriveReady,
+		"want SFPC DriveReady=false with buses off, got true")
+	assert.Zero(t, p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PurificationFlow,
+		"want SFPC PurificationFlow=0 with buses off, got %v",
+		p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PurificationFlow)
+	assert.False(t, p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.StandbyRunning,
+		"want SFPC StandbyRunning=false with buses off, got true")
+	assert.True(t, p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PumpRunning,
+		"want SFPC PumpRunning latch preserved (operator intent), got false")
+}
+
+// When power returns (bus re-energised) the CW pump resumes flow
+// automatically: the Running latch was preserved during the
+// blackout, so the readiness gate alone gates flow.
+func TestESFGating_CWRecoversWhenPowerReturns(t *testing.T) {
+	p := MakePlant()
+	p.Electrical.ESFBusA.BreakerClosed = false
+	p.Electrical.ESFBusB.BreakerClosed = false
+	p.Outside.CirculatingWaterPump.Running = true
+	stepN(&p, 1)
+	assert.Zero(t, p.Outside.CirculatingWaterSystem.FlowGPM,
+		"precondition: no CW flow during blackout")
+	// Restore bus power and step again.
+	p.Electrical.ESFBusA.BreakerClosed = true
+	stepN(&p, 1)
+	assert.True(t, p.Outside.CirculatingWaterPump.DriveReady,
+		"want CW pump DriveReady=true after power restored, got false")
+	assert.InDelta(t, CirculatingWaterDesignFlowGPM,
+		p.Outside.CirculatingWaterSystem.FlowGPM, 1e-9,
+		"want CW FlowGPM=design after power restored, got %v",
+		p.Outside.CirculatingWaterSystem.FlowGPM)
+}

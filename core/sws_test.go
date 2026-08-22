@@ -98,9 +98,10 @@ func TestSFPCS_InitialStateHasTwoPumpsRunning(t *testing.T) {
 func TestSFPCS_StandbyStartsBelow50psig(t *testing.T) {
 	s := SpentFuelPoolCoolingSystem{
 		PumpRunning:    true,
+		DriveReady:     true,
 		HeaderPressure: SFPCStandbyStartPressure - 1.0,
 	}
-	s2 := s.Step()
+	s2 := s.Step(true)
 	assert.True(t, s2.StandbyRunning,
 		"want StandbyRunning=true below 50 psig, got %v",
 		s2.StandbyRunning)
@@ -110,9 +111,10 @@ func TestSFPCS_StandbyStartsBelow50psig(t *testing.T) {
 func TestSFPCS_StandbyOffAbove50psig(t *testing.T) {
 	s := SpentFuelPoolCoolingSystem{
 		PumpRunning:    true,
+		DriveReady:     true,
 		HeaderPressure: SFPCStandbyStartPressure + 1.0,
 	}
-	s2 := s.Step()
+	s2 := s.Step(true)
 	assert.False(t, s2.StandbyRunning,
 		"want StandbyRunning=false above 50 psig, got %v",
 		s2.StandbyRunning)
@@ -124,7 +126,7 @@ func TestSFPCS_StoppedPumpsZeroPurificationFlow(t *testing.T) {
 		PumpRunning:      false,
 		PurificationFlow: SFPCPurificationFlow,
 	}
-	s2 := s.Step()
+	s2 := s.Step(true)
 	assert.Zero(t, s2.PurificationFlow,
 		"want PurificationFlow=0 with pumps stopped, got %v",
 		s2.PurificationFlow)

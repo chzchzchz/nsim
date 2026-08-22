@@ -27,8 +27,10 @@ func TestBridge_PumpSensorsExist(t *testing.T) {
 		"AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePumpRunning",
 		"AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PumpRunning",
 		"AuxiliaryBuilding/SpentFuelPoolCoolingSystem/StandbyRunning",
+		"AuxiliaryBuilding/SpentFuelPoolCoolingSystem/DriveReady",
 		"ReactorBuilding/SafetyInjectionSystem/HHSIPumpRunning",
 		"Outside/CirculatingWaterSystem/PumpRunning",
+		"Outside/CirculatingWaterPump/DriveReady",
 	}
 	for _, id := range want {
 		s, ok := m[id]

@@ -37,6 +37,13 @@ type Pump struct {
 	// exponential startup / coastdown dynamics in the owning
 	// building's Step function (plans/p33_1.txt).
 	Velocity Velocity
+
+	// DriveReady is latched true by Plant.Step when the upstream
+	// power source that feeds the pump motor is energised. When
+	// false, the pump produces zero flow even if Running is set,
+	// matching the SWS / CCWS / CSS / HHSI readiness behaviour.
+	// See plans/x/uat_sat_gating.md for the wiring rationale.
+	DriveReady bool
 }
 
 type Turbine struct {
@@ -3818,6 +3825,18 @@ type SpentFuelPoolCoolingSystem struct {
 	// running. Normal state is two pumps running; third is
 	// standby.
 	PumpRunning bool
+
+	// DriveReady is true when the 480 V MCC that feeds the SFPC
+	// pump motors is energised. The spec is silent on the SFPC
+	// electrical supply; by exclusion from the explicit ESF load
+	// list at
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-80
+	// and the 6600 V vs. 480 V split at
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:77-82,
+	// the pumps are inferred to ride on a 480 V MCC downstream of
+	// an ESF bus. When false, the pumps spin down to zero flow
+	// even if PumpRunning is latched by the standby auto-start.
+	DriveReady bool
 
 	// StandbyRunning is true when the third standby pump has
 	// automatically started due to low header pressure.

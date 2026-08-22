@@ -1787,6 +1787,17 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.StandbyRunning)
 		},
 	}
+	// SFPCS upstream-power readiness. The pumps ride on a 480 V MCC
+	// downstream of an ESF bus (see plans/x/uat_sat_gating.md).
+	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/DriveReady"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
+		Label: "DriveReady",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.DriveReady)
+		},
+	}
 
 	// Circulating water pump running. The operator modulates
 	// the CW pump discharge valves and varies the number of
@@ -1803,6 +1814,18 @@ func GetSensorMap(p *Plant) bridge.SensorMap {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
 				p.Outside.CirculatingWaterPump.Running)
+		},
+	}
+	// CW pump upstream-power readiness. The CW pump motors ride on
+	// the 6600 V plant distribution bus fed by UAT or SAT (see
+	// plans/x/uat_sat_gating.md).
+	m["Outside/CirculatingWaterPump/DriveReady"] = &bridge.Sensor{
+		Part:  "Outside/CirculatingWaterPump",
+		Label: "DriveReady",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.Outside.CirculatingWaterPump.DriveReady)
 		},
 	}
 	// Alarms aggregate the current active alarm conditions

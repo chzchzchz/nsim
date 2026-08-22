@@ -106,12 +106,17 @@ type AuxiliaryBuilding struct {
 // building. The diesel jacket cooler only sees cooling water when
 // the SWS pumps have developed actual flow — PumpRunning alone is
 // not enough if the ESF bus is de-energised.
-func (a *AuxiliaryBuilding) Step(swFlowGPM float64) AuxiliaryBuilding {
+//
+// sfpcDriveReady is the upstream-power readiness signal for the
+// SFPC pump motors (480 V MCC downstream of an ESF bus). It is
+// plumbed in by Plant.Step so this step does not have to reach into
+// the plant electrical model. See plans/x/uat_sat_gating.md.
+func (a *AuxiliaryBuilding) Step(swFlowGPM float64, sfpcDriveReady bool) AuxiliaryBuilding {
 	ret := *a
 	ret.ComponentCoolingWaterSystem =
 		ret.ComponentCoolingWaterSystem.Step()
 	ret.SpentFuelPoolCoolingSystem =
-		ret.SpentFuelPoolCoolingSystem.Step()
+		ret.SpentFuelPoolCoolingSystem.Step(sfpcDriveReady)
 	ret.DieselGenerator = ret.DieselGenerator.Step(swFlowGPM)
 	return ret
 }

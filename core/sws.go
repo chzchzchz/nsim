@@ -102,10 +102,16 @@ func (s *ServiceWaterSystem) Step(heatLoad Watts) ServiceWaterSystem {
 //   - "passing approximately 100 gpm (23 m3/hr) of each loop's
 //     flow through a filter and demineralizer."
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:68-71
-func (s *SpentFuelPoolCoolingSystem) Step() SpentFuelPoolCoolingSystem {
+//
+// driveReady is the upstream-power availability signal plumbed
+// in by Plant.Step. When false (480 V MCC de-energised), the
+// pumps produce zero flow even if PumpRunning was latched by
+// the standby auto-start; the latch is preserved so flow
+// recovers when power returns. See plans/x/uat_sat_gating.md.
+func (s *SpentFuelPoolCoolingSystem) Step(driveReady bool) SpentFuelPoolCoolingSystem {
 	ret := *s
 
-	if !ret.PumpRunning {
+	if !ret.PumpRunning || !driveReady {
 		ret.StandbyRunning = false
 		ret.PurificationFlow = 0
 		return ret

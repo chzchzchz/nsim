@@ -608,6 +608,15 @@ type Plant struct {
 }
 
 func (p *Plant) Step() {
+	// Step the electrical distribution first so the ESF bus
+	// Energized state for this step is visible to every
+	// downstream consumer (CW pump, SFPC pump, RHRS, CCWS,
+	// CSS, HHSI, SWS). The Electrical.Step call is pure on
+	// its input and only writes to nextPlant.Electrical.
+	p.nextPlant.Electrical = p.Electrical.Step()
+	plantDriveReady := p.nextPlant.Electrical.ESFBusA.Energized ||
+		p.nextPlant.Electrical.ESFBusB.Energized
+
 	// Run Outside.Step first so the CW pump / cooling-tower
 	// state is in nextPlant. Step the AuxiliaryBuilding next so
 	// its diesel / RHRS / CCWS state is fresh for the
@@ -618,24 +627,32 @@ func (p *Plant) Step() {
 	// The cross-building source pointers must point at
 	// nextPlant (where the fresh state is being written), not
 	// at p (the current state being read).
-	p.nextPlant.Outside = p.Outside.Step()
+	p.nextPlant.Outside = p.Outside.Step(plantDriveReady)
+	// Latch the CW pump DriveReady (naming-convention
+	// counterpart to ServiceWaterSystem.DriveReady) so the
+	// bridge can publish it as a sensor. The pump motors ride
+	// on the 6600 V plant distribution bus fed by UAT or SAT
+	// (see plans/x/uat_sat_gating.md); a blackout drops it.
+	p.nextPlant.Outside.CirculatingWaterPump.DriveReady = plantDriveReady
 	// SWS flow at this point is the prior step's delivered flow
 	// in gpm (the SWS Step runs later, after the cross-building
 	// DriveReady wiring). PumpRunning alone is not enough — the
 	// 6600V ESF breaker must be closed for the pump motor to
 	// develop flow, so the diesel jacket cooler sees Flow > 0
 	// only when power is actually delivered to the pump.
+	// The SFPC pump reads the same plantDriveReady signal
+	// (480 V MCC downstream of an ESF bus).
 	p.nextPlant.AuxiliaryBuilding = p.AuxiliaryBuilding.Step(
-		p.Outside.ServiceWaterSystem.Flow)
+		p.Outside.ServiceWaterSystem.Flow,
+		plantDriveReady,
+	)
+	// Latch the SFPC DriveReady so the bridge can publish it
+	// as a sensor (plans/x/uat_sat_gating.md).
+	p.nextPlant.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.DriveReady =
+		plantDriveReady
 	p.ReactorBuilding.Aux = &p.nextPlant.AuxiliaryBuilding
 	p.Electrical.DieselGenA = &p.nextPlant.AuxiliaryBuilding.DieselGenerator
 	p.Electrical.DieselGenB = &p.nextPlant.AuxiliaryBuilding.DieselGenerator
-
-	// Step the ESF buses early so the cross-building DriveReady
-	// wiring into the nextPlant parts below reflects this
-	// step's bus Energized state (otherwise it lags by one step
-	// and ReactorBuilding.Step would see last step's values).
-	p.nextPlant.Electrical = p.Electrical.Step()
 
 	// RHR TrainA on BusA, TrainB on BusB. The spec assigns
 	// RHR pumps to their own ESF train, mirroring the EFWS
@@ -1003,7 +1020,9 @@ func (p *Plant) Step() {
 	p.nextPlant.Outside.ServiceWaterSystem =
 		p.nextPlant.Outside.ServiceWaterSystem.Step(rcfcHeatOut)
 
-	// SFPCS: pump auto-start and purification-flow update.
+	// SFPCS: pump auto-start and purification-flow update
+	// happen inside AuxiliaryBuilding.Step above, where the
+	// upstream-drive readiness signal is plumbed in.
 	//
 	// Spec justification:
 	//   - "Normal operation requires two pumps with the third
@@ -1012,8 +1031,7 @@ func (p *Plant) Step() {
 	//   - "passing approximately 100 gpm (23 m3/hr) of each
 	//     loop's flow through a filter and demineralizer."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:68-71
-	p.nextPlant.AuxiliaryBuilding.SpentFuelPoolCoolingSystem =
-		p.nextPlant.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.Step()
+	_ = p.nextPlant.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
 
 	// Flow-modulating valves: assume full-open during the
 	// first 30 minutes after actuation. After that the
@@ -1090,9 +1108,15 @@ func (p *Plant) Step() {
 	p.TurbineBuilding.Turbine.GridFrequency = p.nextPlant.ReactorBuilding.Grid.Frequency
 
 	cwPumpRunning := p.Outside.CirculatingWaterPump.Running
+	// Condenser flow is gated on both the operator latch
+	// (cwPumpRunning) and the upstream-drive readiness
+	// (plantDriveReady). A blackout that drops the ESF bus
+	// also drops CW flow; the secondary side then has no
+	// heat sink and the turbine can no longer accept steam.
+	cwFlowing := cwPumpRunning && plantDriveReady
 	p.nextPlant.TurbineBuilding = p.TurbineBuilding.StepWithSteam(
 		p.nextPlant.ReactorBuilding.SteamGenerator.Pressure,
-		cwPumpRunning,
+		cwFlowing,
 	)
 
 	// Feedwater regulator step. The simplified model collapses

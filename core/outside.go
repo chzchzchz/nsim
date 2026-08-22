@@ -59,7 +59,7 @@ type Outside struct {
 	RiverTemp Temperature
 }
 
-func (o *Outside) Step() Outside {
+func (o *Outside) Step(electricalDriveReady bool) Outside {
 	ret := *o
 	// Circulating Water System step. The CW pump count is
 	// collapsed to the spec's "one per half-condenser"
@@ -68,19 +68,21 @@ func (o *Outside) Step() Outside {
 	// CirculatingWaterDesignFlowGPM.
 	cwRunning := o.CirculatingWaterPump.Running
 	cwPumps := 0
-	if cwRunning {
+	if cwRunning && electricalDriveReady {
 		cwPumps = CirculatingWaterPumpCount
 	}
 	ret.CirculatingWaterSystem = o.CirculatingWaterSystem.Step(
 		cwRunning,
+		electricalDriveReady,
 		cwPumps,
 		o.RiverTemp,
 		&o.CoolingTower,
 	)
 	// The cooling-tower fan mirrors the CW pump state in
-	// the simplified model; a future plan that adds a
-	// dedicated cooling-tower fan control can decouple
-	// these flags.
-	ret.CoolingTower = o.CoolingTower.Step(cwRunning)
+	// the simplified model; both gates share the same
+	// upstream power bus, so a plant-blackout that drops
+	// electricalDriveReady also stops the fan.
+	// See plans/x/uat_sat_gating.md.
+	ret.CoolingTower = o.CoolingTower.Step(cwRunning, electricalDriveReady)
 	return ret
 }

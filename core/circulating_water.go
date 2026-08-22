@@ -22,6 +22,11 @@ import (
 //     Step based on actual heat duty; this method
 //     initialises OutletTemp to InletTemp so the struct is
 //     always in a self-consistent state.
+//   - When driveReady is false (the plant distribution bus
+//     feeding the CW pump motors is de-energised) the system
+//     produces zero flow even if pumpRunning was latched.
+//     The latch is preserved so flow recovers automatically
+//     when power returns. See plans/x/uat_sat_gating.md.
 //
 // Spec justification:
 //   - CWS mission: "major heat sink for the power plant by
@@ -42,13 +47,14 @@ import (
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
 func (c *CirculatingWaterSystem) Step(
 	pumpRunning bool,
+	driveReady bool,
 	numPumps int,
 	sourceTemp Temperature,
 	coolingTower *CoolingTower,
 ) CirculatingWaterSystem {
 	ret := *c
 
-	if pumpRunning && numPumps > 0 {
+	if pumpRunning && driveReady && numPumps > 0 {
 		ret.PumpsInService = numPumps
 		ret.FlowGPM = float64(numPumps) * CirculatingWaterPumpFlowGPM
 	} else {
@@ -85,15 +91,17 @@ func (c *CirculatingWaterSystem) Step(
 // Step advances the CoolingTower state machine by one
 // timestep. The simplified model tracks only the fan
 // running flag; fill hydraulics, fan curves, and drift loss
-// are not modelled.
+// are not modelled. The tower fan shares the same upstream
+// power bus as the CW pump motors, so driveReady is the same
+// readiness signal (plans/x/uat_sat_gating.md).
 //
 // Spec justification:
 //   - Cooling tower is one of the four CW sources listed in
 //     the spec: "river, lake, ocean, or cooling tower."
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
-func (ct *CoolingTower) Step(fanRunning bool) CoolingTower {
+func (ct *CoolingTower) Step(fanRunning, driveReady bool) CoolingTower {
 	ret := *ct
-	ret.FanRunning = fanRunning
+	ret.FanRunning = fanRunning && driveReady
 	if ret.ApproachF <= 0 {
 		ret.ApproachF = CoolingTowerApproachF
 	}
