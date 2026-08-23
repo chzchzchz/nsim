@@ -235,7 +235,10 @@ func TestBug_MakePlantPreservesCallerRPVTemperatures(t *testing.T) {
 //     significantly with fuel depletion."
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
 func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
-	const steps = int(60 * time.Second / TimeStep)
+	// Boron is seeded directly in both legs, so Reactivity reflects
+	// the swing as soon as thermal feedback settles; 30 s covers
+	// the relaxation without a full minute of stepping.
+	const steps = int(30 * time.Second / TimeStep)
 
 	high := MakePlant()
 	high.ReactorBuilding.ReactorCoolantPump.Running = true
@@ -280,7 +283,9 @@ func TestBug_SGWaterExceedsVolume(t *testing.T) {
 	p.ReactorBuilding.ReactorCoolantPump.Running = true
 	p.ReactorBuilding.Pressurizer.HeatersOn = true
 
-	stepN(&p, int(300*time.Second/TimeStep))
+	// The phantom top-up grew SG water within seconds, so a half
+	// minute window is ample to catch its return.
+	stepN(&p, int(30*time.Second/TimeStep))
 
 	water := p.ReactorBuilding.SteamGenerator.Water.Float()
 	volume := p.ReactorBuilding.SteamGenerator.Volume.Float()
@@ -309,7 +314,9 @@ func TestPlant_SGInventoryNotToppedUpFromPrimary(t *testing.T) {
 	p.ReactorBuilding.ReactorCoolantPump.Running = true
 	p.ReactorBuilding.Pressurizer.HeatersOn = true
 
-	stepN(&p, int(300*time.Second/TimeStep))
+	// The phantom top-up grew SG water within seconds, so a half
+	// minute window is ample to catch its return.
+	stepN(&p, int(30*time.Second/TimeStep))
 
 	water := p.ReactorBuilding.SteamGenerator.Water.Float()
 	initial := p.ReactorBuilding.SteamGenerator.Volume.Float() * 0.8

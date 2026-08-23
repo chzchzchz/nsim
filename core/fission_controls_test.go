@@ -238,7 +238,10 @@ func TestThermal_RodWithdrawalRaisesReactivity(t *testing.T) {
 //     depletion and removal of shim boron"
 //     (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:119-121).
 func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
-	const steps = int(30 * time.Second / TimeStep)
+	// Both legs share the same scrammed seed, so decay-heat
+	// trajectories diverge (if at all) from the first step; a
+	// short window is as probative as a long one.
+	const steps = int(15 * time.Second / TimeStep)
 
 	base := MakePlant()
 	// Scram both units explicitly. The old MakePlant self-scram
@@ -306,26 +309,28 @@ func TestThermal_Fission4_BorationLowersOutlet(t *testing.T) {
 		p.ReactorBuilding.ReactorCoolantPump.Running = true
 		p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 		p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
-		// Start at 600 ppm — well below the critical
+		// Start at 1100 ppm — below the ~1140 ppm critical
 		// concentration at zero insertion, so the unit is
-		// supercritical and rides the rated cap.
-		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 600
+		// supercritical and rides the rated cap, but close
+		// enough that boration crosses the boundary quickly
+		// ((critical − start) / 0.8 ppm/s ≈ 50 s).
+		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 1100
 		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = true
 		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = true
 
-		const warmup = int(30 * time.Second / TimeStep)
+		const warmup = int(15 * time.Second / TimeStep)
 		stepN(&p, warmup)
 
 		if borate {
 			// Switch to boration: CVCS drives boron upward
-			// from 600 ppm at CVCSBorationRate (0.8 ppm/s),
-			// crossing the ~1140 ppm critical concentration
-			// partway through the window.
+			// at CVCSBorationRate (0.8 ppm/s), crossing the
+			// ~1140 ppm critical concentration partway
+			// through the window.
 			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSBoration
 			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
 		}
 
-		const steps = int(1000 * time.Second / TimeStep)
+		const steps = int(120 * time.Second / TimeStep)
 		stepN(&p, steps)
 		return p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 	}

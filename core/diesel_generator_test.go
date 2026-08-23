@@ -36,8 +36,18 @@ func TestDieselStartSafetyInjection(t *testing.T) {
 	assert.Equal(t, DieselRunning, p.AuxiliaryBuilding.DieselGenerator.State, "want DieselRunning via SI")
 
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartNone
-	stepN(&p, int(30*time.Second/TimeStep))
-	assert.Equal(t, DieselOff, p.AuxiliaryBuilding.DieselGenerator.State, "want DieselOff after clearing signal")
+	// Poll for the shutdown transition with a cap instead of
+	// stepping a fixed window past it.
+	shutdown := false
+	for i := 0; i < int(30*time.Second/TimeStep); i++ {
+		p.Step()
+		p.Update()
+		if p.AuxiliaryBuilding.DieselGenerator.State == DieselOff {
+			shutdown = true
+			break
+		}
+	}
+	assert.True(t, shutdown, "want DieselOff after clearing signal")
 }
 
 // 10 s after the start signal, the generator side has built up to rated

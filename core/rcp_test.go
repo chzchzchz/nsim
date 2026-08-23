@@ -67,17 +67,39 @@ func TestPlant_RCPDriveReadyFollowsESFBreaker(t *testing.T) {
 func TestRCP_Coastdown(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPump.Running = true
-	stepN(&p, int(20*time.Second/TimeStep))
-	require.GreaterOrEqual(t, float64(p.ReactorBuilding.ReactorCoolantPump.Velocity),
-		0.99*float64(RCPRatedSpeed),
+	// Poll to rated speed with a cap; the ramp is monotone so the
+	// exit comes as soon as the precondition holds.
+	reached := false
+	for i := 0; i < int(20*time.Second/TimeStep); i++ {
+		p.Step()
+		p.Update()
+		if float64(p.ReactorBuilding.ReactorCoolantPump.Velocity) >=
+			0.99*float64(RCPRatedSpeed) {
+			reached = true
+			break
+		}
+	}
+	require.True(t, reached,
 		"precondition: want RCP at rated speed before coastdown, got %v",
 		p.ReactorBuilding.ReactorCoolantPump.Velocity)
 	p.ReactorBuilding.ReactorCoolantPump.Running = false
-	stepN(&p, int(50*time.Second/TimeStep))
-	assert.Less(t, float64(p.ReactorBuilding.ReactorCoolantPump.Velocity),
-		0.01*float64(RCPRatedSpeed),
-		"want RCP velocity < 1%% of rated after 50 s coastdown, got %v (rated=%v)",
-		p.ReactorBuilding.ReactorCoolantPump.Velocity, RCPRatedSpeed)
+	// The flywheel coastdown is long by design (chapter 16 relies on
+	// it for flow during the power decay transient), so poll for the
+	// sub-1% crossing instead of stepping a fixed window past it.
+	const maxCoast = 50 * time.Second
+	crossed := false
+	for i := 0; i < int(maxCoast/TimeStep); i++ {
+		p.Step()
+		p.Update()
+		if float64(p.ReactorBuilding.ReactorCoolantPump.Velocity) <
+			0.01*float64(RCPRatedSpeed) {
+			crossed = true
+			break
+		}
+	}
+	assert.True(t, crossed,
+		"want RCP velocity < 1%% of rated within %v coastdown, got %v (rated=%v)",
+		maxCoast, p.ReactorBuilding.ReactorCoolantPump.Velocity, RCPRatedSpeed)
 }
 
 // TestRCP_HeatInputScalesWithSpeed verifies the per-step
