@@ -35,3 +35,7 @@ Full path (shown below) references to specification files (with line numbers) sh
 
 * Avoid writing slow tests (e.g., >1 second runtime)
 * Use testify/require and testify/assert packages for tests instead of t.Fatal or t.Error
+
+# Running and Testing
+
+* Do not write binaries / testfiles to /tmp/<binary>; write them to /tmp/nsim-<branch-name>/<binary>
