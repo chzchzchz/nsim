@@ -266,17 +266,28 @@ func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 
 	assert.NotEqual(t, baseRP.Reactivity, dilRP.Reactivity,
 		"dilution must shift Reactivity (%v vs %v)", baseRP.Reactivity, dilRP.Reactivity)
-	assert.Equal(t, baseRP.TotalThermalPower(), dilRP.TotalThermalPower(),
-		"scrammed decay heat must be identical despite different reactivity")
-	assert.Equal(t, baseRP.Outlet, dilRP.Outlet,
+	// Under the unified fission equation the scrammed fission tail
+	// decays at a weakly reactivity-dependent rate, so total power
+	// and outlet agree only to second order; the decay-heat
+	// inventories dominate both trajectories. Exact equality held
+	// under the old split model and would be a false invariant here.
+	assert.InDelta(t, float64(baseRP.TotalThermalPower()),
+		float64(dilRP.TotalThermalPower()), 1e5,
+		"scrammed thermal output must be decay-heat dominated regardless of reactivity")
+	assert.InDelta(t, baseRP.Outlet.Float(), dilRP.Outlet.Float(), 0.01,
 		"outlet must track decay heat identically despite different reactivity")
 }
 
-// Starting from a cold operating point with the fission_4
+// Starting from the full-load operating point with the fission_4
 // control geometry (0 insertion, RCP on), CVCS boron boration
-// raises the RCS boron concentration.  The increased negative
-// boron reactivity suppresses fission power, the outlet target
-// drops, and the actual outlet temperature relaxes downward.
+// raises the RCS boron concentration.  Once boron passes the
+// critical concentration for the current rod position (~1140 ppm
+// at zero insertion under the net-temperature-coefficient model),
+// the added negative boron reactivity drives the core
+// subcritical: fission power collapses, the outlet target drops,
+// and the actual outlet temperature relaxes toward no-load. The
+// baseline run stays at 600 ppm, where the unit remains critical
+// and rides the rated cap with its outlet at full-load value.
 //
 // The live control sequence (bridge path) is:
 //
@@ -290,31 +301,38 @@ func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 // RPV.ControlRods.BoronConcentration (bridge.go:815-829),
 // plant.go:49-50 keeps them synchronised on every Plant.Step.
 func TestThermal_Fission4_BorationLowersOutlet(t *testing.T) {
-	p := MakePlant()
-	p.ReactorBuilding.ReactorCoolantPump.Running = true
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
-	// Start at 10 ppm boron (fission_4 starting point) with the
-	// CVCS in VolumeControl mode so no automatic chemistry
-	// motion occurs during warmup.
-	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 10
-	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = true
-	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = true
+	run := func(borate bool) float64 {
+		p := MakePlant()
+		p.ReactorBuilding.ReactorCoolantPump.Running = true
+		p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
+		p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
+		// Start at 600 ppm — well below the critical
+		// concentration at zero insertion, so the unit is
+		// supercritical and rides the rated cap.
+		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 600
+		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = true
+		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = true
 
-	const warmup = int(60 * time.Second / TimeStep)
-	stepN(&p, warmup)
-	baseOut := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+		const warmup = int(30 * time.Second / TimeStep)
+		stepN(&p, warmup)
 
-	// Switch to boration: CVCS drives boron upward from 10 ppm
-	// at CVCSBorationRate (0.8 ppm/s).
-	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSBoration
-	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
+		if borate {
+			// Switch to boration: CVCS drives boron upward
+			// from 600 ppm at CVCSBorationRate (0.8 ppm/s),
+			// crossing the ~1140 ppm critical concentration
+			// partway through the window.
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSBoration
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
+		}
 
-	const steps = int(100 * time.Second / TimeStep)
-	stepN(&p, steps)
-	boratedOut := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+		const steps = int(1000 * time.Second / TimeStep)
+		stepN(&p, steps)
+		return p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+	}
+	baseline := run(false)
+	borated := run(true)
 
-	assert.Less(t, boratedOut, baseOut,
-		"want outlet after boration (%v °F) < baseline at 10 ppm (%v °F)",
-		boratedOut, baseOut)
+	assert.Less(t, borated, baseline,
+		"want outlet after boration (%v °F) < baseline without boration (%v °F)",
+		borated, baseline)
 }

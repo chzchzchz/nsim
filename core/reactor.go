@@ -183,7 +183,15 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 		powerCorrection = 0
 	}
 	ret.FissionPower = Watts(float64(ret.FissionPower) * powerCorrection)
-	ret.FissionPower = max(ret.FissionPower, 0)
+	// The startup neutron sources keep a minimal fission population
+	// alive even deep in subcritical conditions; without this floor
+	// the purely multiplicative update could never raise power from
+	// an exactly zero inventory and no scrammed core could ever
+	// return to power.
+	//   "Reactor startup neutron sources must be used because of fuel
+	//    configuration and the initially low core activity."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_041.txt:18-20
+	ret.FissionPower = max(ret.FissionPower, CoreNeutronSourcePower)
 	ret.FissionPower = min(ret.FissionPower, CoreRatedThermalPower)
 	dtS := dt.Seconds()
 	fastTarget := float64(ret.FissionPower) * CoreDecayHeatFastFraction
@@ -386,6 +394,14 @@ const (
 	CoreDecayHeatShutdownFraction float64 = 0.065 // 6.5% of rated at equilibrium
 	CoreDecayHeatFastFraction     float64 = 0.060
 	CoreDecayHeatSlowFraction     float64 = 0.005
+
+	// CoreNeutronSourcePower is the standing fission power the
+	// startup neutron sources maintain at the bottom of the power
+	// range. The spec mandates the sources but is silent on their
+	// thermal magnitude; 1e-9 of rated (a few watts) keeps startup
+	// from a fully collapsed chain to full power within minutes of
+	// simulated time while staying thermally invisible.
+	CoreNeutronSourcePower Watts = 1e-9 * CoreRatedThermalPower
 	CoreDecayHeatTimeConstant             = 20 * time.Hour
 	CoreDecayHeatFastTimeConstant         = 50 * time.Second
 

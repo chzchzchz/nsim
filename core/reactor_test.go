@@ -6,6 +6,7 @@ import (
 
 	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // With no Trip, the reactor settles to a positive ThermalPower
@@ -290,4 +291,59 @@ func TestReactor_TrippedPowerIgnoresReactivity(t *testing.T) {
 		weak.DecayHeatSlow, strong.DecayHeatSlow)
 	assert.LessOrEqual(t, float64(weak.TotalThermalPower()), float64(CoreRatedThermalPower),
 		"scrammed core must stay at or below rated, got %v W", weak.TotalThermalPower())
+}
+
+// After a scram collapses the fission chain, withdrawing the rods
+// must let power regrow: the startup neutron sources keep a minimal
+// fission population alive at the bottom of the range, and the
+// multiplicative update amplifies it once reactivity turns positive.
+// Without the source floor a once-tripped core could never return to
+// power.
+//
+// Spec justification:
+//   - "Reactor startup neutron sources must be used because of fuel
+//      configuration and the initially low core activity."
+//   - specs/the_westinghouse_pressurized_water_react/chapter_2/page_041.txt:18-20
+func TestReactor_FissionRegrowsFromSourceAfterScram(t *testing.T) {
+	r := ReactorPressureVessel{
+		ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0,
+			// Near-full-dilution (end-of-life) boron: the net
+			// temperature coefficient is strongly negative,
+			// so once the rods withdraw the cold core is
+			// supercritical and the surviving source
+			// population amplifies.
+			BoronConcentration: 1},
+		Inlet:  Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
+		Outlet: Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
+	}
+	r.SeedSteadyStatePower(CoreRatedThermalPower)
+
+	// Scram: full rod insertion drives the chain to the source floor.
+	r.Trip = true
+	for i := 0; i < int(70*time.Second/TimeStep); i++ {
+		r = r.Step(0)
+	}
+	require.Less(t, float64(r.FissionPower), 1e4,
+		"precondition: scram must collapse fission power, got %v W",
+		r.FissionPower)
+
+	// Untrip and withdraw the rods; positive reactivity then
+	// amplifies the surviving source population back toward rated.
+	// Rod motion is rate-limited by ControlRods.Step — the same
+	// step ReactorBuilding.Step runs in production — so the
+	// withdrawal takes ~20 s at RodInsertionSpeed.
+	r.Trip = false
+	r.DemandInsertion = 0
+	regrown := false
+	for i := 0; i < int(600*time.Second/TimeStep); i++ {
+		r.ControlRods = r.ControlRods.Step()
+		r = r.Step(RCPRatedSpeed)
+		if r.FissionPower > CoreRatedThermalPower/10 {
+			regrown = true
+			break
+		}
+	}
+	assert.True(t, regrown,
+		"fission power never regrew past 10%% of rated (final %v W)",
+		r.FissionPower)
 }

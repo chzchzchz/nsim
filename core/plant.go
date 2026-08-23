@@ -1632,6 +1632,20 @@ func MakePlant() Plant {
 	p.ReactorBuilding.ReactorPressureVessel.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
 	p.ReactorBuilding.ReactorPressureVessel.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 	p.ReactorBuilding.ReactorPressureVessel.Pressure = RPVDesignPressure
+	// Seed the fission/fission-product inventories to match those
+	// full-load coolant conditions: a core holding full-load
+	// temperatures must be producing full-load power. Without the
+	// seed the multiplicative fission update can never raise power
+	// from its zero value, and no operator action could ever start
+	// the plant.
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(
+		CoreRatedThermalPower)
+	// The secondary side starts at its full-load shell pressure.
+	// Leaving it at the zero value arms the low-steamline SI trigger
+	// (500 psia) on every fresh plant: "Full load pressure, shell
+	// side ... 920 psia (63 bar)".
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_066.txt:36,80
+	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
 
 	// Pressurizer design defaults: 60% liquid, 40% steam
 	// bubble, pressure at PressurizerHeaterTarget. The RPS
