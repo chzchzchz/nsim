@@ -123,7 +123,7 @@ func TestXenon_ReactivityFollowsInventoryDeviation(t *testing.T) {
 		rpv.ControlRods.BoronConcentration = CVCSInitialBoron
 		rpv.Outlet = Temperature{Val: float64(CoreDopplerReferenceTempF)}
 		rpv.Xenon135 = xe * eq
-		return rpv.Step(0).Reactivity
+		return rpv.Step(0, 0).Reactivity
 	}
 	base := mk(1.0)
 	require.InDelta(t, 0.0, base, 1e-3,

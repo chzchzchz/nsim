@@ -4,20 +4,71 @@ import (
 	"encoding/json"
 	"io"
 	"math"
+	"time"
 
 	u "github.com/bcicen/go-units"
 )
+
+// secondaryExcessDrawW returns the heat pulled out of the primary
+// through sinks other than the RPV's own program relaxation while the
+// secondary carries cooldown duty: the steam-generator enthalpy draw
+// in excess of supplied heat. The caller feeds it back into
+// ReactorPressureVessel.Step so exactly one writer integrates the
+// primary energy balance. Once RHRS has taken over, the takeover
+// branch below owns the outlet evolution from its pre-step value and
+// this must report zero so the two writers do not double-charge the
+// balance.
+//
+// The offtake fraction is the turbine+condenser-dump draw computed by
+// the previous turbine step; the atmospheric valves draw from the
+// same header and are read directly.
+//
+// "Steam dumps are adjusted to start a 50°F/hr (28°C/hr) cooldown
+// rate." "As steam generator steam pressure decreases during the
+// cooldown, the steam dump must be re-adjusted to maintain a 50°F
+// (28°C) per hour cooldown rate."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:73-74,
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:124-127
+func (r *ReactorBuilding) secondaryExcessDrawW(offtakeFraction float64, turbineAdmitting bool, op PlantOperation, dt time.Duration) Watts {
+	if r.Aux != nil && r.Aux.ResidualHeatRemovalSystem.HasTakenOver {
+		return 0
+	}
+	// With the turbine admitted, draw and boiler duty reconcile
+	// through header-pressure regulation and governor demand; their
+	// rated-normalizations need not agree digit-for-digit, so a
+	// residual there is bookkeeping, not primary cooling. The
+	// enthalpy-deficit semantics apply only to the unloaded plant
+	// outside at-power operation: a planned cooldown holds steam dump
+	// against a subcritical core, while a trip stepback inside power
+	// operation reconciles draw through header-pressure regulation
+	// without spending primary stored heat.
+	if turbineAdmitting || op.Mode == PowerOperation {
+		return 0
+	}
+	advFrac := r.SteamGenerator.AtmosphericDumpValve.Open * AtmosphericDumpFraction
+	drawnW := (offtakeFraction + advFrac) * float64(SteamGeneratorFullLoadHeatInput)
+	// Signed imbalance through a first-order filter before
+	// rectification: one-step telemetry lag and rod-control noise
+	// are zero-mean and must not ratchet into phantom primary
+	// cooldown, while a sustained dump/RHRS-style deficit passes.
+	alpha := dt.Seconds() / SecondaryImbalanceTau
+	filt := float64(r.SecondaryImbalanceFiltered)*(1-alpha) +
+		(drawnW-float64(r.SteamGenerator.HeatInput))*alpha
+	r.SecondaryImbalanceFiltered = Watts(filt)
+	return Watts(max(0, filt))
+}
 
 func (r *ReactorBuilding) Step(
 	sgSteamOutflowFraction float64,
 	turbineLoadFraction float64,
 	op PlantOperation,
+	turbineAdmitting bool,
 ) ReactorBuilding {
 	ret := *r
 	dt := TimeStep
 	var reliefDischarge Volume
 	ret.Pressurizer, reliefDischarge = ret.Pressurizer.Step(
-		&ret.PORV, &ret.SafetyValve, &ret.BlockValve)
+		ret.ReactorPressureVessel.Outlet, &ret.PORV, &ret.SafetyValve, &ret.BlockValve)
 	// Route the relieved steam-equivalent volume into the PRT
 	// until it fills; a full tank latches the rupture-disc burst
 	// and further relief vents to containment instead.
@@ -189,7 +240,8 @@ func (r *ReactorBuilding) Step(
 	// system", specs/the_westinghouse_pressurized_water_react/chapter_16/
 	// page_224.txt:109-111).
 	rpvOutletPreStepF := ret.ReactorPressureVessel.Outlet.Float()
-	rpv := ret.ReactorPressureVessel.Step(ret.ReactorCoolantPump.Velocity)
+	rpv := ret.ReactorPressureVessel.Step(ret.ReactorCoolantPump.Velocity,
+		ret.secondaryExcessDrawW(sgSteamOutflowFraction, turbineAdmitting, op, dt))
 	ret.ReactorPressureVessel = rpv
 
 	// RCP velocity dynamics (plans/p33_1.txt). Exponential
@@ -262,15 +314,20 @@ rcsPressurePsig := float64(ret.Pressurizer.Pressure - AtmosphericPressure)
 		ret.Aux.ComponentCoolingWaterSystem.OutletTemp,
 	)
 	if ret.Aux.ResidualHeatRemovalSystem.HasTakenOver {
-		rejectionW := float64(
-			ret.Aux.ResidualHeatRemovalSystem.TrainA.HeatExchanger.HeatTransferRate,
-		) + float64(
-			ret.Aux.ResidualHeatRemovalSystem.TrainB.HeatExchanger.HeatTransferRate,
-		)
-		decayW := float64(ret.ReactorPressureVessel.TotalThermalPower())
-		netW := decayW - rejectionW
-		deltaTK := netW / (RCSMassKg * SpecificHeatWater) * dt.Seconds()
-		ret.ReactorPressureVessel.Outlet = Temperature{Val: rpvOutletPreStepF+deltaTK*9.0/5.0, Unit: u.Fahrenheit}
+	// While RHRS owns primary cooling the takeover integration
+	// evolves the outlet from its pre-step value (net decay+pump heat
+	// minus HX rejection); ReactorPressureVessel.Step's own
+	// secondary-excess path is suppressed for this regime by
+	// secondaryExcessDrawW, keeping one writer per regime.
+	rejectionW := float64(
+		ret.Aux.ResidualHeatRemovalSystem.TrainA.HeatExchanger.HeatTransferRate,
+	) + float64(
+		ret.Aux.ResidualHeatRemovalSystem.TrainB.HeatExchanger.HeatTransferRate,
+	)
+	decayW := float64(ret.ReactorPressureVessel.TotalThermalPower())
+	netW := decayW - rejectionW
+	deltaTK := netW / (RCSMassKg * SpecificHeatWater) * dt.Seconds()
+	ret.ReactorPressureVessel.Outlet = Temperature{Val: rpvOutletPreStepF+deltaTK*9.0/5.0, Unit: u.Fahrenheit}
 		ret.SteamGenerator.HeatInput = 0
 	} else {
 		// Per-loop SG heat input: the lumped single-SG model
@@ -907,6 +964,7 @@ func (p *Plant) Step() {
 		p.TurbineBuilding.SteamOfftakeFraction,
 		p.TurbineBuilding.Turbine.Setpoint,
 		p.nextPlant.PlantOperation,
+		p.TurbineBuilding.Turbine.State == TurbineRunning,
 	)
 	// Latch the RCP DriveReady after the ReactorBuilding step so
 	// the assignment above (which copies the prior state) cannot
@@ -1805,10 +1863,12 @@ func MakePlant() Plant {
 	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
 
 	// Pressurizer design defaults: 60% liquid, 40% steam
-	// bubble, pressure at PressurizerHeaterTarget. Without an
-	// explicit initialisation the bubble is empty and Pressure
-	// collapses to PressurizerBasePressure, below the RPS
-	// low-pressurizer-pressure setpoint.
+	// bubble, pressure at PressurizerHeaterTarget. The RPS
+	// reads Pressurizer pressure; without an explicit
+	// initialisation the bubble is empty and the idle path
+	// settles Pressure on the saturation floor of the default
+	// coolant temperature, below the
+	// RPSLowPressurizerPressureTrip (1800 psi) setpoint.
 	//
 	// HeatersOn is left at its zero value (false) so that
 	// tests which override Pressure to a high value are not

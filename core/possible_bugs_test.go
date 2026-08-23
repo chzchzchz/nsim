@@ -95,7 +95,7 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 		},
 		Outlet:       hotRef,
 	}
-	hotHighB = hotHighB.Step(RCPRatedSpeed)
+	hotHighB = hotHighB.Step(RCPRatedSpeed, 0)
 
 	hotLowB := ReactorPressureVessel{
 		ControlRods: ControlRods{
@@ -105,7 +105,7 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 		},
 		Outlet:       hotRef,
 	}
-	hotLowB = hotLowB.Step(RCPRatedSpeed)
+	hotLowB = hotLowB.Step(RCPRatedSpeed, 0)
 
 	// The Doppler+moderator contribution is the delta in
 	// reactivity relative to the same Outlet at reference
@@ -122,8 +122,8 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 			ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: boron},
 			Outlet:       Temperature{Val: float64(CoreDopplerReferenceTempF), Unit: u.Fahrenheit},
 		}
-		hot = hot.Step(RCPRatedSpeed)
-		ref = ref.Step(RCPRatedSpeed)
+		hot = hot.Step(RCPRatedSpeed, 0)
+		ref = ref.Step(RCPRatedSpeed, 0)
 		return hot.Reactivity - ref.Reactivity
 	}
 

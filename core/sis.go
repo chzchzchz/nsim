@@ -79,7 +79,8 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 	// true once started — but if Level reaches zero the bit
 	// clears so the empty tank does not produce phantom flow.
 	ret.Accumulator.Pressure = Pressure(SISAccumulatorPrechargePressure)
-	canDischarge := ret.Accumulator.Level.Float() > 0
+	canDischarge := ret.Accumulator.Level.Float() > 0 &&
+		!ret.Accumulator.IsolationShut
 	pressureBelow := rcsPressure < float64(SISAccumulatorPrechargePressure)
 	if ret.Accumulator.Discharging || (canDischarge && pressureBelow) {
 		ret.Accumulator.Discharging = true

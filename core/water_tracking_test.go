@@ -17,7 +17,7 @@ func forcePORVOpen(p *Plant) {
 	pz := &p.ReactorBuilding.Pressurizer
 	pz.Volume = Volume{Val: 1500, Unit: u.Gallon}
 	pz.Water = Volume{Val: 1500 - bubbleGal, Unit: u.Gallon}
-	pz.Pressure = PressurizerBasePressure + Pressure(bubbleGal*PressurizerBubbleStiffness)
+	pz.Pressure = PressurizerHeaterTarget + Pressure(bubbleGal*PressurizerBubbleStiffness)
 	p.ReactorBuilding.ReactorPressureVessel.Pressure = pz.Pressure
 	p.ReactorBuilding.SafetyValve.Open = 0
 }
@@ -56,7 +56,15 @@ func TestPRT_AccumulatesPORVDischarge(t *testing.T) {
 
 	pzzBefore := p.ReactorBuilding.Pressurizer.Water.Float()
 	prtBefore := p.ReactorBuilding.PressurizedReliefTank.Level.Float()
+	outletBefore := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 	stepN(&p, int(time.Second/TimeStep))
+
+	// The contraction surge contributes +k * (total hot-leg dT) to
+	// liquid inventory across the window (a drain while cooling);
+	// account for it alongside recondensation so the ledger stays
+	// explicit.
+	surgeGain := PZRSurgeGalPerF *
+		(p.ReactorBuilding.ReactorPressureVessel.Outlet.Float() - outletBefore)
 
 	prtGain := p.ReactorBuilding.PressurizedReliefTank.Level.Float() - prtBefore
 	pzzGain := p.ReactorBuilding.Pressurizer.Water.Float() - pzzBefore
@@ -71,12 +79,12 @@ func TestPRT_AccumulatesPORVDischarge(t *testing.T) {
 	// plus cooldown recondensation — account for both explicitly
 	// instead of demanding one-for-one steam conservation.
 	wantWater := wantGain + float64(PressurizerAmbientDecay)*1.0/
-		PressurizerBubbleStiffness
+		PressurizerBubbleStiffness + surgeGain
 	assert.InDelta(t, wantWater, pzzGain, wantGain*0.05,
 		"want pressurizer liquid gain = discharge + cooldown"+
-			" recondensation (%v + %v), got %v",
+			" recondensation + contraction surge (%v + %v + %v), got %v",
 			wantGain, float64(PressurizerAmbientDecay)/
-				PressurizerBubbleStiffness, pzzGain)
+				PressurizerBubbleStiffness, surgeGain, pzzGain)
 }
 
 // Once the PRT is full the rupture disc vents it: further discharge

@@ -55,7 +55,7 @@ import (
 //     (6.15 m3/sec) Design head 280 ft (85.3 m)"
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_056.txt:124-130
 //     (cited for context; not directly used in the model).
-func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	ret := *r
+func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) ReactorPressureVessel {	ret := *r
 	dt := TimeStep
 
 	// 0) Trip forces full rod insertion per the scram definition:
@@ -81,10 +81,30 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	// power, so a zero-fission core holds its temperature instead of
 	// being dragged toward the full-load reference (cold and hot-soak
 	// states stay put until an active cooling system takes over).
+	// Its remaining authority shrinks further by the share of
+	// production pulled out through active sinks (secondaryExcess),
+	// so sink-dominated operation integrates the energy balance
+	// instead of fighting it — this is what lets steam-dump flow or
+	// the RHRS carry a planned cooldown below the no-load program
+	// value.
+	//
+	// "Steam dumps are adjusted to start a 50°F/hr (28°C/hr)
+	// cooldown rate."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:73-74
 	powerFrac := float64(ret.TotalThermalPower()) / float64(CoreRatedThermalPower)
 	powerFrac = max(powerFrac, 0)
 	refDeltaF := CoreReferenceOutletF - CoreReferenceInletF
 	targetOutlet := CoreReferenceInletF + powerFrac*refDeltaF
+
+	coreCapabilityW := powerFrac * float64(CoreRatedThermalPower)
+	retained := 1.0
+	if secondaryExcess > 0 {
+		if float64(secondaryExcess) >= coreCapabilityW {
+			retained = 0
+		} else {
+			retained = 1 - float64(secondaryExcess)/coreCapabilityW
+		}
+	}
 
 	outletF := ret.Outlet.Float()
 	// Heating needs produced power; passive cooling toward a lower
@@ -97,7 +117,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	// "Steam dumps are adjusted to start a 50°F/hr (28°C/hr)
 	// cooldown rate."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:157-158
-	relax := dt.Seconds() / PrimaryThermalTimeConstant
+	relax := dt.Seconds() / PrimaryThermalTimeConstant * retained
 	if targetOutlet > outletF {
 		relax *= powerFrac
 	}
@@ -105,6 +125,23 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	maxStep := OpHeatupRateLimit * dt.Seconds()
 	outletStep = min(max(outletStep, -maxStep), maxStep)
 	outletF += outletStep
+
+	// Active-sink energy balance (secondary excess draw): primary
+	// stored heat leaves at the m*cp rate scaled by the deficit's
+	// share of production. A subcritical core under dump/RHRS draw
+	// gets the full rate; at power the same draw is ordinary
+	// load-following absorbed by the secondary, not primary cooling.
+	// Bounded by the operational program envelope either way.
+	if secondaryExcess > 0 {
+		share := 1.0
+		if coreCapabilityW > float64(secondaryExcess) {
+			share = float64(secondaryExcess) / coreCapabilityW
+		}
+		deltaTF := -share * float64(secondaryExcess) /
+			(RCSMassKg * SpecificHeatWater) * dt.Seconds() * 9.0 / 5.0
+		deltaTF = min(max(deltaTF, -maxStep), maxStep)
+		outletF += deltaTF
+	}
 	outletF = max(outletF, 0)
 	ret.Outlet = Temperature{Val: outletF, Unit: u.Fahrenheit}
 

@@ -36,7 +36,8 @@ func TestPressurizer_HeatersDrivePressureUp(t *testing.T) {
 }
 
 // With the pressurizer over-pressurised and the spray valve open, the
-// step bleeds pressure down toward PressurizerSprayMin.
+// step bleeds pressure down toward the saturation floor for the
+// hot-leg coolant temperature.
 func TestPressurizer_SprayDrivesPressureDown(t *testing.T) {
 	p := MakePlant()
 	// Equalise primary-loop pressures so the surge-line edges are at
@@ -48,6 +49,8 @@ func TestPressurizer_SprayDrivesPressureDown(t *testing.T) {
 	p.ReactorBuilding.Pressurizer.Water = Volume{Val: 960, Unit: u.Gallon}
 	p.ReactorBuilding.Pressurizer.Pressure = 2500
 	p.ReactorBuilding.Pressurizer.SprayOpen = 1.0
+	floor := PressurizerSatPressure(
+		p.ReactorBuilding.ReactorPressureVessel.Outlet.Float())
 
 	before := p.ReactorBuilding.Pressurizer.Pressure
 	stepN(&p, int(time.Second/TimeStep))
@@ -55,8 +58,8 @@ func TestPressurizer_SprayDrivesPressureDown(t *testing.T) {
 	after := p.ReactorBuilding.Pressurizer.Pressure
 	assert.Less(t, after, before,
 		"Pressure should drop while SprayOpen: before %v after %v", before, after)
-	assert.GreaterOrEqual(t, after, PressurizerSprayMin,
-		"Pressure dropped below spray min: after %v min %v", after, PressurizerSprayMin)
+	assert.GreaterOrEqual(t, after, floor,
+		"Pressure dropped below saturation floor: after %v min %v", after, floor)
 }
 
 // Charging inflow raises the liquid inventory while pressure stays on
@@ -119,21 +122,25 @@ func TestPressurizer_PORVOpensOverTrip(t *testing.T) {
 // from PressurizerHeaterRate and PressurizerBubbleStiffness, not an
 // independently sourced figure.
 func TestPressurizer_BubbleFormationFromWaterSolid(t *testing.T) {
+	hotLeg := Temperature{Val: CoreReferenceInletF + 3, Unit: u.Fahrenheit}
+	seed := float64(PressurizerSatPressure(hotLeg.Float()))
 	pz := Pressurizer{
 		Volume:    Volume{Val: 1500, Unit: u.Gallon},
 		Water:     Volume{Val: 1500, Unit: u.Gallon},
-		Pressure:  PressurizerBasePressure,
+		Pressure:  Pressure(seed),
 		HeatersOn: true,
 	}
-	steps := int(12 * time.Second / TimeStep)
-	for i := 0; i < steps; i++ {
-		pz, _ = pz.Step(nil, nil, nil)
+	// The window must cover (target-seed)/rate seconds of drive.
+	for range int(6 * time.Second / TimeStep) {
+		pz, _ = pz.Step(hotLeg, nil, nil, nil)
 	}
 
 	assert.InDelta(t, float64(PressurizerHeaterTarget), float64(pz.Pressure), 10,
 		"heaters should bring pressure to the saturation target")
-	assert.InDelta(t, 1200.0, pz.Water.Float(), 2,
-		"boiloff should convert ~300 gal of liquid into steam")
+	wantDrop := (float64(PressurizerHeaterTarget) - seed) /
+		PressurizerBubbleStiffness
+	assert.InDelta(t, 1500-wantDrop, pz.Water.Float(), 2,
+		"boiloff should convert the stiffness-equivalent liquid to steam")
 	assert.Greater(t, pz.SteamBubble.Float(), 0.0,
 		"a steam bubble should have formed")
 }
@@ -157,9 +164,10 @@ func TestPressurizer_LetdownDrainHoldsPressure(t *testing.T) {
 	}
 	netLetdown := (CVCSDesignLetdownFlow.Float() - CVCSDesignChargingFlow.Float()) *
 		TimeStep.Seconds()
+	hotLeg := Temperature{Val: CoreReferenceInletF + 3, Unit: u.Fahrenheit}
 
 	for pz.Water.Float() > 375 {
-		pz, _ = pz.Step(nil, nil, nil)
+		pz, _ = pz.Step(hotLeg, nil, nil, nil)
 		pz.Water = vol(pz.Water, pz.Water.Float()-netLetdown)
 
 		require.Less(t, float64(pz.Pressure), float64(PressurizerPORVTrip),
@@ -181,20 +189,21 @@ func TestPressurizer_LetdownDrainHoldsPressure(t *testing.T) {
 // page's cooldown narrative is OCR-truncated mid-sentence; see
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:81-82)
 func TestPressurizer_IdleCooldownCondensesBubble(t *testing.T) {
+	hotLeg := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 	pz := Pressurizer{
 		Volume:   Volume{Val: 1500, Unit: u.Gallon},
 		Water:    Volume{Val: 1200, Unit: u.Gallon},
 		Pressure: PressurizerHeaterTarget,
 	}
-	steps := int(time.Second / TimeStep)
-	for i := 0; i < steps; i++ {
-		pz, _ = pz.Step(nil, nil, nil)
+	for range int(time.Second / TimeStep) {
+		pz, _ = pz.Step(hotLeg, nil, nil, nil)
 	}
 
 	assert.Less(t, float64(pz.Pressure), float64(PressurizerHeaterTarget),
 		"idle cooldown should bleed pressure below its start")
-	assert.GreaterOrEqual(t, float64(pz.Pressure), float64(PressurizerBasePressure),
-		"idle cooldown should not fall below base pressure")
+	assert.GreaterOrEqual(t, float64(pz.Pressure),
+		float64(PressurizerSatPressure(hotLeg.Float())),
+		"idle cooldown should not fall below the saturation floor")
 	assert.Greater(t, pz.Water.Float(), 1200.0,
 		"condensed steam should return to the liquid inventory")
 	assert.LessOrEqual(t, pz.Water.Float(), 1202.0,

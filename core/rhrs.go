@@ -86,7 +86,14 @@ func (t *RHRSTrain) Step(
 	fwMassKg := float64(RHRSTrainDesignFlow) * KilogramsPerGallon
 	maxDuty := fwMassKg * SpecificHeatWater * (rcsOut - ccwIn)
 	eff := 0.7
-	ret.HeatExchanger.HeatTransferRate = Watts(eff * maxDuty)
+	// Duty scales with the fraction of train flow actually routed
+	// through the HX: the bypass throttle is the operator's cooldown-
+	// rate handle ("Operation of the controller and bypass valve
+	// maintains constant return flow to the RCS" while the throttle
+	// sets heat-transfer share).
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:61-66
+	ret.HeatExchanger.HeatTransferRate = Watts(eff * maxDuty *
+		(1.0 - ret.BypassValve.Open))
 
 	return ret
 }

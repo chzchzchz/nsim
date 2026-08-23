@@ -20,7 +20,7 @@ func TestReactor_RunningProducesRatedPower(t *testing.T) {
 	}
 	r.SeedSteadyStatePower(CoreRatedThermalPower)
 	for i := 0; i < int(time.Second/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed)
+		r = r.Step(RCPRatedSpeed, 0)
 	}
 	assert.Positive(t, r.TotalThermalPower(), "want ThermalPower > 0 at running")
 	assert.LessOrEqual(t, r.TotalThermalPower(), CoreRatedThermalPower,
@@ -46,11 +46,11 @@ func TestReactor_TripDropsPowerToDecayHeat(t *testing.T) {
 	}
 	r.SeedSteadyStatePower(CoreRatedThermalPower)
 	for i := 0; i < int(time.Second/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed)
+		r = r.Step(RCPRatedSpeed, 0)
 	}
 	r.Trip = true
 	for i := 0; i < int(2*time.Minute/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed)
+		r = r.Step(RCPRatedSpeed, 0)
 	}
 	assert.Less(t, r.TotalThermalPower(), CoreRatedThermalPower,
 		"want ThermalPower < rated after trip, got %v", r.TotalThermalPower())
@@ -108,14 +108,14 @@ func TestReactor_DopplerShiftsReactivityWithBoron(t *testing.T) {
 		Outlet:      Temperature{Val: hot, Unit: u.Fahrenheit},
 	}
 	bol.SeedSteadyStatePower(CoreRatedThermalPower)
-	bol = bol.Step(RCPRatedSpeed)
+	bol = bol.Step(RCPRatedSpeed, 0)
 
 	eol := ReactorPressureVessel{
 		ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron + 200},
 		Outlet:      Temperature{Val: hot, Unit: u.Fahrenheit},
 	}
 	eol.SeedSteadyStatePower(CoreRatedThermalPower)
-	eol = eol.Step(RCPRatedSpeed)
+	eol = eol.Step(RCPRatedSpeed, 0)
 
 	assert.Positive(t, bol.Reactivity,
 		"want hot-outlet BOL reactivity positive, got %v", bol.Reactivity)
@@ -135,7 +135,7 @@ func TestReactor_TripWithRodsOutKeepsDecayHeatFloor(t *testing.T) {
 	}
 	r.SeedSteadyStatePower(CoreRatedThermalPower)
 	for i := 0; i < int(5*time.Minute/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed)
+		r = r.Step(RCPRatedSpeed, 0)
 	}
 	assert.Positive(t, r.TotalThermalPower(),
 		"want non-zero ThermalPower during decay, got %v", r.TotalThermalPower())
@@ -161,7 +161,7 @@ func TestReactor_OutletAtReferenceGivesZeroDoppler(t *testing.T) {
 		// equilibrium is now the physical concentration.
 		Xenon135: xenonEquilibriumPhysical(1),
 	}
-	r = r.Step(RCPRatedSpeed)
+	r = r.Step(RCPRatedSpeed, 0)
 	assert.GreaterOrEqual(t, r.Reactivity, float32(-1),
 		"want near-zero Reactivity, got %v", r.Reactivity)
 	assert.LessOrEqual(t, r.Reactivity, float32(1),
@@ -181,7 +181,7 @@ func TestReactor_OutletTracksThermalPower(t *testing.T) {
 	// model is on the right side of the operating curve. With Outlet
 	// at the reference, Doppler ≈ 0 and the cascade doesn't halve.
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed)
+		r = r.Step(RCPRatedSpeed, 0)
 	}
 	// After 10 s of full power the outlet should still be near the
 	// design reference (within the model noise).
@@ -200,13 +200,13 @@ func TestReactor_OutletDropsAfterTrip(t *testing.T) {
 	r.SeedSteadyStatePower(CoreRatedThermalPower)
 	// Settle at full power briefly so Outlet converges to ~621°F.
 	for i := 0; i < int(time.Second/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed)
+		r = r.Step(RCPRatedSpeed, 0)
 	}
 	start := r.Outlet.Float()
 	r.Trip = true
 	r.ControlRods.Insertion = 1
 	for i := 0; i < int(time.Minute/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed)
+		r = r.Step(RCPRatedSpeed, 0)
 	}
 	assert.Less(t, r.Outlet.Float(), start,
 		"want Outlet < %v after 1 min of decay, got %v", start, r.Outlet.Float())
@@ -221,7 +221,7 @@ func TestReactor_InletFrozenWhenRCPOff(t *testing.T) {
 		Outlet:       Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
 	}
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		r = r.Step(0) // RCP off
+		r = r.Step(0, 0) // RCP off
 	}
 	assert.Equal(t, 420.0, r.Inlet.Float(),
 		"want Inlet frozen at 420°F with RCP off, got %v", r.Inlet.Float())
@@ -239,7 +239,7 @@ func TestReactor_InletFrozenWhenRCPSpeedZero(t *testing.T) {
 	}
 	// Step with rcpSpeed = 0 (pump latch on, but rotor coasting).
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		r = r.Step(0)
+		r = r.Step(0, 0)
 	}
 	assert.Equal(t, 420.0, r.Inlet.Float(),
 		"want Inlet frozen at 420°F with rcpSpeed=0, got %v", r.Inlet.Float())
@@ -273,8 +273,8 @@ func TestReactor_TrippedPowerIgnoresReactivity(t *testing.T) {
 	strong := mk(990)
 
 	for i := 0; i < int(time.Second/TimeStep); i++ {
-		weak = weak.Step(RCPRatedSpeed)
-		strong = strong.Step(RCPRatedSpeed)
+		weak = weak.Step(RCPRatedSpeed, 0)
+		strong = strong.Step(RCPRatedSpeed, 0)
 		if i > 0 {
 			break
 		}
@@ -327,7 +327,7 @@ func TestReactor_FissionRegrowsFromSourceAfterScram(t *testing.T) {
 	// Scram: full rod insertion drives the chain to the source floor.
 	r.Trip = true
 	for i := 0; i < int(70*time.Second/TimeStep); i++ {
-		r = r.Step(0)
+		r = r.Step(0, 0)
 	}
 	require.Less(t, float64(r.FissionPower), 1e4,
 		"precondition: scram must collapse fission power, got %v W",
@@ -343,7 +343,7 @@ func TestReactor_FissionRegrowsFromSourceAfterScram(t *testing.T) {
 	regrown := false
 	for i := 0; i < int(600*time.Second/TimeStep); i++ {
 		r.ControlRods = r.ControlRods.Step()
-		r = r.Step(RCPRatedSpeed)
+		r = r.Step(RCPRatedSpeed, 0)
 		if r.FissionPower > CoreRatedThermalPower/10 {
 			regrown = true
 			break
@@ -370,7 +370,7 @@ func TestReactor_ZeroPowerHoldsTemperature(t *testing.T) {
 	r.FissionPower = CoreNeutronSourcePower
 
 	for range int(60 * time.Second / TimeStep) {
-		r = r.Step(RCPRatedSpeed)
+		r = r.Step(RCPRatedSpeed, 0)
 	}
 
 	assert.InDelta(t, 135.0, r.Outlet.Float(), 0.5,
@@ -397,7 +397,7 @@ func TestReactor_OutletProgramRateLimited(t *testing.T) {
 	const window = 10 * time.Second
 	start := hot.Outlet.Float()
 	for i := 0; i < int(window/TimeStep); i++ {
-		hot = hot.Step(0)
+		hot = hot.Step(0, 0)
 	}
 	drop := start - hot.Outlet.Float()
 	want := OpHeatupRateLimit * window.Seconds()
@@ -416,7 +416,7 @@ func TestReactor_OutletProgramRateLimited(t *testing.T) {
 	cold.SeedSteadyStatePower(CoreRatedThermalPower)
 	start = cold.Outlet.Float()
 	for i := 0; i < int(window/TimeStep); i++ {
-		cold = cold.Step(RCPRatedSpeed)
+		cold = cold.Step(RCPRatedSpeed, 0)
 	}
 	rise := cold.Outlet.Float() - start
 	assert.InDelta(t, want, rise, want*1e-6,

@@ -2,6 +2,7 @@ package core
 
 import (
 	u "github.com/bcicen/go-units"
+	"math"
 )
 
 
@@ -13,10 +14,28 @@ import (
 // discharge return the steam-equivalent volume relieved this step for
 // the caller to route into the pressurizer relief tank.
 //
+// The rcsTemp argument is the hot-leg coolant temperature in contact
+// with the surge line: it sets the saturation floor the spray, idle,
+// and relief paths can depressurize toward, so manual pressure control
+// tracks the applicable pressure-temperature limits during cooldown.
+//
 // Spec justification for each block is inline below.
-func (p *Pressurizer) Step(porv, safety, block *Valve) (Pressurizer, Volume) {
+func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve) (Pressurizer, Volume) {
 	ret := *p
 	dt := TimeStep
+	satFloor := float64(PressurizerSatPressure(rcsTemp.Float()))
+
+	// Thermal-expansion surge: the loop inventory drains the
+	// pressurizer on cooldown and refills it on heatup, moving the
+	// bubble boundary (page_227.txt:68-72). The clamped bounds are
+	// the ledger sink for extreme strokes.
+	if p.PrevRCSTemp.Val != 0 {
+		dTF := rcsTemp.Float() - p.PrevRCSTemp.Float()
+		surgeGal := -PZRSurgeGalPerF * dTF
+		ret.Water = vol(ret.Water,
+			min(max(ret.Water.Float()-surgeGal, 0), ret.Volume.Float()))
+	}
+	ret.PrevRCSTemp = rcsTemp
 
 	// 1) Heater effect. Energized heaters boil liquid into the steam
 	// space, raising pressure toward PressurizerHeaterTarget at
@@ -39,7 +58,7 @@ func (p *Pressurizer) Step(porv, safety, block *Valve) (Pressurizer, Volume) {
 
 	// 2) Spray effect. The spray valve draws cold RCS water through
 	// the spray line, condensing steam into the liquid inventory and
-	// pulling pressure toward PressurizerSprayMin until the steam
+	// pulling pressure toward the coolant's saturation floor until the steam
 	// space is exhausted.
 	//
 	// "RCS pressure is maintained by adjustment of the pressurizer
@@ -48,7 +67,7 @@ func (p *Pressurizer) Step(porv, safety, block *Valve) (Pressurizer, Volume) {
 	if ret.SprayOpen > 0 {
 		bubble := ret.Volume.Float() - ret.Water.Float()
 		psiDrop := ret.SprayOpen * float64(PressurizerSprayRate) * dt.Seconds()
-		psiDrop = min(psiDrop, float64(ret.Pressure)-float64(PressurizerSprayMin))
+		psiDrop = min(psiDrop, float64(ret.Pressure)-satFloor)
 		psiDrop = min(psiDrop, bubble*PressurizerBubbleStiffness)
 		if psiDrop > 0 {
 			ret.Pressure = Pressure(float64(ret.Pressure) - psiDrop)
@@ -76,12 +95,18 @@ func (p *Pressurizer) Step(porv, safety, block *Valve) (Pressurizer, Volume) {
 
 	// 4) Idle cooldown path. With no active control the steam space
 	// slowly condenses at PressurizerAmbientDecay, returning its
-	// volume to the liquid inventory as pressure settles toward
-	// PressurizerBasePressure. (The source page's cooldown narrative
-	// is OCR-truncated mid-sentence; see
-	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:81-82)
+	// volume to the liquid inventory as pressure settles toward the
+	// saturation pressure of the hot-leg coolant. Tracking saturation
+	// is what lets a planned cooldown depressurize alongside the
+	// cooling RCS instead of stalling at a fixed floor.
+	// "All pressurizer heaters are turned off and the spray valves are
+	// controlled manually to cool the pressurizer at a sufficiently
+	// slow rate to maintain the system pressure within the applicable
+	// pressure-temperature limits."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:81-82,
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:94-96
 	if !ret.HeatersOn && ret.SprayOpen == 0 {
-		base := float64(PressurizerBasePressure)
+		base := satFloor
 		psiDrop := float64(PressurizerAmbientDecay) * dt.Seconds()
 		psiDrop = min(psiDrop, float64(ret.Pressure)-base)
 		psiDrop = min(psiDrop, bubble*PressurizerBubbleStiffness)
@@ -154,7 +179,7 @@ func (p *Pressurizer) Step(porv, safety, block *Valve) (Pressurizer, Volume) {
 			// block 3 intact during transients.
 			psiDrop := gal * PressurizerBubbleStiffness
 			ret.Pressure = Pressure(max(float64(ret.Pressure)-psiDrop,
-				float64(PressurizerBasePressure)))
+				satFloor))
 			relief = Volume{Val: gal, Unit: u.Gallon}
 		}
 	}
@@ -188,6 +213,10 @@ type Pressurizer struct {
 	HeatersOn   bool
 	SprayOpen   float64
 	SteamBubble Volume
+
+	// PrevRCSTemp is the hot-leg temperature seen by the previous
+	// step; its finite difference drives thermal-expansion surge.
+	PrevRCSTemp Temperature
 }
 
 // Pressurizer control tunables. The numbers below are sized to give
@@ -212,20 +241,21 @@ const (
 	// "less than approximately 400 psig", so the solid-plant floor
 	// must sit inside that regime for cooldown chains to reach RHR
 	// entry; 375 psia (~360 psig) places it just under the ceiling.
+	// Active cooldown-control paths instead track the coolant
+	// saturation (PressurizerSatPressure); this constant remains the
+	// standstill calibration used by fixtures.
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:48-58
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
 	PressurizerBasePressure Pressure = 375
 	PressurizerHeaterTarget    Pressure = 2250
 	PressurizerHeaterRate      Pressure = 200 // psi/s while HeatersOn
-	PressurizerSprayMin        Pressure = 1400
 	PressurizerSprayRate       Pressure = 300 // psi/s at SprayOpen == 1
 	PressurizerAmbientDecay    Pressure = 5   // psi/s cooldown when idle
 	// PressurizerBubbleStiffness converts heater and spray pressure
 	// changes into displaced liquid volume during boiloff and
-	// condensation. Rescaled against PressurizerBasePressure so the
-	// no-load 300 gal bubble still holds 2250 psia.
+	// condensation.
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:66-67
-	PressurizerBubbleStiffness float64 = 6.25 // psi per gallon of bubble
+	PressurizerBubbleStiffness float64 = 2.5 // psi per gallon of bubble
 	PressurizerPORVTrip        Pressure = 2500
 
 	// PressurizerSafetySetpoint is where the self-actuating ASME
@@ -236,7 +266,58 @@ const (
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:30-32
 	// Derived magnitude: design pressure + ~4% margin.
 	PressurizerSafetySetpoint Pressure = 2600
+
+	// Antoine vapor-pressure coefficients for water, P in mmHg and
+	// T in °C: log10(P) = A - B/(C+T). Two temperature branches.
+	// specs/wiki/Vapor_pressure_of_water.txt:793-795
+	antoineA1, antoineB1, antoineC1 = 8.07131, 1730.63, 233.426 // 1-99 °C
+	antoineA2, antoineB2, antoineC2 = 8.14019, 1810.94, 244.485 // 100-374 °C
+	mmHgPerPsi                      = 51.7149
+
+	// PressurizerMinSatFloor keeps the correlation finite below its
+	// validated range (assumption; source is silent about sub-atmospheric
+	// layup pressures).
+	PressurizerMinSatFloor = 14.7
+
+	// PZRSurgeGalPerF scales coolant thermal contraction into
+	// pressurizer level movement: cooling shrinks the loop inventory
+	// and drains the pressurizer, growing the bubble. Sized so the
+	// no-load-to-350°F contraction stroke spans the lumped
+	// pressurizer's operating band (invented modeling convention: the
+	// source describes the mechanism, not gallon figures).
+	// "Pressurizer level is raised in anticipation of coolant
+	// contraction during the cooldown."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:68-69
+	PZRSurgeGalPerF = 5.8
 )
+
+// PressurizerSatPressure is the saturation pressure (psia) of water at
+// tempF, floored at atmospheric. It is the lower bound the spray, idle,
+// and relief paths can depressurize toward: manual pressure control
+// during a planned cooldown follows the coolant temperature down the
+// applicable pressure-temperature limits instead of stalling at a fixed
+// floor, which is what makes the RHRS entry pressure reachable.
+//
+// "All pressurizer heaters are turned off and the spray valves are
+// controlled manually to cool the pressurizer at a sufficiently slow
+// rate to maintain the system pressure within the applicable
+// pressure-temperature limits."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:81-82,
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:94-96
+//
+// Known approximation: the Antoine fit reads ~3 percent high against
+// tabulated saturation pressures near 290 °C; acceptable for control
+// purposes, not for thermodynamic bookkeeping.
+func PressurizerSatPressure(tempF float64) Pressure {
+	c := (tempF - 32.0) / 1.8
+	a, b, c0 := antoineA2, antoineB2, antoineC2
+	if c < 99 {
+		a, b, c0 = antoineA1, antoineB1, antoineC1
+	}
+	c = min(max(c, 0), 373)
+	pPsi := math.Pow(10, a-b/(c0+c)) / mmHgPerPsi
+	return Pressure(max(pPsi, PressurizerMinSatFloor))
+}
 
 const (
 	// PressurizerReliefDischargeGalPerSec is the lumped steam-

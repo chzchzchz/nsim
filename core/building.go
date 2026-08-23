@@ -51,6 +51,16 @@ type ReactorBuilding struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-57
 	ContainmentPressure Pressure
 
+	// SecondaryImbalanceFiltered is the first-order filtered signed
+	// imbalance between steam-generator enthalpy draw and supplied
+	// heat (Watts). Only its positive side drives primary cooling:
+	// a sustained deficit means the SG is paying enthalpy out of
+	// primary stored heat, while one-step telemetry lag and control
+	// noise average out instead of rectifying into phantom cooldown.
+	// Time constant SecondaryImbalanceTau (assumption; the source is
+	// silent about bookkeeping dynamics).
+	SecondaryImbalanceFiltered Watts
+
 	// ReactorProtectionSystem models the automatic protection
 	// logic and engineered safeguards actuation — the "brain"
 	// that monitors process variables, decides when to trip

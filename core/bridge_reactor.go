@@ -59,6 +59,33 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Accumulator isolation valves (chapter 16 planned-cooldown
+	// lineup). Normally open so the tanks stay discharge-ready;
+	// the operator shuts them before RCS pressure falls to the
+	// discharge precharge during a coordinated cooldown.
+	// "Before reaching the pressure when the safety injection
+	// accumulators would discharge, the accumulator isolation
+	// valves are closed."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:111-113
+	m["ReactorBuilding/SafetyInjectionSystem/AccumulatorIsolation/Shut"] = &bridge.Control{
+		Part:  "ReactorBuilding/SafetyInjectionSystem/AccumulatorIsolation",
+		Label: "Shut",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.SafetyInjectionSystem.Accumulator.IsolationShut)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SafetyInjectionSystem.Accumulator.IsolationShut = v
+			return nil
+		},
+	}
+
+
 	// Pressurizer spray valve (chapter 7 pressure control):
 	// "The pressurizer pressure control system ... spray ..."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
@@ -384,6 +411,32 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		Get:   func() string { return "0" },
 		Set: func(_ string) error {
 			p.ReactorBuilding.ReactorProtectionSystem.Reset()
+			return nil
+		},
+	}
+
+
+	// Operator block on the SI initiation signals for a planned
+	// cooldown, armed before process variables reach the automatic
+	// actuation setpoints.
+	// "Prior to reaching the automatic safety injection setpoints
+	// during cooldown and depressurization, the safety injection
+	// initiation signals are blocked."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:108-110
+	m["ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorProtectionSystem",
+		Label: "SafetyInjectionBlock",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionBlocked)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionBlocked = v
 			return nil
 		},
 	}

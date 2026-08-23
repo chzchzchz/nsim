@@ -2279,6 +2279,15 @@ type Accumulator struct {
 	// discharging into the RCS cold leg (i.e., RCS pressure
 	// has fallen below Pressure).
 	Discharging bool
+
+	// IsolationShut closes the normally-open accumulator
+	// isolation valves so a planned cooldown can pass below the
+	// discharge precharge without injecting into the RCS.
+	// "Before reaching the pressure when the safety injection
+	// accumulators would discharge, the accumulator isolation
+	// valves are closed."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:111-113
+	IsolationShut bool
 }
 
 // SISSuctionSource enumerates the suction alignment for the SIS
@@ -4249,6 +4258,18 @@ type ReactorProtectionSystem struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:8-9
 	ManualTrip bool
 
+	// SafetyInjectionBlocked is the operator block on SI
+	// initiation signals armed during planned cooldowns before
+	// process variables reach the automatic actuation setpoints.
+	// It gates only the SI ESFAS output; reactor-trip channels
+	// are untouched. The block persists until the operator clears
+	// it through the bridge control.
+	// "Prior to reaching the automatic safety injection setpoints
+	// during cooldown and depressurization, the safety injection
+	// initiation signals are blocked."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:108-110
+	SafetyInjectionBlocked bool
+
 	// TripSignalCount tracks how many of the redundant trip
 	// channels are demanding a trip. The simplified model
 	// collapses the four channels into a single integer and
@@ -5196,6 +5217,13 @@ const (
 	// decrease rate during cooldown (°F/s). Spec: "50°F/hr
 	// (28°C/hr)."
 	OpCooldownRateLimit = -OpHeatupRateLimit
+
+	// SecondaryImbalanceTau is the first-order filter time constant
+	// (seconds) for the signed SG draw-versus-supplied-heat
+	// imbalance before rectification into primary cooling.
+	// Assumption; the source is silent about bookkeeping dynamics.
+	// Sized above control-loop lag noise, far below cooldown legs.
+	SecondaryImbalanceTau = 20.0
 
 	// OpAuxToMainFeedwaterThreshold is the per-SG steam flow
 	// fraction above which the feedwater supply switches from

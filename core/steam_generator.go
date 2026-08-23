@@ -82,6 +82,11 @@ func (s *SteamGenerator) Update() SteamGenerator {
 const (
 	SteamGeneratorShellPressure       Pressure = 920
 	SteamGeneratorShellDesignPressure Pressure = 1000
+
+	// SGPassiveQuenchTau is the first-order decay time constant for
+	// a trapped, non-boiling shell header (seconds). Assumption: the
+	// source describes quenching to zero psig but gives no rate.
+	SGPassiveQuenchTau float64 = 600
 	LatentHeatOfSteamization          Watts    = 2.26e6
 
 	// SteamGeneratorSafetyValveSetpointPsia pops the spring-loaded
@@ -269,6 +274,16 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 		// Water depleted while still boiling: no more steam to
 		// keep the header up.
 		pressure -= pressure * dt.Seconds()
+	} else if pressure > 0 {
+		// No boil and no offtake (RHRS has taken over, dump shut):
+		// the trapped header quenches on shell losses toward the
+		// secondary metal temperature. Modeled as a first-order
+		// decay with an assumed ~10 min time constant; the source
+		// is silent about the rate ("As the steam generator steam
+		// pressure approaches zero psig, the steam dump valves are
+		// closed."
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:141-143).
+		pressure -= pressure * (dt.Seconds() / SGPassiveQuenchTau)
 	}
 	pressure = max(pressure, 0)
 

@@ -15,7 +15,7 @@ import (
 // liquid inventory (the step's boiloff/relief bookkeeping consumes
 // bubble volume from that inventory).
 func setPressurizerPsi(p *Plant, psia float64) {
-	bubble := (psia - float64(PressurizerBasePressure)) /
+	bubble := (psia - float64(PressurizerHeaterTarget)) /
 		PressurizerBubbleStiffness
 	p.ReactorBuilding.Pressurizer.Water =
 		vol(p.ReactorBuilding.Pressurizer.Water,
@@ -55,6 +55,7 @@ func TestPressurizer_SafetyValveAutoActuates(t *testing.T) {
 // The rate constant is derived; this pins that opening relief moves
 // pressure down, not up or nowhere.
 func TestPressurizer_ReliefLowersPressure(t *testing.T) {
+	hotLeg := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 	prz := Pressurizer{
 		Volume: Volume{Val: 1200, Unit: u.Gallon},
 		Water:  Volume{Val: 780, Unit: u.Gallon},
@@ -65,13 +66,13 @@ func TestPressurizer_ReliefLowersPressure(t *testing.T) {
 	block := Valve{Open: 1}
 	var safety Valve
 	for range int(5 * time.Second / TimeStep) {
-		prz, _ = prz.Step(&porv, &safety, &block)
+		prz, _ = prz.Step(hotLeg, &porv, &safety, &block)
 	}
 	assert.Less(t, float64(prz.Pressure), start,
 		"relief must depressurize the pressurizer")
 	assert.GreaterOrEqual(t, float64(prz.Pressure),
-		float64(PressurizerBasePressure),
-		"discharge clamps at the base-pressure floor")
+		float64(PressurizerSatPressure(hotLeg.Float())),
+		"discharge clamps at the saturation floor for the hot-leg coolant")
 }
 
 // Acceptance 3: relief fills the PRT and containment pressure does not
@@ -154,13 +155,13 @@ func TestPRTSpray_AddsInventoryWhileOpen(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.PRTSprayValve = Valve{Open: 1}
 	startLevel := p.ReactorBuilding.PressurizedReliefTank.Level.Float()
-	holdPressure(&p, float64(PressurizerBasePressure),
+	holdPressure(&p, float64(PressurizerSatPressure(CoreReferenceOutletF)),
 		int(time.Second/TimeStep))
 	assert.Greater(t, p.ReactorBuilding.PressurizedReliefTank.Level.Float(),
 		startLevel, "open spray must add PRT inventory")
 
 	p2 := MakePlant()
-	holdPressure(&p2, float64(PressurizerBasePressure),
+	holdPressure(&p2, float64(PressurizerSatPressure(CoreReferenceOutletF)),
 		int(time.Second/TimeStep))
 	assert.Equal(t, startLevel,
 		p2.ReactorBuilding.PressurizedReliefTank.Level.Float(),

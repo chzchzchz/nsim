@@ -50,7 +50,7 @@ func runReactivityApproach(t *testing.T, boron float64, restInsertion float64, h
 		steps := int(hold / TimeStep)
 		for range steps {
 			r.ControlRods = r.ControlRods.Step()
-			r = r.Step(0)
+			r = r.Step(0, 0)
 		}
 		require.InDelta(t, r.DemandInsertion, r.Insertion, 1e-9,
 			"rods must settle before sampling")
@@ -63,7 +63,7 @@ func TestScenario5_DilutionWithRodsInsertedStaysSubcritical(t *testing.T) {
 	r := scenario5Vessel()
 	r.BoronConcentration = CVCSInitialBoron - 400
 	for range int(10 * time.Second / TimeStep) {
-		r = r.Step(0)
+		r = r.Step(0, 0)
 	}
 	assert.Equal(t, CoreNeutronSourcePower, r.FissionPower,
 		"dilution alone must not lift power off the source floor")
@@ -85,7 +85,7 @@ func rAtRest(t *testing.T, boron float64, insertion float64) float32 {
 	r := scenario5Vessel()
 	r.Insertion = insertion
 	r.BoronConcentration = boron
-	out := r.Step(0)
+	out := r.Step(0, 0)
 	return out.Reactivity
 }
 
@@ -103,13 +103,13 @@ func TestScenario5_CrossingStepYieldsSustainedRiseWithoutRodMotion(t *testing.T)
 	r0 := scenario5Vessel()
 	r0.BoronConcentration = boron
 	r0.Insertion = 0
-	constOffset := float64(r0.Step(0).Reactivity)
+	constOffset := float64(r0.Step(0, 0).Reactivity)
 	atCritical := constOffset / 4.5
 
 	r := scenario5Vessel()
 	r.BoronConcentration = boron
 	r.Insertion = atCritical
-	r = r.Step(0)
+	r = r.Step(0, 0)
 	require.InDelta(t, 0.0, float64(r.Reactivity), 1e-6,
 		"closed-form critical position must null reactivity")
 
@@ -120,7 +120,7 @@ func TestScenario5_CrossingStepYieldsSustainedRiseWithoutRodMotion(t *testing.T)
 	first := r.FissionPower
 	r.Insertion = atCritical - withdrawStep
 	for range int(measure / TimeStep) {
-		r = r.Step(0)
+		r = r.Step(0, 0)
 	}
 	final := r.FissionPower
 

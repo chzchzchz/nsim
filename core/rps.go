@@ -111,7 +111,11 @@ func (r *ReactorProtectionSystem) Step(
 	// Safety Injection: high containment pressure, low
 	// steamline pressure, low Tcold, manual SI. (Low
 	// pressurizer pressure is deferred — see Step preamble.)
-	if !ret.SafetyInjectionActuated {
+	// The operator block arms during planned cooldowns before
+	// these variables reach their actuation setpoints
+	// (specs/the_westinghouse_pressurized_water_react/
+	// chapter_16/page_227.txt:108-110).
+	if !ret.SafetyInjectionActuated && !ret.SafetyInjectionBlocked {
 		if containmentPressureGauge > RPSHighContainmentPressureTrip ||
 			steamlinePressure < RPSLowSteamlinePressureTrip ||
 			(tcoldF < RPSLowTcoldTrip && atPowerTripsEnabled) ||
