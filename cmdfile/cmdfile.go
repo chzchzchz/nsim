@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/chzchzchz/nsim/bridge"
@@ -81,6 +82,15 @@ func parseCmds(r io.Reader) ([]Command, []string, error) {
 		})
 		lines = append(lines, line)
 	}
+	// Single-pass consumers (cmd/nsimrun) advance one cursor and
+	// stall behind the first not-yet-due command, so a file written
+	// out of order would silently delay every later-line command
+	// until its own offset arrives. Sorting by offset keeps
+	// application time faithful to the timestamps; equal offsets
+	// keep file order.
+	sort.SliceStable(cmds, func(i, j int) bool {
+		return cmds[i].TimeOffsetMs < cmds[j].TimeOffsetMs
+	})
 	return cmds, lines, nil
 }
 

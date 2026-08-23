@@ -264,13 +264,27 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 		if float64(ret.Velocity) > float64(TurbineRatedSpeed)*TurbineOverspeedTripRatio {
 			ret.State = TurbineTripped
 		} else if steamFlow > 0 {
-			// Wide-range speed control engages when the operator
-			// has raised a pre-breaker speed demand; with no
-			// demand selected the rotor follows admitted steam.
-			// "Wide range speed control of the turbine from
-			// turning gear to rated speed."
-			// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
-			if !ret.Synchronized && ret.SpeedDemand > 0 {
+			// A synchronized machine is held at synchronous speed
+			// by the infinite bus it is paralleled with; its rotor
+			// follows system frequency, not its own admitted-steam
+			// balance. Without this lock, throttling admission for
+			// a low initial load sags shaft speed, drags terminal
+			// frequency out of the synchronism tolerance, and pops
+			// the generator breaker.
+			//
+			// "The turbine-generator is brought up to synchronous
+			// speed and paralleled on the grid."
+			// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:52-53
+			if ret.Synchronized {
+				ret.Velocity = TurbineRatedSpeed
+			} else if ret.SpeedDemand > 0 {
+				// Wide-range speed control engages when the
+				// operator has raised a pre-breaker speed demand;
+				// with no demand selected the rotor follows
+				// admitted steam.
+				// "Wide range speed control of the turbine from
+				// turning gear to rated speed."
+				// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
 				target := Velocity(ret.SpeedDemand * float64(TurbineRatedSpeed))
 				rampStep := Velocity(float64(TurbineRatedSpeed) * TurbineSpeedRampRate * dt.Seconds())
 				if ret.Velocity < target {

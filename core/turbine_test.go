@@ -531,3 +531,45 @@ func TestTurbine_LoadDemandRefRampsSetpoint(t *testing.T) {
 	assert.InDelta(t, 0.7, tr.Setpoint, 0.01,
 		"want Setpoint ramped to dispatcher reference 0.7, got %v", tr.Setpoint)
 }
+
+// A synchronized machine is held at synchronous speed by the
+// infinite bus: throttling admission for a low initial load must not
+// sag shaft speed (which would drag terminal frequency out of the
+// synchronism tolerance and pop the breaker).
+//
+// Spec justification:
+//   - "The turbine-generator is brought up to synchronous speed and
+//     paralleled on the grid."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:52-53
+func TestTurbine_SynchronizedSpeedHeldUnderThrottledAdmission(t *testing.T) {
+	tr := steamingTurbine()
+	tr.State = TurbineRunning
+	tr.Synchronized = true
+	tr.Velocity = TurbineRatedSpeed
+	tr.GoverningValve = Valve{Open: 0.05}
+	tr.GridFrequency = GridRatedFrequency
+	for i := 0; i < int(30*time.Second/TimeStep); i++ {
+		tr = tr.Step(SteamGeneratorShellPressure, 0, false, openValve())
+	}
+	assert.Equal(t, TurbineRatedSpeed, tr.Velocity,
+		"want bus-held rotor to stay at rated speed under 5 percent admission")
+}
+
+// The main generator breaker is operator-reachable through the
+// control map: closing it parallels the unit once the synchronizer
+// tolerance is met. Wiring check — the sync/pop physics are covered
+// by the plant-level scenario run.
+//
+// Spec justification:
+//   - "The turbine-generator is brought up to synchronous speed and
+//     paralleled on the grid."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:52-53
+func TestGeneratorBreakerControlRegistered(t *testing.T) {
+	p := MakePlant()
+	c := GetControlMap(&p)["TurbineBuilding/Generator/BreakerClosed"]
+	require.NotNil(t, c, "want main generator breaker control registered")
+	require.NoError(t, c.Set("1"))
+	assert.True(t, p.TurbineBuilding.Generator.BreakerClosed)
+	require.NoError(t, c.Set("0"))
+	assert.False(t, p.TurbineBuilding.Generator.BreakerClosed)
+}

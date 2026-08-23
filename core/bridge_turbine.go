@@ -345,6 +345,35 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Main generator breaker. Closing it parallels the unit on the
+	// grid once the synchronizer tolerance is met; Plant.Step pops
+	// the breaker again whenever terminal frequency/voltage drift
+	// outside the sync band, so an out-of-step close cannot stick.
+	//
+	// Spec: "The turbine-generator is brought up to synchronous speed
+	// and paralleled on the grid."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:52-53
+	// "Accelerate the main turbine to 1800 rpm, and then synchronize
+	// the generator and connect it to the grid."
+	// specs/westinghouse_plant_operations/chapter_19/page_018.txt:12-13
+	m["TurbineBuilding/Generator/BreakerClosed"] = &bridge.Control{
+		Part:  "TurbineBuilding/Generator",
+		Label: "BreakerClosed",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.TurbineBuilding.Generator.BreakerClosed)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.Generator.BreakerClosed = v
+			return nil
+		},
+	}
+
 }
 
 // addTurbineBuildingSensors adds Sensor entries keyed by the namespace managed by this file to m.

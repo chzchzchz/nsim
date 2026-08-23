@@ -68,9 +68,15 @@ func TestQueueFireDue(t *testing.T) {
 			"C/D": {Set: func(s string) error { return nil }},
 		}
 		q.FireDue(16_000_000, m)
-		assert.Equal(t, StatusDone, q.Entries()[1].Status)
-		assert.Equal(t, StatusDone, q.Entries()[2].Status)
-		assert.Equal(t, StatusPending, q.Entries()[0].Status)
+		// Parse sorts by offset, so pair assertions with the
+		// command timestamps rather than file positions.
+		statusByOffset := map[int64]Status{}
+		for _, e := range q.Entries() {
+			statusByOffset[e.Cmd.TimeOffsetMs] = e.Status
+		}
+		assert.Equal(t, StatusDone, statusByOffset[10])
+		assert.Equal(t, StatusDone, statusByOffset[15])
+		assert.Equal(t, StatusPending, statusByOffset[20])
 
 		q.FireDue(21_000_000, m)
 		for _, e := range q.Entries() {

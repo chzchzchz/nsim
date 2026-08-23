@@ -104,3 +104,26 @@ func TestApply(t *testing.T) {
 		assert.Contains(t, err.Error(), "set control")
 	})
 }
+
+// The single-pass runner consumes commands behind one cursor, so an
+// out-of-order file would silently delay every later-line command
+// until its own offset arrived. Parse sorts by offset; equal offsets
+// keep file order.
+func TestParse_SortsByOffsetKeepingEqualOrder(t *testing.T) {
+	cmds, err := Parse(strings.NewReader(
+		"2000 ReactorBuilding.ReactorCoolantPump.Running 1\n"+
+			"1000 AuxiliaryBuilding.DieselGenerator.Start Manual\n"+
+			"2000 TurbineBuilding.Turbine.Reset Reset\n"+
+			"500 ReactorBuilding.ReactorCoolantPump.Running 0\n",
+	))
+	require.NoError(t, err)
+	require.Len(t, cmds, 4)
+	got := []int64{}
+	for _, c := range cmds {
+		got = append(got, c.TimeOffsetMs)
+	}
+	assert.Equal(t, []int64{500, 1000, 2000, 2000}, got)
+	assert.Equal(t, "ReactorBuilding.ReactorCoolantPump.Running", cmds[2].ControlKey,
+		"want equal offsets to keep file order")
+	assert.Equal(t, "TurbineBuilding.Turbine.Reset", cmds[3].ControlKey)
+}
