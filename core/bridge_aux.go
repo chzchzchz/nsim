@@ -321,6 +321,77 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// CVCS boron operating mode selector. Boration raises the
+	// RCS boron concentration toward the cold shutdown value
+	// before cooldown; dilution lowers it on startup.
+	// "If the plant is to be taken to the cold shutdown
+	//  condition, boration is initiated to bring the boron
+	//  concentration to the cold shutdown value."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:50-52
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "BoronMode",
+		Kind:  "enum",
+		Enum:  []string{"VolumeControl", "Boration", "Dilution", "Letdown"},
+		Get: func() string {
+			switch p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode {
+			case CVCSBoration:
+				return "Boration"
+			case CVCSDilution:
+				return "Dilution"
+			case CVCSLetdown:
+				return "Letdown"
+			default:
+				return "VolumeControl"
+			}
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("enum", s)
+			if err != nil {
+				return err
+			}
+			switch validated {
+			case "Boration":
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSBoration
+			case "Dilution":
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSDilution
+			case "Letdown":
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSLetdown
+			case "VolumeControl":
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSVolumeControl
+			}
+			return nil
+		},
+	}
+
+
+	// BTRS recirculation pump: provides the motive force to
+	// route flow from the VCT through the demineralizers during
+	// boration and dilution; without it neither mode changes
+	// boron concentration.
+	// "The BTRS recirculation pump provides the motive force to
+	//  route flow from the VCT through the demineralizers
+	//  during boration and dilution"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:37-39
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRSPump"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "BTRSPump",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = v
+			return nil
+		},
+	}
+
+
 	// CVCS letdown valve-open latch. The CVCS Step reads
 	// LetdownValveOpen to decide LetdownFlow (in conjunction
 	// with the operating mode — CVCSLetdown forces it closed).
