@@ -195,16 +195,23 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 			powerFrac32 = slow
 		}
 	}
-	powerCorrection := 1.0 + float64(ret.Reactivity)/100.0
-	if powerCorrection < 0 {
-		powerCorrection = 0
+	// Decay heat is fission-product beta decay: its magnitude is a
+	// function of prior power and time since trip only, not of
+	// reactivity (specs/Decay_heat.txt), so the power-defect
+	// correction applies to critical operation only.
+	powerCorrection := 1.0
+	if !ret.Trip {
+		powerCorrection += float64(ret.Reactivity) / 100.0
+		if powerCorrection < 0 {
+			powerCorrection = 0
+		}
 	}
 	ret.ThermalPower = Watts(float64(CoreRatedThermalPower) * float64(powerFrac32) * powerCorrection)
 	if ret.ThermalPower < 0 {
 		ret.ThermalPower = 0
 	}
 	// Rated cap. At BOL the net temperature coefficient can be
-	// small positive (specs/.../chapter_2/page_037.txt:117-122);
+	// small positive (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:117-122);
 	// without rod-by-rod control, even a +1 pcm/°F coefficient
 	// diverges to infinity in this simplified one-state-point
 	// model. Real plants stay subcritical via control rods; the
@@ -328,7 +335,7 @@ type ReactorPressureVessel struct {
 //
 // SteamGeneratorLoopCount is the number of primary loops the
 // lumped single-SG model represents. SteamGeneratorFullLoadHeatInput
-// is the per-SG vaporising duty (specs/.../chapter_3/page_065.txt:56,
+// is the per-SG vaporising duty (specs/the_westinghouse_pressurized_water_react//chapter_3/page_065.txt:56,
 // 480 kg/s), so CoreRatedThermalPower = SteamGeneratorLoopCount ×
 // SteamGeneratorFullLoadHeatInput. The ReactorBuilding wiring
 // (core/plant.go) routes rpv.ThermalPower through the SG, so the
@@ -348,7 +355,7 @@ const (
 	// this to scale the per-loop heat input so the single SG
 	// does not carry the full core thermal output (one SG is
 	// rated for ~480 kg/s of steam, per
-	// specs/.../chapter_3/page_065.txt:56). The 4-loop
+	// specs/the_westinghouse_pressurized_water_react//chapter_3/page_065.txt:56). The 4-loop
 	// configuration matches CoreRatedThermalPower ≈ 4 ×
 	// SteamGeneratorFullLoadHeatInput.
 	SteamGeneratorLoopCount = 4
@@ -510,10 +517,10 @@ const (
 	// (CVCSInitialBoron = 1000 ppm). Sized slightly positive so
 	// the model reproduces the "moderator temperature coefficient
 	// is small [positive]" BOL behaviour described in
-	// specs/.../chapter_2/page_037.txt:117-122 and the BOL
+	// specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:117-122 and the BOL
 	// "+7 pcm/°F" moderator effect at 1700 ppm with burnable
 	// absorbers reducing it in
-	// specs/.../chapter_2/page_039.txt:51-56.
+	// specs/the_westinghouse_pressurized_water_react//chapter_2/page_039.txt:51-56.
 	CoreNetTempCoefAtRefBoronPcmPerDegF float64 = 1.0
 
 	// CoreNetTempCoefAtZeroBoronPcmPerDegF is the combined
@@ -523,7 +530,7 @@ const (
 	// coefficient is substantially more negative per the spec.
 	// Spec: "the coefficient is substantially more negative
 	// due to depletion and removal of shim boron"
-	// specs/.../chapter_2/page_037.txt:119-121
+	// specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:119-121
 	CoreNetTempCoefAtZeroBoronPcmPerDegF float64 = -2.0
 
 	// DopplerClampLowF is the lower bound on the moderator
@@ -538,11 +545,11 @@ const (
 	// DopplerClampHighF is the upper bound on the moderator
 	// temperature the linear temperature-coefficient model is
 	// anchored on. At the RCS design pressure of 2500 psia
-	// (specs/.../chapter_3/page_054.txt:20-21) water saturates
+	// (specs/the_westinghouse_pressurized_water_react//chapter_3/page_054.txt:20-21) water saturates
 	// at ~652°F; the simulator caps at 700°F to leave margin
 	// for transient overshoot before void formation takes over
 	// as the reactivity mechanism
-	// (specs/.../chapter_2/page_037.txt:58).
+	// (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:58).
 	DopplerClampHighF float64 = 700.0
 )
 // Reactor Coolant Pump dynamics constants (plans/p33_1.txt).

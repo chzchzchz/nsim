@@ -56,11 +56,11 @@ func TestBug_SGHeatInputEqualsOneSGRatedAtCoreRated(t *testing.T) {
 	stepN(&p, int(2*time.Second/TimeStep))
 
 	// The per-SG spec heat input is one SG's worth of
-	// vaporising 480 kg/s (specs/.../chapter_3/page_065.txt:56).
+	// vaporising 480 kg/s (specs/the_westinghouse_pressurized_water_react//chapter_3/page_065.txt:56).
 	perSG := float64(SteamGeneratorFullLoadHeatInput)
 	// Number of loops represented by CoreRatedThermalPower:
 	// CoreRatedThermalPower / perSG is the equivalent loop count.
-	// specs/.../chapter_3/page_065.txt:41-43 lists 2/3/4-loop plant options.
+	// specs/the_westinghouse_pressurized_water_react//chapter_3/page_065.txt:41-43 lists 2/3/4-loop plant options.
 	// CoreRatedThermalPower ≈ 4 × perSG (3.4 GW four-loop design),
 	// so the single lumped SG should see perSG.
 	assert.InDelta(t, perSG, float64(p.ReactorBuilding.SteamGenerator.HeatInput),
@@ -71,7 +71,7 @@ func TestBug_SGHeatInputEqualsOneSGRatedAtCoreRated(t *testing.T) {
 
 // Bug 3 reproduction: at beginning-of-life with low boron the
 // moderator temperature coefficient is small positive (+7 pcm/°F
-// per specs/.../chapter_2/page_039.txt:54-55). The model
+// per specs/the_westinghouse_pressurized_water_react//chapter_2/page_039.txt:54-55). The model
 // currently applies CoreDopplerPcmPerDegF = -1.0 unconditionally
 // (core/parts.go:1825-1830) which gives a strong negative
 // feedback regardless of boron concentration.
@@ -136,19 +136,19 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 
 	// Spec at BOL (high boron): "the moderator temperature
 	// coefficient would be on the order of +7 pcm/°F"
-	// (specs/.../chapter_2/page_039.txt:54-55). With Doppler
+	// (specs/the_westinghouse_pressurized_water_react//chapter_2/page_039.txt:54-55). With Doppler
 	// adding ~-2 pcm/°F the combined net temperature
 	// coefficient at BOL is small positive, so an outlet rise
 	// above reference produces positive (or near-zero)
 	// reactivity contribution — NOT -30 pcm (the locked-negative
 	// -1.0 pcm/°F × 30°F).
 	assert.Greater(t, highBTerm, float32(-5),
-		"want high-boron (BOL) Doppler+moderator term near zero or positive; got %v pcm (combined net temperature coefficient should reflect BOL +7 pcm/°F moderator effect, specs/.../chapter_2/page_039.txt:54-55)",
+		"want high-boron (BOL) Doppler+moderator term near zero or positive; got %v pcm (combined net temperature coefficient should reflect BOL +7 pcm/°F moderator effect, specs/the_westinghouse_pressurized_water_react//chapter_2/page_039.txt:54-55)",
 		highBTerm)
 	// Spec at EOL (low boron): "the coefficient is
 	// substantially more negative due to depletion and removal
 	// of shim boron"
-	// (specs/.../chapter_2/page_037.txt:119-121). The Doppler
+	// (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:119-121). The Doppler
 	// term at EOL is more negative than at BOL.
 	assert.Less(t, lowBTerm, highBTerm,
 		"want low-boron (EOL) Doppler+moderator term more negative than high-boron (BOL); got high=%v low=%v",
@@ -170,7 +170,7 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 // Spec: "Reactor coolant inlet temperature: 621°F; outlet:
 // 558°F" is the design reference; it should not be the
 // universal initial condition.
-// specs/.../chapter_3/page_065.txt:60-61
+// specs/the_westinghouse_pressurized_water_react//chapter_3/page_065.txt:60-61
 func TestBug_MakePlantPreservesCallerRPVTemperatures(t *testing.T) {
 	// We build a "loaded" plant state by hand at cold-shutdown
 	// temperatures and then check that MakePlant does not

@@ -11,7 +11,7 @@ go run ./cmd/nsimrun/ [flags]
 Flags:
 
 - `-plant <file.json>` — Plant state JSON file. Optional; if omitted the plant is initialized with design defaults via `MakePlant`.
-- `-seconds <duration>` — Number of seconds to simulate.
+- `-seconds <number>` — Number of seconds to simulate. Plain number (e.g. `5`, `1.5`), not a duration string like `1s`.
 
 ## Behavior
 

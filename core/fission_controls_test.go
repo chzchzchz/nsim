@@ -160,7 +160,7 @@ func TestBridge_SensorsReflectState(t *testing.T) {
 //
 // Spec justification for rod worth: "the differential rod worth
 // or neutron capability is near zero at the top and bottom
-// ends of the core" (specs/.../chapter_2/page_037.txt:124-132),
+// ends of the core" (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:124-132),
 // so rod motion near the extremes has small effect on outlet.
 func TestThermal_RodWithdrawalRaisesOutlet(t *testing.T) {
 	const steps = int(5 * time.Second / TimeStep)
@@ -200,14 +200,36 @@ func TestThermal_RodWithdrawalRaisesOutlet(t *testing.T) {
 // Spec justification:
 //   - "the moderator temperature coefficient would be on the
 //     order of +7 pcm/°F" at BOL with full soluble-boron shim
-//     (specs/.../chapter_2/page_039.txt:54-55).
+//     (specs/the_westinghouse_pressurized_water_react//chapter_2/page_039.txt:54-55).
 //   - "the coefficient is substantially more negative due to
 //     depletion and removal of shim boron"
-//     (specs/.../chapter_2/page_037.txt:119-121).
+//     (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:119-121).
 // The dilution path therefore cools the plant rather than
 // heating it; operators use boron to swing reactivity, not
 // temperature.
-func TestThermal_BoronDilutionCoolsOutlet(t *testing.T) {
+// Diluting boron shifts the net temperature coefficient toward
+// more-negative values per spec, which must show up in the
+// Reactivity state. It must NOT bend thermal power once the unit
+// is scrambled: decay heat is fission-product beta decay, a
+// function of prior power and time since trip only
+// (specs/Decay_heat.txt).
+//
+// Regression: the reactivity power-defect correction used to
+// multiply the tripped branch too, so the dilution here cooled
+// the "decay heat" of an EOL-boron core — amplifying or
+// suppressing fission-product heat with reactivity. The default
+// MakePlant startup transient scrams both units at ~2 s
+// (pre-existing behavior), which is exactly the regime where the
+// bug lived.
+//
+// Spec justification:
+//   - "the moderator temperature coefficient would be on the
+//     order of +7 pcm/°F" at BOL with full soluble-boron shim
+//     (specs/the_westinghouse_pressurized_water_react//chapter_2/page_039.txt:54-55).
+//   - "the coefficient is substantially more negative due to
+//     depletion and removal of shim boron"
+//     (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:119-121).
+func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 	const steps = int(30 * time.Second / TimeStep)
 
 	base := MakePlant()
@@ -217,16 +239,22 @@ func TestThermal_BoronDilutionCoolsOutlet(t *testing.T) {
 	diluted.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSDilution
 	diluted.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
 	// Drop the boron concentration so the net temperature
-	// coefficient becomes more negative and power falls below
-	// rated.
+	// coefficient becomes more negative.
 	diluted.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = CVCSInitialBoron - 500
 	stepN(&diluted, steps)
 
-	baseOut := base.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
-	dilOut := diluted.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
-	assert.Less(t, dilOut, baseOut,
-		"want diluted outlet (%v) < baseline outlet (%v)",
-		dilOut, baseOut)
+	baseRP := base.ReactorBuilding.ReactorPressureVessel
+	dilRP := diluted.ReactorBuilding.ReactorPressureVessel
+
+	require.True(t, baseRP.Trip && dilRP.Trip,
+		"scenario precondition: both units scrambled by the startup transient")
+
+	assert.NotEqual(t, baseRP.Reactivity, dilRP.Reactivity,
+		"dilution must shift Reactivity (%v vs %v)", baseRP.Reactivity, dilRP.Reactivity)
+	assert.Equal(t, baseRP.ThermalPower, dilRP.ThermalPower,
+		"scrammed decay heat must be identical despite different reactivity")
+	assert.Equal(t, baseRP.Outlet, dilRP.Outlet,
+		"outlet must track decay heat identically despite different reactivity")
 }
 
 // Starting from a cold operating point with the fission_4

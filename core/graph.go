@@ -206,7 +206,7 @@ func simulateFluidFlow(g *PlantGraph, dt time.Duration) {
 		// edges push volume in faster than the boil rate pulls
 		// it out at low primary-to-secondary ΔT.
 		// Spec: the SG shell has a finite design volume
-		// (Table 3.4-1, specs/.../chapter_3/page_065.txt:24-61).
+		// (Table 3.4-1, specs/the_westinghouse_pressurized_water_react//chapter_3/page_065.txt:24-61).
 		// Note that for negative flow the actual transfer
 		// reverses: the "to" node is the source and the "from"
 		// node is the destination, so the capacity clamp must

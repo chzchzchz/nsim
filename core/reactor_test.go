@@ -1,6 +1,7 @@
 package core
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -32,8 +33,8 @@ func TestReactor_RunningProducesRatedPower(t *testing.T) {
 // near the shutdown fraction of rated.
 //
 // At beginning-of-life the net temperature coefficient is small
-// positive (specs/.../chapter_2/page_037.txt:117-122,
-// specs/.../chapter_2/page_039.txt:54-55), so the post-trip
+// positive (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:117-122,
+// specs/the_westinghouse_pressurized_water_react//chapter_2/page_039.txt:54-55), so the post-trip
 // power correction lifts the decay-heat floor slightly above the
 // bare fraction. The test allows up to 2× the shutdown level.
 func TestReactor_TripDropsPowerToDecayHeat(t *testing.T) {
@@ -219,4 +220,32 @@ func TestReactor_InletFrozenWhenRCPSpeedZero(t *testing.T) {
 	}
 	assert.Equal(t, 420.0, r.Inlet.Float(),
 		"want Inlet frozen at 420°F with rcpSpeed=0, got %v", r.Inlet.Float())
+}
+
+// Post-trip thermal power must follow the decay-heat curve alone.
+// Decay heat is fission-product beta decay: a function of prior
+// power and time since trip only, not of reactivity
+// (specs/Decay_heat.txt). Regression: the reactivity power-defect
+// correction used to multiply the tripped branch too, letting the
+// cooldown-driven positive reactivity of an EOL-boron core drive a
+// fully-rodded, tripped reactor back up to rated power.
+func TestReactor_TrippedPowerIgnoresReactivity(t *testing.T) {
+	r := ReactorPressureVessel{
+		ControlRods:   ControlRods{Insertion: 1, DemandInsertion: 0, BoronConcentration: 10},
+		ThermalPower:  CoreRatedThermalPower,
+		Inlet:         Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
+		Outlet:        Temperature{Val: float64(CoreDopplerReferenceTempF - 150), Unit: u.Fahrenheit},
+		Trip:          true,
+		TimeSinceTrip: 100 * time.Second,
+	}
+	r = r.Step(0)
+
+	tSlow := (100*time.Second - CoreDecayHeatFastTimeConstant).Seconds()
+	frac := CoreDecayHeatMinFraction +
+		(CoreDecayHeatShutdownFraction-CoreDecayHeatMinFraction)*
+			math.Exp(-tSlow/CoreDecayHeatTimeConstant.Seconds())
+	want := float64(CoreRatedThermalPower) * frac
+
+	assert.InDelta(t, want, float64(r.ThermalPower), want*0.001,
+		"want decay-curve power %v W at t=100 s post-trip, got %v W", want, r.ThermalPower)
 }
