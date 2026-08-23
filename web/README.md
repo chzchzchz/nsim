@@ -25,8 +25,10 @@ web/
 │   ├── console.ts            command console + journal export
 │   ├── units.ts              display metadata for bridge Kind values
 │   ├── wasm.ts               loadWasm()
+│   ├── styles.css            shared stylesheet (linked from index.html)
+│   ├── vite-env.d.ts         Vite client types (import.meta.env)
 │   └── wasm_exec.js          (copied from $(go env GOROOT)/lib/wasm)
-├── index.html                dashboard skeleton + shared CSS
+├── index.html                dashboard skeleton
 ├── package.json              vite + typescript dev deps
 ├── tsconfig.json             ES2020, strict
 ├── vite.config.ts            dev server on :5173

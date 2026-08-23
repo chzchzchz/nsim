@@ -18,6 +18,9 @@ export async function loadWasm(): Promise<void> {
     // Fire-and-forget: Go's main() blocks on `select {}`, so go.run()
     // would never resolve. The export (window.nsimNewPlant) is
     // installed synchronously by js.Global().Set during the wasm
-    // `run` export, before go.run() awaits its exit promise.
-    go.run(instance);
+    // `run` export, before go.run() awaits its exit promise. A later
+    // runtime crash must not vanish as an unhandled rejection.
+    go.run(instance).catch((err: unknown) => {
+        console.error("nsim wasm runtime exited:", err);
+    });
 }

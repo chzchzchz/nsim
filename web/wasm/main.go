@@ -185,6 +185,12 @@ type queueJSON struct {
 	Entries []queueEntryJSON `json:"entries"`
 }
 
+// commandQueueRev returns the queue revision so the UI can skip
+// marshaling the full snapshot on idle frames.
+func (h *plantHandle) commandQueueRev() int64 {
+	return h.queue.Rev()
+}
+
 // commandQueueJSON snapshots the console queue for the UI list.
 func (h *plantHandle) commandQueueJSON() (string, error) {
 	entries := h.queue.Entries()
@@ -328,6 +334,9 @@ func jsHandle(h *plantHandle) js.Value {
 			return js.Global().Get("Error").New(err.Error())
 		}
 		return nil
+	}))
+	obj.Set("commandQueueRev", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		return h.commandQueueRev()
 	}))
 	obj.Set("commandQueueJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		s, err := h.commandQueueJSON()

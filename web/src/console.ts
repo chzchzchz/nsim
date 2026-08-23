@@ -20,12 +20,16 @@ interface QueueSnapshot {
 }
 
 export interface ConsolePanel {
-    // refresh polls commandQueueJSON() and re-renders the list
-    // when the queue revision has changed.
+    // refresh polls the queue revision and re-renders the list
+    // only when it changed.
     refresh(): void;
     // clear empties the list (sim reset starts a fresh queue).
     clear(): void;
 }
+
+// Long sessions accumulate entries; rendering is capped so a rev
+// change never rebuilds an unbounded DOM.
+const MAX_ROWS = 200;
 
 const STATUS_MARK: Record<QueueEntry["status"], string> = {
     pending: "\u2026",
@@ -53,6 +57,10 @@ export function initConsole(
     const exportBtn = document.createElement("button");
     exportBtn.id = "btn-cmd-export";
     exportBtn.textContent = "\u2b07 Export log (.json)";
+    exportBtn.setAttribute(
+        "aria-label",
+        "Export command log as JSON file",
+    );
     exportBtn.title =
         "Download all commands submitted this run as a JSON file "
         + "(replay with: go run ./cmd/nsimrun -cmd nsim-commands.json). "
@@ -88,6 +96,7 @@ export function initConsole(
     const ta = document.createElement("textarea");
     ta.id = "cmd-input";
     ta.rows = 3;
+    ta.setAttribute("aria-label", "Command input");
     ta.placeholder =
         "TimeOffsetMs Part.Label Value  (one command per line)\n"
         + "e.g. 1000 ReactorBuilding.ReactorCoolantPump.Running 0";
@@ -149,6 +158,11 @@ export function initConsole(
     }
 
     function refresh(): void {
+        // Cheap revision probe first: idle frames must not pay for
+        // marshaling and parsing the full snapshot.
+        if (plant.commandQueueRev() === lastRev) {
+            return;
+        }
         const raw = plant.commandQueueJSON();
         if (typeof raw !== "string") {
             return;
@@ -165,7 +179,14 @@ export function initConsole(
         }
         lastRev = snap.rev;
         listEl.replaceChildren();
-        for (const e of snap.entries) {
+        const overflow = Math.max(0, snap.entries.length - MAX_ROWS);
+        if (overflow > 0) {
+            const more = document.createElement("div");
+            more.className = "cmd-row cmd-more";
+            more.textContent = `+ ${overflow} older ${overflow === 1 ? "entry" : "entries"} hidden`;
+            listEl.appendChild(more);
+        }
+        for (const e of snap.entries.slice(-MAX_ROWS)) {
             listEl.appendChild(buildRow(e));
         }
         listEl.scrollTop = listEl.scrollHeight;

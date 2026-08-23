@@ -135,30 +135,50 @@ async function main(): Promise<void> {
     });
 
     let lastSvg = performance.now();
+    // Sim time at the last read-out refresh; plant state only
+    // changes when the clock advances, so paused idle frames skip
+    // the refresh path entirely.
+    let lastRefreshedMs = -1;
+    let lastTickError = "";
     function tick(): void {
-        if (sim.running) {
-            sim.plant.step(sim.ticksPerFrame);
-        }
-        refreshSensors(sensorRows, sim.plant);
-        // Refresh the command console list from the wasm queue.
-        consolePanel?.refresh();
-        // Refresh alarm panel from the structured sensor JSON.
-        const alarmJson = sim.plant.sensorJSON("Plant/Alarms");
-        if (typeof alarmJson === "string") {
-            alarmPanel?.refresh(alarmJson);
-        }
-        if (performance.now() - lastSvg > 1000) {
-            const svg = sim.plant.getSvg();
-            // Swap only when the diagram actually changed so idle
-            // periods do not re-parse an identical DOM tree.
-            if (typeof svg === "string" && svg !== lastSvgHtml) {
-                pidEl.innerHTML = svg;
-                lastSvgHtml = svg;
-            }
-            lastSvg = performance.now();
-        }
-        sim.refreshStatus();
+        // Reschedule first: an exception in the body must never
+        // kill the render loop permanently.
         requestAnimationFrame(tick);
+        try {
+            if (sim.running) {
+                sim.plant.step(sim.ticksPerFrame);
+            }
+            const simMs = sim.plant.simTimeMs();
+            if (simMs !== lastRefreshedMs) {
+                lastRefreshedMs = simMs;
+                refreshSensors(sensorRows, sim.plant);
+                // Refresh the command console list from the wasm queue.
+                consolePanel?.refresh();
+                // Refresh alarm panel from the structured sensor JSON.
+                const alarmJson = sim.plant.sensorJSON("Plant/Alarms");
+                if (typeof alarmJson === "string") {
+                    alarmPanel?.refresh(alarmJson);
+                }
+                if (performance.now() - lastSvg > 1000) {
+                    const svg = sim.plant.getSvg();
+                    // Swap only when the diagram actually changed so
+                    // idle periods do not re-parse an identical DOM.
+                    if (typeof svg === "string" && svg !== lastSvgHtml) {
+                        pidEl.innerHTML = svg;
+                        lastSvgHtml = svg;
+                    }
+                    lastSvg = performance.now();
+                }
+                lastTickError = "";
+            }
+            sim.refreshStatus();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (msg !== lastTickError) {
+                lastTickError = msg;
+                console.error("tick failed:", err);
+            }
+        }
     }
     requestAnimationFrame(tick);
 }
