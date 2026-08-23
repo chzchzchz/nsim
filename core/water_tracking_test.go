@@ -63,9 +63,16 @@ func TestPRT_AccumulatesPORVDischarge(t *testing.T) {
 	wantGain := PRTReliefFlow * 1.0
 	assert.InDelta(t, wantGain, prtGain, wantGain*0.01,
 		"want PRT to collect %v gal of relief flow, gained=%v", wantGain, prtGain)
-	assert.GreaterOrEqual(t, pzzLoss, prtGain-1e-9,
-		"want pressurizer to lose at least the discharged volume, loss=%v",
-		pzzLoss)
+	// The pressurizer's idle cooldown path recondenses ~1 psi/s of
+	// its own bubble back into liquid (PressurizerAmbientDecay), so
+	// the liquid inventory loses the discharged volume MINUS that
+	// internal phase change. Account for it explicitly instead of
+	// demanding one-for-one liquid conservation.
+	wantCooldown := float64(PressurizerAmbientDecay) * 1.0 /
+		PressurizerBubbleStiffness
+	assert.InDelta(t, wantGain-wantCooldown, pzzLoss, wantGain*0.01,
+		"want pressurizer liquid loss = discharge - cooldown recondensation"+
+			" (%v - %v), got %v", wantGain, wantCooldown, pzzLoss)
 }
 
 // Once the PRT is full the rupture disc vents it: further discharge

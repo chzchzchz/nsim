@@ -60,20 +60,28 @@ func TestPressurizer_SprayDrivesPressureDown(t *testing.T) {
 		"Pressure dropped below spray min: after %v min %v", after, PressurizerSprayMin)
 }
 
-// A surge-line inflow (graph-driven, water level rises) shrinks the
-// steam bubble, which in this model pulls pressure down.
-func TestPressurizer_SurgeLineInflowDropsPressure(t *testing.T) {
+// Inflow into the pressurizer raises the water level, shrinking the
+// steam bubble and pulling the bubble-derived pressure down. Since
+// ReactorPressureVessel left the fluid graph (the primary and
+// secondary loops are closed cycles that exchange only heat across
+// the SG tubes:
+//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_064.txt:20-27),
+// tracked inflow arrives through the CVCS charging line:
+//   "pressurizer level represents a balance of injection water flow
+//    into the RCS and water letdown flow into the Chemical and
+//    Volume Control System."
+//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65
+func TestPressurizer_InflowShrinksBubbleDropsPressure(t *testing.T) {
 	p := MakePlant()
-	// Open the surge-line safety valve and pressurise the RPV above
-	// the pressurizer so the graph pushes water from RPV into the
-	// pressurizer. Equalise the SG so the SG<->RPV edge is at zero
-	// deltaP and only the surge-line drives the pressurizer.
-	p.ReactorBuilding.SafetyValve.Open = 1
-	p.ReactorBuilding.SteamGenerator.Pressure = 3000
-	p.ReactorBuilding.ReactorPressureVessel.Pressure = 3000
 	p.ReactorBuilding.Pressurizer.Volume = Volume{Val: 1000, Unit: u.Gallon}
 	p.ReactorBuilding.Pressurizer.Water = Volume{Val: 800, Unit: u.Gallon} // 200 gal bubble -> 2000 psi
 	p.ReactorBuilding.Pressurizer.Pressure = 2000
+	// Charge-only window: letdown stays shut so the net RCS inflow
+	// is the full design charging flow.
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = true
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = false
+
+	waterBefore := p.ReactorBuilding.Pressurizer.Water.Float()
 	before := p.ReactorBuilding.Pressurizer.Pressure
 
 	stepN(&p, int(time.Second/TimeStep))
@@ -81,8 +89,8 @@ func TestPressurizer_SurgeLineInflowDropsPressure(t *testing.T) {
 	after := p.ReactorBuilding.Pressurizer.Pressure
 	assert.Less(t, after, before,
 		"Pressure should drop as bubble shrinks: before %v after %v", before, after)
-	assert.Greater(t, p.ReactorBuilding.Pressurizer.Water.Float(), 800.0,
-		"Water should have risen via surge-line inflow")
+	assert.Greater(t, p.ReactorBuilding.Pressurizer.Water.Float(), waterBefore,
+		"Water should have risen via charging inflow")
 }
 
 // When pressure exceeds the PORV trip setpoint the valve opens.
