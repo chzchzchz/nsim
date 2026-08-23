@@ -288,3 +288,32 @@ func TestBug_SGWaterExceedsVolume(t *testing.T) {
 		"SG water (%v gal) must not exceed shell volume (%v gal)",
 		water, volume)
 }
+
+
+// The primary-loop fluid edges must not transfer water into the
+// steam generator: the primary and secondary cycles are separated
+// and exchange only heat across the tubes, so SG inventory is
+// governed by the secondary-side feed and steam paths. Before this
+// was fixed, the RPV->SG edges topped the SG up to its shell volume
+// within seconds, permanently asserting the high-SG-level RPS trip
+// signal (>90% level).
+//
+// Spec justification:
+//   - "Pressurized water reactors utilize a closed-cycle system design
+//      principle. This means that radioactive coolant in the reactor
+//      cycle is completely separated from the turbine-generator cycle.
+//      [...] The link connecting the two cycles is the steam generator."
+//   - specs/the_westinghouse_pressurized_water_react/chapter_3/page_064.txt:20-27
+func TestPlant_SGInventoryNotToppedUpFromPrimary(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorCoolantPump.Running = true
+	p.ReactorBuilding.Pressurizer.HeatersOn = true
+
+	stepN(&p, int(300*time.Second/TimeStep))
+
+	water := p.ReactorBuilding.SteamGenerator.Water.Float()
+	initial := p.ReactorBuilding.SteamGenerator.Volume.Float() * 0.8
+	assert.LessOrEqual(t, water, initial,
+		"SG water (%v gal) must not grow past the initial inventory (%v gal)",
+		water, initial)
+}

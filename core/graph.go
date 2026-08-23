@@ -74,10 +74,23 @@ func (p *Pressurizer) level() Volume      { return p.Water }
 func (p *Pressurizer) setLevel(v Volume)  { p.Water = v }
 func (p *Pressurizer) capacity() Volume   { return p.Volume }
 
-func (r *ReactorPressureVessel) pressure() Pressure { return r.Pressure }
-func (r *ReactorPressureVessel) level() Volume      { return zeroVolume }
-func (r *ReactorPressureVessel) setLevel(Volume)    {}
-func (r *ReactorPressureVessel) capacity() Volume   { return zeroVolume }
+// ReactorPressureVessel deliberately does NOT implement fluidNode.
+// The primary and secondary sides are separate fluids that exchange
+// only heat across the SG tubes, so the primary-loop edges (hot leg
+// RPV->SG, cold leg SG->RPV, surge line RPV<->Pressurizer) carry no
+// net volume transfer:
+//   "Pressurized water reactors utilize a closed-cycle system design
+//    principle. This means that radioactive coolant in the reactor
+//    cycle is completely separated from the turbine-generator cycle.
+//    [...] The link connecting the two cycles is the steam generator."
+//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_064.txt:20-27
+// SG inventory is instead governed by the feedwater regulator and
+// the steam outlets on the secondary side:
+//   "Feedwater flow to each steam generator is controlled by a
+//    feedwater regulator in each feedwater line. The regulator is
+//    controlled by steam generator level, steam flow and feedwater
+//    flow."
+//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
 
 func (c *Condenser) pressure() Pressure { return c.Pressure }
 func (c *Condenser) level() Volume      { return zeroVolume }

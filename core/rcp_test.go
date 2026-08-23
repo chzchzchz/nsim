@@ -31,6 +31,30 @@ func TestRCP_Startup(t *testing.T) {
 		p.ReactorBuilding.ReactorCoolantPump.Velocity)
 }
 
+
+// The RCP DriveReady latch must survive the ReactorBuilding step
+// assignment inside Plant.Step so the sensor tracks the ESF bus
+// state that feeds the pump motors.
+//
+// Spec justification:
+//   - "All of the engineered safety system loads are fed from two
+//      6600-volt engineered safety features buses."
+//   - specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:72-74
+func TestPlant_RCPDriveReadyFollowsESFBreaker(t *testing.T) {
+	p := MakePlant()
+	p.Electrical.ESFBusA.BreakerClosed = false
+	p.Electrical.ESFBusB.BreakerClosed = false
+	stepN(&p, 10)
+	require.False(t, p.ReactorBuilding.ReactorCoolantPump.DriveReady,
+		"precondition: ESF breakers open, want DriveReady=false")
+
+	p.Electrical.ESFBusA.BreakerClosed = true
+	p.Electrical.ESFBusB.BreakerClosed = true
+	stepN(&p, 10)
+	assert.True(t, p.ReactorBuilding.ReactorCoolantPump.DriveReady,
+		"want DriveReady=true with the ESF buses energized")
+}
+
 // TestRCP_Coastdown verifies the exponential coastdown from rated
 // speed decays toward zero over the RCPCoastdownTimeConstant (10 s);
 // after 50 s (≈ 5 τ) velocity is < 1 % of rated.

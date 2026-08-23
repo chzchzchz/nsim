@@ -143,6 +143,17 @@ type Turbine struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:72
 	OPCTrip bool
 
+	// ResetRequest carries the operator's momentary trip-reset
+	// command to the next Turbine.Step, which consumes it and
+	// returns the machine to service if the rotor has decayed to
+	// rest. The spec's trip devices latch by dumping auto stop oil
+	// to drain; returning the unit to service re-establishes valve
+	// control from the operator's panel:
+	//   "The operator may position the valves, when necessary,
+	//    through the manual valve controllers."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:114-116
+	ResetRequest bool
+
 	// GridFrequency is the infinite-bus frequency in Hz that
 	// the governor droop correction compares against
 	// GridRatedFrequency. Plant.Step latches the grid frequency

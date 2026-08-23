@@ -106,6 +106,46 @@ func TestTurbine_TrippedRequiresReset(t *testing.T) {
 	assert.Equal(t, TurbineOff, tr.State, "want Off after reset, got %v", tr.State)
 }
 
+
+// The operator reset command latches ResetRequest, which the next
+// Step consumes exactly once: Tripped -> Off once the rotor has
+// decayed to rest, then Off -> Running when steam returns. The
+// production call path (TurbineBuilding.StepWithSteam) always passes
+// reset=false, so the latched request is the only reset route.
+//
+// Spec justification:
+//   - "The operator may position the valves, when necessary,
+//      through the manual valve controllers."
+//   - specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:114-116
+func TestTurbine_ResetRequestRestartsFromTripped(t *testing.T) {
+	tr := Turbine{}
+	// Trip via sustained steam loss, then let the rotor coast to
+	// rest.
+	for i := 0; i < 1000; i++ {
+		tr = tr.Step(1000, 0, false, openValve())
+	}
+	steps := int(TurbineSteamLossDeadline/TimeStep) + 100
+	for i := 0; i < steps; i++ {
+		tr = tr.Step(0, 0, false, openValve())
+	}
+	require.Equal(t, TurbineTripped, tr.State, "precondition: want Tripped")
+	for i := 0; i < int(5*time.Second/TimeStep); i++ {
+		tr = tr.Step(0, 0, false, openValve())
+	}
+
+	// Latch the operator reset request and step once.
+	tr.ResetRequest = true
+	tr = tr.Step(0, 0, false, openValve())
+	assert.Equal(t, TurbineOff, tr.State,
+		"want Off after consuming ResetRequest")
+	assert.False(t, tr.ResetRequest, "ResetRequest must be consumed")
+
+	// Steam returns: Off -> Running without any further reset.
+	tr = tr.Step(1000, 0, false, openValve())
+	assert.Equal(t, TurbineRunning, tr.State,
+		"want Running once steam returns")
+}
+
 // With the stop valve closed, no steam admission occurs regardless
 // of the upstream pressure; the turbine stays off.
 func TestTurbine_StopValveClosedBlocksSteam(t *testing.T) {

@@ -36,6 +36,26 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Momentary turbine trip reset. Consumed by the next
+	// Turbine.Step; the machine returns to service only once the
+	// rotor has decayed to rest. Restoring valve control from the
+	// operator's panel after the auto-stop-oil trip latch:
+	//   "The operator may position the valves, when necessary,
+	//    through the manual valve controllers."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:114-116
+	m["TurbineBuilding/Turbine/Reset"] = &bridge.Control{
+		Part:  "TurbineBuilding/Turbine",
+		Label: "Reset",
+		Kind:  "enum",
+		Enum:  []string{"Reset"},
+		Get:   func() string { return "0" },
+		Set: func(_ string) error {
+			p.TurbineBuilding.Turbine.ResetRequest = true
+			return nil
+		},
+	}
+
+
 	// Feedwater regulator valve demand (chapter 15):
 	// "Feedwater flow to each steam generator is controlled by
 	// a feedwater regulator in each feedwater line."

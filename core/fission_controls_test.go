@@ -226,10 +226,9 @@ func TestThermal_RodWithdrawalRaisesReactivity(t *testing.T) {
 // Regression: the reactivity power-defect correction used to
 // multiply the tripped branch too, so the dilution here cooled
 // the "decay heat" of an EOL-boron core — amplifying or
-// suppressing fission-product heat with reactivity. The default
-// MakePlant startup transient scrams both units at ~2 s
-// (pre-existing behavior), which is exactly the regime where the
-// bug lived.
+// suppressing fission-product heat with reactivity. Both units
+// are scrammed explicitly so the comparison runs in the regime
+// where the bug lived.
 //
 // Spec justification:
 //   - "the moderator temperature coefficient would be on the
@@ -242,9 +241,16 @@ func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 	const steps = int(30 * time.Second / TimeStep)
 
 	base := MakePlant()
+	// Scram both units explicitly. The old MakePlant self-scram
+	// at ~2 s was an artifact of the primary-loop fluid edges
+	// overfilling the steam generator past the high-level trip
+	// signal; the graph no longer transfers water between the
+	// separated primary and secondary cycles.
+	base.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
 	stepN(&base, steps)
 
 	diluted := MakePlant()
+	diluted.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
 	diluted.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSDilution
 	diluted.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
 	// Drop the boron concentration so the net temperature
@@ -256,7 +262,7 @@ func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 	dilRP := diluted.ReactorBuilding.ReactorPressureVessel
 
 	require.True(t, baseRP.Trip && dilRP.Trip,
-		"scenario precondition: both units scrambled by the startup transient")
+		"scenario precondition: both units scrammed")
 
 	assert.NotEqual(t, baseRP.Reactivity, dilRP.Reactivity,
 		"dilution must shift Reactivity (%v vs %v)", baseRP.Reactivity, dilRP.Reactivity)

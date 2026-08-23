@@ -342,6 +342,28 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Post-trip reset of the RPS trip latch and the ESFAS output
+	// latches. The step function re-declares the trip while trip
+	// channels still satisfy 2/4 voting, so reset cannot defeat an
+	// active trip condition:
+	//   "The trip breakers are arranged to provide a 2/4 configuration."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:132-133
+	//   Return to service proceeds from hot standby with the rods
+	//   withdrawn back to criticality.
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:24-26
+	m["ReactorBuilding/ReactorProtectionSystem/Reset"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorProtectionSystem",
+		Label: "Reset",
+		Kind:  "enum",
+		Enum:  []string{"Reset"},
+		Get:   func() string { return "0" },
+		Set: func(_ string) error {
+			p.ReactorBuilding.ReactorProtectionSystem.Reset()
+			return nil
+		},
+	}
+
+
 	// Control rod insertion (chapter 7):
 	// "The control rods are then manually withdrawn to achieve criticality"
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:155-156

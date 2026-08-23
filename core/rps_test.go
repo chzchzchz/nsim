@@ -5,6 +5,7 @@ import (
 
 	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // At construction the reactor is not tripped, no manual trip
@@ -185,4 +186,93 @@ func TestPlant_RPS_LatchesReactorPressureVesselTrip(t *testing.T) {
 	assert.True(t, p.ReactorBuilding.ReactorPressureVessel.Trip,
 		"want RPV.Trip=true after RPS trips, got %v",
 		p.ReactorBuilding.ReactorPressureVessel.Trip)
+}
+
+
+// Operator post-trip reset clears the trip latch and the ESFAS
+// outputs. The next Step re-declares the trip while trip channels
+// still satisfy 2/4 voting, so reset cannot bypass an active trip.
+//
+// Spec justification:
+//   - "The trip breakers are arranged to provide a 2/4 configuration."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:132-133
+//   - Return to service proceeds from hot standby with the rods
+//     withdrawn back to criticality.
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:24-26
+func TestRPS_ResetClearsLatchesAndRevotes(t *testing.T) {
+	r := ReactorProtectionSystem{}
+	// Drive two channels (low steamline pressure + high
+	// containment pressure) so the trip and its ESFAS outputs
+	// latch.
+	r = r.Step(100, 50, CoreReferenceInletF,
+		RPSHighContainmentPressureTrip+1)
+	assert.True(t, r.ReactorTripped, "precondition: want ReactorTripped=true")
+	assert.True(t, r.SafetyInjectionActuated,
+		"precondition: want SafetyInjectionActuated=true")
+	assert.True(t, r.SteamlineIsolationActuated,
+		"precondition: want SteamlineIsolationActuated=true")
+
+	// Reset with every channel clear: nothing re-latches.
+	r.Reset()
+	assert.False(t, r.ReactorTripped)
+	assert.False(t, r.ManualTrip)
+	r2 := r.Step(SteamGeneratorShellPressure, 50, CoreReferenceInletF, 0)
+	assert.False(t, r2.ReactorTripped,
+		"want no re-trip after reset with clear channels")
+	assert.False(t, r2.SafetyInjectionActuated)
+
+	// Reset while a trip condition is still present: the next
+	// Step re-declares the trip on its own.
+	r3 := ReactorProtectionSystem{}
+	r3 = r3.Step(100, 50, CoreReferenceInletF,
+		RPSHighContainmentPressureTrip+1)
+	require.True(t, r3.ReactorTripped)
+	r3.Reset()
+	r4 := r3.Step(100, 50, CoreReferenceInletF,
+		RPSHighContainmentPressureTrip+1)
+	assert.True(t, r4.ReactorTripped,
+		"want re-trip while 2/4 voting still demands one")
+}
+
+
+// Resetting the RPS must also release the containment-isolation
+// demand: Plant.Step mirrors the RPS Phase A/B ESFAS outputs into the
+// CIS manual flags each step, and the CIS unlatches a phase once its
+// manual flag is reset and the underlying condition is gone.
+//
+// Spec justification:
+//   - Containment Isolation Phase A triggers: "Safety injection,
+//     Manual"; Phase B: "High containment pressure, Manual actuation
+//     of containment spray."
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:68-80
+func TestPlant_RPSResetReleasesContainmentIsolation(t *testing.T) {
+	p := MakePlant()
+	// Latch SI and both CIS phases via their Table 7-1 triggers:
+	// high containment pressure drives SI, spray, and Phase B;
+	// SI in turn drives Phase A.
+	p.ReactorBuilding.ContainmentBuilding.Pressure =
+		RPSHighContainmentPressureTrip + AtmosphericPressure + 1
+	p.Step()
+	p.Update()
+	cis := p.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem
+	require.True(t, cis.PhaseAIsolated, "precondition: want Phase A isolated")
+	require.True(t, cis.PhaseBIsolated, "precondition: want Phase B isolated")
+
+	// Operator restores conditions (containment back to
+	// atmosphere, steamline at no-load pressure — MakePlant leaves
+	// it at 0 psia, which is itself a live low-steamline SI
+	// trigger) and resets the protection system: the manual flags
+	// clear, then both phases unlatch.
+	p.ReactorBuilding.ContainmentBuilding.Pressure = AtmosphericPressure
+	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
+	p.ReactorBuilding.ReactorProtectionSystem.Reset()
+	for i := 0; i < 10; i++ {
+		p.Step()
+		p.Update()
+	}
+	cis = p.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem
+	assert.False(t, cis.ManualPhaseA, "want manual Phase A demand released")
+	assert.False(t, cis.ManualPhaseB, "want manual Phase B demand released")
+	assert.False(t, cis.PhaseAIsolated, "want Phase A unlatched after reset")
+	assert.False(t, cis.PhaseBIsolated, "want Phase B unlatched after reset")
 }

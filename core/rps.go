@@ -179,3 +179,27 @@ func (r *ReactorProtectionSystem) Step(
 
 	return ret
 }
+
+// Reset clears the reactor-trip latch and the ESFAS output latches
+// once the operator has addressed the initiating conditions. The
+// next Step re-declares a trip on its own if enough trip channels
+// are still demanding one, so reset cannot bypass an active trip:
+//   "The trip breakers are arranged to provide a 2/4 configuration."
+//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:132-133
+// Return to operation after a shutdown proceeds from hot standby,
+// withdrawing the rods back to criticality:
+//   "Startup from Hot Standby: The shutdown banks of the reactor
+//    control rods are withdrawn."
+//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:24-26
+func (r *ReactorProtectionSystem) Reset() {
+	r.ReactorTripped = false
+	r.ManualTrip = false
+	r.SafetyInjectionActuated = false
+	r.SteamlineIsolationActuated = false
+	r.ContainmentSprayActuated = false
+	r.ContainmentIsolationPhaseAActuated = false
+	r.ContainmentIsolationPhaseBActuated = false
+	r.AuxiliaryFeedPumpsStartActuated = false
+	r.FeedwaterIsolationActuated = false
+	r.TurbineTripActuated = false
+}

@@ -635,10 +635,6 @@ func (p *Plant) Step() {
 	// on the 6600 V plant distribution bus fed by UAT or SAT
 	// (see plans/x/uat_sat_gating.md); a blackout drops it.
 	p.nextPlant.Outside.CirculatingWaterPump.DriveReady = plantDriveReady
-	// Latch the RCP DriveReady so the bridge sensor reflects the
-	// actual upstream power state, matching the pattern used for
-	// the CW and SWS pumps.
-	p.nextPlant.ReactorBuilding.ReactorCoolantPump.DriveReady = plantDriveReady
 	// SWS flow at this point is the prior step's delivered flow
 	// in gpm (the SWS Step runs later, after the cross-building
 	// DriveReady wiring). PumpRunning alone is not enough — the
@@ -673,6 +669,15 @@ func (p *Plant) Step() {
 		p.nextPlant.Electrical.ESFBusB.Energized
 
 	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step()
+	// Latch the RCP DriveReady after the ReactorBuilding step so
+	// the assignment above (which copies the prior state) cannot
+	// clobber it. The bridge sensor then reflects the actual
+	// upstream power state, matching the pattern used for the CW
+	// and SWS pumps. The RCP motors ride on the 6600 V ESF buses:
+	//   "All of the engineered safety system loads are fed from
+	//    two 6600-volt engineered safety features buses."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:72-74
+	p.nextPlant.ReactorBuilding.ReactorCoolantPump.DriveReady = plantDriveReady
 
 	// Refueling operations step. The phase machine advances
 	// based on phase-relative time; the cavity flood/drain
@@ -967,12 +972,14 @@ func (p *Plant) Step() {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:68-71
 	rps := p.nextPlant.ReactorBuilding.ReactorProtectionSystem
 	cis := &p.nextPlant.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem
-	if rps.ContainmentIsolationPhaseAActuated {
-		cis.ManualPhaseA = true
-	}
-	if rps.ContainmentIsolationPhaseBActuated {
-		cis.ManualPhaseB = true
-	}
+	// The manual flags mirror the RPS ESFAS outputs in both
+	// directions so an operator reset of the protection system also
+	// releases the isolation demand. The CIS step still requires the
+	// underlying condition (SI signal gone, pressure below setpoint)
+	// before each phase actually unlatches:
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:68-80
+	cis.ManualPhaseA = rps.ContainmentIsolationPhaseAActuated
+	cis.ManualPhaseB = rps.ContainmentIsolationPhaseBActuated
 
 	// Containment Isolation System step. Latches Phase A on
 	// safety-injection signal or operator manual command;

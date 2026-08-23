@@ -43,6 +43,16 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 	ret := *t
 	dt := TimeStep
 
+	// Consume the operator's latched reset request so the command
+	// is edge-triggered: one Step evaluates it exactly once, then
+	// clears it. Returning the tripped machine to service restores
+	// operator valve control after the auto-stop-oil trip latch:
+	//   "The operator may position the valves, when necessary,
+	//    through the manual valve controllers."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:114-116
+	reset = reset || ret.ResetRequest
+	ret.ResetRequest = false
+
 	admission := float64(0)
 	if stopValveOpen != nil {
 		admission = min(max(*stopValveOpen, 0), 1)
