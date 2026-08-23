@@ -588,7 +588,7 @@ const (
 //   - "The pressurizer level is controlled by balancing the
 //     charging flow to the letdown flow."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
-var CVCSDesignChargingFlow Volume = u.NewValue(30, u.Gallon)
+var CVCSDesignChargingFlow Volume = Volume{Val: 30, Unit: u.Gallon}
 
 // CVCSDesignLetdownFlow is the design letdown flow rate from
 // the RCS back to the VCT. The spec describes the letdown
@@ -605,7 +605,7 @@ var CVCSDesignChargingFlow Volume = u.NewValue(30, u.Gallon)
 //   - "The charging pump flow and low-pressure letdown valve
 //     are controlled manually [...]."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115
-var CVCSDesignLetdownFlow Volume = u.NewValue(75, u.Gallon)
+var CVCSDesignLetdownFlow Volume = Volume{Val: 75, Unit: u.Gallon}
 
 // ReactorMakeupDesignFlow is the per-minute volume of makeup
 // water delivered to the VCT when the reactor makeup control
@@ -618,7 +618,7 @@ var CVCSDesignLetdownFlow Volume = u.NewValue(75, u.Gallon)
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-6
 //   - "The reactor makeup control system dilution is [...]"
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:17
-var ReactorMakeupDesignFlow Volume = u.NewValue(60, u.Gallon)
+var ReactorMakeupDesignFlow Volume = Volume{Val: 60, Unit: u.Gallon}
 
 type FuelRods struct{ Part }
 
@@ -1130,7 +1130,7 @@ const (
 //
 // Sized as 10% of design flow; the spec does not state a specific
 // minimum flow value.
-var FeedwaterMinFlow Volume = u.NewValue(950, u.Gallon)
+var FeedwaterMinFlow Volume = Volume{Val: 950, Unit: u.Gallon}
 
 // FeedwaterDesignFlow is the design volumetric flow through the
 // main feed pump at full load. Anchored on the per-SG steam flow
@@ -1140,7 +1140,7 @@ var FeedwaterMinFlow Volume = u.NewValue(950, u.Gallon)
 // gal/min. The per-step value below is per-step at 1 ms: 380 gal/s
 // × 0.001 s/step ≈ 0.38 gal/step; the constant is sized in gal/s
 // for the per-step integration in heater.go.
-var FeedwaterDesignFlow Volume = u.NewValue(380, u.Gallon) // gal/s
+var FeedwaterDesignFlow Volume = Volume{Val: 380, Unit: u.Gallon} // gal/s
 
 // Feedwater regulator design constants (plans/p22_1.txt).
 //
@@ -1305,7 +1305,7 @@ const (
 // Service-Water loss must trip the engine
 // (specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89,
 // specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:8-9).
-var DieselCoolantTripTemp = u.NewValue(220, u.Fahrenheit)
+var DieselCoolantTripTemp = Temperature{Val: 220, Unit: u.Fahrenheit}
 
 // DieselLowFuelLevel is the low-fuel warning threshold, sized
 // to fire well before the diesel trips on fuel exhaustion.
@@ -1313,7 +1313,7 @@ var DieselCoolantTripTemp = u.NewValue(220, u.Fahrenheit)
 // (core/plant.go:1336-1353); 50 gal is 10% — enough headroom
 // for an operator response without nuisance warnings during
 // normal rated-load burn.
-var DieselLowFuelLevel = u.NewValue(50, u.Gallon)
+var DieselLowFuelLevel = Volume{Val: 50, Unit: u.Gallon}
 
 
 
@@ -1995,19 +1995,19 @@ const (
 // SISAccumulatorPerTankCapacity is the water capacity of one
 // accumulator tank (gal). Sized to 1,150 gal, typical of a
 // four-loop Westinghouse accumulator tank.
-var SISAccumulatorPerTankCapacity Volume = u.NewValue(1150, u.Gallon)
+var SISAccumulatorPerTankCapacity Volume = Volume{Val: 1150, Unit: u.Gallon}
 
 // SISAccumulatorDischargeRate is the maximum flow rate at which
 // an accumulator tank discharges into the RCS cold leg (gal/s).
 // The spec does not state a numeric per-tank discharge rate; 230
 // gpm per tank is the typical Westinghouse four-loop accumulator
 // design.
-var SISAccumulatorDischargeRate Volume = u.NewValue(230.0/60.0, u.Gallon)
+var SISAccumulatorDischargeRate Volume = Volume{Val: 230.0/60.0, Unit: u.Gallon}
 
 // SISHHSIDesignFlow is the design discharge flow rate of each
 // HHSI pump (gal/s). 970 gpm is the typical rated flow for the
 // Westinghouse four-loop HHSI pump.
-var SISHHSIDesignFlow Volume = u.NewValue(970.0/60.0, u.Gallon)
+var SISHHSIDesignFlow Volume = Volume{Val: 970.0/60.0, Unit: u.Gallon}
 
 // SIS models the Safety Injection System's high-head injection
 // phase state: the passive accumulator bank, the HHSI pump running
@@ -2359,26 +2359,26 @@ const (
 //     standby for 13 hours then allow a 5-hour cooldown of the
 //     plant to 350°F (176.7°C)."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:52-56
-var EFWSPrimaryTankCapacity Volume = u.NewValue(25000, u.Gallon)
+var EFWSPrimaryTankCapacity Volume = Volume{Val: 25000, Unit: u.Gallon}
 
 // EFWSPrimaryTankMaxTemp is the maximum permissible water
 // temperature in the primary emergency feedwater supply tank (°F).
 // "The maximum permissible water temperature in the primary
 // emergency feedwater supply tank is 120°F (48.9°C)."
 // specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:56-59
-var EFWSPrimaryTankMaxTemp Temperature = u.NewValue(120, u.Fahrenheit)
+var EFWSPrimaryTankMaxTemp Temperature = Temperature{Val: 120, Unit: u.Fahrenheit}
 
 // EFWSMotorPumpFlow is the design discharge flow rate of each
 // motor-driven EFWS pump (gal/s). The spec does not state a
 // numeric gpm; the value 150 gpm is a typical rated flow for a
 // Westinghouse four-loop motor-driven AFW pump.
-var EFWSMotorPumpFlow Volume = u.NewValue(150.0/60.0, u.Gallon)
+var EFWSMotorPumpFlow Volume = Volume{Val: 150.0/60.0, Unit: u.Gallon}
 
 // EFWSTurbinePumpFlow is the design discharge flow rate of each
 // turbine-driven EFWS pump (gal/s). The spec does not state a
 // numeric gpm; the value 200 gpm is higher than the motor-driven
 // pump because the turbine governor can track steam demand.
-var EFWSTurbinePumpFlow Volume = u.NewValue(200.0/60.0, u.Gallon)
+var EFWSTurbinePumpFlow Volume = Volume{Val: 200.0/60.0, Unit: u.Gallon}
 
 // CCWS models the Component Cooling Water System — the
 // intermediate cooling loop that removes heat from safeguards
@@ -2513,7 +2513,7 @@ const (
 // but does not state a numeric capacity; the value chosen is
 // representative of a single surge tank for a four-loop plant.
 // specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:60-67
-var CCWSSurgeTankCapacity Volume = u.NewValue(5000, u.Gallon)
+var CCWSSurgeTankCapacity Volume = Volume{Val: 5000, Unit: u.Gallon}
 
 // CCWSDesignFlow is the lumped CCW flow rate through all cooled
 // components combined (gal/s). The spec does not state a single
@@ -2523,7 +2523,7 @@ var CCWSSurgeTankCapacity Volume = u.NewValue(5000, u.Gallon)
 // "Each safeguards train is sized to supply 100-percent
 // post-accident component cooling flow requirements."
 // specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:41-42
-var CCWSDesignFlow Volume = u.NewValue(800.0/60.0, u.Gallon)
+var CCWSDesignFlow Volume = Volume{Val: 800.0/60.0, Unit: u.Gallon}
 
 // CCHXApproachTemp is the lumped temperature rise across the
 // CCWS heat exchanger (°F). Used as the single-step outlet
@@ -2531,7 +2531,7 @@ var CCWSDesignFlow Volume = u.NewValue(800.0/60.0, u.Gallon)
 // does not need to track individual cooled-component heat
 // loads. The spec does not state an approach temperature; 10°F
 // is typical for a shell-and-tube HX with moderate heat duties.
-var CCHXApproachTemp Temperature = u.NewValue(10.0, u.Fahrenheit)
+var CCHXApproachTemp Temperature = Temperature{Val: 10.0, Unit: u.Fahrenheit}
 
 // ContainmentSpraySystem models the Containment Spray System —
 // the engineered safeguard that limits peak containment pressure
@@ -2773,7 +2773,7 @@ const (
 // "Suction is provided to the spray pump from the CSST, with the
 // SAT providing sodium hydroxide solution."
 // specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:61-63
-var CSSTCapacity Volume = u.NewValue(15000, u.Gallon)
+var CSSTCapacity Volume = Volume{Val: 15000, Unit: u.Gallon}
 
 // SATCapacity is the total sodium hydroxide solution capacity of
 // the simplified lumped SAT (gal). The spec does not state a
@@ -2781,7 +2781,7 @@ var CSSTCapacity Volume = u.NewValue(15000, u.Gallon)
 // of spray at the chosen flow.
 // "the SAT providing sodium hydroxide solution"
 // specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:62-63
-var SATCapacity Volume = u.NewValue(500, u.Gallon)
+var SATCapacity Volume = Volume{Val: 500, Unit: u.Gallon}
 
 // RCFCUnit models one of the four parallel fan units in the
 // Reactor Containment Fan Cooler System. Each unit contains a
@@ -3395,7 +3395,7 @@ const (
 //     does not drain the spent fuel pool below the top of the
 //     stored fuel elements."
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_170.txt:132-136
-var SFPCPoolVolume Volume = u.NewValue(500_000, u.Gallon)
+var SFPCPoolVolume Volume = Volume{Val: 500_000, Unit: u.Gallon}
 
 // ServiceWaterInletTemp is the design inlet temperature of the
 // service water at the plant intake (°F). Used to initialise the
@@ -3405,9 +3405,7 @@ var SFPCPoolVolume Volume = u.NewValue(500_000, u.Gallon)
 //   - "Depending on the plant, the source of circulating water
 //     may be a river, lake, ocean, or cooling tower."
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
-var ServiceWaterInletTemp Temperature = u.NewValue(
-	ServiceWaterSourceTemp, u.Fahrenheit,
-)
+var ServiceWaterInletTemp Temperature = Temperature{Val: ServiceWaterSourceTemp, Unit: u.Fahrenheit}
 
 // RefuelingOperations models the refueling operation cycle for
 // the plant. The simplified model tracks cavity flooding depth,

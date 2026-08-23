@@ -22,16 +22,10 @@ func TestSIS_AccumulatorIdleAbovePrechargePressure(t *testing.T) {
 	s := (&SIS{
 		Accumulator: Accumulator{
 			Pressure: SISAccumulatorPrechargePressure,
-			Level: u.NewValue(
-				SISAccumulatorPerTankCapacity.Float()*
-					float64(SISAccumulatorCount),
-				u.Gallon,
-			),
-			Capacity: u.NewValue(
-				SISAccumulatorPerTankCapacity.Float()*
-					float64(SISAccumulatorCount),
-				u.Gallon,
-			),
+			Level: Volume{Val: SISAccumulatorPerTankCapacity.Float()*
+					float64(SISAccumulatorCount), Unit: u.Gallon},
+			Capacity: Volume{Val: SISAccumulatorPerTankCapacity.Float()*
+					float64(SISAccumulatorCount), Unit: u.Gallon},
 		},
 	}).Step(float64(SISAccumulatorPrechargePressure) + 1)
 	assert.False(t, s.Accumulator.Discharging,
@@ -68,8 +62,8 @@ func TestSIS_AccumulatorDischargesBelowPrecharge(t *testing.T) {
 	s := (&SIS{
 		Accumulator: Accumulator{
 			Pressure: SISAccumulatorPrechargePressure,
-			Level:    u.NewValue(initial, u.Gallon),
-			Capacity: u.NewValue(initial, u.Gallon),
+			Level:    Volume{Val: initial, Unit: u.Gallon},
+			Capacity: Volume{Val: initial, Unit: u.Gallon},
 		},
 	}).Step(float64(SISAccumulatorPrechargePressure) - 1)
 	assert.True(t, s.Accumulator.Discharging,
@@ -130,7 +124,7 @@ func TestSIS_HHSIPumpDepletesRWST(t *testing.T) {
 		HHSIPumpRunning: true,
 		HHSIDriveReady:  true,
 		HHSISuction:     SISSuctionRWST,
-		RWSTLevel:       u.NewValue(SISRWSTCapacity, u.Gallon),
+		RWSTLevel:       Volume{Val: SISRWSTCapacity, Unit: u.Gallon},
 	}).Step(100)
 	dt := TimeStep.Seconds()
 	wantLoss := SISHHSIDesignFlow.Float() * dt
@@ -166,7 +160,7 @@ func TestSIS_RecirculationSwitchoverAlignsToSump(t *testing.T) {
 		HHSIPumpRunning: true,
 		HHSIDriveReady:  true,
 		HHSISuction:     SISSuctionRWST,
-		RWSTLevel:       u.NewValue(SISRWSTLowLevel-1, u.Gallon),
+		RWSTLevel:       Volume{Val: SISRWSTLowLevel-1, Unit: u.Gallon},
 	}
 	delay := int(SISRecirculationSwitchoverDelay /
 		TimeStep.Seconds()) + 1
@@ -217,8 +211,7 @@ func TestSIS_SafetyInjectionSignalStartsHHSIPumps(t *testing.T) {
 	// low-level setpoint and complete the switchover. We
 	// start the RWST close to the low-level setpoint so the
 	// test runs in a tractable number of steps.
-	p.ReactorBuilding.SafetyInjectionSystem.RWSTLevel = u.NewValue(
-		SISRWSTLowLevel-1, u.Gallon)
+	p.ReactorBuilding.SafetyInjectionSystem.RWSTLevel = Volume{Val: SISRWSTLowLevel-1, Unit: u.Gallon}
 	rwstDepletionSec := 1.0 / SISHHSIDesignFlow.Float()
 	totalSec := rwstDepletionSec + SISRecirculationSwitchoverDelay
 	steps := int(totalSec/TimeStep.Seconds()) + 100

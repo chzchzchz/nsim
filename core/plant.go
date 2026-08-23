@@ -18,11 +18,8 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	// Spec: "Because of the influx of makeup water from the
 	// reactor makeup control system [...]"
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-6
-	ret.ReactorMakeupControlValve.Flow = u.NewValue(
-		ret.ReactorMakeupControlValve.Open*
-			ReactorMakeupDesignFlow.Float(),
-		u.Gallon,
-	)
+	ret.ReactorMakeupControlValve.Flow = Volume{Val: ret.ReactorMakeupControlValve.Open*
+			ReactorMakeupDesignFlow.Float(), Unit: u.Gallon}
 	// CVCS: charging, letdown, VCT level, and boron
 	// concentration. The CVCS boron's reactivity contribution
 	// is read by the RPV step below, so CVCS must run first.
@@ -183,9 +180,7 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 		netW := decayW - rejectionW
 		rcsMassKg := 3_500_000.0 * 0.453592
 		deltaTK := netW / (rcsMassKg * 4186.0) * dt.Seconds()
-		ret.ReactorPressureVessel.Outlet = u.NewValue(
-			rcsOutletF+deltaTK*9.0/5.0, u.Fahrenheit,
-		)
+		ret.ReactorPressureVessel.Outlet = Temperature{Val: rcsOutletF+deltaTK*9.0/5.0, Unit: u.Fahrenheit}
 		ret.SteamGenerator.HeatInput = 0
 	} else {
 		// Per-loop SG heat input: the lumped single-SG model
@@ -486,12 +481,9 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 	// regardless of breaker state — the condenser sees exhaust
 	// steam whether or not the unit is exporting to the grid.
 	if ret.Turbine.State == TurbineRunning {
-		ret.Condenser.CondensingRate = u.NewValue(
-			steamMassFromPower(ret.Turbine.RealPower),
-			u.Gallon,
-		)
+		ret.Condenser.CondensingRate = Volume{Val: steamMassFromPower(ret.Turbine.RealPower), Unit: u.Gallon}
 	} else {
-		ret.Condenser.CondensingRate = u.NewValue(0, u.Gallon)
+		ret.Condenser.CondensingRate = Volume{Val: 0, Unit: u.Gallon}
 	}
 
 	// Feedwater heater train: four LP stages between the
@@ -517,14 +509,13 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 	// HP heater train, so the per-stage temperature rise
 	// converges to LPTemperatureRisePerStage /
 	// HPTemperatureRisePerStage at design operating point.
-	fwIn := u.NewValue(120, u.Fahrenheit)
+	fwIn := Temperature{Val: 120, Unit: u.Fahrenheit}
 	lpSteam := ret.Turbine.ExtractionSteamFlow.Float() * MSRSixthStageExtractionFraction
 	hpSteam := ret.Turbine.ExtractionSteamFlow.Float() * MSRDesignExtractionFraction
 	lp := ret.LowPressureHeater
 	for i := 0; i < 4; i++ {
 		lp = lp.Step(fwIn.Float(), lpSteam)
-		fwIn = u.NewValue(lp.Inlet.Float()+lp.TemperatureRise.Float(),
-			u.Fahrenheit)
+		fwIn = Temperature{Val: lp.Inlet.Float()+lp.TemperatureRise.Float(), Unit: u.Fahrenheit}
 	}
 	ret.LowPressureHeater = lp
 
@@ -533,17 +524,13 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 	// feedwater system."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:62-63
 	msrDrain := ret.Turbine.MoistureSeparatorReheater.DrainFlow.Float()
-	ret.Condenser.HotwellLevel = u.NewValue(
-		ret.Condenser.HotwellLevel.Float()+msrDrain,
-		u.Gallon,
-	)
+	ret.Condenser.HotwellLevel = Volume{Val: ret.Condenser.HotwellLevel.Float()+msrDrain, Unit: u.Gallon}
 
 	// HP train: two stages.
 	hp := ret.HighPressureHeater
 	for i := 0; i < 2; i++ {
 		hp = hp.Step(fwIn.Float(), hpSteam)
-		fwIn = u.NewValue(hp.Inlet.Float()+hp.TemperatureRise.Float(),
-			u.Fahrenheit)
+		fwIn = Temperature{Val: hp.Inlet.Float()+hp.TemperatureRise.Float(), Unit: u.Fahrenheit}
 	}
 	ret.HighPressureHeater = hp
 
@@ -559,7 +546,7 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:13-14
 	hpDrain := hp.DrainLevel
 	newHDTLevel := ret.HeaterDrainTank.Level.Float() + hpDrain.Float()
-	ret.HeaterDrainTank.Level = u.NewValue(newHDTLevel, u.Gallon)
+	ret.HeaterDrainTank.Level = Volume{Val: newHDTLevel, Unit: u.Gallon}
 
 	// Minimum-flow recirculation. When the main feed pump is
 	// running but the net flow to the HP heaters is below
@@ -576,7 +563,7 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 	if !ret.MainFeedwaterPump.Running {
 		recirc := FeedwaterMinFlow.Float() * float64(TimeStep.Seconds())
 		newHDTLevel := ret.HeaterDrainTank.Level.Float() + recirc
-		ret.HeaterDrainTank.Level = u.NewValue(newHDTLevel, u.Gallon)
+		ret.HeaterDrainTank.Level = Volume{Val: newHDTLevel, Unit: u.Gallon}
 	}
 
 	return ret
@@ -1449,16 +1436,16 @@ func (p *Plant) Update() {
 func MakePlant() Plant {
 	p := Plant{nextPlant: &Plant{}}
 	p.ReactorBuilding.PlantControlRoom.AlarmSet = make(map[AlarmID]Alarm)
-	p.ReactorBuilding.SteamGenerator.Volume = u.NewValue(100000, u.Gallon)
-	p.ReactorBuilding.SteamGenerator.Water = u.NewValue(80000, u.Gallon)
+	p.ReactorBuilding.SteamGenerator.Volume = Volume{Val: 100000, Unit: u.Gallon}
+	p.ReactorBuilding.SteamGenerator.Water = Volume{Val: 80000, Unit: u.Gallon}
 	// Initialise the RCS to the design full-load operating point so
 	// the Doppler / moderator feedback loop starts in a sane state.
 	// "Reactor coolant inlet temperature: 621°F (327°C); outlet:
 	// 558°F (292°C)" — values here are inverted for RPV-side use
 	// (cold leg from SG inlet / hot leg to SG outlet) per Table 3.4-1.
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60-61
-	p.ReactorBuilding.ReactorPressureVessel.Inlet = u.NewValue(CoreReferenceInletF, u.Fahrenheit)
-	p.ReactorBuilding.ReactorPressureVessel.Outlet = u.NewValue(CoreReferenceOutletF, u.Fahrenheit)
+	p.ReactorBuilding.ReactorPressureVessel.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
+	p.ReactorBuilding.ReactorPressureVessel.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 	p.ReactorBuilding.ReactorPressureVessel.Pressure = RPVDesignPressure
 
 	// Pressurizer design defaults: 60% liquid, 40% steam
@@ -1475,23 +1462,23 @@ func MakePlant() Plant {
 	// pressurizer control loop (planned for a future plan)
 	// will manage HeatersOn and SprayOpen.
 	p.ReactorBuilding.Pressurizer = Pressurizer{
-		Volume:      u.NewValue(1500, u.Gallon),
-		Water:       u.NewValue(900, u.Gallon), // 60% liquid
+		Volume:      Volume{Val: 1500, Unit: u.Gallon},
+		Water:       Volume{Val: 900, Unit: u.Gallon}, // 60% liquid
 		Pressure:    PressurizerHeaterTarget,
-		SteamBubble: u.NewValue(300, u.Gallon),
+		SteamBubble: Volume{Val: 300, Unit: u.Gallon},
 	}
 	p.TurbineBuilding.HeaterDrainTank = Tank{
-		Level:    u.NewValue(0, u.Gallon),
-		Capacity: u.NewValue(13120, u.Gallon),
-		Part:     Part{Temperature: u.NewValue(80, u.Fahrenheit)},
+		Level:    Volume{Val: 0, Unit: u.Gallon},
+		Capacity: Volume{Val: 13120, Unit: u.Gallon},
+		Part:     Part{Temperature: Temperature{Val: 80, Unit: u.Fahrenheit}},
 	}
 	p.Outside = Outside{
 		CondensateStorageTank: Tank{
-			Level:    u.NewValue(300000, u.Gallon),
-			Capacity: u.NewValue(450000, u.Gallon),
-			Part:     Part{Temperature: u.NewValue(80, u.Fahrenheit)},
+			Level:    Volume{Val: 300000, Unit: u.Gallon},
+			Capacity: Volume{Val: 450000, Unit: u.Gallon},
+			Part:     Part{Temperature: Temperature{Val: 80, Unit: u.Fahrenheit}},
 		},
-		RiverTemp: u.NewValue(75, u.Fahrenheit),
+		RiverTemp: Temperature{Val: 75, Unit: u.Fahrenheit},
 	}
 	p.AuxiliaryBuilding.DieselGenerator = DieselGenerator{
 		Speed: 0,
@@ -1505,11 +1492,11 @@ func MakePlant() Plant {
 			// above that so we leave head-room for the 7-day
 			// continuous-rated-load requirement
 			// (page_165.txt:120-122).
-			Level:    u.NewValue(500, u.Gallon),
-			Capacity: u.NewValue(500, u.Gallon),
-			Part:     Part{Temperature: u.NewValue(80, u.Fahrenheit)},
+			Level:    Volume{Val: 500, Unit: u.Gallon},
+			Capacity: Volume{Val: 500, Unit: u.Gallon},
+			Part:     Part{Temperature: Temperature{Val: 80, Unit: u.Fahrenheit}},
 		},
-		CoolantTemp: u.NewValue(80, u.Fahrenheit),
+		CoolantTemp: Temperature{Val: 80, Unit: u.Fahrenheit},
 	}
 	p.Outside.TurbineAFWPump.DriveSource = DriveSteam
 	p.Outside.MotorAFWPump.DriveSource = DriveElectric
@@ -1655,7 +1642,7 @@ func MakePlant() Plant {
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem = CVCS{
 		Mode:                CVCSVolumeControl,
-		VCTLevel:            u.NewValue(VCTDesignLevel, u.Gallon),
+		VCTLevel:            Volume{Val: VCTDesignLevel, Unit: u.Gallon},
 		BoronConcentration:  CVCSInitialBoron,
 		ChargingPumpRunning: true,
 		LetdownValveOpen:    true,
@@ -1695,20 +1682,14 @@ func MakePlant() Plant {
 	p.ReactorBuilding.SafetyInjectionSystem = SIS{
 		Accumulator: Accumulator{
 			Pressure: SISAccumulatorPrechargePressure,
-			Level:    u.NewValue(
-				SISAccumulatorPerTankCapacity.Float()*
-					float64(SISAccumulatorCount),
-				u.Gallon,
-			),
-			Capacity: u.NewValue(
-				SISAccumulatorPerTankCapacity.Float()*
-					float64(SISAccumulatorCount),
-				u.Gallon,
-			),
+			Level:    Volume{Val: SISAccumulatorPerTankCapacity.Float()*
+					float64(SISAccumulatorCount), Unit: u.Gallon},
+			Capacity: Volume{Val: SISAccumulatorPerTankCapacity.Float()*
+					float64(SISAccumulatorCount), Unit: u.Gallon},
 		},
 		HHSIPumpRunning: false,
 		HHSISuction:     SISSuctionRWST,
-		RWSTLevel:       u.NewValue(SISRWSTCapacity, u.Gallon),
+		RWSTLevel:       Volume{Val: SISRWSTCapacity, Unit: u.Gallon},
 	}
 
 	// EFWS defaults (plans/p17_1.txt). At construction the
@@ -1780,8 +1761,8 @@ func MakePlant() Plant {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:93-96
 	p.AuxiliaryBuilding.ComponentCoolingWaterSystem = CCWS{
 		PumpRunning:    false,
-		InletTemp:      u.NewValue(CCWSInletSteadyStateTemp, u.Fahrenheit),
-		OutletTemp:     u.NewValue(CCWSInletSteadyStateTemp, u.Fahrenheit),
+		InletTemp:      Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit},
+		OutletTemp:     Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit},
 		SurgeTankLevel: CCWSSurgeTankCapacity,
 	}
 
@@ -1806,7 +1787,7 @@ func MakePlant() Plant {
 		SprayHeaderOpen:      false,
 		CSSTLevel:            CSSTCapacity,
 		SATLevel:             SATCapacity,
-		CSSTLowLevelSetpoint: u.NewValue(CSSLowLevelSetpoint, u.Gallon),
+		CSSTLowLevelSetpoint: Volume{Val: CSSLowLevelSetpoint, Unit: u.Gallon},
 		SuctionSump:          false,
 		SumpPHAdjusted:       false,
 		SprayFlow:            0,
@@ -1833,8 +1814,8 @@ func MakePlant() Plant {
 			Running:             true,
 			LowSpeed:            false,
 			HeatTransferRate:    0,
-			CoilInletTemp:       u.NewValue(RCFCSWInletTemp, u.Fahrenheit),
-			CoilOutletTemp:      u.NewValue(RCFCSWInletTemp, u.Fahrenheit),
+			CoilInletTemp:       Temperature{Val: RCFCSWInletTemp, Unit: u.Fahrenheit},
+			CoilOutletTemp:      Temperature{Val: RCFCSWInletTemp, Unit: u.Fahrenheit},
 			BackdraftDamperOpen: true,
 		}
 	}
@@ -1854,7 +1835,7 @@ func MakePlant() Plant {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_109.txt:11-12
 	p.ReactorBuilding.ContainmentBuilding = ContainmentBuilding{
 		Pressure:       AtmosphericPressure,
-		Temperature:    u.NewValue(120.0, u.Fahrenheit),
+		Temperature:    Temperature{Val: 120.0, Unit: u.Fahrenheit},
 		DesignPressure: ContainmentDesignPressure,
 		FreeVolume:     ContainmentFreeVolume,
 		// CIS defaults (plans/p23_1.txt). At construction
@@ -1927,7 +1908,7 @@ func MakePlant() Plant {
 		PumpRunning:       true,
 		StandbyRunning:    false,
 		HeaderPressure:    SFPCPressureNormalMin,
-		PoolTemp:          u.NewValue(100.0, u.Fahrenheit),
+		PoolTemp:          Temperature{Val: 100.0, Unit: u.Fahrenheit},
 		PurificationFlow:  SFPCPurificationFlow,
 	}
 
@@ -2058,7 +2039,7 @@ func MakePlant() Plant {
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-6
 	p.ReactorBuilding.ReactorMakeupControlValve = MakeupValve{
 		Open: 0,
-		Flow: u.NewValue(0, u.Gallon),
+		Flow: Volume{Val: 0, Unit: u.Gallon},
 	}
 
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration =

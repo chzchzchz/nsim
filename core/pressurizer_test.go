@@ -20,8 +20,8 @@ func TestPressurizer_HeatersDrivePressureUp(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.Pressure = 2000
 	p.ReactorBuilding.SteamGenerator.Pressure = 2000
 	p.TurbineBuilding.HeaterDrainTank.Pressure = 2000
-	p.ReactorBuilding.Pressurizer.Volume = u.NewValue(1000, u.Gallon)
-	p.ReactorBuilding.Pressurizer.Water = u.NewValue(800, u.Gallon)
+	p.ReactorBuilding.Pressurizer.Volume = Volume{Val: 1000, Unit: u.Gallon}
+	p.ReactorBuilding.Pressurizer.Water = Volume{Val: 800, Unit: u.Gallon}
 	p.ReactorBuilding.Pressurizer.Pressure = 2000
 	p.ReactorBuilding.Pressurizer.HeatersOn = true
 
@@ -45,8 +45,8 @@ func TestPressurizer_SprayDrivesPressureDown(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.Pressure = 2500
 	p.ReactorBuilding.SteamGenerator.Pressure = 2500
 	p.TurbineBuilding.HeaterDrainTank.Pressure = 2500
-	p.ReactorBuilding.Pressurizer.Volume = u.NewValue(1000, u.Gallon)
-	p.ReactorBuilding.Pressurizer.Water = u.NewValue(960, u.Gallon)
+	p.ReactorBuilding.Pressurizer.Volume = Volume{Val: 1000, Unit: u.Gallon}
+	p.ReactorBuilding.Pressurizer.Water = Volume{Val: 960, Unit: u.Gallon}
 	p.ReactorBuilding.Pressurizer.Pressure = 2500
 	p.ReactorBuilding.Pressurizer.SprayOpen = 1.0
 
@@ -71,8 +71,8 @@ func TestPressurizer_SurgeLineInflowDropsPressure(t *testing.T) {
 	p.ReactorBuilding.SafetyValve.Open = 1
 	p.ReactorBuilding.SteamGenerator.Pressure = 3000
 	p.ReactorBuilding.ReactorPressureVessel.Pressure = 3000
-	p.ReactorBuilding.Pressurizer.Volume = u.NewValue(1000, u.Gallon)
-	p.ReactorBuilding.Pressurizer.Water = u.NewValue(800, u.Gallon) // 200 gal bubble -> 2000 psi
+	p.ReactorBuilding.Pressurizer.Volume = Volume{Val: 1000, Unit: u.Gallon}
+	p.ReactorBuilding.Pressurizer.Water = Volume{Val: 800, Unit: u.Gallon} // 200 gal bubble -> 2000 psi
 	p.ReactorBuilding.Pressurizer.Pressure = 2000
 	before := p.ReactorBuilding.Pressurizer.Pressure
 
@@ -88,8 +88,8 @@ func TestPressurizer_SurgeLineInflowDropsPressure(t *testing.T) {
 // When pressure exceeds the PORV trip setpoint the valve opens.
 func TestPressurizer_PORVOpensOverTrip(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.Pressurizer.Volume = u.NewValue(1000, u.Gallon)
-	p.ReactorBuilding.Pressurizer.Water = u.NewValue(500, u.Gallon) // big bubble
+	p.ReactorBuilding.Pressurizer.Volume = Volume{Val: 1000, Unit: u.Gallon}
+	p.ReactorBuilding.Pressurizer.Water = Volume{Val: 500, Unit: u.Gallon} // big bubble
 	p.ReactorBuilding.Pressurizer.Pressure = PressurizerPORVTrip + 100
 
 	stepN(&p, 1)

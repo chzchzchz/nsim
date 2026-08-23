@@ -92,13 +92,13 @@ func (c *ContainmentSpraySystem) Step() ContainmentSpraySystem {
 		if newCSST < 0 {
 			newCSST = 0
 		}
-		ret.CSSTLevel = u.NewValue(newCSST, u.Gallon)
+		ret.CSSTLevel = Volume{Val: newCSST, Unit: u.Gallon}
 		ratio := SATCapacity.Float() / CSSTCapacity.Float()
 		newSAT := ret.SATLevel.Float() - dV*ratio
 		if newSAT < 0 {
 			newSAT = 0
 		}
-		ret.SATLevel = u.NewValue(newSAT, u.Gallon)
+		ret.SATLevel = Volume{Val: newSAT, Unit: u.Gallon}
 
 		// Sump pH adjustment latches once the CSST drains below
 		// the Lo-Lo setpoint. The simplified model only tracks

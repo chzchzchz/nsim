@@ -12,11 +12,11 @@ import (
 func newDiesel(fuelGal float64) DieselGenerator {
 	return DieselGenerator{
 		Fuel: Tank{
-			Level:    u.NewValue(fuelGal, u.Gallon),
-			Capacity: u.NewValue(500, u.Gallon),
-			Part:     Part{Temperature: u.NewValue(80, u.Fahrenheit)},
+			Level:    Volume{Val: fuelGal, Unit: u.Gallon},
+			Capacity: Volume{Val: 500, Unit: u.Gallon},
+			Part:     Part{Temperature: Temperature{Val: 80, Unit: u.Fahrenheit}},
 		},
-		CoolantTemp: u.NewValue(80, u.Fahrenheit),
+		CoolantTemp: Temperature{Val: 80, Unit: u.Fahrenheit},
 	}
 }
 
@@ -135,7 +135,7 @@ func TestDiesel_CoolantCoolsWhenServiceWaterFlows(t *testing.T) {
 	require.Equal(t, DieselRunning, p.AuxiliaryBuilding.DieselGenerator.State, "expected Running")
 
 	// Force the coolant above ambient so cooling is observable.
-	hot := u.NewValue(150, u.Fahrenheit)
+	hot := Temperature{Val: 150, Unit: u.Fahrenheit}
 	p.AuxiliaryBuilding.DieselGenerator.CoolantTemp = hot
 	initial := p.AuxiliaryBuilding.DieselGenerator.CoolantTemp.Float()
 
@@ -191,7 +191,7 @@ func TestDiesel_CoolantDoesNotCoolWhenBreakerOpen(t *testing.T) {
 	// doesn't trip on its own over-temperature: 8 s of
 	// uncooled-running drift is ~40 °F (dieselAmbientRate*100
 	// °F/s), well below the 220 °F trip threshold.
-	hot := u.NewValue(150, u.Fahrenheit)
+	hot := Temperature{Val: 150, Unit: u.Fahrenheit}
 	p.AuxiliaryBuilding.DieselGenerator.CoolantTemp = hot
 	initial := p.AuxiliaryBuilding.DieselGenerator.CoolantTemp.Float()
 

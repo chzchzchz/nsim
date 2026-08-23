@@ -56,9 +56,9 @@ func TestRCFC_StoppedUnitRejectsNoHeat(t *testing.T) {
 	r := RCFCUnit{
 		Running:             false,
 		BackdraftDamperOpen: true,
-		CoilInletTemp:       u.NewValue(RCFCSWInletTemp, u.Fahrenheit),
+		CoilInletTemp:       Temperature{Val: RCFCSWInletTemp, Unit: u.Fahrenheit},
 	}
-	r2 := r.Step(false, u.NewValue(120, u.Fahrenheit))
+	r2 := r.Step(false, Temperature{Val: 120, Unit: u.Fahrenheit})
 	assert.Zero(t, r2.HeatTransferRate,
 		"want HeatTransferRate=0 for stopped unit, got %v",
 		r2.HeatTransferRate)
@@ -79,10 +79,10 @@ func TestRCFC_LOCASensedSwitchesToLowSpeed(t *testing.T) {
 	r := RCFCUnit{
 		Running:             true,
 		LowSpeed:            false,
-		CoilInletTemp:       u.NewValue(RCFCSWInletTemp, u.Fahrenheit),
+		CoilInletTemp:       Temperature{Val: RCFCSWInletTemp, Unit: u.Fahrenheit},
 		BackdraftDamperOpen: true,
 	}
-	r2 := r.Step(true, u.NewValue(120, u.Fahrenheit))
+	r2 := r.Step(true, Temperature{Val: 120, Unit: u.Fahrenheit})
 	assert.True(t, r2.LowSpeed,
 		"want LowSpeed=true after LOCA signal, got %v", r2.LowSpeed)
 }
@@ -94,21 +94,21 @@ func TestRCFC_HeatTransferScalesWithDeltaT(t *testing.T) {
 	r := RCFCUnit{
 		Running:             true,
 		BackdraftDamperOpen: true,
-		CoilInletTemp:       u.NewValue(RCFCSWInletTemp, u.Fahrenheit),
+		CoilInletTemp:       Temperature{Val: RCFCSWInletTemp, Unit: u.Fahrenheit},
 	}
 	// Half-design ΔT (25°F above coil inlet) → half heat rating.
-	half := r.Step(false, u.NewValue(RCFCSWInletTemp+25, u.Fahrenheit))
+	half := r.Step(false, Temperature{Val: RCFCSWInletTemp+25, Unit: u.Fahrenheit})
 	assert.InDelta(t, RCFCDesignHeatRejection*0.5,
 		half.HeatTransferRate, 1e-9,
 		"want half design heat at half ΔT, got %v",
 		half.HeatTransferRate)
 	// ΔT at or below the coil approach temp → no heat transfer.
-	zero := r.Step(false, u.NewValue(RCFCSWInletTemp+5, u.Fahrenheit))
+	zero := r.Step(false, Temperature{Val: RCFCSWInletTemp+5, Unit: u.Fahrenheit})
 	assert.Zero(t, zero.HeatTransferRate,
 		"want zero heat transfer below approach temp, got %v",
 		zero.HeatTransferRate)
 	// ΔT well above design → clamped to design rating.
-	clamped := r.Step(false, u.NewValue(RCFCSWInletTemp+200, u.Fahrenheit))
+	clamped := r.Step(false, Temperature{Val: RCFCSWInletTemp+200, Unit: u.Fahrenheit})
 	assert.InDelta(t, RCFCDesignHeatRejection,
 		clamped.HeatTransferRate, 1e-9,
 		"want clamped heat at super-design ΔT, got %v",
@@ -132,7 +132,7 @@ func TestRCFC_RCFCUnitsRunningCountsRunningUnits(t *testing.T) {
 func TestContainmentBuilding_TemperatureAndPressureTrackHeatBalance(t *testing.T) {
 	c := ContainmentBuilding{
 		Pressure:       AtmosphericPressure,
-		Temperature:    u.NewValue(120, u.Fahrenheit),
+		Temperature:    Temperature{Val: 120, Unit: u.Fahrenheit},
 		DesignPressure: ContainmentDesignPressure,
 		FreeVolume:     ContainmentFreeVolume,
 	}

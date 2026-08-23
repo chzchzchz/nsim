@@ -35,10 +35,10 @@ func (h *LowPressureHeater) Step(fwInletF float64, steamFlowGalPerStep float64) 
 	ret := *h
 	dt := TimeStep
 
-	ret.Inlet = u.NewValue(fwInletF, u.Fahrenheit)
+	ret.Inlet = Temperature{Val: fwInletF, Unit: u.Fahrenheit}
 
 	if steamFlowGalPerStep <= 0 || ret.DrainValve.Open == 0 {
-		ret.TemperatureRise = u.NewValue(0, u.Fahrenheit)
+		ret.TemperatureRise = Temperature{Val: 0, Unit: u.Fahrenheit}
 		return ret
 	}
 
@@ -55,15 +55,12 @@ func (h *LowPressureHeater) Step(fwInletF float64, steamFlowGalPerStep float64) 
 	if deltaTF > LPTemperatureRisePerStage*2 {
 		deltaTF = LPTemperatureRisePerStage * 2
 	}
-	ret.TemperatureRise = u.NewValue(deltaTF, u.Fahrenheit)
+	ret.TemperatureRise = Temperature{Val: deltaTF, Unit: u.Fahrenheit}
 
 	// Drain accumulation: condensed steam goes to drain level.
 	// LP heater drains cascade back to the condenser; this
 	// accumulation is consumed by TurbineBuilding.StepWithSteam.
-	ret.DrainLevel = u.NewValue(
-		ret.DrainLevel.Float()+steamFlowGalPerStep*dt.Seconds(),
-		u.Gallon,
-	)
+	ret.DrainLevel = Volume{Val: ret.DrainLevel.Float()+steamFlowGalPerStep*dt.Seconds(), Unit: u.Gallon}
 
 	return ret
 }
@@ -85,10 +82,10 @@ func (h *HighPressureHeater) Step(fwInletF float64, steamFlowGalPerStep float64)
 	ret := *h
 	dt := TimeStep
 
-	ret.Inlet = u.NewValue(fwInletF, u.Fahrenheit)
+	ret.Inlet = Temperature{Val: fwInletF, Unit: u.Fahrenheit}
 
 	if steamFlowGalPerStep <= 0 || ret.DrainValve.Open == 0 {
-		ret.TemperatureRise = u.NewValue(0, u.Fahrenheit)
+		ret.TemperatureRise = Temperature{Val: 0, Unit: u.Fahrenheit}
 		return ret
 	}
 
@@ -101,12 +98,9 @@ func (h *HighPressureHeater) Step(fwInletF float64, steamFlowGalPerStep float64)
 	if deltaTF > HPTemperatureRisePerStage*2 {
 		deltaTF = HPTemperatureRisePerStage * 2
 	}
-	ret.TemperatureRise = u.NewValue(deltaTF, u.Fahrenheit)
+	ret.TemperatureRise = Temperature{Val: deltaTF, Unit: u.Fahrenheit}
 
-	ret.DrainLevel = u.NewValue(
-		ret.DrainLevel.Float()+steamFlowGalPerStep*dt.Seconds(),
-		u.Gallon,
-	)
+	ret.DrainLevel = Volume{Val: ret.DrainLevel.Float()+steamFlowGalPerStep*dt.Seconds(), Unit: u.Gallon}
 
 	return ret
 }

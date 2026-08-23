@@ -86,7 +86,7 @@ func TestEFWS_MotorPumpsStartOnSafetyInjection(t *testing.T) {
 func TestEFWS_TurbinePumpsStartOnLowLowSGLevel(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.SteamGenerator.Water =
-		u.NewValue(EFWSLevelLowLow-100, u.Gallon)
+		Volume{Val: EFWSLevelLowLow-100, Unit: u.Gallon}
 
 	stepN(&p, 1)
 	efws := p.AuxiliaryBuilding.EmergencyFeedwaterSystem
@@ -141,7 +141,7 @@ func TestEFWS_PrimaryTankDepletesWhilePumpsRunning(t *testing.T) {
 	dt := TimeStep.Seconds()
 	wantLossA := EFWSMotorPumpFlow.Float() * dt
 	wantLossB := EFWSMotorPumpFlow.Float() * dt
-	e2 := e.Step(u.NewValue(EFWSSecureTemp+10, u.Fahrenheit), false)
+	e2 := e.Step(Temperature{Val: EFWSSecureTemp+10, Unit: u.Fahrenheit}, false)
 	assert.InDelta(t, EFWSPrimaryTankCapacity.Float()-wantLossA,
 		e2.SubsystemA.Tank.Level.Float(), 1e-9,
 		"want SubsystemA.Tank.Level=%v after one step, got %v",
@@ -175,7 +175,7 @@ func TestEFWS_TurbinePumpDominatesTankDepletionWhenBothRunning(t *testing.T) {
 	}
 	dt := TimeStep.Seconds()
 	wantLoss := EFWSTurbinePumpFlow.Float() * dt
-	e2 := e.Step(u.NewValue(EFWSSecureTemp+10, u.Fahrenheit), false)
+	e2 := e.Step(Temperature{Val: EFWSSecureTemp+10, Unit: u.Fahrenheit}, false)
 	assert.InDelta(t, EFWSPrimaryTankCapacity.Float()-wantLoss,
 		e2.SubsystemA.Tank.Level.Float(), 1e-9,
 		"want SubsystemA.Tank.Level=%v (turbine dominates), got %v",
@@ -223,7 +223,7 @@ func TestEFWS_SecuredWhenHotLegBelow350FAndRHRSActive(t *testing.T) {
 		},
 	}
 	e2 := e.Step(
-		u.NewValue(EFWSSecureTemp, u.Fahrenheit),
+		Temperature{Val: EFWSSecureTemp, Unit: u.Fahrenheit},
 		true,
 	)
 	assert.False(t, e2.Active,

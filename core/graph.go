@@ -100,7 +100,7 @@ func (h *HighPressureHeater) level() Volume      { return zeroVolume }
 func (h *HighPressureHeater) setLevel(Volume)    {}
 func (h *HighPressureHeater) capacity() Volume   { return zeroVolume }
 
-var zeroVolume = u.NewValue(0, u.Gallon)
+var zeroVolume = Volume{Val: 0, Unit: u.Gallon}
 
 // flowCoefficient is the per-second, per-psi volume transfer rate.
 // Sized so a 100 psid drop across an open valve moves ~1 gpm — fast
@@ -242,11 +242,11 @@ func simulateFluidFlow(g *PlantGraph, dt time.Duration) {
 // vol returns a Volume with the same unit as `v` and the given numeric
 // value, falling back to gallon for a zero-unit value.
 func vol(v Volume, g float64) Volume {
-	unit := v.Unit()
+	unit := v.UnitType()
 	if unit.Name == "" {
 		unit = u.Gallon
 	}
-	return u.NewValue(g, unit)
+	return Volume{Val: g, Unit: unit}
 }
 
 // ExportDot serialises g in Graphviz DOT format.

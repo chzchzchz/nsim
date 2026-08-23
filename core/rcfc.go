@@ -91,7 +91,7 @@ func (r *RCFCUnit) Step(
 	if coilOut > airT {
 		coilOut = airT
 	}
-	ret.CoilOutletTemp = u.NewValue(coilOut, u.Fahrenheit)
+	ret.CoilOutletTemp = Temperature{Val: coilOut, Unit: u.Fahrenheit}
 
 	return ret
 }
@@ -149,7 +149,7 @@ func (c *ContainmentBuilding) Step(
 	if newTempF < -459.67 {
 		newTempF = -459.67
 	}
-	ret.Temperature = u.NewValue(newTempF, u.Fahrenheit)
+	ret.Temperature = Temperature{Val: newTempF, Unit: u.Fahrenheit}
 
 	rAir := 287.0
 	kelvin := (newTempF + 459.67) * 5.0 / 9.0

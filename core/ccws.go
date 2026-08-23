@@ -66,14 +66,8 @@ func (c *CCWS) Step() CCWS {
 	}
 	ss := CCWSInletSteadyStateTemp
 	gap := ss - ret.InletTemp.Float()
-	ret.InletTemp = u.NewValue(
-		ret.InletTemp.Float()+gap*(1.0-math.Exp(-dt/tau)),
-		u.Fahrenheit,
-	)
-	ret.OutletTemp = u.NewValue(
-		ret.InletTemp.Float()+CCHXApproachTemp.Float(),
-		u.Fahrenheit,
-	)
+	ret.InletTemp = Temperature{Val: ret.InletTemp.Float()+gap*(1.0-math.Exp(-dt/tau)), Unit: u.Fahrenheit}
+	ret.OutletTemp = Temperature{Val: ret.InletTemp.Float()+CCHXApproachTemp.Float(), Unit: u.Fahrenheit}
 
 	return ret
 }

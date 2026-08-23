@@ -49,7 +49,7 @@ func (m *MoistureSeparatorReheater) Step(
 		liquidFraction = 0
 	}
 	drainGalPerStep := liquidFraction * reheatSteamFlow.Float() * dt.Seconds() * MSRMoistureRemovalEfficiency
-	ret.DrainFlow = u.NewValue(drainGalPerStep, u.Gallon)
+	ret.DrainFlow = Volume{Val: drainGalPerStep, Unit: u.Gallon}
 
 	// Reheat temperature: simplified scaling of the >100°F
 	// superheat target by the extraction steam fraction. The MSR
@@ -61,7 +61,7 @@ func (m *MoistureSeparatorReheater) Step(
 	if reheatFraction > 1.0 {
 		reheatFraction = 1.0
 	}
-	ret.OutletTemperature = u.NewValue(inletTemp.Float()+MSRReheatTarget*reheatFraction, u.Fahrenheit)
+	ret.OutletTemperature = Temperature{Val: inletTemp.Float()+MSRReheatTarget*reheatFraction, Unit: u.Fahrenheit}
 
 	// Reheat steam pressure is passed through for state tracking.
 	ret.ReheatSteamPressure = reheatSteamPressure

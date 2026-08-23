@@ -13,7 +13,7 @@ import (
 func TestCirculatingWaterPumpRunning(t *testing.T) {
 	c := CirculatingWaterSystem{}
 	c = c.Step(true, true, CirculatingWaterPumpCount,
-		u.NewValue(CirculatingWaterSourceTempF, u.Fahrenheit), nil)
+		Temperature{Val: CirculatingWaterSourceTempF, Unit: u.Fahrenheit}, nil)
 	assert.Equal(t, CirculatingWaterPumpCount, c.PumpsInService,
 		"want PumpsInService=%d, got %d",
 		CirculatingWaterPumpCount, c.PumpsInService)
@@ -27,7 +27,7 @@ func TestCirculatingWaterPumpRunning(t *testing.T) {
 func TestCirculatingWaterPumpStopped(t *testing.T) {
 	c := CirculatingWaterSystem{}
 	c = c.Step(false, true, 0,
-		u.NewValue(CirculatingWaterSourceTempF, u.Fahrenheit), nil)
+		Temperature{Val: CirculatingWaterSourceTempF, Unit: u.Fahrenheit}, nil)
 	assert.Zero(t, c.PumpsInService,
 		"want PumpsInService=0 with pump off, got %v",
 		c.PumpsInService)
@@ -40,7 +40,7 @@ func TestCirculatingWaterPumpStopped(t *testing.T) {
 // applied).
 func TestCirculatingWaterInletTempRiver(t *testing.T) {
 	c := CirculatingWaterSystem{SourceIsCoolingTower: false}
-	source := u.NewValue(65.0, u.Fahrenheit)
+	source := Temperature{Val: 65.0, Unit: u.Fahrenheit}
 	c = c.Step(true, true, CirculatingWaterPumpCount, source, nil)
 	assert.InDelta(t, 65.0, c.InletTemp.Float(), 1e-9,
 		"want InletTemp=65 with river source, got %v",
@@ -53,7 +53,7 @@ func TestCirculatingWaterInletTempRiver(t *testing.T) {
 func TestCirculatingWaterInletTempCoolingTower(t *testing.T) {
 	c := CirculatingWaterSystem{SourceIsCoolingTower: true}
 	ct := &CoolingTower{FanRunning: true, ApproachF: 5.0}
-	source := u.NewValue(70.0, u.Fahrenheit)
+	source := Temperature{Val: 70.0, Unit: u.Fahrenheit}
 	c = c.Step(true, true, CirculatingWaterPumpCount, source, ct)
 	assert.InDelta(t, 75.0, c.InletTemp.Float(), 1e-9,
 		"want InletTemp=75 (source+approach), got %v",
@@ -66,7 +66,7 @@ func TestCirculatingWaterInletTempCoolingTower(t *testing.T) {
 func TestCirculatingWaterInletTempCoolingTowerFanOff(t *testing.T) {
 	c := CirculatingWaterSystem{SourceIsCoolingTower: true}
 	ct := &CoolingTower{FanRunning: false, ApproachF: 5.0}
-	source := u.NewValue(70.0, u.Fahrenheit)
+	source := Temperature{Val: 70.0, Unit: u.Fahrenheit}
 	c = c.Step(true, true, CirculatingWaterPumpCount, source, ct)
 	assert.InDelta(t, 70.0, c.InletTemp.Float(), 1e-9,
 		"want InletTemp=70 (raw source) with tower fan off, got %v",

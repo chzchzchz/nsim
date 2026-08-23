@@ -240,7 +240,7 @@ func TestPlantOperation_ColdShutdownResetsRamping(t *testing.T) {
 	}
 	out := po.Step(
 		ColdShutdown,
-		u.NewValue(120, u.Fahrenheit),
+		Temperature{Val: 120, Unit: u.Fahrenheit},
 		Pressure(200),
 		0,
 		CoreRatedThermalPower,
@@ -269,7 +269,7 @@ func TestPlantOperation_HotStandbyRCPCap(t *testing.T) {
 	po := PlantOperation{}
 	withRHRS := po.Step(
 		HotStandby,
-		u.NewValue(550, u.Fahrenheit),
+		Temperature{Val: 550, Unit: u.Fahrenheit},
 		Pressure(2250),
 		0,
 		CoreRatedThermalPower,
@@ -279,7 +279,7 @@ func TestPlantOperation_HotStandbyRCPCap(t *testing.T) {
 		"want HotStandbyRCPLimitActive=false when RHRS in service")
 	withoutRHRS := po.Step(
 		HotStandby,
-		u.NewValue(550, u.Fahrenheit),
+		Temperature{Val: 550, Unit: u.Fahrenheit},
 		Pressure(2250),
 		0,
 		CoreRatedThermalPower,
@@ -304,7 +304,7 @@ func TestPlantOperation_AuxToMainFeedwaterTransition(t *testing.T) {
 	po := PlantOperation{}
 	below := po.Step(
 		PowerOperation,
-		u.NewValue(580, u.Fahrenheit),
+		Temperature{Val: 580, Unit: u.Fahrenheit},
 		Pressure(2250),
 		CoreRatedThermalPower,
 		CoreRatedThermalPower,
@@ -314,7 +314,7 @@ func TestPlantOperation_AuxToMainFeedwaterTransition(t *testing.T) {
 		"want AuxFeedwaterInUse=true below 3.5%% threshold")
 	above := po.Step(
 		PowerOperation,
-		u.NewValue(580, u.Fahrenheit),
+		Temperature{Val: 580, Unit: u.Fahrenheit},
 		Pressure(2250),
 		CoreRatedThermalPower,
 		CoreRatedThermalPower,
@@ -339,7 +339,7 @@ func TestPlantOperation_PowerRaiseRateLimit(t *testing.T) {
 	// Demand delta = CoreRatedThermalPower ≫ one tick of ramp.
 	out := po.Step(
 		PowerOperation,
-		u.NewValue(580, u.Fahrenheit),
+		Temperature{Val: 580, Unit: u.Fahrenheit},
 		Pressure(2250),
 		0,
 		CoreRatedThermalPower,
@@ -360,7 +360,7 @@ func TestPlantOperation_PowerOperationSettles(t *testing.T) {
 		TimeStep.Seconds() / 2
 	out := po.Step(
 		PowerOperation,
-		u.NewValue(580, u.Fahrenheit),
+		Temperature{Val: 580, Unit: u.Fahrenheit},
 		Pressure(2250),
 		Watts(float64(CoreRatedThermalPower)-tinyDelta),
 		CoreRatedThermalPower,
@@ -384,7 +384,7 @@ func TestPlantOperation_PowerLowerRateLimit(t *testing.T) {
 	po := PlantOperation{}
 	out := po.Step(
 		PowerOperation,
-		u.NewValue(580, u.Fahrenheit),
+		Temperature{Val: 580, Unit: u.Fahrenheit},
 		Pressure(2250),
 		CoreRatedThermalPower,
 		CoreRatedThermalPower,
@@ -413,7 +413,7 @@ func TestPlantOperation_LoadFollow15To100(t *testing.T) {
 	for _, frac := range []float64{0.15, 0.50, 1.00} {
 		out := po.Step(
 			PowerOperation,
-			u.NewValue(580, u.Fahrenheit),
+			Temperature{Val: 580, Unit: u.Fahrenheit},
 			Pressure(2250),
 			Watts(frac*float64(CoreRatedThermalPower)),
 			CoreRatedThermalPower,

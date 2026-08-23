@@ -97,14 +97,14 @@ func (c *CVCS) Step(
 	if ret.ChargingPumpRunning {
 		ret.ChargingFlow = CVCSDesignChargingFlow
 	} else {
-		ret.ChargingFlow = u.NewValue(0, u.Gallon)
+		ret.ChargingFlow = Volume{Val: 0, Unit: u.Gallon}
 	}
 
 	// Letdown flow depends on valve state.
 	if ret.LetdownValveOpen && ret.Mode != CVCSLetdown {
 		ret.LetdownFlow = CVCSDesignLetdownFlow
 	} else {
-		ret.LetdownFlow = u.NewValue(0, u.Gallon)
+		ret.LetdownFlow = Volume{Val: 0, Unit: u.Gallon}
 	}
 
 	// VCT level accumulation: makeup enters, charging-pump
@@ -121,7 +121,7 @@ func (c *CVCS) Step(
 	if newVCT < 0 {
 		newVCT = 0
 	}
-	ret.VCTLevel = u.NewValue(newVCT, u.Gallon)
+	ret.VCTLevel = Volume{Val: newVCT, Unit: u.Gallon}
 
 	// VCT high-level condition: divert BTRS outflow to BRS
 	// holdup tanks. Charging and letdown are halted so VCT
@@ -133,8 +133,8 @@ func (c *CVCS) Step(
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
 	if newVCT > VCTHighLevel {
 		ret.Mode = CVCSLetdown
-		ret.ChargingFlow = u.NewValue(0, u.Gallon)
-		ret.LetdownFlow = u.NewValue(0, u.Gallon)
+		ret.ChargingFlow = Volume{Val: 0, Unit: u.Gallon}
+		ret.LetdownFlow = Volume{Val: 0, Unit: u.Gallon}
 		return ret
 	}
 
@@ -157,8 +157,8 @@ func (c *CVCS) Step(
 		// Operator must correct VCT level (e.g. manual
 		// blowdown or BRS recycle); the CVCS does not exit
 		// this mode on its own.
-		ret.ChargingFlow = u.NewValue(0, u.Gallon)
-		ret.LetdownFlow = u.NewValue(0, u.Gallon)
+		ret.ChargingFlow = Volume{Val: 0, Unit: u.Gallon}
+		ret.LetdownFlow = Volume{Val: 0, Unit: u.Gallon}
 	case CVCSVolumeControl:
 		// Charging/letdown balance to maintain pressurizer
 		// level; the imbalance is the makeup that reaches the

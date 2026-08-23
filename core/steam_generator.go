@@ -110,7 +110,7 @@ const (
 // giving a volumetric flow in ft^3/hr which we then express in
 // gallons. The exact conversion is not load-bearing — the value
 // drives the boil-rate integration only.
-var SteamGeneratorFullLoadSteamFlow = u.NewValue(480*2.2046*3600*0.47/7.4805, u.Gallon)
+var SteamGeneratorFullLoadSteamFlow = Volume{Val: 480*2.2046*3600*0.47/7.4805, Unit: u.Gallon}
 
 // SteamGeneratorFullLoadHeatInput is the primary-to-secondary heat
 // flux that vaporises 480 kg/s of water at LatentHeatOfSteamization.

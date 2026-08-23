@@ -56,7 +56,7 @@ func (t *RHRSTrain) Step(
 	// without power" without operator action.
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:33-36
 	if !ret.Pump.Running || !ret.DriveReady {
-		ret.ReturnFlow = u.NewValue(0, u.Gallon)
+		ret.ReturnFlow = Volume{Val: 0, Unit: u.Gallon}
 		ret.HeatExchanger.HeatTransferRate = 0
 		return ret
 	}
@@ -68,14 +68,14 @@ func (t *RHRSTrain) Step(
 
 	minFlow := RHRSPumpMinFlowGalPerStep * dt.Seconds()
 	if !suctionOpen || !ret.WarmupComplete {
-		ret.ReturnFlow = u.NewValue(minFlow, u.Gallon)
+		ret.ReturnFlow = Volume{Val: minFlow, Unit: u.Gallon}
 		ret.HeatExchanger.HeatTransferRate = 0
 		return ret
 	}
 
 	hxFlow := RHRSTrainDesignFlow * (1.0 - ret.BypassValve.Open) * dt.Seconds()
 	bypassFlow := RHRSTrainDesignFlow * ret.BypassValve.Open * dt.Seconds()
-	ret.ReturnFlow = u.NewValue(hxFlow+bypassFlow+minFlow, u.Gallon)
+	ret.ReturnFlow = Volume{Val: hxFlow+bypassFlow+minFlow, Unit: u.Gallon}
 
 	rcsOut := rcsHotTemp.Float()
 	ccwIn := ccwInletTemp.Float()

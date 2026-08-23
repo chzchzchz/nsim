@@ -35,8 +35,8 @@ func TestCCWS_InitialStateIsIdle(t *testing.T) {
 func TestCCWS_PumpsOffFreezeInletAndOutletEqualInlet(t *testing.T) {
 	c := CCWS{
 		PumpRunning: false,
-		InletTemp:   u.NewValue(110.0, u.Fahrenheit),
-		OutletTemp:  u.NewValue(120.0, u.Fahrenheit),
+		InletTemp:   Temperature{Val: 110.0, Unit: u.Fahrenheit},
+		OutletTemp:  Temperature{Val: 120.0, Unit: u.Fahrenheit},
 	}
 	c2 := c.Step()
 	assert.InDelta(t, 110.0, c2.InletTemp.Float(), 1e-9,
@@ -62,8 +62,8 @@ func TestCCWS_PumpsRunningInletRecoversTowardSetpoint(t *testing.T) {
 	c := CCWS{
 		PumpRunning: true,
 		DriveReady:  true,
-		InletTemp:   u.NewValue(120.0, u.Fahrenheit),
-		OutletTemp:  u.NewValue(120.0, u.Fahrenheit),
+		InletTemp:   Temperature{Val: 120.0, Unit: u.Fahrenheit},
+		OutletTemp:  Temperature{Val: 120.0, Unit: u.Fahrenheit},
 	}
 	c2 := c.Step()
 	gap := 120.0 - CCWSInletSteadyStateTemp
@@ -87,8 +87,8 @@ func TestCCWS_PumpsRunningOutletAboveInletByApproachTemp(t *testing.T) {
 	c := CCWS{
 		PumpRunning: true,
 		DriveReady:  true,
-		InletTemp:   u.NewValue(110.0, u.Fahrenheit),
-		OutletTemp:  u.NewValue(110.0, u.Fahrenheit),
+		InletTemp:   Temperature{Val: 110.0, Unit: u.Fahrenheit},
+		OutletTemp:  Temperature{Val: 110.0, Unit: u.Fahrenheit},
 	}
 	c2 := c.Step()
 	assert.InDelta(t, c2.InletTemp.Float()+CCHXApproachTemp.Float(),
@@ -112,8 +112,8 @@ func TestCCWS_InletRecoversWithinFourHours(t *testing.T) {
 	c := CCWS{
 		PumpRunning: true,
 		DriveReady:  true,
-		InletTemp:   u.NewValue(120.0, u.Fahrenheit),
-		OutletTemp:  u.NewValue(120.0, u.Fahrenheit),
+		InletTemp:   Temperature{Val: 120.0, Unit: u.Fahrenheit},
+		OutletTemp:  Temperature{Val: 120.0, Unit: u.Fahrenheit},
 	}
 	// 4 hours of simulated time at 1 ms per step.
 	steps := int(4 * time.Hour / TimeStep)

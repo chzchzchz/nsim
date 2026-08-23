@@ -13,7 +13,7 @@ import (
 func TestWritePlantSVG_ValidXML(t *testing.T) {
 	p := core.MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.Outlet =
-		u.NewValue(621, u.Fahrenheit)
+		core.Temperature{Val: 621, Unit: u.Fahrenheit}
 	var b strings.Builder
 	if err := WritePlantSVG(&b, &p); err != nil {
 		t.Fatalf("WritePlantSVG: %v", err)

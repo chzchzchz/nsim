@@ -68,8 +68,8 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 	ret := *s
 	dt := TimeStep
 
-	ret.AccumulatorInjectionFlow = u.NewValue(0, u.Gallon)
-	ret.HHSIInjectionFlow = u.NewValue(0, u.Gallon)
+	ret.AccumulatorInjectionFlow = Volume{Val: 0, Unit: u.Gallon}
+	ret.HHSIInjectionFlow = Volume{Val: 0, Unit: u.Gallon}
 
 	// 1) Accumulator discharge.
 	//
@@ -90,11 +90,9 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 			newLevel = 0
 			ret.Accumulator.Discharging = false
 		}
-		ret.Accumulator.Level = u.NewValue(newLevel, u.Gallon)
-		ret.AccumulatorInjectionFlow = u.NewValue(
-			SISAccumulatorDischargeRate.Float()*
-				float64(SISAccumulatorCount), u.Gallon,
-		)
+		ret.Accumulator.Level = Volume{Val: newLevel, Unit: u.Gallon}
+		ret.AccumulatorInjectionFlow = Volume{Val: SISAccumulatorDischargeRate.Float()*
+				float64(SISAccumulatorCount), Unit: u.Gallon}
 	}
 
 	// 2) RWST depletion under HHSI injection.
@@ -111,14 +109,14 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 		if newRWST < 0 {
 			newRWST = 0
 		}
-		ret.RWSTLevel = u.NewValue(newRWST, u.Gallon)
+		ret.RWSTLevel = Volume{Val: newRWST, Unit: u.Gallon}
 		netFlow := SISHHSIDesignFlow.Float() *
 			(1.0 - SISHHSIMiniFlowFraction)
-		ret.HHSIInjectionFlow = u.NewValue(netFlow, u.Gallon)
+		ret.HHSIInjectionFlow = Volume{Val: netFlow, Unit: u.Gallon}
 	} else if ret.HHSIPumpRunning && ret.HHSIDriveReady && ret.HHSISuction == SISSuctionSump {
 		netFlow := SISHHSIDesignFlow.Float() *
 			(1.0 - SISHHSIMiniFlowFraction)
-		ret.HHSIInjectionFlow = u.NewValue(netFlow, u.Gallon)
+		ret.HHSIInjectionFlow = Volume{Val: netFlow, Unit: u.Gallon}
 	}
 
 	// 3) Recirculation switchover.

@@ -89,7 +89,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	if outletF < 0 {
 		outletF = 0
 	}
-	ret.Outlet = u.NewValue(outletF, u.Fahrenheit)
+	ret.Outlet = Temperature{Val: outletF, Unit: u.Fahrenheit}
 
 	// The cold-leg / downcomer inlet temperature only blends
 	// with the outlet when the RCP is actually spinning. The
@@ -109,7 +109,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 		if inletF < 0 {
 			inletF = 0
 		}
-		ret.Inlet = u.NewValue(inletF, u.Fahrenheit)
+		ret.Inlet = Temperature{Val: inletF, Unit: u.Fahrenheit}
 	}
 
 	// 3) Pressure relaxes toward the RPV design pressure. The

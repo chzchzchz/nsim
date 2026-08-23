@@ -179,8 +179,7 @@ func TestPlant_RPS_LatchesReactorPressureVesselTrip(t *testing.T) {
 	// Drive two trip conditions: low steamline pressure and low
 	// SG level.
 	p.ReactorBuilding.SteamGenerator.Pressure = 100
-	p.ReactorBuilding.SteamGenerator.Water = u.NewValue(
-		0.05*p.ReactorBuilding.SteamGenerator.Volume.Float(), u.Gallon)
+	p.ReactorBuilding.SteamGenerator.Water = Volume{Val: 0.05*p.ReactorBuilding.SteamGenerator.Volume.Float(), Unit: u.Gallon}
 	p.Step()
 	p.Update()
 	assert.True(t, p.ReactorBuilding.ReactorPressureVessel.Trip,

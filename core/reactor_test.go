@@ -15,8 +15,8 @@ func TestReactor_RunningProducesRatedPower(t *testing.T) {
 	r := ReactorPressureVessel{
 		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
 		ThermalPower: CoreRatedThermalPower,
-		Inlet:        u.NewValue(CoreReferenceInletF, u.Fahrenheit),
-		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
+		Inlet:        Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
+		Outlet:       Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
 	}
 	for i := 0; i < int(time.Second/TimeStep); i++ {
 		r = r.Step(RCPRatedSpeed)
@@ -40,8 +40,8 @@ func TestReactor_TripDropsPowerToDecayHeat(t *testing.T) {
 	r := ReactorPressureVessel{
 		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
 		ThermalPower: CoreRatedThermalPower,
-		Inlet:        u.NewValue(CoreReferenceInletF, u.Fahrenheit),
-		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
+		Inlet:        Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
+		Outlet:       Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
 	}
 	for i := 0; i < int(time.Second/TimeStep); i++ {
 		r = r.Step(RCPRatedSpeed)
@@ -80,14 +80,14 @@ func TestReactor_DopplerShiftsReactivityWithBoron(t *testing.T) {
 	// BOL: high boron, small positive net coefficient.
 	bol := ReactorPressureVessel{
 		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
-		Outlet:       u.NewValue(float64(CoreDopplerReferenceTempF)+30, u.Fahrenheit),
+		Outlet:       Temperature{Val: float64(CoreDopplerReferenceTempF)+30, Unit: u.Fahrenheit},
 		ThermalPower: CoreRatedThermalPower,
 	}
 	bol = bol.Step(RCPRatedSpeed)
 	// EOL: low boron, more negative net coefficient.
 	eol := ReactorPressureVessel{
 		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: 10},
-		Outlet:       u.NewValue(float64(CoreDopplerReferenceTempF)+30, u.Fahrenheit),
+		Outlet:       Temperature{Val: float64(CoreDopplerReferenceTempF)+30, Unit: u.Fahrenheit},
 		ThermalPower: CoreRatedThermalPower,
 	}
 	eol = eol.Step(RCPRatedSpeed)
@@ -109,8 +109,8 @@ func TestReactor_TripWithRodsOutKeepsDecayHeatFloor(t *testing.T) {
 	r := ReactorPressureVessel{
 		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
 		Trip:         true,
-		Inlet:        u.NewValue(CoreReferenceInletF, u.Fahrenheit),
-		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
+		Inlet:        Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
+		Outlet:       Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
 		ThermalPower: CoreRatedThermalPower,
 	}
 	for i := 0; i < int(5*time.Minute/TimeStep); i++ {
@@ -132,7 +132,7 @@ func TestReactor_TripWithRodsOutKeepsDecayHeatFloor(t *testing.T) {
 func TestReactor_OutletAtReferenceGivesZeroDoppler(t *testing.T) {
 	r := ReactorPressureVessel{
 		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
-		Outlet:       u.NewValue(float64(CoreDopplerReferenceTempF), u.Fahrenheit),
+		Outlet:       Temperature{Val: float64(CoreDopplerReferenceTempF), Unit: u.Fahrenheit},
 		ThermalPower: 0,
 	}
 	r = r.Step(RCPRatedSpeed)
@@ -148,8 +148,8 @@ func TestReactor_OutletTracksThermalPower(t *testing.T) {
 	r := ReactorPressureVessel{
 		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
 		ThermalPower: CoreRatedThermalPower,
-		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
-		Inlet:        u.NewValue(CoreReferenceInletF, u.Fahrenheit),
+		Outlet:       Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
+		Inlet:        Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
 	}
 	// Pre-warm the outlet at the design reference so the simplified
 	// model is on the right side of the operating curve. With Outlet
@@ -169,8 +169,8 @@ func TestReactor_OutletDropsAfterTrip(t *testing.T) {
 	r := ReactorPressureVessel{
 		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
 		ThermalPower: CoreRatedThermalPower,
-		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
-		Inlet:        u.NewValue(CoreReferenceInletF, u.Fahrenheit),
+		Outlet:       Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
+		Inlet:        Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
 	}
 	// Settle at full power briefly so Outlet converges to ~621°F.
 	for i := 0; i < int(time.Second/TimeStep); i++ {
@@ -192,8 +192,8 @@ func TestReactor_InletFrozenWhenRCPOff(t *testing.T) {
 	r := ReactorPressureVessel{
 		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
 		ThermalPower: CoreRatedThermalPower,
-		Inlet:        u.NewValue(420, u.Fahrenheit),
-		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
+		Inlet:        Temperature{Val: 420, Unit: u.Fahrenheit},
+		Outlet:       Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
 	}
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {
 		r = r.Step(0) // RCP off
@@ -210,8 +210,8 @@ func TestReactor_InletFrozenWhenRCPSpeedZero(t *testing.T) {
 	r := ReactorPressureVessel{
 		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
 		ThermalPower: CoreRatedThermalPower,
-		Inlet:        u.NewValue(420, u.Fahrenheit),
-		Outlet:       u.NewValue(CoreReferenceOutletF, u.Fahrenheit),
+		Inlet:        Temperature{Val: 420, Unit: u.Fahrenheit},
+		Outlet:       Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
 	}
 	// Step with rcpSpeed = 0 (pump latch on, but rotor coasting).
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {

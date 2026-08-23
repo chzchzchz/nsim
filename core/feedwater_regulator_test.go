@@ -158,7 +158,7 @@ func TestPlant_FeedwaterRegulatorDrivesControlValve(t *testing.T) {
 	p.TurbineBuilding.MainFeedwaterPump.Running = true
 	sgVol := p.ReactorBuilding.SteamGenerator.Volume.Float()
 	p.ReactorBuilding.SteamGenerator.Water =
-		u.NewValue(0.4*sgVol, u.Gallon)
+		Volume{Val: 0.4*sgVol, Unit: u.Gallon}
 	p.Step()
 	p.Update()
 	reg := p.TurbineBuilding.FeedwaterRegulator

@@ -138,8 +138,8 @@ func TestCSS_SumpPHAdjustedLatchesBelowLoLo(t *testing.T) {
 		Running:         true,
 		DriveReady:      true,
 		SprayHeaderOpen: true,
-		CSSTLevel:       u.NewValue(CSSLowLevelSetpoint-10, u.Gallon),
-		SATLevel:        u.NewValue(SATCapacity.Float()/CSSTCapacity.Float()*(CSSLowLevelSetpoint-10), u.Gallon),
+		CSSTLevel:       Volume{Val: CSSLowLevelSetpoint-10, Unit: u.Gallon},
+		SATLevel:        Volume{Val: SATCapacity.Float()/CSSTCapacity.Float()*(CSSLowLevelSetpoint-10), Unit: u.Gallon},
 	}
 	c2 := c.Step()
 	assert.True(t, c2.SumpPHAdjusted,
@@ -163,8 +163,8 @@ func TestCSS_SwitchoverToSumpStopsCSSTDrain(t *testing.T) {
 		Running:         true,
 		DriveReady:      true,
 		SprayHeaderOpen: true,
-		CSSTLevel:       u.NewValue(CSSLowLevelSetpoint-10, u.Gallon),
-		SATLevel:        u.NewValue(100, u.Gallon),
+		CSSTLevel:       Volume{Val: CSSLowLevelSetpoint-10, Unit: u.Gallon},
+		SATLevel:        Volume{Val: 100, Unit: u.Gallon},
 	}
 	c2 := c.Step()
 	assert.True(t, c2.SuctionSump,

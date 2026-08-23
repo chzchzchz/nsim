@@ -129,7 +129,7 @@ func depleteEFWSSubsystemTank(sub EFWSSubsystem, dt time.Duration) EFWSSubsystem
 	if newLevel < 0 {
 		newLevel = 0
 	}
-	sub.Tank.Level = u.NewValue(newLevel, u.Gallon)
+	sub.Tank.Level = Volume{Val: newLevel, Unit: u.Gallon}
 	return sub
 }
 
@@ -176,9 +176,9 @@ func (sub *EFWSSubsystem) EFWSSubsystemFlow() float64 {
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:23-26
 func (e *EFWS) EFWSFeedwaterFlow() Volume {
 	if !e.Active {
-		return u.NewValue(0, u.Gallon)
+		return Volume{Val: 0, Unit: u.Gallon}
 	}
 	a := e.SubsystemA.EFWSSubsystemFlow()
 	b := e.SubsystemB.EFWSSubsystemFlow()
-	return u.NewValue(a+b, u.Gallon)
+	return Volume{Val: a+b, Unit: u.Gallon}
 }

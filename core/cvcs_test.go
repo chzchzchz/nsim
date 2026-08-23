@@ -18,11 +18,11 @@ import (
 func TestCVCS_VolumeControlKeepsBoronSteady(t *testing.T) {
 	c := (&CVCS{
 		Mode:                CVCSVolumeControl,
-		VCTLevel:            u.NewValue(VCTDesignLevel, u.Gallon),
+		VCTLevel:            Volume{Val: VCTDesignLevel, Unit: u.Gallon},
 		BoronConcentration:  CVCSInitialBoron,
 		ChargingPumpRunning: true,
 		LetdownValveOpen:    true,
-	}).Step(u.NewValue(0, u.Gallon))
+	}).Step(Volume{Val: 0, Unit: u.Gallon})
 	assert.Equal(t, CVCSInitialBoron, c.BoronConcentration,
 		"want BoronConcentration unchanged in VolumeControl, got %v",
 		c.BoronConcentration)
@@ -44,12 +44,12 @@ func TestCVCS_VolumeControlKeepsBoronSteady(t *testing.T) {
 func TestCVCS_BorationIncreasesBoronConcentration(t *testing.T) {
 	c := (&CVCS{
 		Mode:                         CVCSBoration,
-		VCTLevel:                     u.NewValue(VCTDesignLevel, u.Gallon),
+		VCTLevel:                     Volume{Val: VCTDesignLevel, Unit: u.Gallon},
 		BoronConcentration:           CVCSInitialBoron,
 		BTRSRecirculationPumpRunning: true,
 		ChargingPumpRunning:          true,
 		LetdownValveOpen:             true,
-	}).Step(u.NewValue(0, u.Gallon))
+	}).Step(Volume{Val: 0, Unit: u.Gallon})
 	assert.InDelta(t, CVCSBorationRate, c.BorationRate, 1e-9,
 		"want BorationRate=CVCSBorationRate, got %v", c.BorationRate)
 	assert.Greater(t, c.BoronConcentration, CVCSInitialBoron,
@@ -69,12 +69,12 @@ func TestCVCS_BorationIncreasesBoronConcentration(t *testing.T) {
 func TestCVCS_DilutionDecreasesBoronConcentration(t *testing.T) {
 	c := (&CVCS{
 		Mode:                         CVCSDilution,
-		VCTLevel:                     u.NewValue(VCTDesignLevel, u.Gallon),
+		VCTLevel:                     Volume{Val: VCTDesignLevel, Unit: u.Gallon},
 		BoronConcentration:           CVCSInitialBoron,
 		BTRSRecirculationPumpRunning: true,
 		ChargingPumpRunning:          true,
 		LetdownValveOpen:             true,
-	}).Step(u.NewValue(0, u.Gallon))
+	}).Step(Volume{Val: 0, Unit: u.Gallon})
 	assert.InDelta(t, CVCSDilutionRate, c.DilutionRate, 1e-9,
 		"want DilutionRate=CVCSDilutionRate, got %v", c.DilutionRate)
 	assert.Less(t, c.BoronConcentration, CVCSInitialBoron,
@@ -95,11 +95,11 @@ func TestCVCS_DilutionDecreasesBoronConcentration(t *testing.T) {
 func TestCVCS_HighVCTLevelSwitchesToLetdownMode(t *testing.T) {
 	c := (&CVCS{
 		Mode:                CVCSVolumeControl,
-		VCTLevel:            u.NewValue(VCTHighLevel+1, u.Gallon),
+		VCTLevel:            Volume{Val: VCTHighLevel+1, Unit: u.Gallon},
 		BoronConcentration:  CVCSInitialBoron,
 		ChargingPumpRunning: true,
 		LetdownValveOpen:    true,
-	}).Step(u.NewValue(0, u.Gallon))
+	}).Step(Volume{Val: 0, Unit: u.Gallon})
 	assert.Equal(t, CVCSLetdown, c.Mode,
 		"want CVCSLetdown with VCTLevel>VCTHighLevel, got %v", c.Mode)
 	assert.Zero(t, c.ChargingFlow.Float(),
@@ -124,13 +124,13 @@ func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 	// Charging pump only.
 	c := CVCS{
 		Mode:                CVCSVolumeControl,
-		VCTLevel:            u.NewValue(initial, u.Gallon),
+		VCTLevel:            Volume{Val: initial, Unit: u.Gallon},
 		BoronConcentration:  CVCSInitialBoron,
 		ChargingPumpRunning: true,
 		LetdownValveOpen:    true,
 	}
 	for i := 0; i < steps; i++ {
-		c = c.Step(u.NewValue(0, u.Gallon))
+		c = c.Step(Volume{Val: 0, Unit: u.Gallon})
 	}
 	wantLoss := CVCSDesignChargingFlow.Float() * 1.0
 	assert.InDelta(t, initial-wantLoss, c.VCTLevel.Float(), 1e-3,
@@ -140,14 +140,14 @@ func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 	// Now with BTRS pump also running.
 	c = CVCS{
 		Mode:                         CVCSBoration,
-		VCTLevel:                     u.NewValue(initial, u.Gallon),
+		VCTLevel:                     Volume{Val: initial, Unit: u.Gallon},
 		BoronConcentration:           CVCSInitialBoron,
 		BTRSRecirculationPumpRunning: true,
 		ChargingPumpRunning:          true,
 		LetdownValveOpen:             true,
 	}
 	for i := 0; i < steps; i++ {
-		c = c.Step(u.NewValue(0, u.Gallon))
+		c = c.Step(Volume{Val: 0, Unit: u.Gallon})
 	}
 	wantLossBoth := (CVCSDesignChargingFlow.Float() + VCTBTRSCirculation) * 1.0
 	assert.InDelta(t, initial-wantLossBoth, c.VCTLevel.Float(), 1e-3,
@@ -270,11 +270,11 @@ func TestCVCS_ChargingPumpIndependentOfRCP(t *testing.T) {
 	// Charging pump on, RCP off.
 	c := (&CVCS{
 		Mode:                CVCSVolumeControl,
-		VCTLevel:            u.NewValue(VCTDesignLevel, u.Gallon),
+		VCTLevel:            Volume{Val: VCTDesignLevel, Unit: u.Gallon},
 		BoronConcentration:  CVCSInitialBoron,
 		ChargingPumpRunning: true,
 		LetdownValveOpen:    true,
-	}).Step(u.NewValue(0, u.Gallon))
+	}).Step(Volume{Val: 0, Unit: u.Gallon})
 	assert.InDelta(t, CVCSDesignChargingFlow.Float(),
 		c.ChargingFlow.Float(), 1e-9,
 		"want ChargingFlow>0 with ChargingPumpRunning=true regardless of RCP")
@@ -282,11 +282,11 @@ func TestCVCS_ChargingPumpIndependentOfRCP(t *testing.T) {
 	// Charging pump off, RCP would be on.
 	c = (&CVCS{
 		Mode:                CVCSVolumeControl,
-		VCTLevel:            u.NewValue(VCTDesignLevel, u.Gallon),
+		VCTLevel:            Volume{Val: VCTDesignLevel, Unit: u.Gallon},
 		BoronConcentration:  CVCSInitialBoron,
 		ChargingPumpRunning: false,
 		LetdownValveOpen:    true,
-	}).Step(u.NewValue(0, u.Gallon))
+	}).Step(Volume{Val: 0, Unit: u.Gallon})
 	assert.Zero(t, c.ChargingFlow.Float(),
 		"want ChargingFlow=0 with ChargingPumpRunning=false regardless of RCP")
 }

@@ -74,9 +74,7 @@ func (c *CirculatingWaterSystem) Step(
 		if approach <= 0 {
 			approach = CoolingTowerApproachF
 		}
-		ret.InletTemp = u.NewValue(
-			sourceTemp.Float()+approach, u.Fahrenheit,
-		)
+		ret.InletTemp = Temperature{Val: sourceTemp.Float()+approach, Unit: u.Fahrenheit}
 	}
 
 	// The condenser Step will overwrite OutletTemp with the

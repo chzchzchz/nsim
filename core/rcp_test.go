@@ -107,13 +107,13 @@ func TestRCP_HeadScalesWithVelocity(t *testing.T) {
 	runFlow := func(vel Velocity) float64 {
 		from := &Tank{
 			Pressure: Pressure(0),
-			Level:    u.NewValue(1e9, u.Gallon), // effectively infinite source
-			Capacity: u.NewValue(1e9, u.Gallon),
+			Level:    Volume{Val: 1e9, Unit: u.Gallon}, // effectively infinite source
+			Capacity: Volume{Val: 1e9, Unit: u.Gallon},
 		}
 		to := &Tank{
 			Pressure: Pressure(0),
-			Level:    u.NewValue(0, u.Gallon),
-			Capacity: u.NewValue(1e9, u.Gallon),
+			Level:    Volume{Val: 0, Unit: u.Gallon},
+			Capacity: Volume{Val: 1e9, Unit: u.Gallon},
 		}
 		pump := &Pump{
 			Running:  true,

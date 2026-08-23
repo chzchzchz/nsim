@@ -103,7 +103,7 @@ func (p *Pressurizer) Step(porv *Valve) Pressurizer {
 		waterVol = newWater
 		bubble = maxBubble
 	}
-	ret.SteamBubble = u.NewValue(bubble, u.Gallon)
+	ret.SteamBubble = Volume{Val: bubble, Unit: u.Gallon}
 	ret.Pressure = Pressure(float64(PressurizerBasePressure) + bubble*PressurizerBubbleStiffness)
 
 	// 4) Cooldown path. "All pressurizer heaters are turned off and
@@ -126,7 +126,7 @@ func (p *Pressurizer) Step(porv *Valve) Pressurizer {
 				newWater = totalVol
 			}
 			ret.Water = vol(ret.Water, newWater)
-			ret.SteamBubble = u.NewValue(totalVol-newWater, u.Gallon)
+			ret.SteamBubble = Volume{Val: totalVol-newWater, Unit: u.Gallon}
 			ret.Pressure = Pressure(float64(PressurizerBasePressure) +
 				(totalVol-newWater)*PressurizerBubbleStiffness)
 		}

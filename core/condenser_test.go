@@ -17,7 +17,7 @@ func TestCondenser_VacuumPumpsRestoreVacuum(t *testing.T) {
 	c := Condenser{
 		Pressure:           AtmosphericPressure,
 		VacuumPumpRunning:  true,
-		CirculatingWaterIn: u.NewValue(CondenserDesignCWIn, u.Fahrenheit),
+		CirculatingWaterIn: Temperature{Val: CondenserDesignCWIn, Unit: u.Fahrenheit},
 	}
 	for i := 0; i < int(5*time.Second/TimeStep); i++ {
 		c = c.Step(c.CirculatingWaterIn, true, true)
@@ -34,7 +34,7 @@ func TestCondenser_NoCWDegradesToAtmospheric(t *testing.T) {
 	c := Condenser{
 		Pressure:           CondenserDesignVacuum,
 		VacuumPumpRunning:  true,
-		CirculatingWaterIn: u.NewValue(CondenserDesignCWIn, u.Fahrenheit),
+		CirculatingWaterIn: Temperature{Val: CondenserDesignCWIn, Unit: u.Fahrenheit},
 	}
 	for i := 0; i < int(30*time.Second/TimeStep); i++ {
 		c = c.Step(c.CirculatingWaterIn, true, false)
@@ -53,8 +53,8 @@ func TestCondenser_HighSteamLoadOpensDumpValve(t *testing.T) {
 		Condenser: Condenser{
 			Pressure:           CondenserDesignVacuum,
 			VacuumPumpRunning:  true,
-			CirculatingWaterIn: u.NewValue(CondenserDesignCWIn, u.Fahrenheit),
-			CondensingRate:     u.NewValue(CondenserDesignSteamLoadGalPer*2, u.Gallon),
+			CirculatingWaterIn: Temperature{Val: CondenserDesignCWIn, Unit: u.Fahrenheit},
+			CondensingRate:     Volume{Val: CondenserDesignSteamLoadGalPer*2, Unit: u.Gallon},
 		},
 		Turbine: Turbine{StopValve: Valve{Open: 1.0}, DumpValve: Valve{Open: 0}},
 	}
@@ -73,12 +73,12 @@ func TestCondenser_LevelAccumulatesCondensingRate(t *testing.T) {
 	c := Condenser{
 		Pressure:           CondenserDesignVacuum,
 		VacuumPumpRunning:  true,
-		CirculatingWaterIn: u.NewValue(CondenserDesignCWIn, u.Fahrenheit),
+		CirculatingWaterIn: Temperature{Val: CondenserDesignCWIn, Unit: u.Fahrenheit},
 	}
 	const perStep = 5.0
 	const steps = 100
 	for i := 0; i < steps; i++ {
-		c.CondensingRate = u.NewValue(perStep, u.Gallon)
+		c.CondensingRate = Volume{Val: perStep, Unit: u.Gallon}
 		c = c.Step(c.CirculatingWaterIn, true, true)
 	}
 	want := perStep * float64(steps)
@@ -100,12 +100,12 @@ func TestCondenser_HotwellAccumulates(t *testing.T) {
 	c := Condenser{
 		Pressure:           CondenserDesignVacuum,
 		VacuumPumpRunning:  true,
-		CirculatingWaterIn: u.NewValue(CondenserDesignCWIn, u.Fahrenheit),
+		CirculatingWaterIn: Temperature{Val: CondenserDesignCWIn, Unit: u.Fahrenheit},
 	}
 	const perStep = 5.0
 	const steps = 1000
 	for i := 0; i < steps; i++ {
-		c.CondensingRate = u.NewValue(perStep, u.Gallon)
+		c.CondensingRate = Volume{Val: perStep, Unit: u.Gallon}
 		c = c.Step(c.CirculatingWaterIn, true, true)
 	}
 	assert.Positive(t, c.HotwellLevel.Float(),

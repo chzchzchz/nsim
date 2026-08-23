@@ -26,7 +26,7 @@ var (
 	// matching the
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:36-37
 	// 7-day (full tank) hint.
-	dieselFuelRate = u.NewValue(500.0/(4*24), u.Gallon) // gal/hr at 1.0 frac
+	dieselFuelRate = Volume{Val: 500.0/(4*24), Unit: u.Gallon} // gal/hr at 1.0 frac
 )
 
 // Step advances the diesel generator by TimeStep. The state machine,
@@ -116,7 +116,7 @@ func (d *DieselGenerator) Step(swFlowGPM float64) DieselGenerator {
 		if newLevel < 0 {
 			newLevel = 0
 		}
-		ret.Fuel.Level = u.NewValue(newLevel, u.Gallon)
+		ret.Fuel.Level = Volume{Val: newLevel, Unit: u.Gallon}
 		if newLevel == 0 {
 			ret.State = DieselTripped
 		}
@@ -137,12 +137,12 @@ func (d *DieselGenerator) Step(swFlowGPM float64) DieselGenerator {
 	ambient := ret.Fuel.Part.Temperature.Float() // proxy for ambient
 	gap := ret.CoolantTemp.Float() - ambient
 	if swFlowing {
-		ret.CoolantTemp = u.NewValue(ret.CoolantTemp.Float()-gap*(dt.Seconds()/dieselCoolingTau.Seconds()), u.Fahrenheit)
+		ret.CoolantTemp = Temperature{Val: ret.CoolantTemp.Float()-gap*(dt.Seconds()/dieselCoolingTau.Seconds()), Unit: u.Fahrenheit}
 	} else {
 		if ret.State == DieselRunning {
-			ret.CoolantTemp = u.NewValue(ret.CoolantTemp.Float()+dieselAmbientRate*dt.Seconds()*100, u.Fahrenheit)
+			ret.CoolantTemp = Temperature{Val: ret.CoolantTemp.Float()+dieselAmbientRate*dt.Seconds()*100, Unit: u.Fahrenheit}
 		} else {
-			ret.CoolantTemp = u.NewValue(ret.CoolantTemp.Float()-gap*(dt.Seconds()/dieselCoolingTau.Seconds()), u.Fahrenheit)
+			ret.CoolantTemp = Temperature{Val: ret.CoolantTemp.Float()-gap*(dt.Seconds()/dieselCoolingTau.Seconds()), Unit: u.Fahrenheit}
 		}
 	}
 

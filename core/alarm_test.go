@@ -249,7 +249,7 @@ func TestPlant_Alarms_DieselCoolantWarning(t *testing.T) {
 	p.Step()
 	p.Update()
 	p.AuxiliaryBuilding.DieselGenerator.CoolantTemp =
-		u.NewValue(DieselCoolantTripTemp.Float()+1, u.Fahrenheit)
+		Temperature{Val: DieselCoolantTripTemp.Float()+1, Unit: u.Fahrenheit}
 	p.AuxiliaryBuilding.DieselGenerator.State = DieselRunning
 	p.Step()
 	p.Update()

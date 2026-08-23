@@ -86,7 +86,7 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 	// concentrations. The reactivity term from Doppler+moderator
 	// should reflect the boron-dependent sign/magnitude per the
 	// spec, not a constant -1.0 pcm/°F.
-	hotRef := u.NewValue(float64(CoreDopplerReferenceTempF)+30, u.Fahrenheit)
+	hotRef := Temperature{Val: float64(CoreDopplerReferenceTempF)+30, Unit: u.Fahrenheit}
 	hotHighB := ReactorPressureVessel{
 		ControlRods: ControlRods{
 			Insertion:            0,
@@ -118,12 +118,12 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 	dopplerTerm := func(boron float64, outlet float64) float32 {
 		hot := ReactorPressureVessel{
 			ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: boron},
-			Outlet:       u.NewValue(outlet, u.Fahrenheit),
+			Outlet:       Temperature{Val: outlet, Unit: u.Fahrenheit},
 			ThermalPower: CoreRatedThermalPower,
 		}
 		ref := ReactorPressureVessel{
 			ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: boron},
-			Outlet:       u.NewValue(float64(CoreDopplerReferenceTempF), u.Fahrenheit),
+			Outlet:       Temperature{Val: float64(CoreDopplerReferenceTempF), Unit: u.Fahrenheit},
 			ThermalPower: CoreRatedThermalPower,
 		}
 		hot = hot.Step(RCPRatedSpeed)
@@ -198,8 +198,8 @@ func TestBug_MakePlantPreservesCallerRPVTemperatures(t *testing.T) {
 	// rather than letting the caller decide. The test below
 	// therefore requires MakePlant to NOT clobber pre-set
 	// values when called on a Plant with a non-default RPV.
-	p.ReactorBuilding.ReactorPressureVessel.Inlet = u.NewValue(coldIn, u.Fahrenheit)
-	p.ReactorBuilding.ReactorPressureVessel.Outlet = u.NewValue(coldOut, u.Fahrenheit)
+	p.ReactorBuilding.ReactorPressureVessel.Inlet = Temperature{Val: coldIn, Unit: u.Fahrenheit}
+	p.ReactorBuilding.ReactorPressureVessel.Outlet = Temperature{Val: coldOut, Unit: u.Fahrenheit}
 	require.NotEqual(t, CoreReferenceOutletF, coldOut,
 		"coldOut must differ from design reference for this probe")
 	// After MakePlant-style re-init the temperatures should

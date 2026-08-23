@@ -78,7 +78,7 @@ func TestFluidFlow_ValveOpen_MovesWater(t *testing.T) {
 	p.ReactorBuilding.SteamGenerator.Pressure = 100
 	p.TurbineBuilding.Condenser.Pressure = 0
 	p.TurbineBuilding.HeaterDrainTank.Pressure = 100
-	p.ReactorBuilding.SteamGenerator.Water = u.NewValue(1000, u.Gallon)
+	p.ReactorBuilding.SteamGenerator.Water = Volume{Val: 1000, Unit: u.Gallon}
 
 	beforeSG := p.ReactorBuilding.SteamGenerator.Water.Float()
 	p.Step()
@@ -98,7 +98,7 @@ func TestFluidFlow_ValveClosed_NoMovement(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.Pressure = 100
 	p.TurbineBuilding.HeaterDrainTank.Pressure = 100
 	p.ReactorBuilding.Pressurizer.Pressure = 100
-	p.ReactorBuilding.SteamGenerator.Water = u.NewValue(1000, u.Gallon)
+	p.ReactorBuilding.SteamGenerator.Water = Volume{Val: 1000, Unit: u.Gallon}
 	// Pin SG.HeatInput to zero so SG.Step doesn't boil inventory and
 	// drift SG.Water during the assertion window.
 	p.ReactorBuilding.SteamGenerator.HeatInput = 0
@@ -149,7 +149,7 @@ func TestFluidFlow_ValveHalfOpen_HalvesFlow(t *testing.T) {
 		p.TurbineBuilding.Condenser.Pressure = 0
 		p.ReactorBuilding.Pressurizer.Pressure = 1000
 		p.TurbineBuilding.HeaterDrainTank.Pressure = 1000
-		p.ReactorBuilding.SteamGenerator.Water = u.NewValue(100000, u.Gallon)
+		p.ReactorBuilding.SteamGenerator.Water = Volume{Val: 100000, Unit: u.Gallon}
 		before := p.ReactorBuilding.SteamGenerator.Water.Float()
 		for i := 0; i < 1000; i++ {
 			p.Step()

@@ -17,8 +17,8 @@ import (
 //   - "reheat the steam to over 100°F (55°C) superheat"
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:54-55
 func TestMSR_FullQualityReachesReheatTarget(t *testing.T) {
-	inlet := u.NewValue(560.0, u.Fahrenheit)
-	reheatFlow := u.NewValue(FeedwaterDesignFlow.Float(), u.Gallon)
+	inlet := Temperature{Val: 560.0, Unit: u.Fahrenheit}
+	reheatFlow := Volume{Val: FeedwaterDesignFlow.Float(), Unit: u.Gallon}
 	m := (&MoistureSeparatorReheater{}).Step(
 		SteamGeneratorShellPressure,
 		HPExhaustQualityFullLoad,
@@ -41,18 +41,18 @@ func TestMSR_FullQualityReachesReheatTarget(t *testing.T) {
 //   - "the water is removed and drained to the feedwater system"
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:62-63
 func TestMSR_LowQualityIncreasesMoistureDrain(t *testing.T) {
-	reheatFlow := u.NewValue(FeedwaterDesignFlow.Float(), u.Gallon)
+	reheatFlow := Volume{Val: FeedwaterDesignFlow.Float(), Unit: u.Gallon}
 	dry := (&MoistureSeparatorReheater{}).Step(
 		SteamGeneratorShellPressure,
 		HPExhaustQualityFullLoad,
-		u.NewValue(560.0, u.Fahrenheit),
+		Temperature{Val: 560.0, Unit: u.Fahrenheit},
 		reheatFlow,
 		SteamGeneratorShellPressure*0.98,
 	)
 	wet := (&MoistureSeparatorReheater{}).Step(
 		SteamGeneratorShellPressure,
 		HPExhaustQualityLowLoad,
-		u.NewValue(560.0, u.Fahrenheit),
+		Temperature{Val: 560.0, Unit: u.Fahrenheit},
 		reheatFlow,
 		SteamGeneratorShellPressure*0.98,
 	)
@@ -66,13 +66,13 @@ func TestMSR_LowQualityIncreasesMoistureDrain(t *testing.T) {
 // outlet temperature rise within the linear range (below the
 // design extraction point).
 func TestMSR_ReheatScalesWithReheatSteamFlow(t *testing.T) {
-	inlet := u.NewValue(560.0, u.Fahrenheit)
+	inlet := Temperature{Val: 560.0, Unit: u.Fahrenheit}
 	// Pick flows below the design extraction point so we stay in
 	// the linear region of the model (the model caps at the
 	// design point).
 	designReheat := FeedwaterDesignFlow.Float() * MSRDesignExtractionFraction
-	lowFlow := u.NewValue(designReheat*0.25, u.Gallon)
-	highFlow := u.NewValue(designReheat*0.75, u.Gallon)
+	lowFlow := Volume{Val: designReheat*0.25, Unit: u.Gallon}
+	highFlow := Volume{Val: designReheat*0.75, Unit: u.Gallon}
 
 	mLow := (&MoistureSeparatorReheater{}).Step(
 		SteamGeneratorShellPressure, HPExhaustQualityFullLoad,

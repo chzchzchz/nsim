@@ -65,9 +65,7 @@ func (s *ServiceWaterSystem) Step(heatLoad Watts) ServiceWaterSystem {
 		if deltaF < 0 {
 			deltaF = 0
 		}
-		ret.OutletTemp = u.NewValue(
-			ret.InletTemp.Float()+deltaF, u.Fahrenheit,
-		)
+		ret.OutletTemp = Temperature{Val: ret.InletTemp.Float()+deltaF, Unit: u.Fahrenheit}
 	} else {
 		ret.OutletTemp = ret.InletTemp
 	}

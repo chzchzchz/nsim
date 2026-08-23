@@ -257,10 +257,7 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 	if loadFraction < 0 {
 		loadFraction = 0
 	}
-	ret.ExtractionSteamFlow = u.NewValue(
-		loadFraction*FeedwaterDesignFlow.Float(),
-		u.Gallon,
-	)
+	ret.ExtractionSteamFlow = Volume{Val: loadFraction*FeedwaterDesignFlow.Float(), Unit: u.Gallon}
 
 	// HP exhaust quality falls with load fraction because the
 	// HP turbine does less expansion work per pound of steam.
@@ -285,17 +282,14 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 	// temperature at the HP exhaust pressure. For "important
 	// aspects" fidelity a simple linear surrogate is sufficient.
 	inletTempF := float64(ret.HPExhaustPressure)*5.5 + 80.0
-	inletTemp := u.NewValue(inletTempF, u.Fahrenheit)
+	inletTemp := Temperature{Val: inletTempF, Unit: u.Fahrenheit}
 	// MSR receives the highest-pressure extraction steam and main
 	// steam before the throttle valves for reheating. The total
 	// steam available to the MSR reheater tubes is a fraction of
 	// the HP steam flow; with ExtractionSteamFlow = total HP steam
 	// flow, applying MSRDesignExtractionFraction gives the design
 	// reheat duty.
-	reheatFlow := u.NewValue(
-		ret.ExtractionSteamFlow.Float()*MSRDesignExtractionFraction,
-		u.Gallon,
-	)
+	reheatFlow := Volume{Val: ret.ExtractionSteamFlow.Float()*MSRDesignExtractionFraction, Unit: u.Gallon}
 	ret.MoistureSeparatorReheater = ret.MoistureSeparatorReheater.Step(
 		ret.HPExhaustPressure,
 		ret.HPExhaustQuality,

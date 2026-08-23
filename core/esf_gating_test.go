@@ -68,7 +68,7 @@ func TestESFGating_CCWSNoRecoveryWithBusesOff(t *testing.T) {
 	p.Electrical.ESFBusB.BreakerClosed = false
 	p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning = true
 	p.AuxiliaryBuilding.ComponentCoolingWaterSystem.InletTemp =
-		u.NewValue(120, u.Fahrenheit)
+		Temperature{Val: 120, Unit: u.Fahrenheit}
 	stepN(&p, int(10*time.Second/TimeStep))
 	assert.False(t, p.AuxiliaryBuilding.ComponentCoolingWaterSystem.DriveReady,
 		"want CCWS DriveReady=false with buses off, got true")
@@ -89,7 +89,7 @@ func TestESFGating_HHSINoFlowWithBusesOff(t *testing.T) {
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false
 	p.ReactorBuilding.SafetyInjectionSystem.RWSTLevel =
-		u.NewValue(SISRWSTCapacity, u.Gallon)
+		Volume{Val: SISRWSTCapacity, Unit: u.Gallon}
 	rwstInitial := p.ReactorBuilding.SafetyInjectionSystem.RWSTLevel.Float()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection

@@ -46,7 +46,7 @@ func (c *Condenser) Step(cwIn Temperature, vacuumPumpRunning, cwPumpRunning bool
 	// the per-step steam mass condensed (in gallons). Convert to
 	// condensate level on the shell side.
 	steamMass := ret.CondensingRate.Float()
-	ret.Level = u.NewValue(ret.Level.Float()+steamMass, u.Gallon)
+	ret.Level = Volume{Val: ret.Level.Float()+steamMass, Unit: u.Gallon}
 
 	// 2) Heat sink: when the CW pump is off, the tube bundle has no
 	// flow. Condenser pressure relaxes toward atmospheric at the
@@ -64,7 +64,7 @@ func (c *Condenser) Step(cwIn Temperature, vacuumPumpRunning, cwPumpRunning bool
 		}
 		ret.Pressure = Pressure(pressure)
 		ret.CWOut = cwIn
-		ret.CondensingRate = u.NewValue(0, u.Gallon)
+		ret.CondensingRate = Volume{Val: 0, Unit: u.Gallon}
 		return ret
 	}
 
@@ -99,7 +99,7 @@ func (c *Condenser) Step(cwIn Temperature, vacuumPumpRunning, cwPumpRunning bool
 	// is CondenserCWRise. Below design flow the delta-T scales
 	// inversely with the flow ratio.
 	cwDelta := CondenserCWRise * (CondenserDesignCWFlowGPM / cwFlowGpm)
-	ret.CWOut = u.NewValue(cwIn.Float()+cwDelta, u.Fahrenheit)
+	ret.CWOut = Temperature{Val: cwIn.Float()+cwDelta, Unit: u.Fahrenheit}
 
 	// 5) Hotwell level. Accumulates the per-step condensed steam
 	// minus the condensate pump's suction flow (proportional to
@@ -113,9 +113,9 @@ func (c *Condenser) Step(cwIn Temperature, vacuumPumpRunning, cwPumpRunning bool
 	if newLevel < 0 {
 		newLevel = 0
 	}
-	ret.HotwellLevel = u.NewValue(newLevel, u.Gallon)
+	ret.HotwellLevel = Volume{Val: newLevel, Unit: u.Gallon}
 
-	ret.CondensingRate = u.NewValue(0, u.Gallon)
+	ret.CondensingRate = Volume{Val: 0, Unit: u.Gallon}
 	return ret
 }
 

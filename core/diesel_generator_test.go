@@ -14,11 +14,11 @@ import (
 func enoughFuel() DieselGenerator {
 	return DieselGenerator{
 		Fuel: Tank{
-			Level:    u.NewValue(500, u.Gallon),
-			Capacity: u.NewValue(500, u.Gallon),
-			Part:     Part{Temperature: u.NewValue(80, u.Fahrenheit)},
+			Level:    Volume{Val: 500, Unit: u.Gallon},
+			Capacity: Volume{Val: 500, Unit: u.Gallon},
+			Part:     Part{Temperature: Temperature{Val: 80, Unit: u.Fahrenheit}},
 		},
-		CoolantTemp: u.NewValue(80, u.Fahrenheit),
+		CoolantTemp: Temperature{Val: 80, Unit: u.Fahrenheit},
 	}
 }
 

@@ -85,11 +85,10 @@ func TestHeater_LPTrainCumulativeRise(t *testing.T) {
 	h := LowPressureHeater{
 		DrainValve: Valve{Open: 1.0},
 	}
-	fwIn := u.NewValue(120.0, u.Fahrenheit)
+	fwIn := Temperature{Val: 120.0, Unit: u.Fahrenheit}
 	for i := 0; i < 4; i++ {
 		h = h.Step(fwIn.Float(), 1.0)
-		fwIn = u.NewValue(h.Inlet.Float()+h.TemperatureRise.Float(),
-			u.Fahrenheit)
+		fwIn = Temperature{Val: h.Inlet.Float()+h.TemperatureRise.Float(), Unit: u.Fahrenheit}
 	}
 	assert.Greater(t, fwIn.Float(), 120.0,
 		"want cumulative LP train outlet > 120°F, got %v", fwIn.Float())
@@ -99,17 +98,15 @@ func TestHeater_LPTrainCumulativeRise(t *testing.T) {
 // feedwater should produce a meaningful cumulative rise.
 func TestHeater_FullTrainCumulativeRise(t *testing.T) {
 	lp := LowPressureHeater{DrainValve: Valve{Open: 1.0}}
-	fwIn := u.NewValue(120.0, u.Fahrenheit)
+	fwIn := Temperature{Val: 120.0, Unit: u.Fahrenheit}
 	for i := 0; i < 4; i++ {
 		lp = lp.Step(fwIn.Float(), 1.0)
-		fwIn = u.NewValue(lp.Inlet.Float()+lp.TemperatureRise.Float(),
-			u.Fahrenheit)
+		fwIn = Temperature{Val: lp.Inlet.Float()+lp.TemperatureRise.Float(), Unit: u.Fahrenheit}
 	}
 	hp := HighPressureHeater{DrainValve: Valve{Open: 1.0}}
 	for i := 0; i < 2; i++ {
 		hp = hp.Step(fwIn.Float(), 0.5)
-		fwIn = u.NewValue(hp.Inlet.Float()+hp.TemperatureRise.Float(),
-			u.Fahrenheit)
+		fwIn = Temperature{Val: hp.Inlet.Float()+hp.TemperatureRise.Float(), Unit: u.Fahrenheit}
 	}
 	assert.Greater(t, fwIn.Float(), 125.0,
 		"want cumulative LP+HP train outlet > 125°F, got %v", fwIn.Float())
