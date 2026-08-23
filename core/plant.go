@@ -51,8 +51,20 @@ func (r *ReactorBuilding) Step(sgSteamOutflowFraction float64) ReactorBuilding {
 	// determined by comparison of the measured Tc (cold leg
 	// temperature) with the programmed (function of power) Tc."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
+	// Tavg and the measured pressurizer level fraction feed the
+	// CVCS automatic level controller; the program "varies with
+	// RCS average coolant temperature."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
+	tavg := Temperature{Val: (ret.ReactorPressureVessel.Inlet.Float() +
+		ret.ReactorPressureVessel.Outlet.Float()) / 2, Unit: u.Fahrenheit}
+	pzrFraction := 0.0
+	if pzrVolume := ret.Pressurizer.Volume.Float(); pzrVolume > 0 {
+		pzrFraction = ret.Pressurizer.Water.Float() / pzrVolume
+	}
 	ret.Aux.ChemicalVolumeControlSystem = ret.Aux.ChemicalVolumeControlSystem.Step(
 		ret.ReactorMakeupControlValve.Flow,
+		tavg,
+		pzrFraction,
 	)
 	// Propagate the CVCS boron concentration into the
 	// reactivity model. The RPV step reads

@@ -851,6 +851,33 @@ var CVCSDesignChargingFlow Volume = Volume{Val: 30, Unit: u.Gallon}
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115
 var CVCSDesignLetdownFlow Volume = Volume{Val: 75, Unit: u.Gallon}
 
+const (
+	// PzrLevelNoLoadPct is the programmed pressurizer level at
+	// no-load Tavg, percent of pressurizer volume. The hot-startup
+	// initial-condition table pairs Tavg 557°F with a pressurizer
+	// 25 percent full.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:48-66
+	PzrLevelNoLoadPct float64 = 25.0
+
+	// PzrLevelFullLoadPct is the programmed pressurizer level at
+	// full-load Tavg: "approximately 60 percent of the pressurizer
+	// volume is occupied by water" during steady-state operation.
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:40-43
+	PzrLevelFullLoadPct float64 = 60.0
+
+	// PzrLevelNoLoadTavgF is the no-load anchor of the level
+	// program (°F), the hot-standby reactor coolant temperature.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:48-53
+	PzrLevelNoLoadTavgF float64 = 557.0
+
+	// PzrLevelCtrlGainGalPerSecPerPct converts pressurizer level
+	// error (percentage points) into net CVCS flow demand (gal/s).
+	// Derived: saturates the design charging flow at a 10-point
+	// error; the spec states the balance law but no tuning figure.
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:9-12
+	PzrLevelCtrlGainGalPerSecPerPct float64 = 3.0
+)
+
 // ReactorMakeupDesignFlow is the per-minute volume of makeup
 // water delivered to the VCT when the reactor makeup control
 // valve is fully open. Sized at 60 gpm — typical of a
@@ -1884,6 +1911,22 @@ type CVCS struct {
 	// control tank [...]"
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:79-80
 	LetdownFlow Volume
+
+	// AutoLevelControl engages the automatic pressurizer level
+	// controller: the Tavg-referenced program error balances
+	// ChargingFlow against LetdownFlow. The zero value keeps the
+	// manual lineup because startup and cooldown are manual:
+	// "The charging pump flow and low-pressure letdown valve are
+	// controlled manually during plant startup and cooldown."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115-116
+	AutoLevelControl bool
+
+	// ProgrammedLevel is the last computed output of the
+	// Tavg-referenced level program, percent of pressurizer
+	// volume. "maintain pressurizer level at a programmed value
+	// which varies with RCS average coolant temperature."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
+	ProgrammedLevel float64
 
 	// BoronConcentration is the RCS boron concentration in
 	// ppm. This is the primary state variable that boration

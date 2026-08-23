@@ -411,7 +411,32 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = v
 			return nil
 		},
-	}
+		}
+
+
+		// CVCS automatic pressurizer level control engage switch.
+		// "The pressurizer level control system adjusts charging
+		// flow from the CVCS to maintain pressurizer level at a
+		// programmed value which varies with RCS average coolant
+		// temperature."
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
+		m["AuxiliaryBuilding/ChemicalVolumeControlSystem/AutoLevelControl"] = &bridge.Control{
+			Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+			Label: "AutoLevelControl",
+			Kind:  "bool",
+			Get: func() string {
+				return bridge.BoolToStr(
+					p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl)
+			},
+			Set: func(s string) error {
+				v, err := bridge.StrToBool(s)
+				if err != nil {
+					return err
+				}
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = v
+				return nil
+			},
+		}
 
 
 	// Diesel generator start signal (chapter 11):
@@ -594,6 +619,20 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("gpm",
 				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownFlow.Float())
+		},
+	}
+
+
+	// Pressurizer level program output: the Tavg-referenced
+	// programmed value the automatic level controller holds.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/ProgrammedLevel"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "ProgrammedLevel",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ProgrammedLevel)
 		},
 	}
 

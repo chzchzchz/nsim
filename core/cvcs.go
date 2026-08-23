@@ -73,11 +73,15 @@ import (
 //     recirculation), and gains the letdown return path. While
 //     diverting (VCT high-level condition), letdown lands in
 //     BRSHoldupLevel instead of returning to the VCT.
-//   - ChargingFlow = CVCSDesignChargingFlow when
-//     ChargingPumpRunning, else 0.
-//   - LetdownFlow = CVCSDesignLetdownFlow when LetdownValveOpen,
-//     else 0. While diverting, the flow accumulates into
-//     BRSHoldupLevel rather than the VCT.
+//   - With AutoLevelControl false (manual lineup),
+//     ChargingFlow = CVCSDesignChargingFlow when
+//     ChargingPumpRunning, else 0, and LetdownFlow =
+//     CVCSDesignLetdownFlow when LetdownValveOpen, else 0.
+//   - With AutoLevelControl true, the Tavg-referenced program
+//     error splits a net-flow demand between charging and
+//     letdown, clamped to the design rates; the pump and valve
+//     latches still gate their paths. The programmed level is
+//     computed every step regardless of mode for display.
 //   - In CVCSBoration / CVCSDilution modes the
 //     BTRSRecirculationPump must be running (set by operator);
 //     BorationRate / DilutionRate are populated accordingly and
@@ -85,32 +89,38 @@ import (
 //     changes halt.
 func (c *CVCS) Step(
 	makeupFlow Volume,
+	tavg Temperature,
+	pzrLevelFraction float64,
 ) CVCS {
 	ret := *c
 	dt := TimeStep
+
+	ret.ProgrammedLevel = programmedPzrLevel(tavg)
 
 	// Reset per-step rates.
 	ret.BorationRate = 0
 	ret.DilutionRate = 0
 
-	// Charging flow depends on the charging-pump latch (not
-	// the reactor coolant pumps — CVCS charging is an
-	// independent path). The pumps are fed from the
-	// engineered safety features bus during accident
-	// conditions; see
+	// Charging is an independent path gated by its own latch,
+	// not the reactor coolant pumps; the pumps are fed from the
+	// engineered safety features bus during accident conditions,
+	// see
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-80.
-	if ret.ChargingPumpRunning {
+	if ret.AutoLevelControl {
+		ret.applyLevelControl(pzrLevelFraction)
+	} else if ret.ChargingPumpRunning {
 		ret.ChargingFlow = CVCSDesignChargingFlow
 	} else {
 		ret.ChargingFlow = Volume{Val: 0, Unit: u.Gallon}
 	}
-
-	// Letdown flow depends on valve state only; where the flow
-	// lands (VCT return vs BRS diversion) is decided below.
-	if ret.LetdownValveOpen {
-		ret.LetdownFlow = CVCSDesignLetdownFlow
-	} else {
-		ret.LetdownFlow = Volume{Val: 0, Unit: u.Gallon}
+	if !ret.AutoLevelControl {
+		// Letdown flow depends on valve state only; where the flow
+		// lands (VCT return vs BRS diversion) is decided below.
+		if ret.LetdownValveOpen {
+			ret.LetdownFlow = CVCSDesignLetdownFlow
+		} else {
+			ret.LetdownFlow = Volume{Val: 0, Unit: u.Gallon}
+		}
 	}
 
 	// VCT level accumulation: makeup enters, charging-pump
@@ -184,4 +194,41 @@ func (c *CVCS) Step(
 	}
 
 	return ret
+}
+
+// applyLevelControl balances charging against letdown from the
+// pressurizer level error, per the level-control function of the
+// reactor pressurizer control system:
+//
+//	"it must maintain the RCS mass inventory, that is,
+//	the pressurizer level, by balancing the charging
+//	flow to the letdown flow."
+//	specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:9-12
+func (c *CVCS) applyLevelControl(pzrLevelFraction float64) {
+	errPct := c.ProgrammedLevel - 100*pzrLevelFraction
+	demand := PzrLevelCtrlGainGalPerSecPerPct * errPct
+	charge := min(max(demand, 0), CVCSDesignChargingFlow.Float())
+	letdown := min(max(-demand, 0), CVCSDesignLetdownFlow.Float())
+	if !c.ChargingPumpRunning {
+		charge = 0
+	}
+	if !c.LetdownValveOpen {
+		letdown = 0
+	}
+	c.ChargingFlow = Volume{Val: charge, Unit: u.Gallon}
+	c.LetdownFlow = Volume{Val: letdown, Unit: u.Gallon}
+}
+
+// programmedPzrLevel maps RCS average coolant temperature onto the
+// pressurizer level program, anchored at no-load (25 percent at
+// 557°F, chapter_16/page_222.txt:48-66) and full load (60 percent at
+// the rated inlet/outlet midpoint, chapter_3/page_068.txt:40-43), and
+// clamped flat outside that band so shutdown and overload hold the
+// nearest anchor.
+func programmedPzrLevel(tavg Temperature) float64 {
+	fullLoadTavgF := (CoreReferenceInletF + CoreReferenceOutletF) / 2
+	slope := (PzrLevelFullLoadPct - PzrLevelNoLoadPct) /
+		(fullLoadTavgF - PzrLevelNoLoadTavgF)
+	pct := PzrLevelNoLoadPct + (tavg.Float()-PzrLevelNoLoadTavgF)*slope
+	return min(max(pct, PzrLevelNoLoadPct), PzrLevelFullLoadPct)
 }
