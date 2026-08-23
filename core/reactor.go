@@ -214,7 +214,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	// Spec: "Primary temperature is maintained through the
 	// balanced use of reactor coolant pump heat input and a
 	// steam dump system..."
-	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:108-115
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-111
 	return ret
 }
 
@@ -459,7 +459,7 @@ type ReactorPressureVessel struct {
 	// Spec: "Primary temperature is maintained through the
 	// balanced use of reactor coolant pump heat input and a
 	// steam dump system..."
-	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:108-115
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-111
 	PumpHeatInput Watts
 }
 // Reactor core sizing. The spec gives steam-flow and pressure data
@@ -737,7 +737,7 @@ const (
 //   - Heat balance: "Primary temperature is maintained through the
 //     balanced use of reactor coolant pump heat input and a steam
 //     dump system..."
-//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:108-115
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-111
 const (
 	// RCPRatedSpeed is the design operating speed of the
 	// reactor coolant pump from Table 3.3-1.

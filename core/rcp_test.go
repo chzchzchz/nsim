@@ -109,7 +109,7 @@ func TestRCP_Coastdown(t *testing.T) {
 // Spec justification:
 //   - "Primary temperature is maintained through the balanced use of
 //     reactor coolant pump heat input and a steam dump system..."
-//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:108-115
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-111
 func TestRCP_HeatInputScalesWithSpeed(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPump.Running = true

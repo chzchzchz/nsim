@@ -30,6 +30,11 @@ const (
 	// (J/kg·K) near ambient conditions; the spec states no value,
 	// 4186 is the textbook figure.
 	SpecificHeatWater = 4186.0
+
+	// RCSMassKg is the lumped primary-coolant inventory driving
+	// the RHRS-takeover heat balance; assumption, the spec quotes
+	// no RCS inventory figure.
+	RCSMassKg = 3_500_000.0 * KilogramsPerPound
 )
 
 func (t Temperature) Float() float64   { return UnitVal(t).Float() }

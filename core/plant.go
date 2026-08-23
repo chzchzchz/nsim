@@ -131,6 +131,15 @@ func (r *ReactorBuilding) Step(sgSteamOutflowFraction float64) ReactorBuilding {
 	ret.ReactorPressureVessel.ControlRods =
 		ret.ReactorPressureVessel.ControlRods.Step()
 
+	// While RHRS owns primary cooling (HasTakenOver) the takeover
+	// integration below must evolve the outlet from its pre-step value;
+	// otherwise the quasi-steady relaxation inside ReactorPressureVessel.
+	// Step pulls the coolant toward the hot no-load anchor regardless of
+	// the actual heat balance ("Primary temperature is maintained through
+	// the balanced use of reactor coolant pump heat input and a steam dump
+	// system", specs/the_westinghouse_pressurized_water_react/chapter_16/
+	// page_224.txt:109-111).
+	rpvOutletPreStepF := ret.ReactorPressureVessel.Outlet.Float()
 	rpv := ret.ReactorPressureVessel.Step(ret.ReactorCoolantPump.Velocity)
 	ret.ReactorPressureVessel = rpv
 
@@ -172,7 +181,7 @@ func (r *ReactorBuilding) Step(sgSteamOutflowFraction float64) ReactorBuilding {
 	// Spec: "Primary temperature is maintained through the
 	// balanced use of reactor coolant pump heat input and a
 	// steam dump system..."
-	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:108-115
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-111
 	rcpHeat := float64(RCPRatedHeatInput) * rcpV * rcpV /
 		(float64(RCPRatedSpeed) * float64(RCPRatedSpeed))
 	ret.ReactorPressureVessel.PumpHeatInput = Watts(rcpHeat)
@@ -194,7 +203,6 @@ func (r *ReactorBuilding) Step(sgSteamOutflowFraction float64) ReactorBuilding {
 	//     has been taken over by the RHRS, and the steam dump
 	//     system may be shutdown."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:35-37
-	rcsOutletF := ret.ReactorPressureVessel.Outlet.Float()
 	rcsPressure := float64(ret.Pressurizer.Pressure)
 	// The CCWS was already stepped this timestep by
 	// AuxiliaryBuilding.Step (single-writer discipline); the RHRS
@@ -212,9 +220,8 @@ func (r *ReactorBuilding) Step(sgSteamOutflowFraction float64) ReactorBuilding {
 		)
 		decayW := float64(ret.ReactorPressureVessel.TotalThermalPower())
 		netW := decayW - rejectionW
-		rcsMassKg := 3_500_000.0 * KilogramsPerPound
-		deltaTK := netW / (rcsMassKg * SpecificHeatWater) * dt.Seconds()
-		ret.ReactorPressureVessel.Outlet = Temperature{Val: rcsOutletF+deltaTK*9.0/5.0, Unit: u.Fahrenheit}
+		deltaTK := netW / (RCSMassKg * SpecificHeatWater) * dt.Seconds()
+		ret.ReactorPressureVessel.Outlet = Temperature{Val: rpvOutletPreStepF+deltaTK*9.0/5.0, Unit: u.Fahrenheit}
 		ret.SteamGenerator.HeatInput = 0
 	} else {
 		// Per-loop SG heat input: the lumped single-SG model
