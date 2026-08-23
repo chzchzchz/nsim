@@ -41,6 +41,24 @@ func TestBridge_PumpSensorsExist(t *testing.T) {
 	}
 }
 
+// Water-tracking state added for drain tanks and diverted letdown is
+// operator-visible: the BRS holdup level and BTRS bed saturation
+// sensors must be registered and readable.
+func TestBridge_WaterTrackingSensorsExist(t *testing.T) {
+	p := MakePlant()
+	m := GetSensorMap(&p)
+	for _, id := range []string{
+		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BRSHoldupLevel",
+		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRSBedSaturation",
+	} {
+		s, ok := m[id]
+		require.Truef(t, ok, "want sensor %q registered", id)
+		out, err := s.Get()
+		require.NoErrorf(t, err, "Get %q", id)
+		assert.NotEmptyf(t, out, "want non-empty value from sensor %q", id)
+	}
+}
+
 // Operator controls for the same pumps must round-trip: Set writes
 // the field, Get returns it.
 func TestBridge_PumpControlsRoundTrip(t *testing.T) {
