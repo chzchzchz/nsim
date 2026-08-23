@@ -626,6 +626,9 @@ type Plant struct {
 }
 
 func (p *Plant) Step() {
+	if p.nextPlant == nil {
+		p.nextPlant = &Plant{}
+	}
 	// Step the electrical distribution first so the ESF bus
 	// Energized state for this step is visible to every
 	// downstream consumer (CW pump, SFPC pump, RHRS, CCWS,
