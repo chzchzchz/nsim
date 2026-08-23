@@ -1327,12 +1327,6 @@ var DieselLowFuelLevel = Volume{Val: 50, Unit: u.Gallon}
 
 type Transformer struct{ Part }
 
-type Pipe struct {
-	Part
-	Pressure
-	Velocity
-}
-
 type Valve struct {
 	Part
 	Open float64

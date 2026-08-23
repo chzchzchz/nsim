@@ -254,13 +254,6 @@ const (
 	// for temperate climates.
 	CirculatingWaterSourceTempF = 70.0
 
-	// CondenserDesignCWRiseF is the design temperature rise of
-	// the CW across the condenser tube bundle at full
-	// condensing duty (°F). The spec does not state a number;
-	// 18 °F is sized to reject full condenser duty at the
-	// design CW flow.
-	CondenserDesignCWRiseF = 18.0
-
 	// CoolingTowerApproachF is the steady-state difference
 	// between the tower cold-basin temperature and the ambient
 	// wet-bulb (°F) while the fans run. The spec does not state
