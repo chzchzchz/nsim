@@ -75,6 +75,9 @@ export function enablePanelSwaps(grid: HTMLElement): void {
         if (ev.button !== 0 || drag) {
             return;
         }
+        if (ev.target instanceof Element && ev.target.closest(".tile-toggle")) {
+            return;
+        }
         const heading =
             ev.target instanceof Element
                 ? ev.target.closest<HTMLElement>(".tile > h2")

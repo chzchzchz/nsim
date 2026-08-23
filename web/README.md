@@ -119,7 +119,9 @@ The dashboard has these regions:
    Tiles rearrange by mouse: press a tile's prefix heading, drag
    ~100 px toward a neighbour to mark it as the pending swap
    (outlined tiles show the pair), drag back inside that band to
-   cancel, and release the button to apply the swap.
+   cancel, and release the button to apply the swap. The − button
+   at a heading's right edge minimizes the tile to just its header;
+   it becomes + and restores the full panel.
 
 5. **Command console** (bottom) — submit `TimeOffsetMs Part.Label Value`
    lines that fire relative to the simulation clock; completed rows are

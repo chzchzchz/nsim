@@ -11,6 +11,9 @@ import { buildBindings, displayPart, groupByPrefix, type PartBinding } from "./b
 import { enablePanelSwaps } from "./grid";
 import { Sim } from "./sim";
 
+const MINIMIZE_GLYPH = "−";
+const RESTORE_GLYPH = "+";
+
 declare global {
     interface Window {
         Go: any;
@@ -208,7 +211,10 @@ function renderTile(
     const tile = document.createElement("div");
     tile.className = "tile";
     const h = document.createElement("h2");
-    h.textContent = prefix || "(other)";
+    const label = document.createElement("span");
+    label.textContent = prefix || "(other)";
+    h.appendChild(label);
+    h.appendChild(renderMinimizeToggle(tile));
     tile.appendChild(h);
 
     const body = document.createElement("div");
@@ -234,4 +240,22 @@ function renderTile(
     body.appendChild(ctlCol);
     body.appendChild(senCol);
     return tile;
+}
+
+// renderMinimizeToggle builds the header button that collapses a
+// tile down to its heading and expands it again.
+function renderMinimizeToggle(tile: HTMLElement): HTMLElement {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tile-toggle";
+    btn.textContent = MINIMIZE_GLYPH;
+    btn.title = "Minimize panel";
+    btn.setAttribute("aria-label", btn.title);
+    btn.addEventListener("click", () => {
+        const minimized = tile.classList.toggle("minimized");
+        btn.textContent = minimized ? RESTORE_GLYPH : MINIMIZE_GLYPH;
+        btn.title = minimized ? "Restore panel" : "Minimize panel";
+        btn.setAttribute("aria-label", btn.title);
+    });
+    return btn;
 }
