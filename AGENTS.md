@@ -3,6 +3,7 @@
 * Only implement what is important for simulation
 * Prefer generalization over specialization
 * Trace implementation details back to specifications in specs/ (referencing full file paths / line numbers)
+* DO NOT commit files in specs/* or plans/*
 
 # Specifications
 
