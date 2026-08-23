@@ -17,14 +17,19 @@ type RPM float64
 
 const TimeStep = time.Millisecond
 
-// Shared unit-conversion factors for the lumped thermal models.
-// Water is treated as 1 kg/L, so one gallon (≈3.785 L,
-// KilogramsPerGallon in core/parts.go) of water weighs
-// KilogramsPerGallon kilograms and one gpm delivers
+// Shared unit-conversion factors and fluid properties for the
+// lumped thermal models. Water is treated as 1 kg/L, so one
+// gallon (≈3.785 L, KilogramsPerGallon in core/parts.go) of
+// water weighs KilogramsPerGallon kilograms and one gpm delivers
 // KilogramsPerGPM kg/s.
 const (
 	KilogramsPerGPM   = KilogramsPerGallon / 60.0
 	KilogramsPerPound = 0.453592
+
+	// SpecificHeatWater is the specific heat of liquid water
+	// (J/kg·K) near ambient conditions; the spec states no value,
+	// 4186 is the textbook figure.
+	SpecificHeatWater = 4186.0
 )
 
 func (t Temperature) Float() float64   { return UnitVal(t).Float() }

@@ -125,7 +125,7 @@ func TestSWSTotalHeatLoadIncludesCCWDuty(t *testing.T) {
 		"want CCW HXHeatDuty > 0 in steady state, got %v", duty)
 
 	massKgPerS := ServiceWaterDesignFlow * KilogramsPerGPM
-	wantRise := (rcfcSum + duty) / (massKgPerS * 4186.0) * 9.0 / 5.0
+	wantRise := (rcfcSum + duty) / (massKgPerS * SpecificHeatWater) * 9.0 / 5.0
 	sws := p.Outside.ServiceWaterSystem
 	gotRise := sws.OutletTemp.Float() - sws.InletTemp.Float()
 	assert.InDelta(t, wantRise, gotRise, 1e-9,

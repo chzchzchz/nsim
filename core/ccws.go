@@ -106,7 +106,7 @@ func (c *CCWS) Step(
 	}
 	massKgPerS := float64(CCWSDesignFlow.Float()) * 60.0 * KilogramsPerGPM
 	dutyK := CCHXApproachTemp.Float() * 5.0 / 9.0
-	ret.HXHeatDuty = Watts(massKgPerS * 4186.0 * dutyK)
+	ret.HXHeatDuty = Watts(massKgPerS * SpecificHeatWater * dutyK)
 
 	return ret
 }

@@ -221,7 +221,7 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 		decayW := float64(ret.ReactorPressureVessel.TotalThermalPower())
 		netW := decayW - rejectionW
 		rcsMassKg := 3_500_000.0 * KilogramsPerPound
-		deltaTK := netW / (rcsMassKg * 4186.0) * dt.Seconds()
+		deltaTK := netW / (rcsMassKg * SpecificHeatWater) * dt.Seconds()
 		ret.ReactorPressureVessel.Outlet = Temperature{Val: rcsOutletF+deltaTK*9.0/5.0, Unit: u.Fahrenheit}
 		ret.SteamGenerator.HeatInput = 0
 	} else {
