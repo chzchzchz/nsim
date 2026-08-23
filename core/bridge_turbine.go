@@ -231,6 +231,31 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Condenser vacuum pump / steam-jet air ejector (chapter 15):
+	// operator handle for developing condenser vacuum before steam
+	// is admitted during plant startup.
+	// "Under normal operation the air is removed by steam jet air
+	//  ejectors or vacuum pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:19-22
+	m["TurbineBuilding/Condenser/VacuumPump"] = &bridge.Control{
+		Part:  "TurbineBuilding/Condenser",
+		Label: "VacuumPump",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.TurbineBuilding.Condenser.VacuumPumpRunning)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.Condenser.VacuumPumpRunning = v
+			return nil
+		},
+	}
+
+
 	// Main feedwater control valve (chapter 15):
 	// "A signal from the Feedwater Control System also sets
 	// the position of the motor-driven feedwater pump discharge
@@ -425,6 +450,22 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("psi",
 				p.TurbineBuilding.Turbine.BearingOilPressure)
+		},
+	}
+
+
+	// Condenser back-pressure (chapter 15): the vacuum the operator
+	// develops before rolling the turbine; low vacuum trips it.
+	// "Under normal operation the air is removed by steam jet air
+	//  ejectors or vacuum pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:19-22
+	m["TurbineBuilding/Condenser/Pressure"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/Condenser",
+		Label: "Pressure",
+		Kind:  "psig",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("psi",
+				p.TurbineBuilding.Condenser.Pressure)
 		},
 	}
 
