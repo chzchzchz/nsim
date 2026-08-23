@@ -169,8 +169,11 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 	// atmospheric dump valves are located on each steam line
 	// upstream of the stop valves."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	advFraction := 0.0
 	if ret.AtmosphericDumpValve.Open > 0 && ret.Pressure > 0 {
-		dump := ret.AtmosphericDumpValve.Open * AtmosphericDumpFraction *
+		advFraction = ret.AtmosphericDumpValve.Open * AtmosphericDumpFraction
+
+		dump := advFraction *
 			SteamGeneratorFullLoadSteamFlow.Float() / SecondsPerHour *
 			dt.Seconds()
 		newWater := max(ret.Water.Float()-dump, 0)
@@ -181,13 +184,18 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 	// to boil, Pressure relaxes toward the shell pressure scaled by
 	// how much of the boil-off capacity is left after the offtake:
 	// drawing faster than the SG can raise steam sags the header
-	// pressure. With no HeatInput there is no steam generation and
-	// Pressure decays toward zero.
+	// pressure. Atmospheric relief draws from the same header as the
+	// turbine and condenser dump ("This heat is rejected to the
+	// condenser through the steam dump valves and to the atmosphere",
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:6-7),
+	// so it participates in that draw. With no HeatInput there is no
+	// steam generation and Pressure decays toward zero.
 	pressure := float64(ret.Pressure)
 	if ret.HeatInput > 0 && ret.Water.Float() > 0 {
+		outflow := steamOutflowFraction + advFraction
 		ratio := 1.0
-		if steamOutflowFraction > 1.0 {
-			ratio = 1.0 / steamOutflowFraction
+		if outflow > 1.0 {
+			ratio = 1.0 / outflow
 		}
 		target := float64(SteamGeneratorShellPressure) * ratio
 		gap := target - pressure

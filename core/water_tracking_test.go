@@ -99,8 +99,15 @@ func TestPRT_RuptureDiscLatchesOnFull(t *testing.T) {
 }
 
 // Opening the atmospheric dump valve must spend SG secondary
-// inventory; an identical plant with the valve closed keeps its
-// water.
+// inventory; an identical shell with the valve closed keeps its
+// water. Driven through SteamGenerator.Step directly so shared
+// secondary-side dynamics cancel exactly: at the plant level the
+// resulting header sag also trims turbine admission draw
+// (throttled flow scales with header pressure), which would swamp
+// the shell mass-balance debit under comparison. The expected
+// debit is recomputed from the same constants production uses, so
+// this is a wiring check on the debit path, not independent
+// verification of the relief capacity choice.
 //
 // Spec justification:
 //   - "During plant cooldown, steam is dumped to the condensers to
@@ -109,33 +116,25 @@ func TestPRT_RuptureDiscLatchesOnFull(t *testing.T) {
 //     system."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:33-37
 func TestSG_AtmosphericDumpDebitsInventory(t *testing.T) {
-	open := MakePlant()
-	shut := MakePlant()
-	for _, p := range []*Plant{&open, &shut} {
-		p.ReactorBuilding.SteamGenerator.Water =
-			Volume{Val: 60000, Unit: u.Gallon}
-		p.ReactorBuilding.SteamGenerator.Volume =
-			Volume{Val: 80000, Unit: u.Gallon}
-		p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
-		p.TurbineBuilding.MainFeedwaterPump.Running = false
-		p.TurbineBuilding.CondensatePump.Running = false
-		p.TurbineBuilding.HeaterDrainPump.Running = false
-		p.TurbineBuilding.MakeupValve.Open = 0
+	const seededWater = 60000.0
+	run := func(atmOpen float64) float64 {
+		sg := SteamGenerator{
+			Water:     Volume{Val: seededWater, Unit: u.Gallon},
+			Volume:    Volume{Val: 80000, Unit: u.Gallon},
+			Pressure:  SteamGeneratorShellPressure,
+			HeatInput: SteamGeneratorFullLoadHeatInput,
+		}
+		sg.AtmosphericDumpValve.Open = atmOpen
+		for i := 0; i < int(time.Second/TimeStep); i++ {
+			sg = sg.Step(1.0)
+		}
+		return seededWater - sg.Water.Float()
 	}
-	open.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open = 1.0
-
-	steps := int(time.Second / TimeStep)
-	stepN(&open, steps)
-	stepN(&shut, steps)
-
-	// Compare the two plants so shared secondary-side dynamics
-	// cancel and only the atmospheric dump differs.
 	wantLoss := AtmosphericDumpFraction *
 		SteamGeneratorFullLoadSteamFlow.Float() / SecondsPerHour * 1.0
-	diff := shut.ReactorBuilding.SteamGenerator.Water.Float() -
-		open.ReactorBuilding.SteamGenerator.Water.Float()
+	diff := run(1.0) - run(0.0)
 	assert.InDelta(t, wantLoss, diff, wantLoss*0.01,
-		"want open-valve SG to lose ~%v gal more than the closed plant, diff=%v",
+		"want open-valve SG to lose ~%v gal more than the closed shell, diff=%v",
 		wantLoss, diff)
 }
 
@@ -309,10 +308,16 @@ func TestTurbineBuilding_LPHeaterDrainsCascadeToHotwell(t *testing.T) {
 
 // silenceHotwellFlows stops the per-step hotwell inflows/outflows
 // that are unrelated to the path under test (MSR drains, condensate
-// pump take, feed-pump recirculation).
+// pump take, feed-pump recirculation). Latching the extraction
+// nonreturn valves closed also cuts the extraction supply that
+// feeds the MSR reheater and the heater drain collection, so the
+// shells hold only their seeded inventory:
+// "Extraction line nonreturn valves."
+// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:83
 func silenceHotwellFlows(p *Plant) {
 	p.TurbineBuilding.Turbine.MoistureSeparatorReheater.DrainFlow =
 		Volume{Val: 0, Unit: u.Gallon}
+	p.TurbineBuilding.Turbine.ExtractionNRVClosed = true
 	p.TurbineBuilding.CondensatePump.Running = false
 	p.TurbineBuilding.MainFeedwaterPump.Running = false
 }
