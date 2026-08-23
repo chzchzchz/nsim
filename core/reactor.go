@@ -353,11 +353,6 @@ func (r *ReactorPressureVessel) advanceXenon(dt time.Duration) {
 	}
 }
 
-// xenonEquilibriumIodine returns the normalized iodine-135 steady
-// state at fractional rated power.
-func xenonEquilibriumIodine(p float64) float64 {
-	return p
-}
 // xenonEquilibriumXenon returns the normalized xenon-135 steady state
 // at fractional rated power. The equilibrium-ratio construction makes
 // the value exactly 1 at rated power.
