@@ -5,6 +5,7 @@
 #   make wasm    — compile wasm + copy wasm_exec.js into public/
 #   make wasm-exec — copy $(go env GOROOT)/lib/wasm/wasm_exec.js into public/ and src/
 #   make typecheck — tsc --noEmit
+#   make test    — vitest run (pure-logic unit tests)
 #   make dev     — vite dev server on :5173
 #   make bundle  — pack web.tgz (release: minified JS, stripped
 #                  wasm) which extracts to nsim-web/ ready for
@@ -25,7 +26,7 @@ BUNDLE_TGZ := web.tgz
 BUNDLE_DEBUG_TGZ := web-debug.tgz
 BUNDLE_DEPS := $(shell find src index.html vite.config.ts package.json 2>/dev/null)
 
-.PHONY: all build wasm wasm-exec typecheck dev bundle bundle-release bundle-debug clean
+.PHONY: all build wasm wasm-exec typecheck test dev bundle bundle-release bundle-debug clean
 
 all: build wasm-exec
 
@@ -52,6 +53,16 @@ typecheck:
 	else \
 		echo "(node_modules not installed; skipping tsc)"; \
 	fi
+
+# Unlike typecheck, a missing toolchain fails loudly: the unit
+# tests assert correctness and must not be skipped silently.
+test:
+	@echo "running vitest"
+	@if [ ! -d node_modules ]; then \
+		echo "node_modules not installed; run 'npm install' first" >&2; \
+		exit 1; \
+	fi
+	npx vitest run
 
 dev:
 	@echo "starting vite dev server on http://localhost:5173"

@@ -169,9 +169,17 @@ silently wrong.
 
 ## Testing
 
-The wasm build is verified by `make build` succeeding. The
-front-end TypeScript layer is small enough that the manual
-loop in `make dev` is the canonical test:
+The wasm build is verified by `make build` succeeding. Pure-logic
+modules (layout persistence validation, kind display metadata,
+prefix grouping) have unit tests under `src/*.test.ts` run via:
+
+```sh
+make test           # npx vitest run
+```
+
+DOM behaviour (drag-to-swap, widgets, alarm rows) stays covered by
+the manual loop in `make dev`, which remains the canonical test for
+anything the browser renders:
 
 1. Open `http://localhost:5173`
 2. Click **Start** — sensor read-out updates at 60 Hz

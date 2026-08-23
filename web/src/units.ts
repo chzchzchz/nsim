@@ -35,6 +35,7 @@ export const UNITS: Record<string, UnitInfo> = {
     hz:          { unit: "Hz",   range: null,    numeric: true },
     string:      { unit: "",     range: null,    numeric: false },
     enum:        { unit: "",     range: null,    numeric: false },
+    alarm:       { unit: "",     range: null,    numeric: false },
 };
 
 export function unitFor(kind: string): string {
