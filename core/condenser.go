@@ -248,12 +248,6 @@ const (
 	CirculatingWaterDesignFlowGPM =
 		CirculatingWaterPumpFlowGPM * CirculatingWaterPumpCount
 
-	// CirculatingWaterSourceTempF is the assumed constant
-	// intake temperature for river / lake / ocean sources
-	// (°F). The spec does not state a value; 70 °F is typical
-	// for temperate climates.
-	CirculatingWaterSourceTempF = 70.0
-
 	// CoolingTowerApproachF is the steady-state difference
 	// between the tower cold-basin temperature and the ambient
 	// wet-bulb (°F) while the fans run. The spec does not state

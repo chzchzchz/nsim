@@ -304,9 +304,6 @@ type TurbineBuilding struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:50-51
 	HighPressureHeater HighPressureHeater
 
-	SecondStageHeaterDrainTank Tank
-	SecondStageHeaterDrainPump Pump
-
 	// GeneratorExcitationAvailable is true when the turbine
 	// shaft is turning and the brushless exciter is producing
 	// field current (plans/p30_1.txt). Mirrors

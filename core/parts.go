@@ -4742,13 +4742,6 @@ const (
 	//   per minute → per second: 0.05 / 60 = 0.0008333...
 	OpPowerRaiseRate = 0.05 / 60.0
 
-	// OpPowerLowerRate is the maximum fraction of rated power
-	// per second the plant may lower power during shutdown or
-	// load rejection. Spec does not state a separate downward
-	// rate; the simplified model uses the same magnitude as
-	// the upward rate so shutdowns mirror startup speed.
-	OpPowerLowerRate = OpPowerRaiseRate
-
 	// OpHeatupRateLimit is the maximum RCS temperature
 	// increase rate during heatup (°F/s). Spec: "50°F (28°C)
 	// per hour."

@@ -17,7 +17,7 @@ import (
 func TestCirculatingWaterPumpRunning(t *testing.T) {
 	c := CirculatingWaterSystem{}
 	c = c.Step(true, true, CirculatingWaterPumpCount,
-		Temperature{Val: CirculatingWaterSourceTempF, Unit: u.Fahrenheit}, nil)
+		Temperature{Val: 70.0, Unit: u.Fahrenheit}, nil)
 	assert.Equal(t, CirculatingWaterPumpCount, c.PumpsInService,
 		"want PumpsInService=%d, got %d",
 		CirculatingWaterPumpCount, c.PumpsInService)
@@ -31,7 +31,7 @@ func TestCirculatingWaterPumpRunning(t *testing.T) {
 func TestCirculatingWaterPumpStopped(t *testing.T) {
 	c := CirculatingWaterSystem{}
 	c = c.Step(false, true, 0,
-		Temperature{Val: CirculatingWaterSourceTempF, Unit: u.Fahrenheit}, nil)
+		Temperature{Val: 70.0, Unit: u.Fahrenheit}, nil)
 	assert.Zero(t, c.PumpsInService,
 		"want PumpsInService=0 with pump off, got %v",
 		c.PumpsInService)
