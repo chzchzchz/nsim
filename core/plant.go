@@ -1604,7 +1604,17 @@ func (p *Plant) Step() {
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
 	p.nextPlant.ReactorBuilding.Grid = p.ReactorBuilding.Grid.Step()
 	p.TurbineBuilding.Turbine.GridFrequency = p.nextPlant.ReactorBuilding.Grid.Frequency
-	p.TurbineBuilding.Turbine.LoadDemandRef = p.nextPlant.ReactorBuilding.Grid.LoadDemand
+	// Dispatch demand reaches the turbine only under the operator's
+	// dispatching permissive, converted once from MW to the
+	// Setpoint-scale fraction here.
+	// "to act as a permissive network so that unsafe demands from
+	// the computer [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:10-12
+	if p.PlantOperation.LoadFollowActive {
+		p.TurbineBuilding.Turbine.LoadDemandRef =
+			p.nextPlant.ReactorBuilding.Grid.LoadDemand * WattsPerMW /
+				float64(TurbineRatedkW)
+	}
 	p.TurbineBuilding.Turbine.Synchronized =
 		p.nextPlant.TurbineBuilding.Generator.BreakerClosed
 

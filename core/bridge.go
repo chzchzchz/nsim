@@ -158,6 +158,53 @@ func addPlantOperationControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
+
+	// Dispatch permissive: the operator's grant that lets remote
+	// dispatch demands reach the turbine load reference.
+	// "to act as a permissive network so that unsafe demands from
+	// the computer [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:10-12
+	m["PlantOperation/LoadFollow"] = &bridge.Control{
+		Part:  "PlantOperation",
+		Label: "LoadFollow",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(p.PlantOperation.LoadFollowActive)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.PlantOperation.LoadFollowActive = v
+			return nil
+		},
+	}
+
+	// Dispatcher load demand, fraction of rated generator output.
+	// Reaches the turbine load reference only while the dispatch
+	// permissive above is engaged.
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:44-47
+	m["ReactorBuilding/Grid/LoadDemand"] = &bridge.Control{
+		Part:  "ReactorBuilding/Grid",
+		Label: "LoadDemand",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.ReactorBuilding.Grid.LoadDemand)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.Grid.LoadDemand = v
+			return nil
+		},
+	}
 }
 
 // addPlantOperationSensors registers the reactor power control
