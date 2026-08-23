@@ -563,6 +563,52 @@ func TestPlant_LoadRejectOpensDumpAndRoutesSteam(t *testing.T) {
 		p.ReactorBuilding.SteamGenerator.Pressure)
 }
 
+// A manual stop-valve closure on a synchronized unit latches the turbine
+// trip through the steam-loss deadline, and the trip state alone holds the
+// condenser dump valves open until the operator resets at rest — the
+// bypass "temporarily replaces the turbine as the steam load".
+//
+// Spec justification:
+//   - stop/governor valves close and MW drops instantly on turbine trip:
+//     specs/pwr_sim/chapter_3/page_041.txt:12-15
+//   - bypass valves open on turbine trip and modulate to hold boiler
+//     pressure:
+//     specs/pwr_sim/chapter_3/page_041.txt:39-45
+//   - "These valves close automatically as steam is admitted to the
+//     turbine."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:32-33
+func TestPlant_StopValveClosureHoldsDumpUntilReset(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
+	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	synchronizeAndCloseBreaker(&p)
+	stepN(&p, int(5*time.Second/TimeStep))
+	require.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State,
+		"precondition: want turbine running")
+
+	p.TurbineBuilding.Turbine.StopValve.Open = 0
+	p.TurbineBuilding.Generator.BreakerClosed = false
+	stepN(&p, int(3*time.Second/TimeStep))
+	require.Equal(t, TurbineTripped, p.TurbineBuilding.Turbine.State,
+		"steam-loss deadline should latch the trip")
+	assert.Equal(t, Watts(0), p.TurbineBuilding.Turbine.RealPower,
+		"tripped machine makes no power")
+	assert.Greater(t, p.TurbineBuilding.Turbine.DumpValve.Open, 0.9,
+		"trip state should hold the condenser dump open, got %v",
+		p.TurbineBuilding.Turbine.DumpValve.Open)
+
+	stepN(&p, int(10*time.Second/TimeStep))
+	p.TurbineBuilding.Turbine.ResetRequest = true
+	stepN(&p, int(10*time.Millisecond/TimeStep))
+	require.Equal(t, TurbineOff, p.TurbineBuilding.Turbine.State,
+		"reset at rest should clear the trip to off")
+	p.TurbineBuilding.Turbine.StopValve.Open = 1
+	stepN(&p, int(2*time.Second/TimeStep))
+	assert.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State,
+		"steam admission after reset should return the machine to service")
+}
+
 // The atmospheric dump valve relieves SG inventory and pressure
 // directly to atmosphere without adding condensate to the condenser.
 //
