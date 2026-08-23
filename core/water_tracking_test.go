@@ -13,24 +13,24 @@ import (
 // the RPV pressure so the surge-line fluid-graph edges see no
 // differential (they would otherwise move phantom volume).
 func forcePORVOpen(p *Plant) {
-	const bubbleGal = 500.0 // 1500 + 500*2.5 = 2750 psia > PORVTrip
+	const bubbleGal = 500.0
 	pz := &p.ReactorBuilding.Pressurizer
 	pz.Volume = Volume{Val: 1500, Unit: u.Gallon}
 	pz.Water = Volume{Val: 1500 - bubbleGal, Unit: u.Gallon}
-	p.ReactorBuilding.ReactorPressureVessel.Pressure = PressurizerBasePressure +
-		Pressure(bubbleGal*PressurizerBubbleStiffness)
+	pz.Pressure = PressurizerBasePressure + Pressure(bubbleGal*PressurizerBubbleStiffness)
+	p.ReactorBuilding.ReactorPressureVessel.Pressure = pz.Pressure
 	p.ReactorBuilding.SafetyValve.Open = 0
 }
 
 // steadyPressurizer pins the pressurizer at its 2250 psia operating
 // point with matched RPV pressure so surge-line edges stay inert.
 func steadyPressurizer(p *Plant) {
-	const bubbleGal = 300.0 // 1500 + 300*2.5 = 2250 psia
+	const bubbleGal = 300.0 // no-load operating point, 2250 psia
 	pz := &p.ReactorBuilding.Pressurizer
 	pz.Volume = Volume{Val: 1500, Unit: u.Gallon}
 	pz.Water = Volume{Val: 1500 - bubbleGal, Unit: u.Gallon}
-	p.ReactorBuilding.ReactorPressureVessel.Pressure = PressurizerBasePressure +
-		Pressure(bubbleGal*PressurizerBubbleStiffness)
+	pz.Pressure = PressurizerHeaterTarget
+	p.ReactorBuilding.ReactorPressureVessel.Pressure = PressurizerHeaterTarget
 	p.ReactorBuilding.SafetyValve.Open = 0
 }
 

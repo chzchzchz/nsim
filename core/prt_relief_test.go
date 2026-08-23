@@ -9,16 +9,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// setPressurizerPsi drives the pressurizer to a target pressure by
-// setting its liquid inventory — the step recomputes pressure from the
-// bubble every tick, so inventory is the test-side stand-in for
-// continued energy input.
+// setPressurizerPsi holds the pressurizer at a target pressure. Under
+// the decoupled two-loop model pressure is an independent saturation
+// state, so the helper asserts both the state itself and the matching
+// liquid inventory (the step's boiloff/relief bookkeeping consumes
+// bubble volume from that inventory).
 func setPressurizerPsi(p *Plant, psia float64) {
 	bubble := (psia - float64(PressurizerBasePressure)) /
 		PressurizerBubbleStiffness
 	p.ReactorBuilding.Pressurizer.Water =
 		vol(p.ReactorBuilding.Pressurizer.Water,
 			p.ReactorBuilding.Pressurizer.Volume.Float()-bubble)
+	p.ReactorBuilding.Pressurizer.Pressure = Pressure(psia)
 }
 
 // holdPressure re-asserts a pressurizer pressure before each step so a
