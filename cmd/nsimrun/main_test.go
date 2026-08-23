@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/chzchzchz/nsim/cmdfile"
 	"github.com/chzchzchz/nsim/core"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,6 +27,46 @@ func captureLogs(fn func()) []string {
 		return nil
 	}
 	return lines
+}
+
+func writeTemp(t *testing.T, name, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	return path
+}
+
+func TestLoadCommands(t *testing.T) {
+	t.Run("json envelope", func(t *testing.T) {
+		path := writeTemp(t, "cmds.json",
+			`{"commands":[{"offsetMs":500,"control":"Part/Label","value":"1"}]}`)
+		cmds, err := loadCommands(path)
+		require.NoError(t, err)
+		require.Len(t, cmds, 1)
+		assert.Equal(t, int64(500), cmds[0].TimeOffsetMs)
+		assert.Equal(t, "Part/Label", cmds[0].ControlKey)
+	})
+
+	t.Run("json extension is case insensitive", func(t *testing.T) {
+		path := writeTemp(t, "cmds.JSON", `{"commands":[]}`)
+		cmds, err := loadCommands(path)
+		require.NoError(t, err)
+		assert.Empty(t, cmds)
+	})
+
+	t.Run("text lines", func(t *testing.T) {
+		path := writeTemp(t, "cmds.txt", "100 Part.Label 1\n")
+		cmds, err := loadCommands(path)
+		require.NoError(t, err)
+		require.Len(t, cmds, 1)
+		assert.Equal(t, int64(100), cmds[0].TimeOffsetMs)
+		assert.Equal(t, "Part.Label", cmds[0].ControlKey)
+	})
+
+	t.Run("missing file", func(t *testing.T) {
+		_, err := loadCommands(filepath.Join(t.TempDir(), "nope.txt"))
+		require.Error(t, err)
+	})
 }
 
 func TestNSimRunCommandIntegration(t *testing.T) {

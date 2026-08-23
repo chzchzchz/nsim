@@ -4,6 +4,7 @@
 package cmdfile
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -13,10 +14,34 @@ import (
 
 // Command is one time-stamped control action, identical to a
 // line in an nsimrun -cmd file (see cmd/nsimrun/README.md).
+// The JSON tags define the web console export format consumed
+// by `nsimrun -cmd *.json`.
 type Command struct {
-	TimeOffsetMs int64
-	ControlKey   string
-	Value        string
+	TimeOffsetMs int64  `json:"offsetMs"`
+	ControlKey   string `json:"control"`
+	Value        string `json:"value"`
+}
+
+// commandFile is the JSON envelope shared by the web UI
+// command-log export and the nsimrun -cmd *.json loader.
+type commandFile struct {
+	Commands []Command `json:"commands"`
+}
+
+// ParseJSON reads the envelope written by WriteJSON.
+func ParseJSON(r io.Reader) ([]Command, error) {
+	var cf commandFile
+	if err := json.NewDecoder(r).Decode(&cf); err != nil {
+		return nil, fmt.Errorf("parse command JSON: %w", err)
+	}
+	return cf.Commands, nil
+}
+
+// WriteJSON emits the envelope consumed by nsimrun -cmd *.json.
+func WriteJSON(w io.Writer, cmds []Command) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(commandFile{Commands: cmds})
 }
 
 // Parse reads zero or more command lines. Blank lines and

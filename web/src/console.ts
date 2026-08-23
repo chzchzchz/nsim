@@ -39,9 +39,43 @@ export function initConsole(
 ): ConsolePanel {
     hostEl.innerHTML = "";
 
+    const header = document.createElement("div");
+    header.className = "cmd-header";
+    hostEl.appendChild(header);
+
     const h = document.createElement("h2");
     h.textContent = "Command Console";
-    hostEl.appendChild(h);
+    header.appendChild(h);
+
+    // Downloads the journaled commands as a JSON file for
+    // nsimrun replay; distinct from the top-bar clipboard button,
+    // which copies the plant state JSON.
+    const exportBtn = document.createElement("button");
+    exportBtn.id = "btn-cmd-export";
+    exportBtn.textContent = "\u2b07 Export log (.json)";
+    exportBtn.title =
+        "Download all commands submitted this run as a JSON file "
+        + "(replay with: go run ./cmd/nsimrun -cmd nsim-commands.json). "
+        + "Not the clipboard copy \u2014 that one copies plant state.";
+    exportBtn.addEventListener("click", () => {
+        const raw = plant.commandLogJSON();
+        if (typeof raw !== "string") {
+            const msg = raw instanceof Error ? raw.message : String(raw);
+            errorLine.textContent = `log export failed: ${msg}`;
+            return;
+        }
+        const blob = new Blob([raw], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "nsim-commands.json";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        errorLine.textContent = "";
+    });
+    header.appendChild(exportBtn);
 
     const listEl = document.createElement("div");
     listEl.id = "cmd-list";

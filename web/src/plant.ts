@@ -26,6 +26,7 @@ export interface PlantHandle {
     sensorJSON(id: string): string | Error;
     submitCommands(text: string): Error | null;
     commandQueueJSON(): string | Error;
+    commandLogJSON(): string | Error;
     getSvg(): string | Error;
     simTimeMs(): number;
     toJSON(): string;

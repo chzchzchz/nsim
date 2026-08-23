@@ -29,6 +29,7 @@ type plantHandle struct {
 	simTimeNs  int64
 	createdAt  time.Time
 	queue      *cmdfile.Queue
+	journal    *cmdfile.Journal
 	controls   bridge.ControlMap
 }
 
@@ -38,6 +39,7 @@ func newPlantHandle() *plantHandle {
 		p:        &p,
 		createdAt: time.Now(),
 		queue:    &cmdfile.Queue{},
+		journal:  &cmdfile.Journal{},
 		controls: p.GetControlMap(),
 	}
 }
@@ -91,13 +93,20 @@ func (h *plantHandle) lookupSensor(id string) (*bridge.Sensor, bool) {
 	return s, ok
 }
 
+// setControl applies a UI control change and journals it at the
+// current simulated time so sessions can be exported and
+// replayed with nsimrun.
 func (h *plantHandle) setControl(id, value string) error {
-	cm := h.p.GetControlMap()
-	c, ok := cm[id]
+	key := cmdfile.ResolveKey(h.controls, id)
+	c, ok := h.controls[key]
 	if !ok {
 		return fmt.Errorf("unknown control %q", id)
 	}
-	return c.Set(value)
+	if err := c.Set(value); err != nil {
+		return err
+	}
+	h.journal.Add(cmdfile.Command{ControlKey: key, Value: value}, h.simTimeNs)
+	return nil
 }
 
 // getControlValue returns the current Get() result for the
@@ -128,9 +137,17 @@ func (h *plantHandle) sensorJSON(id string) (string, error) {
 }
 
 // submitCommands parses console text and schedules each
-// command relative to the current simulation time.
+// command relative to the current simulation time. Scheduled
+// entries are journaled at their due time.
 func (h *plantHandle) submitCommands(text string) error {
-	return h.queue.Submit(text, h.simTimeNs)
+	before := len(h.queue.Entries())
+	if err := h.queue.Submit(text, h.simTimeNs); err != nil {
+		return err
+	}
+	for _, e := range h.queue.Entries()[before:] {
+		h.journal.Add(e.Cmd, e.DueNs)
+	}
+	return nil
 }
 
 type queueEntryJSON struct {
@@ -164,6 +181,16 @@ func (h *plantHandle) commandQueueJSON() (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// commandLogJSON renders every journaled control command as a
+// JSON command file loadable via `nsimrun -cmd *.json`.
+func (h *plantHandle) commandLogJSON() (string, error) {
+	var buf bytes.Buffer
+	if err := cmdfile.WriteJSON(&buf, h.journal.CommandsFrom(0)); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 func (h *plantHandle) getSvg() (string, error) {
@@ -275,6 +302,13 @@ func jsHandle(h *plantHandle) js.Value {
 	}))
 	obj.Set("commandQueueJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		s, err := h.commandQueueJSON()
+		if err != nil {
+			return js.Global().Get("Error").New(err.Error())
+		}
+		return s
+	}))
+	obj.Set("commandLogJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		s, err := h.commandLogJSON()
 		if err != nil {
 			return js.Global().Get("Error").New(err.Error())
 		}

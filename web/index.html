@@ -118,12 +118,29 @@
             padding: 8px;
             font-size: 12px;
         }
-        #console > h2 {
-            margin: 0 0 8px 0;
-            font-size: 14px;
+        .cmd-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px;
             border-bottom: 1px solid #ccc;
             padding-bottom: 4px;
         }
+        .cmd-header h2 {
+            margin: 0;
+            font-size: 14px;
+        }
+        #btn-cmd-export {
+            background: #1e6b52;
+            color: white;
+            border: 1px solid #14503c;
+            padding: 3px 10px;
+            cursor: pointer;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        #btn-cmd-export:hover { background: #2a8a6b; }
         #cmd-list {
             max-height: 180px;
             overflow-y: auto;

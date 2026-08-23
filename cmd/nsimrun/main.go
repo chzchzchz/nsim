@@ -6,15 +6,32 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/chzchzchz/nsim/cmdfile"
 	"github.com/chzchzchz/nsim/core"
 )
 
+// loadCommands dispatches on file extension: *.json files hold
+// the web console export envelope, anything else uses the line
+// grammar (see cmd/nsimrun/README.md).
+func loadCommands(path string) ([]cmdfile.Command, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if strings.EqualFold(filepath.Ext(path), ".json") {
+		return cmdfile.ParseJSON(f)
+	}
+	return cmdfile.Parse(f)
+}
+
 func main() {
 	plantPath := flag.String("plant", "", "plant JSON file (defaults to MakePlant)")
 	seconds := flag.Float64("seconds", 0, "number of seconds to step")
-	cmdPath := flag.String("cmd", "", "command file (TimeOffset Part.Label Value per line)")
+	cmdPath := flag.String("cmd", "", "command file: TimeOffset Part.Label Value lines, or web-exported *.json")
 	flag.Parse()
 
 	p := core.MakePlant()
@@ -50,14 +67,10 @@ func main() {
 
 	var cmds []cmdfile.Command
 	if *cmdPath != "" {
-		f, err := os.Open(*cmdPath)
+		var err error
+		cmds, err = loadCommands(*cmdPath)
 		if err != nil {
-			log.Fatalf("failed to open command file: %v", err)
-		}
-		defer f.Close()
-		cmds, err = cmdfile.Parse(f)
-		if err != nil {
-			log.Fatalf("failed to parse command file: %v", err)
+			log.Fatalf("failed to load command file: %v", err)
 		}
 	}
 

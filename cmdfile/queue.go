@@ -57,10 +57,8 @@ func (q *Queue) Submit(text string, nowNs int64) error {
 		return err
 	}
 	for i, c := range cmds {
-		due := nowNs + c.TimeOffsetMs*int64(time.Millisecond)
-		if due < nowNs {
-			due = nowNs
-		}
+		offsetNs := c.TimeOffsetMs * int64(time.Millisecond)
+		due := max(nowNs, nowNs+offsetNs)
 		q.entries = append(q.entries, Entry{
 			Seq:   q.nextSeq,
 			Text:  lines[i],
