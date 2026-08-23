@@ -70,6 +70,31 @@ func TestXenon_PostShutdownPeakTimingAndBound(t *testing.T) {
 		"by ~72 hours the pit should have decayed toward recovery")
 }
 
+// A sustained power reduction drops xenon burnup destruction faster
+// than production, so the inventory climbs immediately (the classic
+// load-follow transient operators compensate with rods/boron). This is
+// the mechanism that makes intermediate-power plateaus unstable under
+// static rod position during load maneuvers.
+func TestXenon_InventoryRisesAfterPowerReduction(t *testing.T) {
+	var rpv ReactorPressureVessel
+	rpv.Iodine135 = 1
+	rpv.Xenon135 = 1
+	p := 0.9
+	rpv.FissionPower = Watts(p * float64(CoreFissionPowerAtRated))
+
+	prev := rpv.Xenon135
+	for i := 1; i <= 10; i++ {
+		rpv.advanceXenon(60 * time.Second)
+		assert.Greater(t, rpv.Xenon135, prev,
+			"xenon must climb while power sits below the iodine equilibrium")
+		prev = rpv.Xenon135
+	}
+	assert.Greater(t, rpv.Xenon135, 1.0005,
+		"ten minutes at 90 percent power must show measurable xenon growth")
+	assert.Less(t, rpv.Xenon135, 1.06,
+		"growth should stay on the minutes-to-hours physical scale")
+}
+
 // The reactivity term folds its reference at rated equilibrium:
 // surplus xenon subtracts reactivity, depleted xenon adds it. Wiring
 // check recomputed from CoreXenonEquilibriumWorthPct.
