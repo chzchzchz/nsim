@@ -11,6 +11,7 @@ import (
 func (r *ReactorBuilding) Step(
 	sgSteamOutflowFraction float64,
 	turbineLoadFraction float64,
+	op PlantOperation,
 ) ReactorBuilding {
 	ret := *r
 	dt := TimeStep
@@ -63,6 +64,14 @@ func (r *ReactorBuilding) Step(
 	pzrFraction := 0.0
 	if pzrVolume := ret.Pressurizer.Volume.Float(); pzrVolume > 0 {
 		pzrFraction = ret.Pressurizer.Water.Float() / pzrVolume
+	}
+	// Automatic stepback boron channel: while latched, CVCS dilution
+	// carries the post-stepback xenon buildup so rod margin is never
+	// the binding limit (load-follow compensation duty,
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:24-27).
+	if op.StepbackActive && op.StepbackCVCSDilute {
+		ret.Aux.ChemicalVolumeControlSystem.Mode = CVCSDilution
+		ret.Aux.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
 	}
 	ret.Aux.ChemicalVolumeControlSystem = ret.Aux.ChemicalVolumeControlSystem.Step(
 		ret.ReactorMakeupControlValve.Flow,
@@ -138,7 +147,8 @@ func (r *ReactorBuilding) Step(
 	// incremental reactivity changes rather than an
 	// instantaneous scram. A latched trip supersedes both and
 	// forces full insertion inside ReactorPressureVessel.Step
-	// (plans/x/trip.md).
+	// (plans/x/trip.md). While the automatic stepback is latched
+	// it, not the operator, owns the demand.
 	//   "Rod cluster control (RCC) assemblies are used for
 	//   reactor startup or shutdown, to follow load changes,
 	//   and to control small transient changes in reactivity."
@@ -151,9 +161,12 @@ func (r *ReactorBuilding) Step(
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:24-27
 	// A latched trip freezes integration: the scram forces full
 	// insertion regardless of demand, and pre-spinning withdrawal
-	// for a post-trip reset is not an automatic action.
+	// for a post-trip reset is not an automatic action. The
+	// turbine-trip stepback outranks it while latched - the trip
+	// response is the control system's first action
+	// (specs/pwr_sim/chapter_3/page_041.txt:24-29).
 	if ret.ReactorPressureVessel.ControlRods.AutoControl &&
-		!ret.ReactorPressureVessel.Trip {
+		!ret.ReactorPressureVessel.Trip && !op.StepbackActive {
 		powerFraction := float64(ret.ReactorPressureVessel.FissionPower) /
 			float64(CoreRatedThermalPower)
 		ret.ReactorPressureVessel.ControlRods.applyAutoControl(
@@ -161,6 +174,9 @@ func (r *ReactorBuilding) Step(
 			float64(ret.ReactorPressureVessel.Reactivity))
 	}
 
+	if op.StepbackActive {
+		ret.ReactorPressureVessel.ControlRods.DemandInsertion = op.StepbackDemand
+	}
 	ret.ReactorPressureVessel.ControlRods =
 		ret.ReactorPressureVessel.ControlRods.Step()
 
@@ -276,6 +292,29 @@ rcsPressurePsig := float64(ret.Pressurizer.Pressure - AtmosphericPressure)
 		)
 	}
 	ret.SteamGenerator = ret.SteamGenerator.Step(sgSteamOutflowFraction)
+
+	// Pressurizer surge line. The RCS is a fixed inventory of
+	// water whose density follows the coolant temperature, so the
+	// loop "breathes" into and out of the pressurizer as Tavg
+	// moves: heating expands the loop and lifts pressurizer level,
+	// cooling contracts it and drains the tank. The coefficient is
+	// an assumption (the spec quotes no expansion data): it is
+	// sized so a full core-reference-temperature maneuver
+	// (558→621°F) displaces roughly 40 percent of pressurizer
+	// volume, the level swing operators see across the program.
+	//   "Raise pressurizer level above no-load value in
+	//    anticipation of coolant contraction"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:70-72
+	surge := PressurizerSurgePerDegF * (ret.ReactorPressureVessel.Outlet.Float() - rpvOutletPreStepF)
+	if surge > -1e-6 && surge < 1e-6 {
+		surge = 0
+	}
+	pzrWater := min(max(ret.Pressurizer.Water.Float()+surge, 0),
+		ret.Pressurizer.Volume.Float())
+	ret.Pressurizer.SteamBubble = Volume{
+		Val: ret.Pressurizer.Volume.Float() - pzrWater, Unit: u.Gallon,
+	}
+	ret.Pressurizer.Water = Volume{Val: pzrWater, Unit: u.Gallon}
 
 	// SIS: passive accumulator discharge and HHSI pump
 	// injection. The accumulator discharges into the RCS cold
@@ -856,9 +895,18 @@ func (p *Plant) Step() {
 	p.nextPlant.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.DriveReady =
 		p.nextPlant.Electrical.ESFBusB.Energized
 
+	// Automatic turbine-trip stepback. The control system latches
+	// on the trip and owns the rod demand while it holds neutron
+	// power at the runback level; the ReactorBuilding step below
+	// applies that demand ahead of its rod-drive rate limit.
+	p.nextPlant.PlantOperation = p.PlantOperation.Stepback(
+		p.TurbineBuilding.Turbine.State,
+		p.ReactorBuilding.ReactorPressureVessel,
+	)
 	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step(
 		p.TurbineBuilding.SteamOfftakeFraction,
 		p.TurbineBuilding.Turbine.Setpoint,
+		p.nextPlant.PlantOperation,
 	)
 	// Latch the RCP DriveReady after the ReactorBuilding step so
 	// the assignment above (which copies the prior state) cannot
@@ -1415,6 +1463,28 @@ func (p *Plant) Step() {
 	p.nextPlant.TurbineBuilding.MainFeedwaterControlValve.Open =
 		reg.ValveDemand
 
+	// Main feedwater replenishment. With the pump running and the
+	// regulator in service, the valve demand meters FeedwaterDesign-
+	// Flow into the lumped SG and out of the condenser hotwell, so
+	// secondary mass stays conserved: steam offtake condenses back
+	// into the hotwell, and feed draws it onward to the SG. This
+	// closes the gap where only EFWS could add SG inventory.
+	//   "The condensate pumps take suction from the condenser
+	//    hotwell and pump condensate [...]; the water discharge from
+	//    the feedwater pumps flows [...] into the steam generators."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-51
+	if reg.Running && p.nextPlant.TurbineBuilding.MainFeedwaterPump.Running {
+		delivery := reg.ValveDemand *
+			FeedwaterDesignFlow.Float() * TimeStep.Seconds()
+		sgWater := min(sg.Water.Float()+delivery,
+			sg.Volume.Float())
+		p.nextPlant.ReactorBuilding.SteamGenerator.Water =
+			Volume{Val: sgWater, Unit: u.Gallon}
+		hotwell := max(p.nextPlant.TurbineBuilding.Condenser.HotwellLevel.Float()-delivery, 0)
+		p.nextPlant.TurbineBuilding.Condenser.HotwellLevel =
+			Volume{Val: hotwell, Unit: u.Gallon}
+	}
+
 	p.nextPlant.Electrical = p.Electrical.Step()
 
 	// Plant electrical systems step (plans/p27_1.txt). The
@@ -1660,10 +1730,11 @@ func (p *Plant) Step() {
 	// pressure, which is the normal state of every hot lineup.
 	steamFlowFraction := p.nextPlant.TurbineBuilding.SteamOfftakeFraction
 	// nextPlant is a zero-valued scratch pad; seed the operational
-	// layer with the operator-configured mode so Step advances the
-	// lineup the plant actually sits in (mode definitions:
+	// layer from the copy this step already advanced (the seed
+	// preserves the stepback latch written earlier in the step) so
+	// Step advances the lineup the plant actually sits in (mode
+	// definitions:
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:79-86).
-	p.nextPlant.PlantOperation = p.PlantOperation
 	p.nextPlant.PlantOperation = p.nextPlant.PlantOperation.Step(
 		p.nextPlant.PlantOperation.Mode,
 		p.nextPlant.ReactorBuilding.ReactorPressureVessel.Outlet,

@@ -84,6 +84,30 @@ const (
 	SteamGeneratorShellDesignPressure Pressure = 1000
 	LatentHeatOfSteamization          Watts    = 2.26e6
 
+	// SteamGeneratorSafetyValveSetpointPsia pops the spring-loaded
+	// SG safety valves. Assumption; the spec names the valves
+	// ("self-actuating ASME-code safety valves") but quotes no
+	// setpoint, so the value sits above every legitimate operating
+	// surge the pressure-mode controller can demand and below the
+	// shell design cap.
+	//   "If action is not taken [...], the boiler pressure safety
+	//    relief valve will open on high boiler pressure"
+	//   specs/pwr_sim/chapter_3/page_041.txt:20-22
+	//   "self-actuating ASME-code [safety valves]"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:34-38
+	SteamGeneratorSafetyValveSetpointPsia Pressure = 985
+
+	// SteamGeneratorSafetyValveRecloseFraction is the pressure
+	// fraction below the popping setpoint at which the valves
+	// reseat. Assumption; models ASME-code blowdown so the valves
+	// do not chatter around the setpoint.
+	SteamGeneratorSafetyValveRecloseFraction = 0.97
+
+	// SteamGeneratorSafetyValveReliefFraction is the fraction of
+	// rated steam flow the safety valves pass at full lift.
+	// Assumption; sized comparable to the atmospheric dump bank.
+	SteamGeneratorSafetyValveReliefFraction = 0.5
+
 	// SteamGallonWaterM3 is the liquid-water volume (m^3) the SG
 	// inventory loses per gallon of steam drawn off, matching the
 	// ~1 kg/L convention used by the boil-rate integration.
@@ -180,6 +204,26 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 		ret.Water = vol(ret.Water, newWater)
 	}
 
+	// ASME-code safety valves. Spring-loaded: they pop open at the
+	// setpoint and reseat with blowdown below it, relieving to
+	// atmosphere the way the atmospheric bank does.
+	//   "self-actuating ASME-code [safety valves] which open
+	//    automatically to reduce steam pressure"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:34-38
+	if ret.Pressure >= SteamGeneratorSafetyValveSetpointPsia {
+		ret.SafetyValve.Open = 1
+	} else if ret.Pressure <
+		SteamGeneratorSafetyValveSetpointPsia*SteamGeneratorSafetyValveRecloseFraction {
+		ret.SafetyValve.Open = 0
+	}
+	svFraction := ret.SafetyValve.Open * SteamGeneratorSafetyValveReliefFraction
+	if svFraction > 0 {
+		dump := svFraction *
+			SteamGeneratorFullLoadSteamFlow.Float() / SecondsPerHour *
+			dt.Seconds()
+		ret.Water = Volume{Val: max(ret.Water.Float()-dump, 0), Unit: u.Gallon}
+	}
+
 	// 2) Pressure response. While HeatInput > 0 and there is water
 	// to boil, Pressure relaxes toward the shell pressure scaled by
 	// the balance of steam production against offtake: demand above
@@ -193,7 +237,7 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 	// steam generation and Pressure decays toward zero.
 	pressure := float64(ret.Pressure)
 	if ret.HeatInput > 0 && ret.Water.Float() > 0 {
-		outflow := steamOutflowFraction + advFraction
+		outflow := steamOutflowFraction + advFraction + svFraction
 		supply := boilRateM3PerSec / ratedBoilM3PerSec
 		target := float64(SteamGeneratorShellPressure)
 		switch {

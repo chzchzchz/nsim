@@ -117,10 +117,11 @@ func TestPrecriticalLineup_DutyCycleBalancesChargingLetdown(t *testing.T) {
 			"the unclamped tank is the inventory ledger for the balance")
 	assert.GreaterOrEqual(t, minPZW, 1300.0,
 		"want pressurizer essentially full through every cycle")
-	assert.Equal(t, 1500.0, p.ReactorBuilding.Pressurizer.Water.Float(),
-		"want pressurizer refilled water solid at end")
-	assert.Zero(t, p.ReactorBuilding.Pressurizer.SteamBubble.Float(),
-		"want no steam bubble under balanced inventory")
+	assert.InDelta(t, 1500.0, p.ReactorBuilding.Pressurizer.Water.Float(), 1.0,
+		"want pressurizer refilled water solid at end (surge-line "+
+			"contraction now tracks the cooling Tavg program)")
+	assert.Less(t, p.ReactorBuilding.Pressurizer.SteamBubble.Float(), 1.0,
+		"want no meaningful steam bubble under balanced inventory")
 	assert.InDelta(t, CVCSInitialBoron,
 		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration, 2,
 		"want boron concentration unchanged during checks")

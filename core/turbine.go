@@ -70,9 +70,20 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 	// Throttled design-flow steam demand (gal/step). At full
 	// admission and rated header pressure this equals the condenser's
 	// design full-load steam load, so the SG draw, condenser duty,
-	// and dump capacity share one scale.
+	// and dump capacity share one scale. Before synchronization the
+	// draw scales with rotor speed — a slow-roll rotor cannot swallow
+	// design flow; without this a rolling machine chills its steam
+	// generator at standstill. Assumption floor (10%) keeps the
+	// Off→Running self-start alive at zero speed.
+	//   "Wide range speed control of the turbine from turning gear
+	//    to rated speed."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
 	steamFlow := CondenserDesignSteamLoadGalPer * admission *
 		float64(sgPressure) / float64(SteamGeneratorShellPressure)
+	if !ret.Synchronized {
+		steamFlow *= max(float64(ret.Velocity)/float64(TurbineRatedSpeed),
+			TurbineRollMinSteamFraction)
+	}
 	steamFlow = max(steamFlow, 0)
 	ret.steamDemandGalPerStep = steamFlow
 

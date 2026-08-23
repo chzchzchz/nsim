@@ -386,6 +386,14 @@ const (
 	TurbineOverspeedTripRatio float64  = 1.20
 	TurbineSteamLossDeadline           = 2 * time.Second
 	TurbineRatedkW            Watts    = 1_000_000e3
+
+	// TurbineRollMinSteamFraction is the floor on the rotor-speed
+	// scaling of pre-synchronization steam draw: a machine at rest
+	// still admits enough steam to self-start once the stop valve
+	// opens. Assumption; the source describes wide-range speed
+	// control without quoting a minimum admission.
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
+	TurbineRollMinSteamFraction = 0.10
 )
 
 // Turbine-generator grid-coupling and protective-control constants
@@ -1064,10 +1072,8 @@ func (c ControlRods) Step() ControlRods {
 	ret.Insertion = c.Insertion + min(max(delta, -maxStep), maxStep)
 	return ret
 }
+
 type Nozzle struct{ Part }
-
-
-
 
 // PowerGenerator models the electrical side of a generator set. The
 // diesel engine step populates these fields; the main turbine's
@@ -1430,9 +1436,6 @@ const (
 	DieselFieldFlashingTime         = 1 * time.Second
 )
 
-
-
-
 // Feedwater heating train design constants (plans/p10_1.txt).
 //
 // Spec justification:
@@ -1462,6 +1465,7 @@ const (
 	ExtractionSteamEnthalpy   Watts   = 1.16e6
 	KilogramsPerGallon        float64 = 3.785
 )
+
 //   - LPTemperatureRisePerStage / HPTemperatureRisePerStage — no
 //     per-stage temperature numbers are stated in the spec; the
 //     heater model uses a per-stage rise that sums to the
@@ -1494,6 +1498,7 @@ const (
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
 //     three SGs at full load give 3 × 480 kg/s = 1440 kg/s ≈
 //     9531 gal/s, converted below.
+//
 // FeedwaterMinFlow is the minimum stable flow below which the
 // main feed pump discharge recirculates to the deaerator.
 // "The discharge from the pumps is automatically recirculated back
@@ -1673,7 +1678,6 @@ const (
 	HPExhaustQualityLowLoad = 0.70
 )
 
-
 // DieselCoolantTripTemp — cooling trip threshold; the spec implies
 // Service-Water loss must trip the engine
 // (specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89,
@@ -1687,10 +1691,6 @@ var DieselCoolantTripTemp = Temperature{Val: 220, Unit: u.Fahrenheit}
 // for an operator response without nuisance warnings during
 // normal rated-load burn.
 var DieselLowFuelLevel = Volume{Val: 50, Unit: u.Gallon}
-
-
-
-
 
 type Transformer struct{ Part }
 
@@ -1719,8 +1719,8 @@ type Valve struct {
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:17
 type MakeupValve struct {
 	Part
-	Open  float64
-	Flow  Volume
+	Open float64
+	Flow Volume
 }
 
 // Grid models the infinite bus at the station switchyard. It is a
@@ -2411,12 +2411,12 @@ var SISAccumulatorPerTankCapacity Volume = Volume{Val: 1150, Unit: u.Gallon}
 // The spec does not state a numeric per-tank discharge rate; 230
 // gpm per tank is the typical Westinghouse four-loop accumulator
 // design.
-var SISAccumulatorDischargeRate Volume = Volume{Val: 230.0/60.0, Unit: u.Gallon}
+var SISAccumulatorDischargeRate Volume = Volume{Val: 230.0 / 60.0, Unit: u.Gallon}
 
 // SISHHSIDesignFlow is the design discharge flow rate of each
 // HHSI pump (gal/s). 970 gpm is the typical rated flow for the
 // Westinghouse four-loop HHSI pump.
-var SISHHSIDesignFlow Volume = Volume{Val: 970.0/60.0, Unit: u.Gallon}
+var SISHHSIDesignFlow Volume = Volume{Val: 970.0 / 60.0, Unit: u.Gallon}
 
 // SIS models the Safety Injection System's high-head injection
 // phase state: the passive accumulator bank, the HHSI pump running
@@ -2681,14 +2681,14 @@ type EFWS struct {
 //     period it is assumed that these valves will be full open."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:36-39
 //   - Auto-start signals:
-//       "Low-low level in 2/4 level channels in any one steam
-//       generator" → Motor driven pumps.
-//       specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:71-79
-//       "Low-low level in 2/4 level channels in any two steam
-//       generators" → Turbine drive pumps.
-//       specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:82-92
-//       "Safety injection" → Motor driven pumps.
-//       specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:94-98
+//     "Low-low level in 2/4 level channels in any one steam
+//     generator" → Motor driven pumps.
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:71-79
+//     "Low-low level in 2/4 level channels in any two steam
+//     generators" → Turbine drive pumps.
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:82-92
+//     "Safety injection" → Motor driven pumps.
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:94-98
 //   - EFWS secured: "the reactor coolant hot leg temperature
 //     is reduced to 350°F (176.7°C) and the RHRS has been
 //     activated, the EFWS is secured."
@@ -2781,13 +2781,13 @@ var EFWSPrimaryTankMaxTemp Temperature = Temperature{Val: 120, Unit: u.Fahrenhei
 // motor-driven EFWS pump (gal/s). The spec does not state a
 // numeric gpm; the value 150 gpm is a typical rated flow for a
 // Westinghouse four-loop motor-driven AFW pump.
-var EFWSMotorPumpFlow Volume = Volume{Val: 150.0/60.0, Unit: u.Gallon}
+var EFWSMotorPumpFlow Volume = Volume{Val: 150.0 / 60.0, Unit: u.Gallon}
 
 // EFWSTurbinePumpFlow is the design discharge flow rate of each
 // turbine-driven EFWS pump (gal/s). The spec does not state a
 // numeric gpm; the value 200 gpm is higher than the motor-driven
 // pump because the turbine governor can track steam demand.
-var EFWSTurbinePumpFlow Volume = Volume{Val: 200.0/60.0, Unit: u.Gallon}
+var EFWSTurbinePumpFlow Volume = Volume{Val: 200.0 / 60.0, Unit: u.Gallon}
 
 // CCWS models the Component Cooling Water System — the
 // intermediate cooling loop that removes heat from safeguards
@@ -2941,7 +2941,7 @@ var CCWSSurgeTankCapacity Volume = Volume{Val: 5000, Unit: u.Gallon}
 // "Each safeguards train is sized to supply 100-percent
 // post-accident component cooling flow requirements."
 // specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:41-42
-var CCWSDesignFlow Volume = Volume{Val: 800.0/60.0, Unit: u.Gallon}
+var CCWSDesignFlow Volume = Volume{Val: 800.0 / 60.0, Unit: u.Gallon}
 
 // CCHXApproachTemp is the lumped temperature rise across the
 // CCWS heat exchanger (°F). Used as the single-step outlet
@@ -4975,10 +4975,10 @@ type GeneratorExcitationSystem struct {
 // GeneratorCoolingSystem models the dual independent cooling
 // circuits for the main generator (chapter 15.2):
 //
-//   1. Hydrogen gas circulated by a shaft-driven blower
-//      through four hydrogen coolers.
-//   2. Stator coil cooling water (SCCW) closed demineralized-
-//      water loop with redundant pumps and coolers.
+//  1. Hydrogen gas circulated by a shaft-driven blower
+//     through four hydrogen coolers.
+//  2. Stator coil cooling water (SCCW) closed demineralized-
+//     water loop with redundant pumps and coolers.
 //
 // The simplified model tracks flow availability and per-cooler
 // effectiveness; it does not model H₂ circulation kinetics,
@@ -5202,6 +5202,46 @@ const (
 	// auxiliary to main. Spec: "about 3.5-percent steam flow."
 	OpAuxToMainFeedwaterThreshold = 0.035
 
+	// StepbackPowerFraction is the neutron power level the plant
+	// control system runs back to on a turbine trip before holding,
+	// preserving xenon reactivity margin for a full-power recovery.
+	// "The reactor neutron power will be reduced quickly to 60 % by
+	// rapid insertion of control rods - this is known as reactor
+	// power 'stepback'."
+	//   specs/pwr_sim/chapter_3/page_041.txt:28-29
+	StepbackPowerFraction = 0.60
+
+	// StepbackHoldBand is the fraction of rated fission power around
+	// the stepback target inside which the controller stops driving
+	// rods in and holds measured reactivity at zero instead.
+	// Assumption; the source describes the target level but not a
+	// hysteresis band.
+	StepbackHoldBand = 0.02
+
+	// StepbackControlGain scales the stepback controller's integral
+	// action: rod demand moves at the full mechanical drive speed at
+	// a 10-percent power error, proportionally slower nearer the
+	// target. Assumption; the source gives no controller tuning.
+	StepbackControlGain = 32.0
+
+	// StepbackMaxHold caps how long the automatic stepback holds the
+	// park before handing back to the operator: xenon growth on the
+	// model's compressed timescale eventually exhausts rod trim
+	// authority (gap A2 of plans/x/scenario/15.txt).
+	// Assumption.
+	StepbackMaxHold = 180 * time.Second
+
+	// StepbackXenonBoronGain is the soluble-boron dilution (ppm)
+	// that offsets one unit of xenon-135 growth above its rated-power
+	// equilibrium: xenon worth -2.7 pct per unit Xe (core/reactor.go
+	// CoreXenonEquilibriumWorthPct) divided by boron worth -0.05 pct
+	// per 100 ppm (core/parts.go CoreBoronWorthPer100ppm).
+	StepbackXenonBoronGain = 5400.0
+
+	// StepbackBoronFloorPpm keeps some soluble shim in hand during a
+	// long stepback hold. Assumption.
+	StepbackBoronFloorPpm = 600.0
+
 	// OpHotStandbyMaxRCPs is the maximum number of reactor
 	// coolant pumps permitted to run in HotStandby mode before
 	// RHRS is in service. Spec: "maximum of two out of four
@@ -5392,6 +5432,88 @@ type PlantOperation struct {
 	// instantaneous aggregates of stored state, computed on read,
 	// not stored.
 	DemandedPowerSetpoint float64
+	// StepbackActive latches while the plant control system is
+	// holding the reactor-power stepback that follows a turbine
+	// trip: neutron power run back to StepbackPowerFraction by
+	// rod insertion with xenon margin preserved for recovery.
+	// While latched the controller owns ControlRods.DemandInsertion;
+	// the latch releases when the turbine returns to Running or a
+	// reactor trip supersedes it.
+	//   "the plant control system is designed with the following
+	//    control actions: The reactor neutron power will be reduced
+	//    quickly to 60 % by rapid insertion of control rods"
+	//   specs/pwr_sim/chapter_3/page_041.txt:24-29
+	StepbackActive bool
+
+	// StepbackDemand is the rod insertion demand the active
+	// stepback controller holds (normalised 0..1).
+	StepbackDemand float64
+
+	// StepbackCVCSDilute requests the CVCS dilution mode while the
+	// stepback is latched, so soluble-boron dilution carries the
+	// post-stepback xenon buildup instead of rod margin.
+	StepbackCVCSDilute bool
+
+	// StepbackElapsed accumulates hold time while the stepback is
+	// latched; the controller hands back to the operator at
+	// StepbackMaxHold.
+	StepbackElapsed time.Duration
+}
+
+// Stepback latches and drives the automatic turbine-trip runback.
+// Arming requires a tripped turbine with the core still critical
+// above the target level; a reactor trip supersedes the runback, and
+// the latch releases once the turbine returns to service so operator
+// demand regains the rods. While active the controller integrates the
+// power error into rod demand at up to the mechanical drive speed:
+// pure integral action through the rate-limited drive cannot chase
+// itself into limit cycles the way proportional terms can. Xenon
+// growth after the power cut is carried by soluble-boron dilution
+// (the load-follow compensation duty) so rod margin is never the
+// binding limit during the hold.
+func (po PlantOperation) Stepback(tstate TurbineState, rpv ReactorPressureVessel) PlantOperation {
+	ret := po
+	if rpv.Trip {
+		ret.StepbackActive = false
+		return ret
+	}
+	if !ret.StepbackActive {
+		if tstate != TurbineTripped || float64(rpv.FissionPower) <=
+			StepbackPowerFraction*float64(CoreFissionPowerAtRated) {
+			return ret
+		}
+		ret.StepbackActive = true
+		ret.StepbackDemand = rpv.ControlRods.Insertion + RodInsertionSpeed
+	} else if tstate != TurbineTripped {
+		// Reset consumed: the trip latch is cleared (State Off) or
+		// the machine is back in service (Running) - either way the
+		// operator regains rod demand for the recovery.
+		ret.StepbackActive = false
+		return ret
+	}
+	errFrac := (float64(rpv.FissionPower) -
+		StepbackPowerFraction*float64(CoreFissionPowerAtRated)) /
+		float64(CoreFissionPowerAtRated)
+	rate := max(min(StepbackControlGain*errFrac, RodInsertionSpeed),
+		-RodInsertionSpeed)
+	demand := ret.StepbackDemand + rate*TimeStep.Seconds()
+	ret.StepbackDemand = min(max(demand, 0), 1)
+	// Dilute for the whole hold: at fresh-fuel chemistry a part-load
+	// park does not self-arrest (the fold would otherwise sink toward
+	// the neutron-source floor), and xenon growth after the power cut
+	// only adds to the deficit. This is the same remedy the
+	// load-rejection scenario applies by hand.
+	//   "Dilute to maneuvering chemistry so the fold self-arrests"
+	//   core/scenario17_test.go (93fa73c); plans/x/scenario/15.txt gap A2
+	ret.StepbackCVCSDilute = true
+	ret.StepbackElapsed += TimeStep
+	if ret.StepbackElapsed >= StepbackMaxHold {
+		// Xenon growth on the model's compressed timescale eventually
+		// exhausts rod trim authority (gap A2); hand back to the
+		// operator rather than let the core sink to the source floor.
+		ret.StepbackActive = false
+	}
+	return ret
 }
 
 // Step advances the PlantOperation layer for one tick. It enforces
@@ -5504,11 +5626,12 @@ func fissionFraction(fissionPower Watts) float64 {
 // coolant temperatures the core thermal model relaxes toward, so
 // the controller's reference is the plant's own temperature program
 // by construction.
-//   "From the DEMANDED POWER SETPOINT, a reference reactor coolant
-//    temperature (TREF) is obtained from the 'Tref versus power'
-//    characteristic curve."
-//   specs/pwr_sim/chapter_2/page_024.txt:13-14
-//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60-61
+//
+//	"From the DEMANDED POWER SETPOINT, a reference reactor coolant
+//	 temperature (TREF) is obtained from the 'Tref versus power'
+//	 characteristic curve."
+//	specs/pwr_sim/chapter_2/page_024.txt:13-14
+//	specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60-61
 func (po *PlantOperation) referenceTempF() float64 {
 	return CoreReferenceInletF +
 		(CoreReferenceOutletF-CoreReferenceInletF)*
@@ -5613,5 +5736,3 @@ func ClampRate(current, desiredDelta, posLimit, negLimit float64, dt time.Durati
 	delta = max(delta, maxDeltaNeg)
 	return delta / dt.Seconds()
 }
-
-

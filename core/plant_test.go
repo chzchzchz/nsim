@@ -681,3 +681,199 @@ func TestPowerGenerator_MVAEnforced(t *testing.T) {
 		"want no alarm when within rating")
 	_ = q3
 }
+
+// The turbine-trip stepback is the plant control system response to a
+// trip: fold neutron power quickly to 60 percent by rod insertion, park
+// there with zero measured reactivity (xenon margin preserved for
+// recovery), release the rods when the machine returns to service.
+//
+// Spec justification:
+//   - "The reactor neutron power will be reduced quickly to 60 % by
+//     rapid insertion of control rods - this is known as reactor power
+//     'stepback' [...] still has enough positive reactivity [...] to
+//     bring the reactor back to full power."
+//     specs/pwr_sim/chapter_3/page_041.txt:28-35
+func TestPlant_TurbineTripStepbackHoldsSixtyPercent(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
+	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	synchronizeAndCloseBreaker(&p)
+	stepN(&p, int(5*time.Second/TimeStep))
+	require.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State,
+		"precondition: want turbine running")
+
+	p.TurbineBuilding.Turbine.StopValve.Open = 0
+	p.TurbineBuilding.Generator.BreakerClosed = false
+	stepN(&p, int(3*time.Second/TimeStep))
+	require.True(t, p.PlantOperation.StepbackActive,
+		"trip should latch the automatic stepback")
+	require.False(t, p.ReactorBuilding.ReactorPressureVessel.Trip,
+		"stepback must hold without a reactor trip")
+
+	target := StepbackPowerFraction * float64(CoreFissionPowerAtRated)
+	stepN(&p, int(30*time.Second/TimeStep))
+	fp := float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower)
+	assert.InDelta(t, target, fp, 0.03*target,
+		"stepback should park neutron power at the runback level")
+	require.True(t, p.PlantOperation.StepbackActive,
+		"hold should persist while the turbine is out of service")
+	found := false
+	for _, a := range p.Alarms() {
+		if a.ID == AlarmIDTurbineStepback {
+			found = true
+		}
+	}
+	assert.True(t, found, "want stepback alarm active during hold")
+
+	p.TurbineBuilding.Turbine.ResetRequest = true
+	stepN(&p, int(10*time.Millisecond/TimeStep))
+	require.Equal(t, TurbineOff, p.TurbineBuilding.Turbine.State,
+		"reset at rest should clear the trip to off")
+	p.TurbineBuilding.Turbine.StopValve.Open = 1
+	p.TurbineBuilding.Turbine.SpeedDemand = 1.0
+	stepN(&p, int(3*time.Second/TimeStep))
+	assert.False(t, p.PlantOperation.StepbackActive,
+		"turbine back in service should release the stepback")
+}
+
+// Main feedwater delivery moves secondary inventory from the condenser
+// hotwell into the steam generator one-for-one: the differential
+// between two identical plants differing only in pump state isolates
+// the feed path from every shared flow.
+//
+// Spec justification:
+//   - "The condensate pumps take suction from the condenser hotwell
+//     and pump condensate [...]; the water discharge from the feedwater
+//     pumps flows [...] into the steam generators."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-51
+func TestPlant_MainFeedwaterReplenishesSGFromHotwell(t *testing.T) {
+	run := func(pumpOn bool) (float64, float64) {
+		p := MakePlant()
+		p.ReactorBuilding.SteamGenerator.Water =
+			Volume{Val: 20000, Unit: u.Gallon}
+		p.TurbineBuilding.Condenser.HotwellLevel =
+			Volume{Val: 50000, Unit: u.Gallon}
+		p.TurbineBuilding.MainFeedwaterPump.Running = pumpOn
+		stepN(&p, int(10*time.Second/TimeStep))
+		return p.ReactorBuilding.SteamGenerator.Water.Float(),
+			p.TurbineBuilding.Condenser.HotwellLevel.Float()
+	}
+	sgOff, hwOff := run(false)
+	sgOn, hwOn := run(true)
+
+	dSG := sgOn - sgOff
+	dHW := hwOn - hwOff
+	assert.Greater(t, dSG, 0.0,
+		"running main feedwater should raise SG inventory")
+	assert.InDelta(t, dSG, -dHW, 1.0,
+		"SG gain must come out of the hotwell (ledger closed)")
+}
+
+// Coolant expansion raises pressurizer level through the surge line:
+// with every secondary outlet secured, core heat accumulates in the
+// primary, the RCS swells, and pressurizer water rises while the
+// bubble shrinks to keep the tank whole.
+//
+// Spec justification:
+//   - "Raise pressurizer level above no-load value in anticipation of
+//      coolant contraction" (the surge coupling, either sign).
+//      specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:70-72
+func TestPlant_PressurizerSurgeTracksCoolantExpansion(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
+	startWater := p.ReactorBuilding.Pressurizer.Water.Float()
+	startOutlet := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+
+	// Secure CVCS so charging/letdown cannot move pressurizer level;
+	// run an RCP so shaft heat holds total power just above rated.
+	// Both fixtures then isolate the surge-line coupling.
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = false
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = false
+	p.ReactorBuilding.ReactorCoolantPump.Running = true
+
+	// Secure every secondary outlet so core heat accumulates in the
+	// primary: stop valves shut, condenser dump shut, atmospheric
+	// dump and SG safety valves shut.
+	p.TurbineBuilding.Turbine.StopValve.Open = 0
+	p.TurbineBuilding.Turbine.DumpValve.Open = 0
+	p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open = 0
+	stepN(&p, int(45*time.Second/TimeStep))
+
+	outlet := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+	assert.Greater(t, outlet, startOutlet,
+		"precondition: want the primary heated above its starting point")
+	water := p.ReactorBuilding.Pressurizer.Water.Float()
+	assert.Greater(t, water, startWater,
+		"expansion should raise pressurizer level through the surge line")
+	bubble := p.ReactorBuilding.Pressurizer.SteamBubble.Float()
+	vol := p.ReactorBuilding.Pressurizer.Volume.Float()
+	assert.InDelta(t, vol, water+bubble, 1e-6,
+		"pressurizer volumes must stay conserved")
+}
+
+// Pre-synchronization steam draw scales with rotor speed: a slow-roll
+// rotor cannot swallow design flow. A synchronized machine at the same
+// speed draws full design steam.
+//
+// Spec justification:
+//   - "Wide range speed control of the turbine from turning gear to
+//      rated speed."
+//      specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
+func TestTurbine_RollingSteamDrawScalesWithSpeed(t *testing.T) {
+	base := Turbine{
+		State:          TurbineRunning,
+		Velocity:       TurbineRatedSpeed / 2,
+		Synchronized:   false,
+		GoverningValve: Valve{Open: 1},
+	}
+	half := base.Step(SteamGeneratorShellPressure, CondenserDesignVacuum, false, nil)
+	syncd := base
+	syncd.Synchronized = true
+	full := syncd.Step(SteamGeneratorShellPressure, CondenserDesignVacuum, false, nil)
+
+	speedFrac := max(float64(base.Velocity)/float64(TurbineRatedSpeed),
+		TurbineRollMinSteamFraction)
+	want := CondenserDesignSteamLoadGalPer * speedFrac
+	require.Greater(t, float64(half.Velocity),
+		TurbineRollMinSteamFraction*float64(TurbineRatedSpeed),
+		"precondition: rotor above the roll floor so speed scaling shows")
+	assert.InDelta(t, want, half.steamDemandGalPerStep, want*0.05,
+		"rolling draw should scale with rotor speed")
+	assert.InDelta(t, CondenserDesignSteamLoadGalPer,
+		full.steamDemandGalPerStep, CondenserDesignSteamLoadGalPer*0.02,
+		"synchronized machine draws full design steam at rated speed")
+}
+
+// The SG safety valves pop at their setpoint, relieve to atmosphere,
+// and reseat with blowdown once pressure falls back.
+//
+// Spec justification:
+//   - "the boiler pressure safety relief valve will open on high
+//      boiler pressure"
+//      specs/pwr_sim/chapter_3/page_041.txt:20-22
+//   - "self-actuating ASME-code [safety valves] which open
+//      automatically to reduce steam pressure"
+//      specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:34-38
+func TestPlant_SGSafetyValvePopsAndReseats(t *testing.T) {
+	pop := MakePlant().ReactorBuilding.SteamGenerator
+	pop.HeatInput = SteamGeneratorFullLoadHeatInput
+	pop.Water = Volume{Val: 80000, Unit: u.Gallon}
+	pop.Pressure = SteamGeneratorSafetyValveSetpointPsia
+	pop = pop.Step(0)
+	require.Greater(t, pop.SafetyValve.Open, 0.9,
+		"valves should pop at setpoint")
+	assert.Less(t, pop.Water.Float(), 80000.0,
+		"relief spends secondary inventory")
+
+	reseat := pop
+	// Quarter heat: boil-off falls below the safety-valve relief
+	// capacity, so the header sags and the valves reseat.
+	reseat.HeatInput = SteamGeneratorFullLoadHeatInput / 4
+	for i := 0; i < 8000; i++ {
+		reseat = reseat.Step(0)
+	}
+	assert.Equal(t, 0.0, reseat.SafetyValve.Open,
+		"valves should reseat once pressure decays below blowdown")
+}

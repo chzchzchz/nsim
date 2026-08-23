@@ -270,4 +270,17 @@ const (
 	// signal against spray condensation, slow enough to observe
 	// the transient.
 	ContainmentVentRatePSIGPerS = 10.0
+
+	// PressurizerSurgePerDegF is the pressurizer water volume
+	// displaced per °F of RCS coolant temperature change through
+	// the surge line: heating expands the loop and raises level,
+	// cooling contracts it and drains the tank. Assumption; the
+	// spec quotes no expansion data, so the coefficient is sized
+	// for the model's volumes — a full core-reference-temperature
+	// maneuver (558→621°F) displaces ~40 percent of pressurizer
+	// volume, the level swing operators manage across the program.
+	//   "Raise pressurizer level above no-load value in
+	//    anticipation of coolant contraction"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:70-72
+	PressurizerSurgePerDegF = 0.40 * 1500.0 / (CoreReferenceOutletF - CoreReferenceInletF)
 )
