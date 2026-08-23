@@ -5135,6 +5135,29 @@ const (
 	PowerOperation
 )
 
+// LeadLagMode selects which demand the operator drives directly
+// during power maneuvering: the turbine load setpoint or the reactor
+// power setpoint.
+type LeadLagMode int
+
+const (
+	// TurbineLead — load changes are made on the turbine-
+	// generator with the NSSS following steam demand; zero value
+	// preserves the manual lineup the plant ran before the RPC
+	// layer existed.
+	//   "Load changes ... are initially made on the turbine-
+	//    generator. The control system of the NSSS then adjusts
+	//    the power level of the reactor to follow the power
+	//    demand of the turbine."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_230.txt:126-129
+	TurbineLead LeadLagMode = iota
+
+	// ReactorLead — the operator drives the reactor power
+	// setpoint and the turbine load demand follows achieved
+	// power (the mirrored coordination of the citation above).
+	ReactorLead
+)
+
 // Plant Operation design constants (plans/p32_1.txt).
 //
 // Spec justification:
@@ -5207,6 +5230,58 @@ const (
 	// OpMaxRCPs is the total number of reactor coolant pumps
 	// in the four-loop plant.
 	OpMaxRCPs = 4
+)
+
+// Reactor power control (RPC) constants.
+const (
+	// RodControlMaxRatePerSec caps the operator-entered ramp
+	// rate at 0.8 % of full power per second (0.008 fraction/s).
+	//   "limited by the maximum rate of 0.8 % of full power per
+	//    second"
+	//   specs/pwr_sim/chapter_2/page_024.txt:3-5
+	RodControlMaxRatePerSec float64 = 0.008
+
+	// RodControlDeadbandF is the first deadband around Tref,
+	// 0.5 °C expressed in Fahrenheit (0.5 * 9/5). Inside it the
+	// rods hold; outside it they trim one bank's worth of speed
+	// toward the reference.
+	//   regions defined with -0.5 < DT < 0.5
+	//   (specs/pwr_sim/chapter_2/page_021.txt:13-16);
+	//   withdrawal below Tref, insertion above it
+	//   (specs/pwr_sim/chapter_2/page_022.txt:6-10)
+	RodControlDeadbandF float64 = 0.9
+
+	// RodControlSecondDeadbandF is the second deadband, 1 °C in
+	// Fahrenheit (1.8 F). Past it two banks move at once, modeled
+	// as a doubled trim rate.
+	//   specs/pwr_sim/chapter_2/page_022.txt:24-27
+	RodControlSecondDeadbandF float64 = 1.8
+
+	// RodControlTrimRatePerSec is the base rate at which the RPC
+	// slews rod demand toward its computed target, doubled past the
+	// second deadband (two banks at once). It is a small fraction
+	// of the mechanical drive speed for two reasons: the gray banks
+	// are fine-worth regulators moved one at a time at a controlled
+	// rate
+	//   "gray rods would be withdrawn, one bank at a time"
+	//   specs/pwr_sim/chapter_2/page_022.txt:8-9;
+	//   bank worths -6.25/-5/-3/-1.75 mk
+	//   specs/pwr_sim/chapter_2/page_022.txt:15-17
+	// and the modeled power-defect chain rescales fission power
+	// every step with no delayed-neutron smoothing, so the trim
+	// must inject reactivity no faster than the coolant-
+	// temperature feedback can absorb.
+	RodControlTrimRatePerSec float64 = 1e-4
+
+	// RodControlSteerOffsetInsertion is the rod-demand offset a
+	// full-scale deadband error commands on top of the reactivity-
+	// nulling position. One deadband width maps to 0.9/63 = 0.0143
+	// points of rated power through the Tref program span; at the
+	// ~2.8e-5 travel per point critical-line slope of the lumped
+	// ABCD bank this is ~4e-5 of insertion - about one plateau-to-
+	// plateau increment, so sustained deviations steer power back
+	// onto the program while nulling keeps the chain critical.
+	RodControlSteerOffsetInsertion float64 = 4e-5
 )
 
 // PlantOperation models the Chapter 16 operational layer that sits on
@@ -5284,6 +5359,39 @@ type PlantOperation struct {
 	// limit (°F/s). Positive when heating, negative when
 	// cooling.
 	TavgRateLimited float64
+
+	// LeadLagMode selects which demand the operator drives
+	// directly. TurbineLead preserves the manual lineup: turbine
+	// Setpoint writes are operator actions and rods are manual
+	// unless RodControlAuto engages the reactor power control.
+	// ReactorLead gives the operator the power setpoint and rate;
+	// the turbine demand follows achieved power.
+	//   "MODE will indicate whether the reactor is under TURBINE
+	//    LEADING to REACTOR LEADING control, this status can also
+	//    be changed here."
+	//   specs/pwr_sim/chapter_2/page_023.txt:27-28
+	LeadLagMode LeadLagMode
+
+	// RodControlAuto engages the RPC rod drive. While false,
+	// manual DemandInsertion writes remain the single rod
+	// authority.
+	RodControlAuto bool
+
+	// PowerSetpointDemand is the operator's target reactor power
+	// (fraction of rated fission power); PowerRateDemand is the
+	// entered ramp rate (fraction of rated per second), clamped
+	// to RodControlMaxRatePerSec.
+	//   "Enter 'reactor power SP target' = 90 %; enter 'power
+	//    rate' = 0.08 %/sec"
+	//   specs/pwr_sim/chapter_3/page_036.txt:37-40
+	PowerSetpointDemand float64
+	PowerRateDemand     float64
+
+	// DemandedPowerSetpoint is the integrator output the Tref
+	// program reads. Derived observables (Tref, power error) are
+	// instantaneous aggregates of stored state, computed on read,
+	// not stored.
+	DemandedPowerSetpoint float64
 }
 
 // Step advances the PlantOperation layer for one tick. It enforces
@@ -5382,6 +5490,107 @@ func (po *PlantOperation) Step(
 	}
 
 	return ret
+}
+
+// fissionFraction normalizes fission power against its rated value,
+// clamped to [0, 1].
+func fissionFraction(fissionPower Watts) float64 {
+	return min(max(float64(fissionPower)/
+		float64(CoreFissionPowerAtRated), 0), 1)
+}
+
+// referenceTempF evaluates the Tref-versus-power characteristic at
+// the demanded power setpoint. The anchors are the same full-load
+// coolant temperatures the core thermal model relaxes toward, so
+// the controller's reference is the plant's own temperature program
+// by construction.
+//   "From the DEMANDED POWER SETPOINT, a reference reactor coolant
+//    temperature (TREF) is obtained from the 'Tref versus power'
+//    characteristic curve."
+//   specs/pwr_sim/chapter_2/page_024.txt:13-14
+//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60-61
+func (po *PlantOperation) referenceTempF() float64 {
+	return CoreReferenceInletF +
+		(CoreReferenceOutletF-CoreReferenceInletF)*
+			po.DemandedPowerSetpoint
+}
+
+// StepRPC advances the reactor power control (RPC) layer for one
+// tick. The demanded power setpoint integrates toward the operator's
+// target at the entered rate; the Tref program converts it to a
+// reference coolant temperature; and when auto rod control is
+// engaged, rod demand is steered so outlet temperature tracks the
+// reference within the deadband.
+//
+// The rod drive is a supervisory servo. Its base target is the
+// insertion that nulls measured reactivity - the modeled
+// power-defect chain rescales fission power every step with no
+// delayed-neutron smoothing, so holding any point of the program
+// requires continuous reactivity balance, not motionless rods. On
+// top of that, the deadband error biases the target: Tavg below
+// Tref beyond the deadband withdraws (region B), above it inserts
+// (region D), and past the second deadband the slew rate doubles
+// (two banks at once).
+//
+// Spec justification:
+//   - Rate limit and demanded-setpoint ramp:
+//     specs/pwr_sim/chapter_2/page_024.txt:3-12
+//   - Tref curve and dT comparison:
+//     specs/pwr_sim/chapter_2/page_024.txt:13-16
+//   - Deadband rod direction and second-deadband doubled speed:
+//     specs/pwr_sim/chapter_2/page_022.txt:6-10, :24-27
+//   - RPC runs in reactor-leading mode:
+//     specs/pwr_sim/chapter_2/page_023.txt:11-14
+func (po *PlantOperation) StepRPC(rpv *ReactorPressureVessel,
+	turbine *Turbine, dt time.Duration) {
+
+	pf := fissionFraction(rpv.FissionPower)
+	if !po.RodControlAuto {
+		// Bumpless: the integrator shadows measured power so
+		// engaging auto later introduces no reactivity step.
+		po.DemandedPowerSetpoint = pf
+		return
+	}
+
+	switch po.LeadLagMode {
+	case ReactorLead:
+		rate := min(max(po.PowerRateDemand, 0), RodControlMaxRatePerSec)
+		delta := min(max(po.PowerSetpointDemand, 0), 1) -
+			po.DemandedPowerSetpoint
+		maxDelta := rate * dt.Seconds()
+		po.DemandedPowerSetpoint = min(max(
+			po.DemandedPowerSetpoint+
+				min(max(delta, -maxDelta), maxDelta), 0), 1)
+		// The turbine follows the reactor: load demand tracks
+		// achieved power (chapter_16/page_230.txt:126-129
+		// mirrored).
+		turbine.Setpoint = pf
+	default:
+		// Turbine lead: the demand path is the turbine's own
+		// setpoint, so the integrator shadows measured power.
+		po.DemandedPowerSetpoint = pf
+	}
+
+	if rpv.Trip {
+		// A scram owns the rods; the drive stands down until
+		// the operator resets and re-engages.
+		return
+	}
+
+	dT := rpv.Outlet.Float() - po.referenceTempF()
+	bias := min(max(dT/RodControlDeadbandF, -1), 1)
+	rodWorthPctPerInsertion := -float64(CoreRodWorthABCD) * 100
+	target := rpv.ControlRods.DemandInsertion +
+		float64(rpv.Reactivity)/rodWorthPctPerInsertion +
+		bias*RodControlSteerOffsetInsertion
+	rate := RodControlTrimRatePerSec * dt.Seconds()
+	if dT > RodControlSecondDeadbandF || dT < -RodControlSecondDeadbandF {
+		rate *= 2
+	}
+	step := min(max(target-rpv.ControlRods.DemandInsertion,
+		-rate), rate)
+	rpv.ControlRods.DemandInsertion =
+		min(max(rpv.ControlRods.DemandInsertion+step, 0), 1)
 }
 
 // ClampRate limits the rate of change of a value to a per-second

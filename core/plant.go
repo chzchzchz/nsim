@@ -1676,6 +1676,19 @@ func (p *Plant) Step() {
 		p.nextPlant.TurbineBuilding.Turbine.Setpoint,
 	)
 
+	// Reactor power control step (specs/pwr_sim chapter 2.8).
+	// Advances the demanded-power-setpoint integrator and, when
+	// the operator has engaged automatic rod control, trims rod
+	// demand so outlet temperature tracks the Tref program within
+	// the deadband. Runs after the RPV/turbine steps so the loop
+	// sees this tick's temperatures; the write lands in nextPlant
+	// and reaches the rods on the next tick's ControlRods step.
+	// Zero-value state (turbine lead, auto off) touches nothing,
+	// preserving the pre-RPC behavior.
+	p.nextPlant.PlantOperation.StepRPC(
+		&p.nextPlant.ReactorBuilding.ReactorPressureVessel,
+		&p.nextPlant.TurbineBuilding.Turbine, TimeStep)
+
 	// Pressure-driven fluid flow integrates the freshly-stepped parts.
 	// Graph nodes hold pointers into nextPlant; the mutations land in
 	// nextPlant directly so Update() copies them into p.

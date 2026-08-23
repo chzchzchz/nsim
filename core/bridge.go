@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/chzchzchz/nsim/bridge"
 )
@@ -58,6 +59,150 @@ func addPlantOperationControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
+
+	// Lead/lag plant mode select (chapter 2.8 RPC screen):
+	//   "MODE will indicate whether the reactor is under TURBINE
+	//    LEADING to REACTOR LEADING control, this status can also
+	//    be changed here."
+	//   specs/pwr_sim/chapter_2/page_023.txt:27-28
+	m["PlantOperation/LeadLagMode"] = &bridge.Control{
+		Part:  "PlantOperation",
+		Label: "LeadLagMode",
+		Kind:  "enum",
+		Enum:  []string{"TurbineLead", "ReactorLead"},
+		Get: func() string {
+			return fmt.Sprintf("%d", p.PlantOperation.LeadLagMode)
+		},
+		Set: func(s string) error {
+			switch s {
+			case "0":
+				p.PlantOperation.LeadLagMode = TurbineLead
+			case "1":
+				p.PlantOperation.LeadLagMode = ReactorLead
+			default:
+				return fmt.Errorf(
+					"invalid LeadLagMode %q (want 0..1)", s)
+			}
+			return nil
+		},
+	}
+
+	// RPC auto rod control engage (chapter 2.8): the RPC screen
+	// shows "auto/manual mode (changeable by user)" for the gray
+	// rod drive.
+	//   specs/pwr_sim/chapter_2/page_024.txt:23-24
+	m["PlantOperation/RodControlAuto"] = &bridge.Control{
+		Part:  "PlantOperation",
+		Label: "RodControlAuto",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(p.PlantOperation.RodControlAuto)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.PlantOperation.RodControlAuto = v
+			return nil
+		},
+	}
+
+	// Reactor power setpoint target (chapter 3 pop-up):
+	//   "Enter 'reactor power SP target' = 90 %"
+	//   specs/pwr_sim/chapter_3/page_036.txt:37-38
+	m["PlantOperation/PowerSetpointTarget"] = &bridge.Control{
+		Part:  "PlantOperation",
+		Label: "PowerSetpointTarget",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.PlantOperation.PowerSetpointDemand)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.PlantOperation.PowerSetpointDemand = v
+			return nil
+		},
+	}
+
+	// Reactor power ramp rate (chapter 3 pop-up), entered as a
+	// fraction of rated power per second; the integrator clamps
+	// it to RodControlMaxRatePerSec (0.008 = 0.8 %/s).
+	//   "limited by the maximum rate of 0.8 % of full power per
+	//    second"
+	//   specs/pwr_sim/chapter_2/page_024.txt:3-5
+	m["PlantOperation/PowerRateDemand"] = &bridge.Control{
+		Part:  "PlantOperation",
+		Label: "PowerRateDemand",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.PlantOperation.PowerRateDemand)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.PlantOperation.PowerRateDemand = v
+			return nil
+		},
+	}
+}
+
+// addPlantOperationSensors registers the reactor power control
+// observables demanded by the evolution's Table II: actual/demanded
+// setpoint, power error, and Tref.
+//
+// Spec justification:
+//   - "the POWER ERROR is also determined from current reactor
+//     power minus demanded power setpoint"
+//     specs/pwr_sim/chapter_2/page_024.txt:17-18
+func addPlantOperationSensors(p *Plant, m bridge.SensorMap) {
+	m["PlantOperation/DemandedPowerSetpoint"] = &bridge.Sensor{
+		Part:  "PlantOperation",
+		Label: "DemandedPowerSetpoint",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.PlantOperation.DemandedPowerSetpoint)
+		},
+	}
+
+	m["PlantOperation/Tref"] = &bridge.Sensor{
+		Part:  "PlantOperation",
+		Label: "Tref",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.PlantOperation.referenceTempF())
+		},
+	}
+
+	// Power error is signed, so it bypasses the non-negative
+	// numeric kinds and formats directly (same pattern as the
+	// turbine state sensor).
+	m["PlantOperation/PowerError"] = &bridge.Sensor{
+		Part:  "PlantOperation",
+		Label: "PowerError",
+		Kind:  "string",
+		Get: func() (string, error) {
+			powerError := fissionFraction(
+				p.ReactorBuilding.ReactorPressureVessel.FissionPower) -
+				p.PlantOperation.DemandedPowerSetpoint
+			return fmt.Sprintf("%+.4f", powerError), nil
+		},
+	}
 }
 
 // GetSensorMap returns a bridge.SensorMap populated with sensors for the
@@ -65,6 +210,7 @@ func addPlantOperationControls(p *Plant, m bridge.ControlMap) {
 // Kind.
 func GetSensorMap(p *Plant) bridge.SensorMap {
 	m := make(bridge.SensorMap)
+	addPlantOperationSensors(p, m)
 	addReactorBuildingSensors(p, m)
 	addTurbineBuildingSensors(p, m)
 	addAuxiliaryBuildingSensors(p, m)
