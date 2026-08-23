@@ -6,6 +6,8 @@
 
 # Specifications
 
+Full path (shown below) references to specification files (with line numbers) should be cited when commenting to soundly justify plant/physics modeling decisions. Do not truncate the path with ellipses.
+
 ##  Westinghouse PWR document
 
 * Table of Contents: specs/the_westinghouse_pressurized_water_react/toc.md
@@ -24,6 +26,7 @@
 
 * Set "description" in tool json if tool is failing for no reason.
 * Prefer godoc mcp tool commands to analyze source code.
+* godoc access for this package should use github.com/chzchzchz/nsim for the package base (ignore any "alt" substrings)
 * Prefer gopls mcp's lsp tool commands for mechanical code changes.
 * cmd/nsimrun can simulate a Plant using plant json (see cmd/nsimrun/README.md)
 
