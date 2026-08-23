@@ -637,6 +637,84 @@ var CVCSDesignLetdownFlow Volume = Volume{Val: 75, Unit: u.Gallon}
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:17
 var ReactorMakeupDesignFlow Volume = Volume{Val: 60, Unit: u.Gallon}
 
+// Water-tracking constants for drain tanks and dumped-water paths.
+//
+// Spec justification:
+//   - "Steam from the safety and/or relief valves is piped to the
+//     pressurizer relief tank which contains sufficient water to
+//     condense the steam. Cold water can be sprayed into the
+//     pressurizer relief tank to increase the heat sink capacity.
+//     A rupture disc vents the tank to the containment if design
+//     pressure is exceeded."
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:32-38
+//   - "ASME Code safety valves and power operated relief and
+//     atmospheric dump valves are located on each steam line
+//     upstream of the stop valves."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+//   - "The heater drain tanks are horizontal 13,120-gal tanks.
+//     [...] A dump valve which taps off the cross-connection drains
+//     the tanks to condenser A on a high level in either tank."
+//     specs/westinghouse_tech_manual/chapter_7/page_0636.txt:32-38
+const (
+	// PRTReliefFlow is the per-second volume moved from the
+	// pressurizer to the pressurizer relief tank while the PORV is
+	// open. Derived: sized so one lift at PressurizerPORVTrip moves
+	// ~0.5% of the pressurizer liquid inventory per second, making
+	// the fill visible over tens of seconds without draining the
+	// pressurizer unrealistically fast.
+	PRTReliefFlow float64 = 10.0 // gal/s
+
+	// PRTRuptureCapacity is the PRT level at which the rupture disc
+	// vents the tank to containment. Derived: sized to accept about
+	// 60 s of full PORV flow (PRTReliefFlow * 60). The spec states
+	// no PRT volume.
+	PRTRuptureCapacity = 600.0 // gal
+
+	// AtmosphericDumpFraction is the fraction of full-load SG steam
+	// flow released per second through one fully open atmospheric
+	// dump valve. Derived: relief capacity of order half of
+	// SteamGeneratorFullLoadSteamFlow.
+	AtmosphericDumpFraction = 0.5
+
+	// HeaterDrainTankCapacityGal is quoted verbatim from the tech
+	// manual: "horizontal 13,120-gal tanks".
+	HeaterDrainTankCapacityGal = 13120.0
+
+	// HDTHighLevelFraction is derived: the auto dump valve opens
+	// above 90% capacity ("drains the tanks to condenser A on a
+	// high level in either tank").
+	HDTHighLevelFraction = 0.9
+
+	// HDTDumpFlow is the per-second volume through the open HDT
+	// dump valve to the condenser. Derived: empties the high-level
+	// band ((1-HDTHighLevelFraction)*capacity = 1312 gal) in about
+	// 100 s.
+	HDTDumpFlow = 13.12 // gal/s
+
+	// FeedPumpSuctionFlow is the per-second main-feedwater draw on
+	// the heater drain tank (deaerator stand-in) while
+	// MainFeedwaterPump.Running. Derived from the existing
+	// full-load condenser steam load constant.
+	// "The feedwater booster pumps draw suction from the deaerator
+	// water storage tank, which is mounted directly below the
+	// deaerator, and supply the main feedwater pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:46-49
+	FeedPumpSuctionFlow = CondenserDesignSteamLoadGalPer // gal/s
+
+	// BTRSBedLifeSeconds is derived: continuous boration/dilution
+	// saturates the BTRS resin bed in about one plant-hour. The
+	// spec gives depletion qualitatively ("until the resin beds are
+	// fully depleted as indicated by the boron concentration meter",
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:11-13)
+	// but no number.
+	BTRSBedLifeSeconds = 3600.0
+
+	// SecondsPerHour converts hourly flow figures (e.g.
+	// SteamGeneratorFullLoadSteamFlow, expressed in gal/hr) into
+	// per-second rates.
+	SecondsPerHour = 3600.0
+)
+
 type FuelRods struct{ Part }
 
 // ControlRods models the rod cluster control (RCC) assemblies.
@@ -1565,13 +1643,13 @@ type CVCS struct {
 
 	// LetdownValveOpen is the operator latch on the letdown
 	// isolation valve. The CVCS Step sets LetdownFlow from this
-	// field combined with the operating mode (CVCSLetdown mode
-	// forces letdown closed).
+	// field; when the VCT high-level condition diverts letdown,
+	// the flow lands in BRSHoldupLevel instead of the VCT.
 	LetdownValveOpen bool
 
 	// LetdownFlow is the flow rate from the RCS letdown tap
 	// through the letdown chiller and demineralizers back to
-	// the VCT (gal/s).
+	// the VCT, or into the BRS holdup tanks while diverting.
 	// "The charging pumps take the coolant from the volume
 	// control tank [...]"
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:79-80
@@ -1616,6 +1694,32 @@ type CVCS struct {
 	// concentration decrease in ppm per second, positive when
 	// the BTRS is in dilution mode.
 	DilutionRate float64
+
+	// BRSHoldupLevel is the accumulated diverted letdown routed to
+	// the BRS holdup tanks while the VCT is in its high-level
+	// condition. Uncapped pending a spec capacity figure.
+	// "If the volume control tank is full, a high-water level
+	// signal diverts letdown flow to the Boron Recycle"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:19-21
+	BRSHoldupLevel Volume
+
+	// Diverting latches while the VCT high-level condition reroutes
+	// letdown into BRSHoldupLevel. It is deliberately separate from
+	// Mode: the spec keeps the BTRS cycling through boration and
+	// dilution while letdown is diverted ("This operation continues
+	// until the resin beds are fully depleted [...]", followed by a
+	// mode switch back to dilution),
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:11-16
+	// so the divert must not cancel the operator's boron mode.
+	Diverting bool
+
+	// BTRSBedSaturation is the fraction (0..1) of BTRS
+	// demineralizer resin exchange capacity consumed. At 1.0
+	// boration/dilution halt until the bed is regenerated.
+	// "This operation continues until the resin beds are fully
+	// depleted as indicated by the boron concentration meter."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:11-13
+	BTRSBedSaturation float64
 }
 
 // CVCSMode enumerates the CVCS operating modes.

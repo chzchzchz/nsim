@@ -13,10 +13,11 @@ import (
 //     charging stream; RCS boron concentration rises.
 //   - Dilution: BTRS demineralizers absorb boron from the
 //     charging stream; RCS boron concentration falls.
-//   - Letdown: VCT level has exceeded VCTHighLevel; the level
-//     controller has diverted BTRS outflow to the BRS holdup
-//     tanks and charging/letdown are halted so the VCT level
-//     can stabilise.
+//   - Diverting: VCT level has exceeded VCTHighLevel; letdown
+//     continues at design rate but the level controller diverts it
+//     to the BRS holdup tanks until VCTLevel falls back to
+//     VCTDesignLevel. The boron mode keeps running while
+//     diverting.
 //
 // Spec justification:
 //   - Mode selection: "The operating mode (boration or dilution)
@@ -68,16 +69,20 @@ import (
 // Per-step dynamics:
 //
 //   - VCTLevel accumulates makeup from the reactor makeup
-//     control system and depletes by (charging flow + BTRS
-//     recirculation). The letdown path returns coolant to the
-//     VCT so it does not directly drain VCTLevel.
+//     control system, depletes by (charging flow + BTRS
+//     recirculation), and gains the letdown return path. While
+//     diverting (VCT high-level condition), letdown lands in
+//     BRSHoldupLevel instead of returning to the VCT.
 //   - ChargingFlow = CVCSDesignChargingFlow when
 //     ChargingPumpRunning, else 0.
-//   - LetdownFlow = CVCSDesignLetdownFlow when LetdownValveOpen
-//     and the mode is not CVCSLetdown, else 0.
+//   - LetdownFlow = CVCSDesignLetdownFlow when LetdownValveOpen,
+//     else 0. While diverting, the flow accumulates into
+//     BRSHoldupLevel rather than the VCT.
 //   - In CVCSBoration / CVCSDilution modes the
 //     BTRSRecirculationPump must be running (set by operator);
-//     BorationRate / DilutionRate are populated accordingly.
+//     BorationRate / DilutionRate are populated accordingly and
+//     BTRSBedSaturation advances toward 1, after which boron
+//     changes halt.
 func (c *CVCS) Step(
 	makeupFlow Volume,
 ) CVCS {
@@ -100,8 +105,9 @@ func (c *CVCS) Step(
 		ret.ChargingFlow = Volume{Val: 0, Unit: u.Gallon}
 	}
 
-	// Letdown flow depends on valve state.
-	if ret.LetdownValveOpen && ret.Mode != CVCSLetdown {
+	// Letdown flow depends on valve state only; where the flow
+	// lands (VCT return vs BRS diversion) is decided below.
+	if ret.LetdownValveOpen {
 		ret.LetdownFlow = CVCSDesignLetdownFlow
 	} else {
 		ret.LetdownFlow = Volume{Val: 0, Unit: u.Gallon}
@@ -110,7 +116,8 @@ func (c *CVCS) Step(
 	// VCT level accumulation: makeup enters, charging-pump
 	// suction leaves, BTRS recirculation drains when active.
 	// Per-second rates; multiply by dt.Seconds() for per-step
-	// delta.
+	// delta. The letdown return path normally credits the VCT;
+	// while diverting it lands in the BRS holdup tanks instead.
 	delta := 0.0
 	delta += makeupFlow.Float() * dt.Seconds()
 	delta -= ret.ChargingFlow.Float() * dt.Seconds()
@@ -118,48 +125,62 @@ func (c *CVCS) Step(
 		delta -= VCTBTRSCirculation * dt.Seconds()
 	}
 	newVCT := ret.VCTLevel.Float() + delta
-	newVCT = max(newVCT, 0)
-	ret.VCTLevel = Volume{Val: newVCT, Unit: u.Gallon}
 
-	// VCT high-level condition: divert BTRS outflow to BRS
-	// holdup tanks. Charging and letdown are halted so VCT
-	// level can stabilise.
+	// VCT high-level condition: divert letdown to the BRS holdup
+	// tanks until the level returns to its design band. The spec
+	// reroutes letdown; it does not stop it, and the BTRS keeps
+	// cycling through its operator-selected boron mode while
+	// diverting.
 	//
+	// "If the volume control tank is full, a high-water level
+	// signal diverts letdown flow to the Boron Recycle"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:19-21
 	// "the volume control tank level controller automatically
 	// diverts the outflow from the BTRS into the BRS holdup
 	// tanks."
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
-	if newVCT > VCTHighLevel {
-		ret.Mode = CVCSLetdown
-		ret.ChargingFlow = Volume{Val: 0, Unit: u.Gallon}
-		ret.LetdownFlow = Volume{Val: 0, Unit: u.Gallon}
-		return ret
+	diverting := ret.Diverting || newVCT > VCTHighLevel
+	if diverting {
+		ret.Diverting = true
+		ret.BRSHoldupLevel = Volume{Val: ret.BRSHoldupLevel.Float() +
+			ret.LetdownFlow.Float()*dt.Seconds(), Unit: u.Gallon}
+	} else {
+		newVCT += ret.LetdownFlow.Float() * dt.Seconds()
 	}
+	newVCT = max(newVCT, 0)
+	ret.VCTLevel = Volume{Val: newVCT, Unit: u.Gallon}
 
-	// Otherwise: act on the current mode.
 	switch ret.Mode {
 	case CVCSBoration:
-		if ret.BTRSRecirculationPumpRunning {
+		if ret.BTRSRecirculationPumpRunning && ret.BTRSBedSaturation < 1 {
+			ret.BTRSBedSaturation = min(
+				ret.BTRSBedSaturation+dt.Seconds()/BTRSBedLifeSeconds, 1)
 			ret.BorationRate = CVCSBorationRate
 			ret.BoronConcentration += CVCSBorationRate * dt.Seconds()
 		}
 	case CVCSDilution:
-		if ret.BTRSRecirculationPumpRunning {
+		if ret.BTRSRecirculationPumpRunning && ret.BTRSBedSaturation < 1 {
+			ret.BTRSBedSaturation = min(
+				ret.BTRSBedSaturation+dt.Seconds()/BTRSBedLifeSeconds, 1)
 			ret.DilutionRate = CVCSDilutionRate
 			ret.BoronConcentration -= CVCSDilutionRate * dt.Seconds()
 			ret.BoronConcentration = max(ret.BoronConcentration, 0)
 		}
 	case CVCSLetdown:
-		// Operator must correct VCT level (e.g. manual
-		// blowdown or BRS recycle); the CVCS does not exit
-		// this mode on its own.
-		ret.ChargingFlow = Volume{Val: 0, Unit: u.Gallon}
-		ret.LetdownFlow = Volume{Val: 0, Unit: u.Gallon}
+		// Legacy operator-selectable mode; the automatic divert
+		// uses the Diverting latch instead so the boron mode
+		// survives a transient VCT overflow.
 	case CVCSVolumeControl:
 		// Charging/letdown balance to maintain pressurizer
 		// level; the imbalance is the makeup that reaches the
 		// VCT level controller (already accumulated above).
 		// No boron concentration change.
+	}
+
+	// Clear the divert latch once the VCT is back in its design
+	// band; letdown then returns to the VCT again.
+	if ret.Diverting && newVCT <= VCTDesignLevel {
+		ret.Diverting = false
 	}
 
 	return ret

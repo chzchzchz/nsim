@@ -527,6 +527,38 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 	}
 
 
+	// BRS holdup tank level: diverted letdown accumulates here
+	// while the VCT is in its high-level condition.
+	// "If the volume control tank is full, a high-water level
+	// signal diverts letdown flow to the Boron Recycle"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:19-21
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/BRSHoldupLevel"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "BRSHoldupLevel",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BRSHoldupLevel.Float())
+		},
+	}
+
+
+	// BTRS demineralizer bed saturation: boron changes halt when
+	// the resin beds are depleted.
+	// "This operation continues until the resin beds are fully
+	// depleted as indicated by the boron concentration meter."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:11-13
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRSBedSaturation"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "BTRSBedSaturation",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSBedSaturation)
+		},
+	}
+
+
 	// Diesel generator ready-to-load status (chapter 11):
 	// "designed to reach rated speed and be ready to
 	// begin accepting load within 10 seconds"

@@ -9,17 +9,46 @@ import (
 
 func (r *ReactorBuilding) Step() ReactorBuilding {
 	ret := *r
+	dt := TimeStep
 	ret.Pressurizer = ret.Pressurizer.Step(&ret.PORV)
-	// Reactor makeup control valve: the operator sets Open
-	// (0..1); Flow is the per-step volume delivered to the
-	// VCT. Derived once per step so downstream consumers see
-	// a stable value.
+
+	// PORV discharge fills the pressurizer relief tank, which
+	// condenses the steam; once full, a rupture disc vents the
+	// tank (and any further discharge path) to containment.
 	//
-	// Spec: "Because of the influx of makeup water from the
-	// reactor makeup control system [...]"
-	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-6
-	ret.ReactorMakeupControlValve.Flow = Volume{Val: ret.ReactorMakeupControlValve.Open*
-			ReactorMakeupDesignFlow.Float(), Unit: u.Gallon}
+	// "Steam from the safety and/or relief valves is piped to the
+	// pressurizer relief tank which contains sufficient water to
+	// condense the steam. [...] A rupture disc vents the tank to
+	// the containment if design pressure is exceeded."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:32-38
+	if ret.PORV.Open == 1 && !ret.RuptureDiscRuptured {
+		moved := min(PRTReliefFlow*dt.Seconds(), ret.Pressurizer.Water.Float())
+		ret.Pressurizer.Water = vol(ret.Pressurizer.Water,
+			ret.Pressurizer.Water.Float()-moved)
+		prt := min(ret.PressurizedReliefTank.Level.Float()+moved,
+			PRTRuptureCapacity)
+		ret.PressurizedReliefTank.Level = Volume{Val: prt, Unit: u.Gallon}
+		if prt >= PRTRuptureCapacity {
+			ret.RuptureDiscRuptured = true
+		}
+	}
+
+	// Reactor makeup control valve: the operator sets Open
+	// (0..1); Flow is the effective makeup rate actually delivered,
+	// clamped against the RWST inventory that sources it. Derived
+	// once per step so downstream consumers see a stable value.
+	//
+	// Spec: "Low-level signals from the volume control tank initiate
+	// reactor makeup control or flow from the refueling water
+	// storage tank as a backup."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:1-4
+	makeupDemand := ret.ReactorMakeupControlValve.Open *
+		ReactorMakeupDesignFlow.Float()
+	rwstLevel := ret.SafetyInjectionSystem.RWSTLevel.Float()
+	makeupRate := min(makeupDemand, rwstLevel/dt.Seconds())
+	ret.ReactorMakeupControlValve.Flow = Volume{Val: makeupRate, Unit: u.Gallon}
+	newRWST := max(rwstLevel-makeupRate*dt.Seconds(), 0)
+	ret.SafetyInjectionSystem.RWSTLevel = Volume{Val: newRWST, Unit: u.Gallon}
 	// CVCS: charging, letdown, VCT level, and boron
 	// concentration. The CVCS boron's reactivity contribution
 	// is read by the RPV step below, so CVCS must run first.
@@ -45,6 +74,20 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
 	ret.ReactorPressureVessel.ControlRods.BoronConcentration =
 		ret.Aux.ChemicalVolumeControlSystem.BoronConcentration
+
+	// Charging/letdown couple to pressurizer volume so the CVCS is
+	// a real volume circuit rather than a display rate.
+	//
+	// "pressurizer level represents a balance of injection water
+	// flow into the RCS and water letdown flow into the Chemical
+	// and Volume Control System."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65
+	cvcs := ret.Aux.ChemicalVolumeControlSystem
+	netCVCS := (cvcs.ChargingFlow.Float() - cvcs.LetdownFlow.Float()) *
+		dt.Seconds()
+	pzWater := ret.Pressurizer.Water.Float() + netCVCS
+	pzWater = min(max(pzWater, 0), ret.Pressurizer.Volume.Float())
+	ret.Pressurizer.Water = vol(ret.Pressurizer.Water, pzWater)
 
 	// Reactor Protection System step. Runs before the
 	// ReactorPressureVessel step so the ReactorTripped latch
@@ -159,7 +202,6 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	//     has been taken over by the RHRS, and the steam dump
 	//     system may be shutdown."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:35-37
-	dt := TimeStep
 	rcsOutletF := ret.ReactorPressureVessel.Outlet.Float()
 	rcsPressure := float64(ret.Pressurizer.Pressure)
 	// The CCWS was already stepped this timestep by
@@ -511,6 +553,16 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 		lp = lp.Step(fwIn.Float(), lpSteam)
 		fwIn = Temperature{Val: lp.Inlet.Float()+lp.TemperatureRise.Float(), Unit: u.Fahrenheit}
 	}
+	// LP heater drains cascade back to the condenser instead of
+	// accumulating inside the heater shell.
+	// "Drains from the high-pressure feedwater heaters are routed
+	// to the deaerator. Drains from the four low-pressure
+	// feedwater heaters are cascaded back to the condenser."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:88-90,
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:1-2
+	ret.Condenser.HotwellLevel = Volume{Val: ret.Condenser.HotwellLevel.Float() +
+		lp.DrainLevel.Float(), Unit: u.Gallon}
+	lp.DrainLevel = Volume{Val: 0, Unit: u.Gallon}
 	ret.LowPressureHeater = lp
 
 	// MSR moisture drain to hotwell (feedwater system).
@@ -559,6 +611,31 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 		newHDTLevel := ret.HeaterDrainTank.Level.Float() + recirc
 		ret.HeaterDrainTank.Level = Volume{Val: newHDTLevel, Unit: u.Gallon}
 	}
+
+	// Drain-tank accounting: clamp at capacity, draw suction while
+	// the main feed pump runs, and open the dump valve to the
+	// condenser on a high level.
+	//
+	// "The feedwater booster pumps draw suction from the deaerator
+	// water storage tank, which is mounted directly below the
+	// deaerator, and supply the main feedwater pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:46-49
+	// "A dump valve which taps off the cross-connection drains the
+	// tanks to condenser A on a high level in either tank."
+	// specs/westinghouse_tech_manual/chapter_7/page_0636.txt:36-38
+	dtSec := TimeStep.Seconds()
+	hdt := min(ret.HeaterDrainTank.Level.Float(), HeaterDrainTankCapacityGal)
+	if ret.MainFeedwaterPump.Running {
+		hdt = max(hdt-FeedPumpSuctionFlow*dtSec, 0)
+	}
+	if hdt > HeaterDrainTankCapacityGal*HDTHighLevelFraction {
+		dumped := min(HDTDumpFlow*dtSec,
+			hdt-HeaterDrainTankCapacityGal*HDTHighLevelFraction)
+		hdt -= dumped
+		ret.Condenser.HotwellLevel = Volume{Val: ret.Condenser.HotwellLevel.Float() +
+			dumped, Unit: u.Gallon}
+	}
+	ret.HeaterDrainTank.Level = Volume{Val: hdt, Unit: u.Gallon}
 
 	return ret
 }
@@ -1494,9 +1571,17 @@ func MakePlant() Plant {
 		Pressure:    PressurizerHeaterTarget,
 		SteamBubble: Volume{Val: 300, Unit: u.Gallon},
 	}
+	// The PRT starts half full of water to condense incoming
+	// relief steam ("which contains sufficient water to condense
+	// the steam", chapter_3/page_068.txt:32-34); capacity is a
+	// derived figure (see PRTRuptureCapacity).
+	p.ReactorBuilding.PressurizedReliefTank = Tank{
+		Level:    Volume{Val: PRTRuptureCapacity / 2, Unit: u.Gallon},
+		Capacity: Volume{Val: PRTRuptureCapacity, Unit: u.Gallon},
+	}
 	p.TurbineBuilding.HeaterDrainTank = Tank{
 		Level:    Volume{Val: 0, Unit: u.Gallon},
-		Capacity: Volume{Val: 13120, Unit: u.Gallon},
+		Capacity: Volume{Val: HeaterDrainTankCapacityGal, Unit: u.Gallon},
 		Part:     Part{Temperature: Temperature{Val: 80, Unit: u.Fahrenheit}},
 	}
 	p.Outside = Outside{

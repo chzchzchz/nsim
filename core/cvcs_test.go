@@ -82,12 +82,15 @@ func TestCVCS_DilutionDecreasesBoronConcentration(t *testing.T) {
 		c.BoronConcentration)
 }
 
-// VCT level rises above VCTHighLevel forces CVCSLetdown mode,
-// which halts charging and letdown so the VCT level can
-// stabilise. Per the spec, the BTRS outflow is diverted to the
-// BRS holdup tanks in this condition.
+// VCT level rises above VCTHighLevel latches the BRS divert:
+// letdown continues at design rate but accumulates into the BRS
+// holdup tanks instead of returning to the VCT. Charging keeps
+// running per its latch, and the boron mode is untouched.
 //
 // Spec justification:
+//   - "If the volume control tank is full, a high-water level
+//     signal diverts letdown flow to the Boron Recycle"
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:19-21
 //   - "the volume control tank level controller automatically
 //     diverts the outflow from the BTRS into the BRS holdup
 //     tanks."
@@ -95,29 +98,32 @@ func TestCVCS_DilutionDecreasesBoronConcentration(t *testing.T) {
 func TestCVCS_HighVCTLevelSwitchesToLetdownMode(t *testing.T) {
 	c := (&CVCS{
 		Mode:                CVCSVolumeControl,
-		VCTLevel:            Volume{Val: VCTHighLevel+1, Unit: u.Gallon},
+		VCTLevel:            Volume{Val: VCTHighLevel + 1, Unit: u.Gallon},
 		BoronConcentration:  CVCSInitialBoron,
 		ChargingPumpRunning: true,
 		LetdownValveOpen:    true,
 	}).Step(Volume{Val: 0, Unit: u.Gallon})
-	assert.Equal(t, CVCSLetdown, c.Mode,
-		"want CVCSLetdown with VCTLevel>VCTHighLevel, got %v", c.Mode)
-	assert.Zero(t, c.ChargingFlow.Float(),
-		"want ChargingFlow=0 in CVCSLetdown, got %v", c.ChargingFlow)
-	assert.Zero(t, c.LetdownFlow.Float(),
-		"want LetdownFlow=0 in CVCSLetdown, got %v", c.LetdownFlow)
+	assert.True(t, c.Diverting,
+		"want Diverting with VCTLevel>VCTHighLevel, got %v", c.Diverting)
+	assert.InDelta(t, CVCSDesignChargingFlow.Float(), c.ChargingFlow.Float(), 1e-9,
+		"want charging unchanged by divert, got %v", c.ChargingFlow)
+	assert.InDelta(t, CVCSDesignLetdownFlow.Float(), c.LetdownFlow.Float(), 1e-9,
+		"want letdown at design rate during divert, got %v", c.LetdownFlow)
+	assert.InDelta(t, CVCSDesignLetdownFlow.Float()*TimeStep.Seconds(),
+		c.BRSHoldupLevel.Float(), 1e-9,
+		"want BRSHoldupLevel to gain one step of letdown, got %v",
+		c.BRSHoldupLevel)
 }
 
-// VCT level accumulates from charging-pump depletion and BTRS
-// recirculation. With the charging pump running the VCT loses
-// inventory each step; with the BTRS pump running the loss is
-// larger.
+// VCT level balance: charging-pump suction and BTRS recirculation
+// deplete the VCT; the letdown return path more than makes up the
+// difference at design flows.
 //
 // Spec justification:
-//   - "the volume control tank level controller automatically
-//     diverts the outflow from the BTRS into the BRS holdup
-//     tanks."
-//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
+//   - "The pressurizer level represents a balance of injection
+//     water flow into the RCS and water letdown flow into the
+//     Chemical and Volume Control System."
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65
 func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 	initial := VCTDesignLevel
 	steps := int(1 * time.Second / TimeStep)
@@ -132,10 +138,10 @@ func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 	for i := 0; i < steps; i++ {
 		c = c.Step(Volume{Val: 0, Unit: u.Gallon})
 	}
-	wantLoss := CVCSDesignChargingFlow.Float() * 1.0
-	assert.InDelta(t, initial-wantLoss, c.VCTLevel.Float(), 1e-3,
-		"want VCTLevel=%v after 1 s charging-pump-only, got %v",
-		initial-wantLoss, c.VCTLevel.Float())
+	wantGain := (CVCSDesignLetdownFlow.Float() - CVCSDesignChargingFlow.Float()) * 1.0
+	assert.InDelta(t, initial+wantGain, c.VCTLevel.Float(), 1e-3,
+		"want VCTLevel=%v after 1 s charging-vs-letdown, got %v",
+		initial+wantGain, c.VCTLevel.Float())
 
 	// Now with BTRS pump also running.
 	c = CVCS{
@@ -149,10 +155,11 @@ func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 	for i := 0; i < steps; i++ {
 		c = c.Step(Volume{Val: 0, Unit: u.Gallon})
 	}
-	wantLossBoth := (CVCSDesignChargingFlow.Float() + VCTBTRSCirculation) * 1.0
-	assert.InDelta(t, initial-wantLossBoth, c.VCTLevel.Float(), 1e-3,
+	wantGainBoth := (CVCSDesignLetdownFlow.Float() - CVCSDesignChargingFlow.Float() -
+		VCTBTRSCirculation) * 1.0
+	assert.InDelta(t, initial+wantGainBoth, c.VCTLevel.Float(), 1e-3,
 		"want VCTLevel=%v after 1 s charging+BTRS, got %v",
-		initial-wantLossBoth, c.VCTLevel.Float())
+		initial+wantGainBoth, c.VCTLevel.Float())
 }
 
 // End-to-end: with the reactor at rated power, switching to

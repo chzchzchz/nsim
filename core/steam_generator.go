@@ -133,6 +133,24 @@ func (s *SteamGenerator) Step() SteamGenerator {
 		ret.Water = vol(ret.Water, newWater)
 	}
 
+	// 1b) Atmospheric dump debit. Dumping to atmosphere spends
+	// secondary inventory; only the condenser dump returns it
+	// ("During plant cooldown, steam is dumped to the condensers
+	// [...] rather than to atmosphere through the atmospheric dump
+	// valves. This conserves condensate in the system.",
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:33-37).
+	// "ASME Code safety valves and power operated relief and
+	// atmospheric dump valves are located on each steam line
+	// upstream of the stop valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	if ret.AtmosphericDumpValve.Open > 0 && ret.Pressure > 0 {
+		dump := ret.AtmosphericDumpValve.Open * AtmosphericDumpFraction *
+			SteamGeneratorFullLoadSteamFlow.Float() / SecondsPerHour *
+			dt.Seconds()
+		newWater := max(ret.Water.Float()-dump, 0)
+		ret.Water = vol(ret.Water, newWater)
+	}
+
 	// 2) Pressure response. While HeatInput > 0 and there is water
 	// to boil, Pressure relaxes toward SteamGeneratorShellPressure
 	// at a rate proportional to the gap. With no HeatInput there

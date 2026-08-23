@@ -15,10 +15,18 @@ type ReactorBuilding struct {
 	SteamGenerator        `json:"SteamGenerator"`
 	ReactorCoolantPump Pump
 	Pressurizer           `json:"Pressurizer"`
-	SafetyValve           Valve
-	BlockValve            Valve
-	PORV                  Valve
-	PressurizedReliefTank Tank
+	SafetyValve            Valve
+	BlockValve             Valve
+	PORV                   Valve
+	PressurizedReliefTank  Tank
+
+	// RuptureDiscRuptured latches once the PRT reaches capacity;
+	// further PORV discharge bypasses the tank into the containment
+	// pressure proxy.
+	// "A rupture disc vents the tank to the containment if design
+	// pressure is exceeded."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:37-38
+	RuptureDiscRuptured bool
 
 	// Aux points at the canonical AuxiliaryBuilding that lives on
 	// Plant. The Step function reads CVCS / RHRS / CCWS / CSS /
