@@ -15,6 +15,7 @@
 # Tools
 
 * Set "description" in tool json if tool is failing for no reason.
+* Prefer gopls mcp's lsp tool commands for mechanical code changes.
 
 # Tests
 

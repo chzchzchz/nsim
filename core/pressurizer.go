@@ -4,6 +4,7 @@ import (
 	u "github.com/bcicen/go-units"
 )
 
+
 // Step advances the pressurizer by TimeStep. It implements the
 // heater/spray energy balance and the bubble-driven pressure model
 // described in plans/p5_1.txt:120-181.
@@ -151,3 +152,57 @@ func (p *Pressurizer) Step(porv *Valve) Pressurizer {
 
 	return ret
 }
+// Pressurizer models the surge-line volume at the top of the primary
+// loop that holds the steam bubble used for pressure control.
+//
+// Spec justification for the field set:
+//   - Pressure, Water, Volume — "The pressurizer is a partial tank that
+//     contains saturated water and steam in equilibrium at saturation
+//     temperature corresponding to the pressure." (glossary.md
+//     pressurizer, p. 169)
+//   - HeatersOn — "All pressurizer heaters are energized to start the
+//     bubble formation during plant startup."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:15-23
+//   - SprayOpen — "Pressurizer heater and spray valve control is [...]
+//     used to maintain the pressure in accordance with the applicable
+//     temperature-pressure curves."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:42-43
+//   - SteamBubble — "When the pressurizer fluid reaches saturation
+//     temperature for the pressure being maintained, steam formation
+//     in the pressurizer begins."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:15-23
+type Pressurizer struct {
+	Part
+	Pressure
+	Water       Volume
+	Volume      Volume
+	HeatersOn   bool
+	SprayOpen   float64
+	SteamBubble Volume
+}
+
+// Pressurizer control tunables. The numbers below are sized to give
+// spec-anchored behaviour on the 1 ms plant step:
+//
+//   - PressurizerBasePressure + PressurizerBubbleStiffness * bubble ->
+//     ~2250 psia at a ~30% bubble.
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:69
+//   - PressurizerHeaterRate drives Pressure toward the target on a
+//     timescale of a few seconds.
+//   - PressurizerPORVTrip is the safety-valve setpoint the step uses to
+//     crack the PORV.
+//
+// Spec justification:
+//   - "operation of pressurizer heaters and spray maintains the system
+//     pressure in accordance with the applicable temperature-pressure
+//     curves." specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:42-43
+const (
+	PressurizerBasePressure    Pressure = 1500
+	PressurizerHeaterTarget    Pressure = 2250
+	PressurizerHeaterRate      Pressure = 200 // psi/s while HeatersOn
+	PressurizerSprayMin        Pressure = 1400
+	PressurizerSprayRate       Pressure = 300 // psi/s at SprayOpen == 1
+	PressurizerAmbientDecay    Pressure = 5   // psi/s cooldown when idle
+	PressurizerBubbleStiffness float64  = 2.5 // psi per gallon of bubble
+	PressurizerPORVTrip        Pressure = 2500
+)

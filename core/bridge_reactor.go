@@ -1,0 +1,833 @@
+package core
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/chzchzchz/nsim/bridge"
+)
+
+// addReactorBuildingControls adds Control entries keyed by the namespace managed by this file to m.
+func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
+
+	// Reactor coolant pump running (chapter 4 startup / cooldown):
+	// "One reactor coolant pump is kept running ... until the cooling
+	// temperature is below 160°F (71°C)."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:37-40
+	m["ReactorBuilding/ReactorCoolantPump/Running"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorCoolantPump",
+		Label: "Running",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.ReactorCoolantPump.Running)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorCoolantPump.Running = v
+			return nil
+		},
+	}
+
+
+	// HHSI pump manual start. Manual starting of the HHSI
+	// pumps from the main control board backs up the CVCS
+	// charging pumps for RCS boration.
+	// "Manual starting of the HHSI pumps will result in the
+	// injection of borated water as RCS pressure is decreased
+	// below the shutoff head of the pump."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:159-164
+	m["ReactorBuilding/SafetyInjectionSystem/HHSIPumpRunning"] = &bridge.Control{
+		Part:  "ReactorBuilding/SafetyInjectionSystem",
+		Label: "HHSIPumpRunning",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = v
+			return nil
+		},
+	}
+
+
+	// Pressurizer spray valve (chapter 7 pressure control):
+	// "The pressurizer pressure control system ... spray ..."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
+	m["ReactorBuilding/Pressurizer/SprayOpen"] = &bridge.Control{
+		Part:  "ReactorBuilding/Pressurizer",
+		Label: "SprayOpen",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.ReactorBuilding.Pressurizer.SprayOpen)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.Pressurizer.SprayOpen = v
+			return nil
+		},
+	}
+
+
+	// Steam generator main steam isolation valve (chapter 15):
+	// The MSIV isolates the SG secondary side from the
+	// turbine and steam dump on a steam-line-break signal
+	// or operator command.
+	// "ASME Code safety valves and power operated relief and
+	// atmospheric dump valves are located on each steam
+	// line upstream of the stop valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	m["ReactorBuilding/SteamGenerator/MainSteamIsolationValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/SteamGenerator/MainSteamIsolationValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open = v
+			return nil
+		},
+	}
+
+
+	// Steam generator atmospheric dump valve (chapter 15).
+	// The atmospheric dump valve (also called "steam dump to
+	// atmosphere") is the operator handle for dumping excess
+	// SG steam when the turbine is unavailable (load
+	// rejection, turbine trip).
+	// "ASME Code safety valves and power operated relief and
+	// atmospheric dump valves are located on each steam
+	// line upstream of the stop valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	m["ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/SteamGenerator/AtmosphericDumpValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open = v
+			return nil
+		},
+	}
+
+
+	// Steam generator safety valve (chapter 15).
+	// Self-actuating ASME-Code spring-loaded safety valve;
+	// the bridge exposes it as a control for completeness
+	// (the Step function will also auto-trip it on
+	// overpressure).
+	// "Safety valves in each steam generator outlet main
+	// steam line."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:42-45
+	m["ReactorBuilding/SteamGenerator/SafetyValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/SteamGenerator/SafetyValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.SteamGenerator.SafetyValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SteamGenerator.SafetyValve.Open = v
+			return nil
+		},
+	}
+
+
+	// Reactor makeup control valve (chapter 4):
+	// "Because of the influx of makeup water from the reactor
+	// makeup control system [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-6
+	m["ReactorBuilding/ReactorMakeupControlValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorMakeupControlValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.ReactorMakeupControlValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorMakeupControlValve.Open = v
+			return nil
+		},
+	}
+
+
+	// Pressurizer heaters (chapter 16 startup):
+	// "All pressurizer heaters are energized to start the
+	// heatup of the pressurizer necessary to form the
+	// steam bubble."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:15-16
+	m["ReactorBuilding/Pressurizer/HeatersOn"] = &bridge.Control{
+		Part:  "ReactorBuilding/Pressurizer",
+		Label: "HeatersOn",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.Pressurizer.HeatersOn)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.Pressurizer.HeatersOn = v
+			return nil
+		},
+	}
+
+
+	// Pressurizer power-operated relief valve (chapter 3
+	// pressure-limiting train):
+	// "Reductions in plant electrical load with resultant
+	// pressure increases beyond the pressure-limiting
+	// capability of the pressurizer spray system cause the
+	// air-operated relief valves to open. These valves are
+	// automatically opened at a pressure below system design
+	// pressure. They can also be opened manually from a control
+	// console in the control room."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:23-30
+	m["ReactorBuilding/PORV/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/PORV",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.ReactorBuilding.PORV.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.PORV.Open = v
+			return nil
+		},
+	}
+
+
+	// Pressurizer ASME-code safety valves (chapter 3):
+	// "If system pressure continues to rise, self-actuating
+	// ASME-code safety valves will open. Steam from the
+	// safety and/or relief valves is piped to the pressurizer
+	// relief tank."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:30-34
+	// These are spring-loaded and self-actuating; the bridge
+	// exposes the aggregate state for visibility. The Step
+	// function auto-trips the safety valve when pressure
+	// exceeds PressurizerPORVTrip.
+	m["ReactorBuilding/SafetyValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/SafetyValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.ReactorBuilding.SafetyValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SafetyValve.Open = v
+			return nil
+		},
+	}
+
+
+	// Reactor coolant loop block valve (chapter 3):
+	// "Reactor coolant loop isolation valves may be closed
+	// to isolate a loop."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_071.txt:145
+	m["ReactorBuilding/BlockValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/BlockValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.ReactorBuilding.BlockValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.BlockValve.Open = v
+			return nil
+		},
+	}
+
+
+	// Reactor trip (chapter 7 protection system):
+	// "Manual trip signal – Redundant control
+	// board pushbuttons are provided."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:8-9
+	m["ReactorBuilding/ReactorPressureVessel/Trip"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "Trip",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.ReactorPressureVessel.Trip)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorPressureVessel.Trip = v
+			return nil
+		},
+	}
+
+
+	// Control rod insertion (chapter 7):
+	// "The control rods are then manually withdrawn to achieve criticality"
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:155-156
+	// The Set path writes the operator's demand to
+	// DemandInsertion; ReactorBuilding.Step rate-limits the
+	// actual transition from Insertion toward DemandInsertion
+	// at RodInsertionSpeed (plans/x/fission_controls.md).
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "Insertion",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = v
+			return nil
+		},
+	}
+
+
+	// CVCS boron concentration setpoint. The operator writes
+	// the desired RCS boron concentration in ppm directly; this
+	// feeds the reactivity model on the next step. The CVCS
+	// rate dynamics (boration/dilution) still run in their
+	// respective modes; the setpoint is the operator-visible
+	// handle on the slow shim path.
+	//   "The operating mode (boration or dilution) and the
+	//   magnitude of the boron concentration change required
+	//   is determined by comparison of the measured Tc
+	//   (cold leg temperature) with the programmed (function
+	//   of power) Tc."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
+	//   "Operational Reactivity Control — Reactivity control is
+	//   provided by the neutron absorbing control rods and a
+	//   soluble chemical neutron absorber (boric acid) in the
+	//   reactor coolant."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_036.txt:114
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/BoronSetpoint"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "BoronSetpoint",
+		Kind:  "ppm",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("ppm", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			// Write to CVCS so the next step's propagation
+			// (CVCS.BoronConcentration → RPV.ControlRods.BoronConcentration)
+			// does not overwrite the operator's demand.
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = v
+			p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = v
+			return nil
+		},
+	}
+
+}
+
+// addReactorBuildingSensors adds Sensor entries keyed by the namespace managed by this file to m.
+func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
+
+	// Reactor coolant outlet temperature (chapter 3 design data):
+	// "Reactor coolant inlet temperature: 621°F (327°C);
+	// outlet: 558°F (292°C)"
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60-61
+	m["ReactorBuilding/ReactorPressureVessel/Outlet"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "Outlet",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.ReactorBuilding.ReactorPressureVessel.Outlet.Float())
+		},
+	}
+
+
+	// Steam generator pressure:
+	m["ReactorBuilding/SteamGenerator/Pressure"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator",
+		Label: "Pressure",
+		Kind:  "psig",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("psig",
+				p.ReactorBuilding.SteamGenerator.Pressure)
+		},
+	}
+
+
+	// Pressurizer pressure (chapter 16):
+	// "operation of pressurizer heaters and spray maintains the system
+	// pressure in accordance with the applicable temperature-pressure
+	// curves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:42-43
+	m["ReactorBuilding/Pressurizer/Pressure"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/Pressurizer",
+		Label: "Pressure",
+		Kind:  "psig",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("psig",
+				p.ReactorBuilding.Pressurizer.Pressure)
+		},
+	}
+
+
+	// Steam generator water inventory:
+	m["ReactorBuilding/SteamGenerator/Water"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator",
+		Label: "Water",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.ReactorBuilding.SteamGenerator.Water.Float())
+		},
+	}
+
+
+	// Containment atmosphere temperature (chapter 6):
+	// "As this water comes in contact with the steam in the
+	// containment atmosphere, the steam is condensed"
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:56-57
+	m["ReactorBuilding/ContainmentBuilding/Temperature"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentBuilding",
+		Label: "Temperature",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.ReactorBuilding.ContainmentBuilding.Temperature.Float())
+		},
+	}
+
+
+	// Reactor coolant pump running (chapter 4 startup / cooldown):
+	// "One reactor coolant pump is kept running ... until the cooling
+	// temperature is below 160°F (71°C)."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:37-40
+	m["ReactorBuilding/ReactorCoolantPump/Running"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorCoolantPump",
+		Label: "Running",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.ReactorCoolantPump.Running)
+		},
+	}
+
+
+	// Reactor coolant inlet temperature (chapter 3 design data):
+	// "Reactor coolant inlet temperature: 621°F (327°C);
+	// outlet: 558°F (292°C)"
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60
+	m["ReactorBuilding/ReactorPressureVessel/Inlet"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "Inlet",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.ReactorBuilding.ReactorPressureVessel.Inlet.Float())
+		},
+	}
+
+
+	// Steam generator heat extraction rate (primary-side heat
+	// input from the RPV). The SG is the dominant primary
+	// energy sink; reducing this is the fastest way to stop a
+	// temperature drop once it starts.
+	//   "3,813,000 Ib/hr (480 kg/sec)" steam flow per steam
+	//   generator — Table 3.4-1.
+	//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
+	m["ReactorBuilding/SteamGenerator/HeatInput"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator",
+		Label: "HeatInput",
+		Kind:  "watt",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("watt",
+				p.ReactorBuilding.SteamGenerator.HeatInput)
+		},
+	}
+
+
+	// RCP shaft speed. The shaft-loss heat enters the primary
+	// coolant; reduced flow raises ΔT, providing a secondary
+	// primary-temperature lever via the coolant pump.
+	//   "Primary temperature is maintained through the
+	//   balanced use of reactor coolant pump heat input and a
+	//   steam dump system."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-111
+	m["ReactorBuilding/ReactorCoolantPump/Speed"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorCoolantPump",
+		Label: "Speed",
+		Kind:  "rpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("rpm",
+				float64(p.ReactorBuilding.ReactorCoolantPump.Velocity))
+		},
+	}
+
+
+	// Reactor pressure vessel pressure:
+	// Operating pressure 2250 psia (155 bar); design pressure 2500 psia.
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:45
+	m["ReactorBuilding/ReactorPressureVessel/Pressure"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "Pressure",
+		Kind:  "psig",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("psig",
+				p.ReactorBuilding.ReactorPressureVessel.Pressure)
+		},
+	}
+
+
+	// Steam generator total volume (chapter 3 design data):
+	// Table 3.4-1: "Overall height: 67 ft, 8 in."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:25-44
+	m["ReactorBuilding/SteamGenerator/Volume"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator",
+		Label: "Volume",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.ReactorBuilding.SteamGenerator.Volume.Float())
+		},
+	}
+
+
+	// Main steam isolation valve (chapter 15 steam system):
+	// "ASME Code safety valves and power operated relief and
+	// atmospheric dump valves are located on each steam line
+	// upstream of the stop valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	// The bridge sensor exposes the actual Open fraction for
+	// visibility — the Step function uses it to gate the SG-to-
+	// turbine steam path.
+	m["ReactorBuilding/SteamGenerator/MainSteamIsolationValve/Open"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator/MainSteamIsolationValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open)
+		},
+	}
+
+
+	// Steam generator safety valve (chapter 15):
+	// "Safety valves in each steam generator outlet main
+	// steam line."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:42-45
+	m["ReactorBuilding/SteamGenerator/SafetyValve/Open"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator/SafetyValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.SteamGenerator.SafetyValve.Open)
+		},
+	}
+
+
+	// Steam generator atmospheric dump valve (chapter 15):
+	// "ASME Code safety valves and power operated relief and
+	// atmospheric dump valves are located on each steam line
+	// upstream of the stop valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	m["ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator/AtmosphericDumpValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open)
+		},
+	}
+
+
+	// Reactor coolant boron concentration (chapter 7):
+	// "Control of the reactor coolant's boron concentration
+	// involves both the Boron Thermal Regeneration System (BTRS)
+	// and the Reactor Water Makeup System."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:37-38
+	m["ReactorBuilding/ReactorPressureVessel/BoronConcentration"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "BoronConcentration",
+		Kind:  "ppm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("ppm",
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration)
+		},
+	}
+
+
+	// Control-rod actual insertion (chapter 2 RCC operation):
+	// "Rod cluster control (RCC) assemblies are used for reactor
+	// startup or shutdown, to follow load changes, and to
+	// control small transient changes in reactivity."
+	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_035.txt:90-93
+	// Insertion=0 means fully withdrawn (normal operation);
+	// Insertion=1 means fully inserted.
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:43
+	// "rod position [...] provides operational reactivity control"
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "Insertion",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion)
+		},
+	}
+
+
+	// Reactor makeup control valve flow (chapter 4 CVCS):
+	// "Because of the influx of makeup water from the reactor
+	// makeup control system [...]"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-6
+	m["ReactorBuilding/ReactorMakeupControlValve/Flow"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorMakeupControlValve",
+		Label: "Flow",
+		Kind:  "gpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gpm",
+				p.ReactorBuilding.ReactorMakeupControlValve.Flow.Float())
+		},
+	}
+
+
+	// Pressurizer water inventory (chapter 16 startup):
+	// "Drain pressurizer to no-load operating level [...] lower
+	// pressurizer level to the normal range of 20 to 80 percent"
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:22-23
+	m["ReactorBuilding/Pressurizer/Water"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/Pressurizer",
+		Label: "Water",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.ReactorBuilding.Pressurizer.Water.Float())
+		},
+	}
+
+
+	// Pressurizer PORV position (chapter 3 pressure
+	// limiting):
+	// "Reductions in plant electrical load with resultant
+	// pressure increases beyond the pressure-limiting
+	// capability of the pressurizer spray system cause the
+	// air-operated relief valves to open."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:23-30
+	m["ReactorBuilding/PORV/Open"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/PORV",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.PORV.Open)
+		},
+	}
+
+
+	// Pressurizer ASME-code safety valve position
+	// (chapter 3):
+	// "If system pressure continues to rise, self-actuating
+	// ASME-code safety valves will open."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:30-31
+	m["ReactorBuilding/SafetyValve/Open"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SafetyValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.SafetyValve.Open)
+		},
+	}
+
+
+	// Reactor coolant loop block valve position
+	// (chapter 3):
+	// "Reactor coolant loop isolation valves may be closed
+	// to isolate a loop."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_071.txt:145
+	m["ReactorBuilding/BlockValve/Open"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/BlockValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.BlockValve.Open)
+		},
+	}
+
+
+	// Pressurizer relief tank level (chapter 3):
+	// "Steam from the safety and/or relief valves is piped
+	// to the pressurizer relief tank which contains
+	// sufficient water to condense the steam."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:33-35
+	m["ReactorBuilding/PressurizedReliefTank/Level"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/PressurizedReliefTank",
+		Label: "Level",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.ReactorBuilding.PressurizedReliefTank.Level.Float())
+		},
+	}
+
+
+	// Containment pressure (chapter 5 safety injection / chapter 7 RPS):
+	// "High containment pressure as reported by two out of four signals."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:97
+	m["ReactorBuilding/ContainmentPressure"] = &bridge.Sensor{
+		Part:  "ReactorBuilding",
+		Label: "ContainmentPressure",
+		Kind:  "psig",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("psig",
+				p.ReactorBuilding.ContainmentPressure)
+		},
+	}
+
+
+	// HHSI pump running. Auto-started on safety injection; also
+	// manually started from the main control board for
+	// RCS boration backup.
+	// "The receipt of the safety injection signal initiates
+	// the following emergency core cooling actions: [...] The
+	// HHSI pumps are started."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:109-118
+	// "Manual starting of the HHSI pumps will result in the
+	// injection of borated water as RCS pressure is decreased
+	// below the shutoff head of the pump."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:159-164
+	m["ReactorBuilding/SafetyInjectionSystem/HHSIPumpRunning"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SafetyInjectionSystem",
+		Label: "HHSIPumpRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning)
+		},
+	}
+
+
+	// Grid frequency (chapter 11 / turbine governor reference):
+	// "Wide range speed control of the turbine from turning
+	// gear to rated speed."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
+	m["ReactorBuilding/Grid/Frequency"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/Grid",
+		Label: "Frequency",
+		Kind:  "hz",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("hz",
+				p.ReactorBuilding.Grid.Frequency)
+		},
+	}
+
+
+	// Off-site grid voltage (chapter 16):
+	// "If offsite power is not available, the long coast"
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:64
+	m["ReactorBuilding/Grid/Voltage"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/Grid",
+		Label: "Voltage",
+		Kind:  "volt",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("volt",
+				p.ReactorBuilding.Grid.Voltage)
+		},
+	}
+
+}
