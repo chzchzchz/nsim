@@ -175,7 +175,7 @@ func TestCoolingTowerSteadyStateApproach(t *testing.T) {
 	wetBulb := Temperature{Val: 75.0, Unit: u.Fahrenheit}
 	hot := Temperature{Val: 93.0, Unit: u.Fahrenheit}
 	steps := int(5 * time.Minute / TimeStep)
-	for i := 0; i < steps; i++ {
+	for range steps {
 		ct = ct.Step(true, true, CirculatingWaterDesignFlowGPM, hot, wetBulb)
 	}
 	target := wetBulb.Float() + CoolingTowerApproachF
@@ -200,7 +200,7 @@ func TestCoolingTowerDegradedApproachRunsHotter(t *testing.T) {
 	degraded := towerFixture(93.0)
 	degraded.ApproachF = CoolingTowerApproachF + 10.0
 
-	for i := 0; i < steps; i++ {
+	for range steps {
 		design = design.Step(true, true,
 			CirculatingWaterDesignFlowGPM, hot, wetBulb)
 		degraded = degraded.Step(true, true,
@@ -222,7 +222,7 @@ func TestCoolingTowerFanLossHotSoak(t *testing.T) {
 	ct := towerFixture(95.0)
 	prev := ct.ColdBasinTemp.Float()
 	steps := int(CoolingTowerTimeConstant.Seconds() / TimeStep.Seconds())
-	for i := 0; i < steps; i++ {
+	for range steps {
 		ct = ct.Step(false, false, CirculatingWaterDesignFlowGPM, hot, wetBulb)
 		if ct.ColdBasinTemp.Float() < prev {
 			t.Fatalf("cold basin cooled during hot soak: %v -> %v",
@@ -250,12 +250,12 @@ func TestCoolingTowerEvaporationDepletesBasin(t *testing.T) {
 
 	// Converge thermally first (makeup open clamps at capacity;
 	// here we just let temps settle before closing makeup).
-	for i := 0; i < 10*int(time.Second/TimeStep); i++ {
+	for range 10 * int(time.Second/TimeStep) {
 		ct = ct.Step(true, true, CirculatingWaterDesignFlowGPM, hot, wetBulb)
 	}
 	startLevel := ct.Basin.Level.Float()
 	measureSteps := 10 * int(time.Second/TimeStep)
-	for i := 0; i < measureSteps; i++ {
+	for range measureSteps {
 		ct = ct.Step(true, true, CirculatingWaterDesignFlowGPM, hot, wetBulb)
 	}
 	drop := startLevel - ct.Basin.Level.Float()
@@ -287,7 +287,7 @@ func TestCoolingTowerMakeupRefillsBasin(t *testing.T) {
 	ct.MakeupValve.Open = 1.0
 	ct.Basin.Level = vol(ct.Basin.Level, 100_000)
 	steps := 60 * int(time.Second/TimeStep)
-	for i := 0; i < steps; i++ {
+	for range steps {
 		ct = ct.Step(true, true, 0, hot, wetBulb)
 	}
 	want := 100_000 + CoolingTowerMakeupFlowGPM/60.0*
