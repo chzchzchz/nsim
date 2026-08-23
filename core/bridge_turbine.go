@@ -523,7 +523,7 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Label: "FirstStagePressure",
 		Kind:  "psig",
 		Get: func() (string, error) {
-			return bridge.FormatSensorValue("psi",
+			return bridge.FormatSensorValue("psig",
 				p.TurbineBuilding.Turbine.FirstStagePressure)
 		},
 	}
@@ -538,7 +538,7 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Label: "BearingOilPressure",
 		Kind:  "psig",
 		Get: func() (string, error) {
-			return bridge.FormatSensorValue("psi",
+			return bridge.FormatSensorValue("psig",
 				p.TurbineBuilding.Turbine.BearingOilPressure)
 		},
 	}
@@ -554,7 +554,7 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Label: "Pressure",
 		Kind:  "psig",
 		Get: func() (string, error) {
-			return bridge.FormatSensorValue("psi",
+			return bridge.FormatSensorValue("psig",
 				p.TurbineBuilding.Condenser.Pressure)
 		},
 	}

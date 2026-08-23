@@ -112,6 +112,20 @@ func TestBridge_ReliefAndIsolationValveSensors(t *testing.T) {
 	}
 }
 
+// Every registered sensor must format its reading under its declared
+// Kind; a Kind string outside the bridge taxonomy fails Get only when
+// the web interface renders the control.
+func TestBridge_AllSensorsGetWithoutError(t *testing.T) {
+	p := MakePlant()
+	m := GetSensorMap(&p)
+	require.NotEmptyf(t, m, "want non-empty sensor map")
+	for id, s := range m {
+		out, err := s.Get()
+		require.NoErrorf(t, err, "Get %q", id)
+		assert.NotEmptyf(t, out, "want non-empty value from sensor %q", id)
+	}
+}
+
 func TestBridge_ReliefAndIsolationValveControls(t *testing.T) {
 	p := MakePlant()
 	m := GetControlMap(&p)
