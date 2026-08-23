@@ -7,7 +7,10 @@ import (
 	u "github.com/bcicen/go-units"
 )
 
-func (r *ReactorBuilding) Step() ReactorBuilding {
+func (r *ReactorBuilding) Step(
+	swSupplyTemp Temperature,
+	swFlowAvail bool,
+) ReactorBuilding {
 	ret := *r
 	ret.Pressurizer = ret.Pressurizer.Step(&ret.PORV)
 	// Reactor makeup control valve: the operator sets Open
@@ -162,7 +165,10 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 	dt := TimeStep
 	rcsOutletF := ret.ReactorPressureVessel.Outlet.Float()
 	rcsPressure := float64(ret.Pressurizer.Pressure)
-	ret.Aux.ComponentCoolingWaterSystem = ret.Aux.ComponentCoolingWaterSystem.Step()
+	ret.Aux.ComponentCoolingWaterSystem = ret.Aux.ComponentCoolingWaterSystem.Step(
+		swSupplyTemp,
+		swFlowAvail,
+	)
 	ret.Aux.ResidualHeatRemovalSystem = ret.Aux.ResidualHeatRemovalSystem.Step(
 		ret.ReactorPressureVessel.Outlet,
 		rcsPressure,
@@ -642,6 +648,7 @@ func (p *Plant) Step() {
 	// The SFPC pump reads the same plantDriveReady signal
 	// (480 V MCC downstream of an ESF bus).
 	p.nextPlant.AuxiliaryBuilding = p.AuxiliaryBuilding.Step(
+		p.Outside.ServiceWaterSystem.InletTemp,
 		p.Outside.ServiceWaterSystem.Flow,
 		plantDriveReady,
 	)
@@ -665,7 +672,10 @@ func (p *Plant) Step() {
 	p.nextPlant.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.DriveReady =
 		p.nextPlant.Electrical.ESFBusB.Energized
 
-	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step()
+	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step(
+		p.Outside.ServiceWaterSystem.InletTemp,
+		p.Outside.ServiceWaterSystem.Flow > 0,
+	)
 
 	// Refueling operations step. The phase machine advances
 	// based on phase-relative time; the cavity flood/drain
@@ -928,8 +938,10 @@ func (p *Plant) Step() {
 	for i := 0; i < RCFCUnitCount; i++ {
 		p.nextPlant.AuxiliaryBuilding.RCFCUnits[i] =
 			p.nextPlant.AuxiliaryBuilding.RCFCUnits[i].Step(
-				locaSensed, cbTemp,
-			)
+					locaSensed, cbTemp,
+					p.Outside.ServiceWaterSystem.InletTemp,
+					p.Outside.ServiceWaterSystem.Flow > 0,
+				)
 	}
 	var rcfcHeatOut Watts
 	for i := 0; i < RCFCUnitCount; i++ {
@@ -1002,7 +1014,9 @@ func (p *Plant) Step() {
 	p.nextPlant.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression = hds
 
 	// SWS: the service water picks up the heat rejected by the
-	// RCFC coils. In the simplified model the lumped SWS flow
+	// RCFC coils plus the component cooling heat exchangers, and
+	// its inlet tracks Outside.RiverTemp (shared intake house).
+	// In the simplified model the lumped SWS flow
 	// is the design maximum (all three essential pumps running)
 	// at construction; the outlet temperature rises with the
 	// imposed heat load.
@@ -1016,8 +1030,15 @@ func (p *Plant) Step() {
 	//     "Containment for ventilation coolers" are typical
 	//     SWS loads.
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:81-93
+	//   - Shared river intake: "serves one circulating water
+	//     pump and one service water pump."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:37-38
+	ccwDuty := p.nextPlant.AuxiliaryBuilding.ComponentCoolingWaterSystem.HXHeatDuty
 	p.nextPlant.Outside.ServiceWaterSystem =
-		p.nextPlant.Outside.ServiceWaterSystem.Step(rcfcHeatOut)
+		p.nextPlant.Outside.ServiceWaterSystem.Step(
+			p.Outside.RiverTemp,
+			rcfcHeatOut+ccwDuty,
+		)
 
 	// SFPCS: pump auto-start and purification-flow update
 	// happen inside AuxiliaryBuilding.Step above, where the
@@ -1794,8 +1815,8 @@ func MakePlant() Plant {
 			Running:             true,
 			LowSpeed:            false,
 			HeatTransferRate:    0,
-			CoilInletTemp:       Temperature{Val: RCFCSWInletTemp, Unit: u.Fahrenheit},
-			CoilOutletTemp:      Temperature{Val: RCFCSWInletTemp, Unit: u.Fahrenheit},
+			CoilInletTemp:       p.Outside.RiverTemp,
+			CoilOutletTemp:      p.Outside.RiverTemp,
 			BackdraftDamperOpen: true,
 		}
 	}
@@ -1868,8 +1889,8 @@ func MakePlant() Plant {
 	p.Outside.ServiceWaterSystem = ServiceWaterSystem{
 		PumpRunning:           true,
 		Flow:                 ServiceWaterDesignFlow,
-		InletTemp:            ServiceWaterInletTemp,
-		OutletTemp:           ServiceWaterInletTemp,
+		InletTemp:            p.Outside.RiverTemp,
+		OutletTemp:           p.Outside.RiverTemp,
 		NonessentialIsolated: false,
 	}
 

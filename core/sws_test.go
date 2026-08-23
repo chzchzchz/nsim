@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -11,7 +12,7 @@ import (
 // At construction all three essential service water pumps are
 // running (collapsed to a single boolean), the lumped flow is
 // the design maximum, and the inlet temperature equals the
-// design source temperature.
+// river source temperature.
 func TestSWS_InitialStateHasAllPumpsRunning(t *testing.T) {
 	p := MakePlant()
 	sws := p.Outside.ServiceWaterSystem
@@ -20,9 +21,9 @@ func TestSWS_InitialStateHasAllPumpsRunning(t *testing.T) {
 	assert.InDelta(t, ServiceWaterDesignFlow, sws.Flow, 1e-9,
 		"want Flow=ServiceWaterDesignFlow at startup, got %v",
 		sws.Flow)
-	assert.InDelta(t, ServiceWaterSourceTemp,
+	assert.InDelta(t, p.Outside.RiverTemp.Float(),
 		sws.InletTemp.Float(), 1e-9,
-		"want InletTemp=ServiceWaterSourceTemp at startup, got %v",
+		"want InletTemp=RiverTemp at startup, got %v",
 		sws.InletTemp.Float())
 	assert.False(t, sws.NonessentialIsolated,
 		"want NonessentialIsolated=false at startup, got %v",
@@ -35,10 +36,9 @@ func TestSWS_StoppedPumpsHaveZeroFlow(t *testing.T) {
 	s := ServiceWaterSystem{
 		PumpRunning: true,
 		Flow:       ServiceWaterDesignFlow,
-		InletTemp:  ServiceWaterInletTemp,
 	}
 	s.PumpRunning = false
-	s2 := s.Step(Watts(1e6))
+	s2 := s.Step(Temperature{Val: 70, Unit: u.Fahrenheit}, Watts(1e6))
 	assert.Zero(t, s2.Flow,
 		"want Flow=0 with pumps stopped, got %v", s2.Flow)
 	assert.InDelta(t, s2.InletTemp.Float(), s2.OutletTemp.Float(), 1e-9,
@@ -54,14 +54,14 @@ func TestSWS_OutletTempRisesWithHeatLoad(t *testing.T) {
 		PumpRunning: true,
 		DriveReady:  true,
 		Flow:       ServiceWaterDesignFlow,
-		InletTemp:  ServiceWaterInletTemp,
 	}
-	s2 := s.Step(Watts(0))
-	assert.InDelta(t, s.InletTemp.Float(), s2.OutletTemp.Float(), 1e-9,
+	riverT := Temperature{Val: 70, Unit: u.Fahrenheit}
+	s2 := s.Step(riverT, Watts(0))
+	assert.InDelta(t, s2.InletTemp.Float(), s2.OutletTemp.Float(), 1e-9,
 		"want OutletTemp=InletTemp with no heat load, got %v",
 		s2.OutletTemp.Float())
 	// Apply 1e7 W; expect a measurable rise above inlet.
-	hot := s.Step(Watts(1e7))
+	hot := s.Step(riverT, Watts(1e7))
 	assert.Greater(t, hot.OutletTemp.Float(), hot.InletTemp.Float(),
 		"want OutletTemp > InletTemp with heat load, got %v vs %v",
 		hot.OutletTemp.Float(), hot.InletTemp.Float())

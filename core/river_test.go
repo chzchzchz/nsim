@@ -1,0 +1,133 @@
+package core
+
+import (
+	"testing"
+
+	u "github.com/bcicen/go-units"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// River-to-containment heat-sink chain (plans/x/river.md): the
+// river boundary condition must reach the containment cooling
+// coils through the service water system, and loss of the
+// ultimate heat sink must be visible in the reactor building.
+//
+// Spec justification:
+//   - Shared intake: "serves one circulating water pump and one
+//     service water pump."
+//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:37-38
+//   - "Cooling water is supplied by the essential service water
+//     system."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:86-87
+
+// The SWS inlet temperature tracks the river every step.
+func TestRiverFeedsServiceWaterInlet(t *testing.T) {
+	p := MakePlant()
+	p.Outside.RiverTemp = Temperature{Val: 88, Unit: u.Fahrenheit}
+	stepN(&p, 1)
+	assert.InDelta(t, 88.0,
+		p.Outside.ServiceWaterSystem.InletTemp.Float(), 1e-9,
+		"want SWS InletTemp=88 after one step, got %v",
+		p.Outside.ServiceWaterSystem.InletTemp.Float())
+}
+
+// The RCFC coil inlet follows the river with a one-step lag
+// (the coils read the prior-step service water state).
+func TestRiverFeedsRCFCCoilInlet(t *testing.T) {
+	p := MakePlant()
+	p.Outside.RiverTemp = Temperature{Val: 88, Unit: u.Fahrenheit}
+	stepN(&p, 2)
+	for i := 0; i < RCFCUnitCount; i++ {
+		assert.InDelta(t, 88.0,
+			p.AuxiliaryBuilding.RCFCUnits[i].CoilInletTemp.Float(), 1e-9,
+			"want RCFCUnits[%d].CoilInletTemp=88 after two steps, got %v",
+			i, p.AuxiliaryBuilding.RCFCUnits[i].CoilInletTemp.Float())
+	}
+}
+
+// With the service water pumps stopped the RCFC coils run dry:
+// no unit rejects heat and the coil outlet tracks the inlet.
+func TestLossOfServiceWaterKillsRCFCCooling(t *testing.T) {
+	p := MakePlant()
+	p.Outside.ServiceWaterSystem.PumpRunning = false
+	stepN(&p, 3)
+	assert.Zero(t, p.Outside.ServiceWaterSystem.Flow,
+		"want SWS Flow=0 with pumps stopped, got %v",
+		p.Outside.ServiceWaterSystem.Flow)
+	for i := 0; i < RCFCUnitCount; i++ {
+		unit := p.AuxiliaryBuilding.RCFCUnits[i]
+		assert.Zero(t, unit.HeatTransferRate,
+			"want RCFCUnits[%d].HeatTransferRate=0 without SW flow, got %v",
+			i, unit.HeatTransferRate)
+		assert.InDelta(t, unit.CoilInletTemp.Float(),
+			unit.CoilOutletTemp.Float(), 1e-9,
+			"want RCFCUnits[%d] CoilOutletTemp=CoilInletTemp with dry coils, got %v",
+			i, unit.CoilOutletTemp.Float())
+	}
+}
+
+// A hot river lifts the CCW inlet target above the 105°F design
+// value (target = supply + approach); at the nominal 75°F river
+// the loop holds the spec value.
+func TestHotRiverLiftsCCWInletTarget(t *testing.T) {
+	hot := MakePlant()
+	hot.Outside.RiverTemp = Temperature{Val: 100, Unit: u.Fahrenheit}
+	stepN(&hot, 2)
+	ccws := hot.AuxiliaryBuilding.ComponentCoolingWaterSystem
+	require.True(t, ccws.PumpRunning,
+		"precondition: CCWS auto-starts once an ESF bus is energised")
+	assert.Greater(t, ccws.InletTemp.Float(), CCWSInletSteadyStateTemp,
+		"want CCW InletTemp > 105 with a 100°F river, got %v",
+		ccws.InletTemp.Float())
+
+	nominal := MakePlant()
+	stepN(&nominal, 2)
+	nominalCCWS := nominal.AuxiliaryBuilding.ComponentCoolingWaterSystem
+	assert.InDelta(t, CCWSInletSteadyStateTemp,
+		nominalCCWS.InletTemp.Float(), 1e-9,
+		"want CCW InletTemp=105 at nominal river, got %v",
+		nominalCCWS.InletTemp.Float())
+}
+
+// Without service water flow the CCW loop soaks toward the
+// cooldown maximum and rejects no duty across its HX.
+func TestLossOfServiceWaterSoaksCCWLoop(t *testing.T) {
+	p := MakePlant()
+	p.Outside.ServiceWaterSystem.PumpRunning = false
+	stepN(&p, 2)
+	ccws := p.AuxiliaryBuilding.ComponentCoolingWaterSystem
+	require.True(t, ccws.PumpRunning,
+		"precondition: CCWS auto-starts once an ESF bus is energised")
+	assert.Greater(t, ccws.InletTemp.Float(), CCWSInletSteadyStateTemp,
+		"want CCW InletTemp soaking above 105 without SW flow, got %v",
+		ccws.InletTemp.Float())
+	assert.Zero(t, ccws.HXHeatDuty,
+		"want HXHeatDuty=0 without SW flow, got %v", ccws.HXHeatDuty)
+}
+
+// The SWS outlet rise reflects the total essential load: RCFC
+// heat rejection plus the component cooling HX duty.
+//
+// Spec justification:
+//   - "Component cooling heat exchangers"
+//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:81
+func TestSWSTotalHeatLoadIncludesCCWDuty(t *testing.T) {
+	p := MakePlant()
+	stepN(&p, 2)
+	rcfcSum := 0.0
+	for i := 0; i < RCFCUnitCount; i++ {
+		rcfcSum += p.AuxiliaryBuilding.RCFCUnits[i].HeatTransferRate
+	}
+	duty := float64(p.AuxiliaryBuilding.ComponentCoolingWaterSystem.HXHeatDuty)
+	require.Greater(t, duty, 0.0,
+		"want CCW HXHeatDuty > 0 in steady state, got %v", duty)
+
+	massKgPerS := ServiceWaterDesignFlow * 0.0631
+	wantRise := (rcfcSum + duty) / (massKgPerS * 4186.0) * 9.0 / 5.0
+	sws := p.Outside.ServiceWaterSystem
+	gotRise := sws.OutletTemp.Float() - sws.InletTemp.Float()
+	assert.InDelta(t, wantRise, gotRise, 1e-9,
+		"want SWS outlet rise=%v from RCFC+CCW loads, got %v",
+		wantRise, gotRise)
+}

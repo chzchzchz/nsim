@@ -100,10 +100,14 @@ type AuxiliaryBuilding struct {
 // heat-exchanger inlet) are wired by Plant.Step before and after this
 // call. EFWSFeedwaterFlow (the per-step flow to the steam generators)
 // stays on ReactorBuilding because the SG consumes it inside the
-// containment. swFlowGPM is the prior-step Service Water flow rate
+// containment. swSupplyTemp is the prior-step service water supply
+// temperature (Outside.ServiceWaterSystem.InletTemp), the cold-side
+// input to the component cooling heat exchangers.
+// swFlowGPM is the prior-step Service Water flow rate
 // from Outside.ServiceWaterSystem.Flow (in gpm), fed in explicitly
 // by Plant.Step so this step does not have to reach into another
-// building. The diesel jacket cooler only sees cooling water when
+// building; zero flow also strips the CCWS of its ultimate heat
+// sink. The diesel jacket cooler only sees cooling water when
 // the SWS pumps have developed actual flow — PumpRunning alone is
 // not enough if the ESF bus is de-energised.
 //
@@ -111,10 +115,14 @@ type AuxiliaryBuilding struct {
 // SFPC pump motors (480 V MCC downstream of an ESF bus). It is
 // plumbed in by Plant.Step so this step does not have to reach into
 // the plant electrical model. See plans/x/uat_sat_gating.md.
-func (a *AuxiliaryBuilding) Step(swFlowGPM float64, sfpcDriveReady bool) AuxiliaryBuilding {
+func (a *AuxiliaryBuilding) Step(
+	swSupplyTemp Temperature,
+	swFlowGPM float64,
+	sfpcDriveReady bool,
+) AuxiliaryBuilding {
 	ret := *a
 	ret.ComponentCoolingWaterSystem =
-		ret.ComponentCoolingWaterSystem.Step()
+		ret.ComponentCoolingWaterSystem.Step(swSupplyTemp, swFlowGPM > 0)
 	ret.SpentFuelPoolCoolingSystem =
 		ret.SpentFuelPoolCoolingSystem.Step(sfpcDriveReady)
 	ret.DieselGenerator = ret.DieselGenerator.Step(swFlowGPM)

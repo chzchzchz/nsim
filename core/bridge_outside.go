@@ -352,8 +352,8 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 	// is required."
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:16-19
 	// InletTemp is the river/lake/ocean intake temperature;
-	// held constant at ServiceWaterSourceTemp (70°F) by the
-	// simplified model.
+	// tracks Outside.RiverTemp each step (shared intake house
+	// with the circulating water pumps).
 	m["Outside/ServiceWaterSystem/InletTemp"] = &bridge.Sensor{
 		Part:  "Outside/ServiceWaterSystem",
 		Label: "InletTemp",

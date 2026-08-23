@@ -10,7 +10,7 @@ import (
 
 // At construction all four RCFC units are running at full
 // speed, the backdraft damper is open, and the coil inlet is at
-// the design service water temperature. HeatTransferRate is
+// the river source temperature. HeatTransferRate is
 // initialised to zero and gets computed on the first Step call.
 func TestRCFC_InitialStateAllUnitsRunning(t *testing.T) {
 	p := MakePlant()
@@ -25,19 +25,20 @@ func TestRCFC_InitialStateAllUnitsRunning(t *testing.T) {
 		assert.True(t, u0.BackdraftDamperOpen,
 			"want RCFCUnits[%d].BackdraftDamperOpen=true at startup, got %v",
 			i, u0.BackdraftDamperOpen)
-		assert.InDelta(t, RCFCSWInletTemp,
+		assert.InDelta(t, p.Outside.RiverTemp.Float(),
 			u0.CoilInletTemp.Float(), 1e-9,
-			"want RCFCUnits[%d].CoilInletTemp=RCFCSWInletTemp, got %v",
+			"want RCFCUnits[%d].CoilInletTemp=RiverTemp, got %v",
 			i, u0.CoilInletTemp.Float())
 	}
 	// Step the units with the live containment temperature;
-	// design ΔT (120°F atmosphere − 60°F coil inlet) equals
+	// design ΔT (120°F atmosphere − 70°F service water) equals
 	// RCFCDesignDeltaT (50°F), so each unit's heat transfer
 	// rate equals RCFCDesignHeatRejection.
 	cbTemp := p.ReactorBuilding.ContainmentBuilding.Temperature
+	swT := Temperature{Val: 70, Unit: u.Fahrenheit}
 	for i := 0; i < RCFCUnitCount; i++ {
 		p.AuxiliaryBuilding.RCFCUnits[i] =
-			p.AuxiliaryBuilding.RCFCUnits[i].Step(false, cbTemp)
+			p.AuxiliaryBuilding.RCFCUnits[i].Step(false, cbTemp, swT, true)
 	}
 	sum := 0.0
 	for i := 0; i < RCFCUnitCount; i++ {
@@ -56,9 +57,9 @@ func TestRCFC_StoppedUnitRejectsNoHeat(t *testing.T) {
 	r := RCFCUnit{
 		Running:             false,
 		BackdraftDamperOpen: true,
-		CoilInletTemp:       Temperature{Val: RCFCSWInletTemp, Unit: u.Fahrenheit},
 	}
-	r2 := r.Step(false, Temperature{Val: 120, Unit: u.Fahrenheit})
+	r2 := r.Step(false, Temperature{Val: 120, Unit: u.Fahrenheit},
+		Temperature{Val: 75, Unit: u.Fahrenheit}, true)
 	assert.Zero(t, r2.HeatTransferRate,
 		"want HeatTransferRate=0 for stopped unit, got %v",
 		r2.HeatTransferRate)
@@ -79,10 +80,10 @@ func TestRCFC_LOCASensedSwitchesToLowSpeed(t *testing.T) {
 	r := RCFCUnit{
 		Running:             true,
 		LowSpeed:            false,
-		CoilInletTemp:       Temperature{Val: RCFCSWInletTemp, Unit: u.Fahrenheit},
 		BackdraftDamperOpen: true,
 	}
-	r2 := r.Step(true, Temperature{Val: 120, Unit: u.Fahrenheit})
+	r2 := r.Step(true, Temperature{Val: 120, Unit: u.Fahrenheit},
+		Temperature{Val: 75, Unit: u.Fahrenheit}, true)
 	assert.True(t, r2.LowSpeed,
 		"want LowSpeed=true after LOCA signal, got %v", r2.LowSpeed)
 }
@@ -94,25 +95,52 @@ func TestRCFC_HeatTransferScalesWithDeltaT(t *testing.T) {
 	r := RCFCUnit{
 		Running:             true,
 		BackdraftDamperOpen: true,
-		CoilInletTemp:       Temperature{Val: RCFCSWInletTemp, Unit: u.Fahrenheit},
 	}
+	swT := Temperature{Val: 60, Unit: u.Fahrenheit}
 	// Half-design ΔT (25°F above coil inlet) → half heat rating.
-	half := r.Step(false, Temperature{Val: RCFCSWInletTemp+25, Unit: u.Fahrenheit})
+	half := r.Step(false, Temperature{Val: 60 + 25, Unit: u.Fahrenheit}, swT, true)
 	assert.InDelta(t, RCFCDesignHeatRejection*0.5,
 		half.HeatTransferRate, 1e-9,
 		"want half design heat at half ΔT, got %v",
 		half.HeatTransferRate)
 	// ΔT at or below the coil approach temp → no heat transfer.
-	zero := r.Step(false, Temperature{Val: RCFCSWInletTemp+5, Unit: u.Fahrenheit})
+	zero := r.Step(false, Temperature{Val: 60 + 5, Unit: u.Fahrenheit}, swT, true)
 	assert.Zero(t, zero.HeatTransferRate,
 		"want zero heat transfer below approach temp, got %v",
 		zero.HeatTransferRate)
 	// ΔT well above design → clamped to design rating.
-	clamped := r.Step(false, Temperature{Val: RCFCSWInletTemp+200, Unit: u.Fahrenheit})
+	clamped := r.Step(false, Temperature{Val: 60 + 200, Unit: u.Fahrenheit}, swT, true)
 	assert.InDelta(t, RCFCDesignHeatRejection,
 		clamped.HeatTransferRate, 1e-9,
 		"want clamped heat at super-design ΔT, got %v",
 		clamped.HeatTransferRate)
+}
+
+// A running unit without service water flow has dry coils: it
+// rejects no heat and tracks the coil outlet at the inlet, but
+// still picks up the live supply temperature.
+//
+// Spec justification:
+//   - "Cooling water is supplied by the essential
+//     service water system."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:86-87
+func TestRCFC_NoServiceWaterFlowStopsHeatRejection(t *testing.T) {
+	r := RCFCUnit{
+		Running:             true,
+		BackdraftDamperOpen: true,
+	}
+	dry := r.Step(false, Temperature{Val: 200, Unit: u.Fahrenheit},
+		Temperature{Val: 88, Unit: u.Fahrenheit}, false)
+	assert.Zero(t, dry.HeatTransferRate,
+		"want HeatTransferRate=0 with no service water flow, got %v",
+		dry.HeatTransferRate)
+	assert.InDelta(t, 88.0, dry.CoilInletTemp.Float(), 1e-9,
+		"want CoilInletTemp updated to supply temp, got %v",
+		dry.CoilInletTemp.Float())
+	assert.InDelta(t, dry.CoilInletTemp.Float(),
+		dry.CoilOutletTemp.Float(), 1e-9,
+		"want CoilOutletTemp=CoilInletTemp with dry coils, got %v",
+		dry.CoilOutletTemp.Float())
 }
 
 // RCFCUnitsRunning returns the count of units with Running=true.

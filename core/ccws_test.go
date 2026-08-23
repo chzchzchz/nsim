@@ -38,7 +38,7 @@ func TestCCWS_PumpsOffFreezeInletAndOutletEqualInlet(t *testing.T) {
 		InletTemp:   Temperature{Val: 110.0, Unit: u.Fahrenheit},
 		OutletTemp:  Temperature{Val: 120.0, Unit: u.Fahrenheit},
 	}
-	c2 := c.Step()
+	c2 := c.Step(Temperature{Val: 70, Unit: u.Fahrenheit}, true)
 	assert.InDelta(t, 110.0, c2.InletTemp.Float(), 1e-9,
 		"want InletTemp=110 with pumps off, got %v", c2.InletTemp.Float())
 	assert.InDelta(t, c2.InletTemp.Float(), c2.OutletTemp.Float(), 1e-9,
@@ -65,7 +65,7 @@ func TestCCWS_PumpsRunningInletRecoversTowardSetpoint(t *testing.T) {
 		InletTemp:   Temperature{Val: 120.0, Unit: u.Fahrenheit},
 		OutletTemp:  Temperature{Val: 120.0, Unit: u.Fahrenheit},
 	}
-	c2 := c.Step()
+	c2 := c.Step(Temperature{Val: 70, Unit: u.Fahrenheit}, true)
 	gap := 120.0 - CCWSInletSteadyStateTemp
 	frac := 1.0 - (c2.InletTemp.Float()-CCWSInletSteadyStateTemp)/gap
 	// Per-step fraction should match the analytical exponential
@@ -90,7 +90,7 @@ func TestCCWS_PumpsRunningOutletAboveInletByApproachTemp(t *testing.T) {
 		InletTemp:   Temperature{Val: 110.0, Unit: u.Fahrenheit},
 		OutletTemp:  Temperature{Val: 110.0, Unit: u.Fahrenheit},
 	}
-	c2 := c.Step()
+	c2 := c.Step(Temperature{Val: 70, Unit: u.Fahrenheit}, true)
 	assert.InDelta(t, c2.InletTemp.Float()+CCHXApproachTemp.Float(),
 		c2.OutletTemp.Float(), 1e-9,
 		"want OutletTemp=InletTemp+CCHXApproachTemp, got %v",
@@ -116,9 +116,10 @@ func TestCCWS_InletRecoversWithinFourHours(t *testing.T) {
 		OutletTemp:  Temperature{Val: 120.0, Unit: u.Fahrenheit},
 	}
 	// 4 hours of simulated time at 1 ms per step.
+	swSupply := Temperature{Val: 70, Unit: u.Fahrenheit}
 	steps := int(4 * time.Hour / TimeStep)
 	for i := 0; i < steps; i++ {
-		c = c.Step()
+		c = c.Step(swSupply, true)
 	}
 	// After 4 tau the gap should have shrunk by 1 - exp(-4) ≈ 0.982.
 	// Allow a small slack to absorb per-step rounding.
@@ -128,6 +129,51 @@ func TestCCWS_InletRecoversWithinFourHours(t *testing.T) {
 	assert.Greater(t, c.InletTemp.Float(), CCWSInletSteadyStateTemp-0.1,
 		"want InletTemp >= ~105°F after 4h, got %v",
 		c.InletTemp.Float())
+}
+
+// With a hot river the component cooling HX cannot cool the
+// loop to the spec's 105°F design value; the inlet target lifts
+// to service water supply + approach (110°F at 100°F supply),
+// so the inlet moves above 105°F instead of holding.
+func TestCCWS_HotRiverRaisesInletTarget(t *testing.T) {
+	c := CCWS{
+		PumpRunning: true,
+		DriveReady:  true,
+		InletTemp:   Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit},
+	}
+	hot := c.Step(Temperature{Val: 100, Unit: u.Fahrenheit}, true)
+	assert.Greater(t, hot.InletTemp.Float(), CCWSInletSteadyStateTemp,
+		"want InletTemp > 105 with 100°F supply, got %v",
+		hot.InletTemp.Float())
+	assert.LessOrEqual(t, hot.InletTemp.Float(), 100.0+CCHXApproachTemp.Float(),
+		"want InletTemp <= supply+approach, got %v",
+		hot.InletTemp.Float())
+}
+
+// Without service water flow there is no heat sink across the
+// component cooling HX: the loop soaks toward the maximum
+// permitted cooldown inlet and no duty is rejected to the
+// service water.
+//
+// Spec justification:
+//   - "The component cooling water inlet temperature to various
+//     components during normal cooldown is permitted to increase
+//     to 120°F (49°C), however it must return to 105°F (40°C)
+//     after four hours."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112
+func TestCCWS_LossOfServiceWaterSoaksLoopAndZeroesDuty(t *testing.T) {
+	c := CCWS{
+		PumpRunning: true,
+		DriveReady:  true,
+		InletTemp:   Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit},
+	}
+	Soaked := c.Step(Temperature{Val: 75, Unit: u.Fahrenheit}, false)
+	assert.Greater(t, Soaked.InletTemp.Float(), CCWSInletSteadyStateTemp,
+		"want InletTemp > 105 soaking toward 120 without SW flow, got %v",
+		Soaked.InletTemp.Float())
+	assert.Zero(t, Soaked.HXHeatDuty,
+		"want HXHeatDuty=0 without SW flow, got %v",
+		Soaked.HXHeatDuty)
 }
 
 // End-to-end via Plant.Step: a safety-injection actuation

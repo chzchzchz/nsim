@@ -22,7 +22,9 @@ import (
 //      the containment atmosphere to the service water at a
 //      rate proportional to the live ΔT (containment air
 //      temperature minus coil inlet temperature) scaled against
-//      the design ΔT.
+//      the design ΔT. The coil inlet is the live essential
+//      service water supply temperature; with no service water
+//      flow the coils run dry and reject no heat.
 //
 // Spec justification:
 //   - RCFC purpose: "The Reactor Containment Fan Cooler System
@@ -48,8 +50,11 @@ import (
 func (r *RCFCUnit) Step(
 	locaSensed bool,
 	containmentTemp Temperature,
+	swSupplyTemp Temperature,
+	swFlowAvail bool,
 ) RCFCUnit {
 	ret := *r
+	ret.CoilInletTemp = swSupplyTemp
 
 	if !ret.Running {
 		ret.HeatTransferRate = 0
@@ -68,6 +73,17 @@ func (r *RCFCUnit) Step(
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:54-56
 	ret.LowSpeed = locaSensed
 	ret.BackdraftDamperOpen = true
+
+	// Dry coils: without service water flow there is no heat
+	// sink for the containment atmosphere.
+	// "Cooling water is supplied by the essential
+	// service water system."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:86-87
+	if !swFlowAvail {
+		ret.HeatTransferRate = 0
+		ret.CoilOutletTemp = ret.CoilInletTemp
+		return ret
+	}
 
 	// Heat transfer: scale the design rating by the live
 	// (containment air − coil inlet) ΔT over the design ΔT.

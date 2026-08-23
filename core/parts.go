@@ -2467,6 +2467,15 @@ type CCWS struct {
 	// thermal expansion and collects leakage.
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:60-64
 	SurgeTankLevel Volume
+
+	// HXHeatDuty is the lumped heat rate the component cooling
+	// loop rejects across the component cooling heat exchangers
+	// to the service water (W). Zero when the CCWS pumps are
+	// stopped. Summed into the ServiceWaterSystem heat load by
+	// Plant.Step.
+	// "Component cooling heat exchangers"
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:81
+	HXHeatDuty Watts
 }
 
 // CCWS design constants.
@@ -3102,13 +3111,6 @@ const (
 	// 15°F is typical for a finned-tube coil with air-side heat
 	// transfer.
 	RCFCCoilApproachTemp float64 = 15.0
-
-	// RCFCSWInletTemp is the assumed service water inlet
-	// temperature to the RCFC coil (°F). The spec describes
-	// service water supply without a numerical value; 60°F is
-	// typical for a deep-lake / cooling-tower service water
-	// supply at design conditions.
-	RCFCSWInletTemp float64 = 60.0
 )
 
 // ContainmentDesignPressure is the spec-stated containment
@@ -3211,8 +3213,8 @@ type ServiceWaterSystem struct {
 	Flow float64
 
 	// InletTemp is the service water inlet temperature (°F) as
-	// it enters the plant intake. Assumed constant; site-
-	// specific in a full model.
+	// it enters the plant intake. Tracks Outside.RiverTemp;
+	// site-specific in a full model.
 	InletTemp Temperature
 
 	// OutletTemp is the mixed service water outlet temperature
@@ -3333,12 +3335,6 @@ const (
 	// water flow when all three pumps are running (gpm).
 	ServiceWaterDesignFlow = ServiceWaterPumpFlow *
 		ServiceWaterEssentialPumpCount // 60,000 gpm
-
-	// ServiceWaterSourceTemp is the assumed constant service
-	// water source temperature (°F). The spec does not state a
-	// value; 70°F is typical for a river or lake in temperate
-	// climates.
-	ServiceWaterSourceTemp = 70.0 // °F
 )
 
 // Spent Fuel Pool Cooling System design constants.
@@ -3391,16 +3387,6 @@ const (
 //     stored fuel elements."
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_170.txt:132-136
 var SFPCPoolVolume Volume = Volume{Val: 500_000, Unit: u.Gallon}
-
-// ServiceWaterInletTemp is the design inlet temperature of the
-// service water at the plant intake (°F). Used to initialise the
-// lumped service-water inlet and the RCFC coil inlet.
-//
-// Spec justification:
-//   - "Depending on the plant, the source of circulating water
-//     may be a river, lake, ocean, or cooling tower."
-//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
-var ServiceWaterInletTemp Temperature = Temperature{Val: ServiceWaterSourceTemp, Unit: u.Fahrenheit}
 
 // RefuelingOperations models the refueling operation cycle for
 // the plant. The simplified model tracks cavity flooding depth,

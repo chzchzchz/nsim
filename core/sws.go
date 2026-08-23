@@ -5,22 +5,28 @@ import (
 )
 
 // Step advances the Service Water System by one timestep. The
-// step function implements three state machines:
+// step function implements four state machines:
 //
-//   1. Pump running state. While PumpRunning is true, the lumped
+//   1. Inlet temperature. The inlet tracks Outside.RiverTemp
+//      every step; the service water pumps share the river
+//      intake house with the circulating water pumps.
+//   2. Pump running state. While PumpRunning is true, the lumped
 //      flow equals ServiceWaterPumpFlow × number of running
 //      pumps (capped at ServiceWaterEssentialPumpCount). The
 //      simplified model collapses the three physical pumps into
 //      a single boolean.
-//   2. Outlet temperature. The mixed service water outlet
+//   3. Outlet temperature. The mixed service water outlet
 //      temperature rises above the source by the heat load
 //      divided by the per-second water mass flow, capped at the
 //      design rise to prevent instability at large timesteps.
-//   3. Nonessential isolation. The NonessentialIsolated flag is
+//   4. Nonessential isolation. The NonessentialIsolated flag is
 //      set by the operator during accident conditions to
 //      conserve water for safety-grade loads.
 //
 // Spec justification:
+//   - Shared river intake: "serves one circulating water pump
+//     and one service water pump."
+//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:37-38
 //   - "The Service Water System supplies all the cooling water
 //     for the plant, including that required for emergency
 //     shutdown. Consequently, high reliability and redundancy
@@ -33,8 +39,12 @@ import (
 //     branch headers that can be isolated from the main headers
 //     under accident conditions to conserve water."
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:23-26
-func (s *ServiceWaterSystem) Step(heatLoad Watts) ServiceWaterSystem {
+func (s *ServiceWaterSystem) Step(
+	riverTemp Temperature,
+	heatLoad Watts,
+) ServiceWaterSystem {
 	ret := *s
+	ret.InletTemp = riverTemp
 
 	// DriveReady reflects whether the 6600V ESF bus that
 	// feeds the SWS pump motors is energised. Without bus
