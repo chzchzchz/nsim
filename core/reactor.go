@@ -149,7 +149,14 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	//     range level."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_223.txt:172
 	rodReactivity := float32(ret.ControlRods.Insertion) * CoreRodWorthABCD
-	dopplerDeltaF := outletF - float64(CoreDopplerReferenceTempF)
+	outletFClamped := outletF
+	if outletFClamped < DopplerClampLowF {
+		outletFClamped = DopplerClampLowF
+	}
+	if outletFClamped > DopplerClampHighF {
+		outletFClamped = DopplerClampHighF
+	}
+	dopplerDeltaF := outletFClamped - float64(CoreDopplerReferenceTempF)
 	// Net temperature coefficient (Doppler + moderator) varies
 	// with RCS boron concentration: small positive at beginning
 	// of life with full soluble-boron shim, substantially
@@ -518,6 +525,25 @@ const (
 	// due to depletion and removal of shim boron"
 	// specs/.../chapter_2/page_037.txt:119-121
 	CoreNetTempCoefAtZeroBoronPcmPerDegF float64 = -2.0
+
+	// DopplerClampLowF is the lower bound on the moderator
+	// temperature the linear temperature-coefficient model is
+	// anchored on. Below this the moderator would freeze (water
+	// freezes at 32°F; the linear dρ/dT description no longer
+	// applies). The cooldown target in
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:8
+	// is 140°F, well above the clamp.
+	DopplerClampLowF float64 = 32.0
+
+	// DopplerClampHighF is the upper bound on the moderator
+	// temperature the linear temperature-coefficient model is
+	// anchored on. At the RCS design pressure of 2500 psia
+	// (specs/.../chapter_3/page_054.txt:20-21) water saturates
+	// at ~652°F; the simulator caps at 700°F to leave margin
+	// for transient overshoot before void formation takes over
+	// as the reactivity mechanism
+	// (specs/.../chapter_2/page_037.txt:58).
+	DopplerClampHighF float64 = 700.0
 )
 // Reactor Coolant Pump dynamics constants (plans/p33_1.txt).
 //
