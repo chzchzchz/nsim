@@ -7,7 +7,7 @@
 
 # Specifications
 
-Full path (shown below) references to specification files (with line numbers) should be cited when commenting to soundly justify plant/physics modeling decisions. Do not truncate the path with ellipses.
+These are sources of truth and where to look for answers when asking questions. Full path (shown below) references to specification files (with line numbers) should be cited when commenting to soundly justify plant/physics modeling decisions. Do not truncate the path with ellipses.
 
 ##  Westinghouse PWR document
 
