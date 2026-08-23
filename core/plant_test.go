@@ -487,6 +487,27 @@ func TestPlant_StepPropagatesPlantOperation(t *testing.T) {
 		"want AuxFeedwaterInUse=true in ColdShutdown")
 }
 
+// The discriminating case for the same wiring: nextPlant is a
+// zero-valued scratch pad, so an unseeded PlantOperation.Step call
+// advances ColdShutdown regardless of the configured lineup. Only a
+// non-zero mode catches it — ColdShutdown equals the zero value and
+// passes either way.
+//
+// Spec justification:
+//   - hot standby is a distinct operator-selected condition
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:79-86
+func TestPlant_StepAdvancesConfiguredHotStandby(t *testing.T) {
+	p := MakePlant()
+	p.PlantOperation.Mode = HotStandby
+	require.False(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.Running,
+		"precondition: RHRS secured so the hot-standby RCP cap arms")
+	stepN(&p, 1)
+	assert.Equal(t, HotStandby, p.PlantOperation.Mode,
+		"want the configured mode preserved through Step")
+	assert.True(t, p.PlantOperation.HotStandbyRCPLimitActive,
+		"want the hot-standby RCP cap armed with RHRS out of service")
+}
+
 // The synchronism check pops the breaker when it is closed onto an
 // out-of-step machine: with the rotor stationary the terminal
 // frequency and voltage are far outside the sync window, so

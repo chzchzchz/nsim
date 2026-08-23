@@ -1596,6 +1596,11 @@ func (p *Plant) Step() {
 	steamFlowFraction := float64(
 		p.nextPlant.ReactorBuilding.SteamGenerator.Pressure,
 	) / float64(SteamGeneratorShellPressure)
+	// nextPlant is a zero-valued scratch pad; seed the operational
+	// layer with the operator-configured mode so Step advances the
+	// lineup the plant actually sits in (mode definitions:
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:79-86).
+	p.nextPlant.PlantOperation = p.PlantOperation
 	p.nextPlant.PlantOperation = p.nextPlant.PlantOperation.Step(
 		p.nextPlant.PlantOperation.Mode,
 		p.nextPlant.ReactorBuilding.ReactorPressureVessel.Outlet,

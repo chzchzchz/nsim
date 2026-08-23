@@ -39,6 +39,10 @@ func TestScenario4_VacuumPumpControlEstablishesVacuum(t *testing.T) {
 	p := MakePlant()
 	p.TurbineBuilding.Condenser.VacuumPumpRunning = false
 	p.TurbineBuilding.Condenser.Pressure = AtmosphericPressure
+	// E1 requires vacuum established BEFORE any steam admission; a
+	// steam load holds the back-pressure up by design
+	// (condenser.go load-factor term), so secure admission first.
+	p.TurbineBuilding.Turbine.StopValve.Open = 0
 
 	setControl(t, &p, "TurbineBuilding/Condenser/VacuumPump", "1")
 	stepFor(&p, 5*time.Second)
