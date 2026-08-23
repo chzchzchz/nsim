@@ -88,13 +88,23 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 
 	outletF := ret.Outlet.Float()
 	// Heating needs produced power; passive cooling toward a lower
-	// target (steam dump, SG heat sink) proceeds at the full rate so
-	// boration and power cuts still show their cooling signature.
+	// target (steam dump, SG heat sink) runs unscaled, and both
+	// directions are bounded by the operational program rate: Tavg
+	// follows the program, it does not jump to it.
+	//
+	// Spec: "Primary plant heatup rate is limited to 50°F per hour."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:140-141
+	// "Steam dumps are adjusted to start a 50°F/hr (28°C/hr)
+	// cooldown rate."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:157-158
 	relax := dt.Seconds() / PrimaryThermalTimeConstant
 	if targetOutlet > outletF {
 		relax *= powerFrac
 	}
-	outletF += (targetOutlet - outletF) * relax
+	outletStep := (targetOutlet - outletF) * relax
+	maxStep := OpHeatupRateLimit * dt.Seconds()
+	outletStep = min(max(outletStep, -maxStep), maxStep)
+	outletF += outletStep
 	outletF = max(outletF, 0)
 	ret.Outlet = Temperature{Val: outletF, Unit: u.Fahrenheit}
 

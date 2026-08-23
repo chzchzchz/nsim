@@ -110,3 +110,42 @@ func TestScenario10_RodInsertionShutsDownReactor(t *testing.T) {
 	// No protective trip may result from the shutdown itself.
 	assert.False(t, p.ReactorBuilding.ReactorPressureVessel.Trip)
 }
+
+// Through the post-trip cooldown the pressurizer level loop must hold
+// level inside the no-load band with the bubble intact, and Tavg must
+// coast down at the program rate instead of collapsing.
+//
+// "Pressurizer level is raised in anticipation of coolant contraction"
+// (level management, page_226.txt:146-153) and "Primary plant heatup
+// rate is limited to 50°F per hour" (page_224.txt:140-141).
+func TestScenario10_LevelAndRateHoldThroughCooldown(t *testing.T) {
+	p := scenario10FullPowerPlant()
+	// The evolution runs on the automatic level loop: level follows
+	// the Tavg-referenced program (60 pct at full load toward 25 pct
+	// at no-load) instead of drifting on raw design flows.
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = true
+	setControl(t, &p,
+		"ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion", "1")
+	stepN(&p, int(30*time.Second/TimeStep)) // rods in, power collapsed
+
+	outA := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+	stepN(&p, int(100*time.Second/TimeStep))
+	outB := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+
+	pzr := p.ReactorBuilding.Pressurizer
+	levelFrac := pzr.Water.Float() / pzr.Volume.Float()
+	// Level follows the Tavg program down toward its no-load anchor
+	// (25 pct), staying inside the no-load band.
+	assert.GreaterOrEqual(t, levelFrac, 0.20,
+		"pressurizer must not drain below the no-load band")
+	assert.LessOrEqual(t, levelFrac, 0.80,
+		"pressurizer must not go water solid")
+	assert.Positive(t, pzr.SteamBubble.Float(),
+		"the steam bubble must survive the cooldown")
+
+	// Cooldown paced at the program rate between the samples.
+	dropPerHour := (outA - outB) / (100.0 / 3600.0)
+	assert.LessOrEqual(t, dropPerHour, 50.0*1.01,
+		"cooldown rate exceeds the 50 F/hr program limit")
+	assert.Greater(t, outA, outB, "want the outlet cooling down")
+}

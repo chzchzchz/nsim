@@ -376,3 +376,48 @@ func TestReactor_ZeroPowerHoldsTemperature(t *testing.T) {
 	assert.InDelta(t, 135.0, r.Inlet.Float(), 0.5,
 		"the inlet must hold as well with no flow-driven blend")
 }
+
+// The Tavg program is rate-limited to the operational heatup/cooldown
+// limits: a power collapse drops the program target instantly, but the
+// outlet chases it at 50 F/hr instead of jumping.
+//
+// Spec: "Primary plant heatup rate is limited to 50°F per hour."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:140-141
+func TestReactor_OutletProgramRateLimited(t *testing.T) {
+	hot := ReactorPressureVessel{}
+	hot.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
+	hot.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
+	// Subcritical: with the rods out the source population would
+	// regrow to rated and the program target would stay at 621.
+	hot.Insertion = 1
+	hot.DemandInsertion = 1
+
+	const window = 10 * time.Second
+	start := hot.Outlet.Float()
+	for i := 0; i < int(window/TimeStep); i++ {
+		hot = hot.Step(0)
+	}
+	drop := start - hot.Outlet.Float()
+	want := OpHeatupRateLimit * window.Seconds()
+	// Every step saturates the clamp this far from the target, so
+	// the drop equals the limit exactly (float-rounding tolerance).
+	assert.InDelta(t, want, drop, want*1e-6,
+		"want cooldown paced at exactly the 50 F/hr program rate, got %v F in %v",
+		drop, window)
+	assert.Greater(t, start, hot.Outlet.Float(), "want the outlet cooling")
+
+	// Heatup direction: a cold vessel under full power climbs at the
+	// same bounded rate.
+	cold := ReactorPressureVessel{}
+	cold.Inlet = Temperature{Val: 200, Unit: u.Fahrenheit}
+	cold.Outlet = Temperature{Val: 200, Unit: u.Fahrenheit}
+	cold.SeedSteadyStatePower(CoreRatedThermalPower)
+	start = cold.Outlet.Float()
+	for i := 0; i < int(window/TimeStep); i++ {
+		cold = cold.Step(RCPRatedSpeed)
+	}
+	rise := cold.Outlet.Float() - start
+	assert.InDelta(t, want, rise, want*1e-6,
+		"want heatup paced at exactly the 50 F/hr program rate, got %v F in %v",
+		rise, window)
+}
