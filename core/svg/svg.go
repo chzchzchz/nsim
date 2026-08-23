@@ -156,82 +156,99 @@ func auxTL() (float64, float64) {
 	return AuxBuildingX, AuxBuildingY
 }
 
-// turbineCenter returns the turbine center in doc-space.
-func turbineCenter() (float64, float64) {
-	return TurbineX, TurbineY
-}
-
-// docPos converts a parent-relative offset to a document-space point.
-// px, py is the parent origin; rx, ry is the child's offset from that origin.
-func docPos(px, py, rx, ry float64) (x, y float64) {
-	return px + rx, py + ry
-}
-
 // anchor describes the document-space coordinate of a part's
-// primary anchor (used for pipe routing) plus a flag indicating
-// whether the anchor should be the centre of the part or one of
-// the named SVG anchors exposed by the part's <symbol>.
-type anchor struct {
+// primary anchor (used for pipe routing). Defined in layout.go.
+type Anchor struct {
 	X, Y float64
 }
 
-// anchors maps node IDs from BuildGraphFor to the layout
-// coordinates computed by WritePlantSVG. New part placements
-// should add entries here so the pipe layer can find the source
-// and destination of each edge.
-//
-// Containment children use offsets relative to containment top-left
-// (ContainmentX - ContainmentW/2, ContainmentY - ContainmentH/2).
-// Turbine/feedwater children use doc-space coordinates referenced
-// from TurbineX/Y (turbine center).
-var anchors = map[string]anchor{
-	// Containment children — document-space origins (useAt positions).
-	"RPV":           {ContainmentX - ContainmentW/2 + RPVX, ContainmentY - ContainmentH/2 + RPVY},
-	"Pressurizer":   {ContainmentX - ContainmentW/2 + PressurizerX, ContainmentY - ContainmentH/2 + PressurizerY},
-	"ReactorCoolantPump": {ContainmentX - ContainmentW/2 + RCPX, ContainmentY - ContainmentH/2 + RCPY},
-	"SG":            {ContainmentX - ContainmentW/2 + SGX, ContainmentY - ContainmentH/2 + SGY},
+// DebugLayout writes an SVG overlay showing the graphviz-computed
+// bounding box and anchor point for every plant-graph node.
+// Use this with -svg-dot + dot -Tplain-ext to compare against
+// the hand-composed SVG placement.
+func DebugLayout(w io.Writer, g *core.PlantGraph, pos map[string]Anchor) error {
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
+	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%.0fpx" height="%.0fpx" viewBox="0 0 %.0f %.0f">`+"\n",
+		DocumentWidth, DocumentHeight, DocumentWidth, DocumentHeight)
+	b.WriteString(`<g id="debug-layout">` + "\n")
+	b.WriteString(`<g id="clusters">` + "\n")
+	clusters := []struct {
+		name string
+		x, y, w, h float64
+	}{
+		{"Containment", ContainmentX - ContainmentW/2, ContainmentY - ContainmentH/2, ContainmentW, ContainmentH},
+		{"Auxiliary", AuxBuildingX, AuxBuildingY, AuxBuildingW, AuxBuildingH},
+		{"Turbine", TurbineBuildingX, TurbineBuildingY, TurbineBuildingW, TurbineBuildingH},
+	}
+	for _, c := range clusters {
+		fmt.Fprintf(&b, `  <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="none" stroke="blue" stroke-width="2" stroke-dasharray="4 2"/>`+"\n",
+			c.x, c.y, c.w, c.h)
+		fmt.Fprintf(&b, `  <text x="%.1f" y="%.1f" font-size="10" fill="blue">%s</text>`+"\n", c.x+4, c.y+12, c.name)
+	}
+	b.WriteString("</g>\n")
+	ids := make([]string, 0, len(g.Nodes))
+	for id := range g.Nodes {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		a, ok := pos[id]
+		if !ok {
+			continue
+		}
+		w, h := nodeSize(g.Nodes[id].Kind)
+		x := a.X - w/2
+		y := a.Y - h/2
+		fmt.Fprintf(&b, `  <rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="rgba(255,0,0,0.15)" stroke="red" stroke-width="1"/>`+"\n", x, y, w*96, h*96)
+		fmt.Fprintf(&b, `  <circle cx="%.1f" cy="%.1f" r="3" fill="red"/>`+"\n", a.X, a.Y)
+		fmt.Fprintf(&b, `  <text x="%.1f" y="%.1f" font-size="8" fill="red">%s</text>`+"\n", a.X, a.Y-4, id)
+	}
+	b.WriteString("</g>\n</svg>\n")
+	_, err := io.WriteString(w, b.String())
+	return err
+}
 
-	// Secondary — turbine center.
-	"Turbine":       {TurbineX, TurbineY},
-	"Condenser":     {CondenserX, CondenserY},
-	"CST":           {CSTX, CSTY},
-	"HDT":           {HDTX, HDTY},
-	"LPHeaterDrain": {LPHeaterX, LPHeaterY},
-	"HPHeaterDrain": {HPHeaterX, HPHeaterY},
+var loadedLayout *Layout = EmptyLayout()
 
-	// Pressurizer relief — document-space position.
-	// useAt: coX+PRTX-30, coY+30 → center at coX+PRTX-30+30 = coX+PRTX
-	"PressurizedReliefTank": {ContainmentX - ContainmentW/2 + PRTX - 30 + 30, ContainmentY - ContainmentH/2 + 30},
-
-	// AFW pumps — document-space positions (offsets from containment origin).
-	"DieselAFWPump":  {ContainmentX - ContainmentW/2 + DieselAFWX, ContainmentY - ContainmentH/2 + DieselAFWY},
-	"MotorAFWPump":   {ContainmentX - ContainmentW/2 + MotorAFWX, ContainmentY - ContainmentH/2 + MotorAFWY},
-	"TurbineAFWPump": {ContainmentX - ContainmentW/2 + TurbineAFWX, ContainmentY - ContainmentH/2 + TurbineAFWY},
+// SetLayout replaces the current layout used by getAnchor.
+// If the build includes layout_default_generated.go, the
+// default is pre-loaded from embedded graphviz positions so
+// no runtime dot invocation is needed. Call SetLayout to override.
+func SetLayout(l *Layout) {
+	loadedLayout = l
 }
 
 // anchorFor returns the layout coordinate of the named graph
 // node. Unknown nodes fall back to (0, 0). Values are clamped
 // to the document viewport (+10 px margin) so no pipe line
 // starts or ends off-screen.
-func anchorFor(id string) anchor {
+func anchorFor(id string) Anchor {
 	const margin = 10.0
-	a := anchor{0, 0}
-	if v, ok := anchors[id]; ok {
-		a = v
+	x, y := getAnchor(id, 0, 0)
+	if x < margin {
+		x = margin
 	}
-	if a.X < margin {
-		a.X = margin
+	if y < margin {
+		y = margin
 	}
-	if a.Y < margin {
-		a.Y = margin
+	if x > DocumentWidth-margin {
+		x = DocumentWidth - margin
 	}
-	if a.X > DocumentWidth-margin {
-		a.X = DocumentWidth - margin
+	if y > DocumentHeight-margin {
+		y = DocumentHeight - margin
 	}
-	if a.Y > DocumentHeight-margin {
-		a.Y = DocumentHeight - margin
+	return Anchor{X: x, Y: y}
+}
+
+// getAnchor returns the layout coordinate for the given graph node
+// ID, falling back to the provided default when the layout does not
+// contain that ID.
+func getAnchor(id string, defX, defY float64) (float64, float64) {
+	if a, ok := loadedLayout.Pos[id]; ok {
+		return a.X, a.Y
 	}
-	return a
+	return defX, defY
 }
 
 // WritePlantSVG writes a hand-composed P&ID-style SVG of the
@@ -242,9 +259,8 @@ func WritePlantSVG(w io.Writer, p *core.Plant) error {
 
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	fmt.Fprintf(&b,
-		`<svg xmlns="http://www.w3.org/2000/svg" `+
-			`viewBox="0 0 %.0f %.0f">`+"\n",
-		DocumentWidth, DocumentHeight)
+		`<svg xmlns="http://www.w3.org/2000/svg" width="%.0fpx" height="%.0fpx" viewBox="0 0 %.0f %.0f">`+"\n",
+		DocumentWidth, DocumentHeight, DocumentWidth, DocumentHeight)
 	b.WriteString(`<title>PWR plant P\u0026ID</title>` + "\n")
 	b.WriteString(`<desc>Hand-composed P\u0026ID-style SVG of the ` +
 		`simulator plant, built from the asset library under ` +
@@ -277,11 +293,11 @@ func WritePlantSVG(w io.Writer, p *core.Plant) error {
 	writePart := func(part, use string) {
 		fmt.Fprintf(&b, `<g data-part="%s">%s</g>`+"\n", part, use)
 	}
-	useAt := func(sym string, x, y, w, h float64) string {
+	useAt := func(sym string, cx, cy, w, h float64) string {
 		return fmt.Sprintf(
 			`<use href="#%s" x="%.0f" y="%.0f" `+
 				`width="%.0f" height="%.0f"/>`,
-			sym, x, y, w, h)
+			sym, cx-w/2, cy-h/2, w, h)
 	}
 	writeLabel := func(x, y float64, text string) {
 		fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="10" `+
@@ -330,38 +346,43 @@ func WritePlantSVG(w io.Writer, p *core.Plant) error {
 	}
 
 	// RPV at the centre of the reactor building.
+	rpvX, rpvY := getAnchor("RPV", coX+RPVX, coY+RPVY)
 	writePart("ReactorBuilding/ReactorPressureVessel",
-		useAt("reactor_vessel", coX+RPVX, coY+RPVY, 100, 240))
-	writeLabel(coX+RPVX+50, coY+RPVY+130, "RPV")
+		useAt("reactor_vessel", rpvX, rpvY, 100, 240))
+	writeLabel(rpvX+50, rpvY+130, "RPV")
 
 	// Pressurizer to the upper-right of the RPV, fully inside
 	// the dome arch (top at domeTop+30, bottom aligns with RPV centre).
+	pzrX, pzrY := getAnchor("Pressurizer", coX+PressurizerX, coY+30)
 	writePart("ReactorBuilding/Pressurizer",
-		useAt("pressurizer", coX+PressurizerX, coY+30, 60, 200))
-	writeLabel(coX+PressurizerX+30, coY+250, "PZR")
+		useAt("pressurizer", pzrX, pzrY, 60, 200))
+	writeLabel(pzrX, pzrY+220, "PZR")
 
 	// Pressurizer relief tank to the right of the pressurizer,
 	// inside the dome.
+	prtX, prtY := getAnchor("PressurizedReliefTank", coX+PRTX, coY+30)
 	writePart("ReactorBuilding/PressurizedReliefTank",
-		useAt("tank-vertical", coX+PRTX, coY+30, 60, 80))
+		useAt("tank-vertical", prtX, prtY, 60, 80))
 	fmt.Fprintf(&b,
 		`<text x="%.0f" y="%.0f" font-size="10" `+
 			`text-anchor="middle">PRT</text>`+"\n",
-		coX+PRTX+30, coY+30+50)
+		prtX+30, prtY+50)
 
 	// RCP between RPV and SG.
+	rcpX, rcpY := getAnchor("ReactorCoolantPump", coX+RCPX, coY+RCPY-80)
 	writePart("ReactorBuilding/ReactorCoolantPump",
-		useAt("pump-rcp", coX+RCPX, coY+RCPY-80, 50, 160))
-	writeLabel(coX+RCPX+25, coY+RCPY-100, "RCP")
+		useAt("pump-rcp", rcpX, rcpY, 50, 160))
+	writeLabel(rcpX+25, rcpY-20, "RCP")
 
 	// SG to the right of the RCP.
+	sgX, sgY := getAnchor("SG", coX+SGX, coY+SGY-215)
 	writePart("ReactorBuilding/SteamGenerator",
-		useAt("steam_generator", coX+SGX, coY+SGY-215, 190, 430))
-	writeLabel(coX+SGX+95, coY+SGY+240, "SG (x4)")
+		useAt("steam_generator", sgX, sgY, 190, 430))
+	writeLabel(sgX+95, sgY+240, "SG (x4)")
 	fmt.Fprintf(&b,
 		`<text x="%.0f" y="%.0f" font-size="10" `+
 			`text-anchor="middle">(x4)</text>`+"\n",
-		coX+SGX+95, coY+SGY+220)
+		sgX+95, sgY+220)
 
 	// Containment origin for valve placement (nozzle y).
 	for i := 0; i < 3; i++ {
@@ -378,103 +399,140 @@ func WritePlantSVG(w io.Writer, p *core.Plant) error {
 	}
 
 	// Turbine + feedwater chain.
-	toX := TurbineX
-	toY := TurbineY
+	turbX, turbY := getAnchor("Turbine", TurbineX, TurbineY)
 	writePart("TurbineBuilding/Turbine",
-		useAt("turbine-main", toX-180, toY-100, 360, 200))
-	writeLabel(toX, toY-110, "Turbine")
+		useAt("turbine-main", turbX, turbY, 360, 200))
+	writeLabel(turbX, turbY-110, "Turbine")
+
+	genX, genY := getAnchor("Generator", GeneratorX, GeneratorY)
 	writePart("TurbineBuilding/Generator",
-		useAt("generator-main", GeneratorX-110, GeneratorY-70, 220, 140))
-	writeLabel(GeneratorX, GeneratorY-85, "Generator")
+		useAt("generator-main", genX, genY, 220, 140))
+	writeLabel(genX, genY-85, "Generator")
+
+	condX, condY := getAnchor("Condenser", CondenserX, CondenserY)
 	writePart("TurbineBuilding/Condenser",
-		useAt("condenser", CondenserX-200, CondenserY-50, 400, 100))
-	writeLabel(CondenserX, CondenserY+70, "Condenser")
+		useAt("condenser", condX, condY, 400, 100))
+	writeLabel(condX, condY+70, "Condenser")
 
 	// Feedwater chain: CST -> condensate pump -> LP heater ->
 	// HDT (deaerator) -> feed pump -> HP heater -> SG.
+	cstX, cstY := getAnchor("CST", turbX+CSTX, turbY+CSTY)
 	writePart("TurbineBuilding/CondensateStorageTank",
-		useAt("tank-cst", toX+CSTX-50, toY+CSTY-65, 100, 130))
-	writeLabel(toX+CSTX, toY+CSTY-75, "CST")
+		useAt("tank-cst", cstX, cstY, 100, 130))
+	writeLabel(cstX, cstY-75, "CST")
+
+	cpuX, cpuY := getAnchor("CondensatePump", turbX+CondPumpX, turbY+CondPumpY)
 	writePart("TurbineBuilding/CondensatePump",
-		useAt("pump-horizontal", toX+CondPumpX-30, toY+CondPumpY-20, 60, 40))
+		useAt("pump-horizontal", cpuX, cpuY, 60, 40))
+
+	lphX, lphY := getAnchor("LPHeaterDrain", turbX+LPHeaterX, turbY+LPHeaterY)
 	writePart("TurbineBuilding/HeaterDrainTank",
-		useAt("heat-exchanger-vertical", toX+LPHeaterX-25, toY+LPHeaterY-50, 50, 100))
-	writeLabel(toX+LPHeaterX, toY+LPHeaterY-60, "LP Heater")
+		useAt("heat-exchanger-vertical", lphX, lphY, 50, 100))
+	writeLabel(lphX, lphY-60, "LP Heater")
+
+	hdtX, hdtY := getAnchor("HDT", turbX+HDTX, turbY+HDTY)
 	writePart("TurbineBuilding/HeaterDrainTank",
-		useAt("tank-horizontal", toX+HDTX-50, toY+HDTY-25, 100, 50))
-	writeLabel(toX+HDTX, toY+HDTY-35, "HDT")
+		useAt("tank-horizontal", hdtX, hdtY, 100, 50))
+	writeLabel(hdtX, hdtY-35, "HDT")
+
+	hppX, hppY := getAnchor("HeaterDrainPump", turbX+HPPumpX, turbY+HPPumpY)
 	writePart("TurbineBuilding/HeaterDrainPump",
-		useAt("pump-horizontal", toX+HPPumpX-30, toY+HPPumpY-20, 60, 40))
-	writeLabel(toX+HPPumpX, toY+HPPumpY-30, "Feed Pump")
+		useAt("pump-horizontal", hppX, hppY, 60, 40))
+	writeLabel(hppX, hppY-30, "Feed Pump")
+
+	hphX, hphY := getAnchor("HPHeaterDrain", turbX+HPHeaterX, turbY+HPHeaterY)
 	writePart("TurbineBuilding/HeaterDrainTank",
-		useAt("heat-exchanger-vertical", toX+HPHeaterX-25, toY+HPHeaterY-50, 50, 100))
-	writeLabel(toX+HPHeaterX, toY+HPHeaterY-60, "HP Heater")
+		useAt("heat-exchanger-vertical", hphX, hphY, 50, 100))
+	writeLabel(hphX, hphY-60, "HP Heater")
 
 	// Main feedwater control valve (modulating) on the
 	// SG-inlet pipe (offsets from turbine center).
+	fwcX, fwcY := getAnchor("MainFeedValve", turbX+FWCtrlX, turbY+FWCtrlY)
 	writePart("TurbineBuilding/MainFeedwaterControlValve",
-		useAt("valve-modulating", toX+FWCtrlX-12, toY+FWCtrlY-10, 24, 20))
-	writeLabel(toX+FWCtrlX, toY+FWCtrlY-15, "FW Ctrl")
+		useAt("valve-modulating", fwcX, fwcY, 24, 20))
+	writeLabel(fwcX, fwcY-15, "FW Ctrl")
 
 	// AFW pumps — near the SG inlets (offsets from containment origin).
+	daX, daY := getAnchor("DieselAFWPump", coX+DieselAFWX, coY+DieselAFWY)
 	writePart("Outside/TurbineAFWPump",
-		useAt("pump-turbine", coX+DieselAFWX-30, coY+DieselAFWY-20, 60, 40))
-	writeLabel(coX+DieselAFWX, coY+DieselAFWY-28, "AFW TD")
+		useAt("pump-turbine", daX, daY, 60, 40))
+	writeLabel(daX, daY-28, "AFW TD")
+
+	maX, maY := getAnchor("MotorAFWPump", coX+MotorAFWX, coY+MotorAFWY)
 	writePart("Outside/MotorAFWPump",
-		useAt("pump-horizontal", coX+MotorAFWX-30, coY+MotorAFWY-20, 60, 40))
-	writeLabel(coX+MotorAFWX, coY+MotorAFWY-28, "AFW MD")
+		useAt("pump-horizontal", maX, maY, 60, 40))
+	writeLabel(maX, maY-28, "AFW MD")
+
+	taX, taY := getAnchor("TurbineAFWPump", coX+TurbineAFWX, coY+TurbineAFWY)
 	writePart("Outside/DieselAFWPump",
-		useAt("pump-horizontal", coX+TurbineAFWX-30, coY+TurbineAFWY-20, 60, 40))
-	writeLabel(coX+TurbineAFWX, coY+TurbineAFWY-28, "AFW Diesel")
+		useAt("pump-horizontal", taX, taY, 60, 40))
+	writeLabel(taX, taY-28, "AFW Diesel")
 
 	// SIS accumulators (one cluster of 4).
+	sisX, sisY := getAnchor("SISAccumulators", coX+SISX, coY+SISY)
 	writePart("ReactorBuilding/SafetyInjectionSystem",
-		useAt("sis-accumulators", coX+SISX, coY+SISY-50, 240, 100))
-	writeLabel(coX+SISX+120, coY+SISY-60, "SIS Acc")
+		useAt("sis-accumulators", sisX, sisY-50, 240, 100))
+	writeLabel(sisX+120, sisY-60, "SIS Acc")
 
 	// EFWS tank.
+	efX, efY := getAnchor("EFWSTank", AuxBuildingX+EFWSTankX, AuxBuildingY+EFWSTankY)
 	writePart("AuxiliaryBuilding/EmergencyFeedwaterSystem",
-		useAt("efws-tank", AuxBuildingX+EFWSTankX, AuxBuildingY+EFWSTankY-50, 80, 100))
-	writeLabel(AuxBuildingX+EFWSTankX+40, AuxBuildingY+EFWSTankY-60, "EFWS")
+		useAt("efws-tank", efX, efY-50, 80, 100))
+	writeLabel(efX+40, efY-60, "EFWS")
 
 	// CCWS heat exchanger.
+	ccX, ccY := getAnchor("CCWSHX", AuxBuildingX+CCWSHXX, AuxBuildingY+CCWSHXY)
 	writePart("AuxiliaryBuilding/ComponentCoolingWaterSystem",
-		useAt("ccws-hx", AuxBuildingX+CCWSHXX, AuxBuildingY+CCWSHXY-25, 100, 50))
-	writeLabel(AuxBuildingX+CCWSHXX+50, AuxBuildingY+CCWSHXY-35, "CCWS HX")
+		useAt("ccws-hx", ccX, ccY-25, 100, 50))
+	writeLabel(ccX+50, ccY-35, "CCWS HX")
 
 	// RHRS trains.
+	raX, raY := getAnchor("RHRS_A", AuxBuildingX+RHRSTrainAX, AuxBuildingY+RHRSTrainAY)
 	writePart("AuxiliaryBuilding/ResidualHeatRemovalSystem",
-		useAt("rhrs-train", AuxBuildingX+RHRSTrainAX, AuxBuildingY+RHRSTrainAY-40, 200, 80))
-	writeLabel(AuxBuildingX+RHRSTrainAX+100, AuxBuildingY+RHRSTrainAY-50, "RHRS A")
+		useAt("rhrs-train", raX, raY-40, 200, 80))
+	writeLabel(raX+100, raY-50, "RHRS A")
+
+	rbX, rbY := getAnchor("RHRS_B", AuxBuildingX+RHRSTrainBX, AuxBuildingY+RHRSTrainBY)
 	writePart("AuxiliaryBuilding/ResidualHeatRemovalSystem",
-		useAt("rhrs-train", AuxBuildingX+RHRSTrainBX, AuxBuildingY+RHRSTrainBY-40, 200, 80))
-	writeLabel(AuxBuildingX+RHRSTrainBX+100, AuxBuildingY+RHRSTrainBY-50, "RHRS B")
+		useAt("rhrs-train", rbX, rbY-40, 200, 80))
+	writeLabel(rbX+100, rbY-50, "RHRS B")
 
 	// SFP — offset from containment origin.
+	sfpX, sfpY := getAnchor("SFP", coX+SFPX, coY+SFPY)
 	writePart("ReactorBuilding/SpentFuelPool",
-		useAt("tank-sfp", coX+SFPX-100, coY+SFPY-50, 200, 100))
-	writeLabel(coX+SFPX, coY+SFPY+60, "SFP")
+		useAt("tank-sfp", sfpX, sfpY, 200, 100))
+	writeLabel(sfpX, sfpY+60, "SFP")
 
 	// Electrical: diesel + fuel tank, station transformer,
 	// ESF buses, grid (offsets from auxiliary building origin).
+	dieX, dieY := getAnchor("Diesel", AuxBuildingX+DieselX, AuxBuildingY+DieselY)
 	writePart("AuxiliaryBuilding/DieselGenerator",
-		useAt("diesel-generator", AuxBuildingX+DieselX, AuxBuildingY+DieselY-50, 200, 100))
-	writeLabel(AuxBuildingX+DieselX+100, AuxBuildingY+DieselY-60, "Diesel")
+		useAt("diesel-generator", dieX, dieY, 200, 100))
+	writeLabel(dieX+100, dieY-60, "Diesel")
+
+	ftX, ftY := getAnchor("FuelTank", AuxBuildingX+FuelTankX, AuxBuildingY+FuelTankY)
 	writePart("AuxiliaryBuilding/DieselGenerator",
-		useAt("fuel-tank", AuxBuildingX+FuelTankX, AuxBuildingY+FuelTankY-20, 30, 40))
+		useAt("fuel-tank", ftX, ftY, 30, 40))
+
+	stX, stY := getAnchor("Transformer", AuxBuildingX+StationTransformerX, AuxBuildingY+StationTransformerY)
 	writePart("AuxiliaryBuilding/Transformer",
-		useAt("transformer-2w", AuxBuildingX+StationTransformerX,
-			AuxBuildingY+StationTransformerY-25, 50, 50))
-	writeLabel(AuxBuildingX+StationTransformerX+25, AuxBuildingY+StationTransformerY-35, "Xformer")
+		useAt("transformer-2w", stX, stY, 50, 50))
+	writeLabel(stX+25, stY-35, "Xformer")
+
+	esfAX, esfAY := getAnchor("ESF_A", AuxBuildingX+ESFBusAX, AuxBuildingY+ESFBusAY)
 	writePart("Outside/ESFBus",
-		useAt("esf-bus", AuxBuildingX+ESFBusAX, AuxBuildingY+ESFBusAY-10, 120, 20))
-	writeLabel(AuxBuildingX+ESFBusAX+60, AuxBuildingY+ESFBusAY-15, "ESF Bus A")
+		useAt("esf-bus", esfAX, esfAY, 120, 20))
+	writeLabel(esfAX+60, esfAY-15, "ESF Bus A")
+
+	esfBX, esfBY := getAnchor("ESF_B", AuxBuildingX+ESFBusBX, AuxBuildingY+ESFBusBY)
 	writePart("Outside/ESFBus",
-		useAt("esf-bus", AuxBuildingX+ESFBusBX, AuxBuildingY+ESFBusBY-10, 120, 20))
-	writeLabel(AuxBuildingX+ESFBusBX+60, AuxBuildingY+ESFBusBY-15, "ESF Bus B")
+		useAt("esf-bus", esfBX, esfBY, 120, 20))
+	writeLabel(esfBX+60, esfBY-15, "ESF Bus B")
+
+	gridX, gridY := getAnchor("Grid", GridX, GridY)
 	writePart("Outside/Grid",
-		useAt("grid-bus", GridX-15, GridY-25, 30, 50))
-	writeLabel(GridX, GridY-35, "Grid")
+		useAt("grid-bus", gridX, gridY, 30, 50))
+	writeLabel(gridX, gridY-35, "Grid")
 
 	// Pipes + inline valves / pumps. Walk the build graph so
 	// the diagram is faithful to the simulator's actual edge

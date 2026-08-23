@@ -37,6 +37,10 @@ func dump(v reflect.Value, depth int) {
 func main() {
 	dotPath := flag.String("dot", "", "write plant graph in DOT format to file")
 	svgPath := flag.String("svg", "", "write plant P&ID SVG to file")
+	svgDotPath := flag.String("svg-dot", "", "write graphviz DOT for SVG layout to file and exit")
+	svgLayoutPath := flag.String("svg-layout", "", "compute graphviz layout and write dot.svg to file and exit")
+	svgDebugPath := flag.String("svg-debug", "", "compute layout, write debug overlay with bbox+anchors to file and exit")
+	svgAssetsPath := flag.String("svg-assets", "", "export symbol SVG files to a directory and exit")
 	flag.Parse()
 
 	p := core.MakePlant()
@@ -53,7 +57,90 @@ func main() {
 		}
 		return
 	}
+	if *svgDebugPath != "" {
+		g := p.BuildGraphFor(&p)
+		layout, err := svg.ComputeLayout(&p)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to compute layout: %v\n", err)
+			os.Exit(1)
+		}
+		pos := make(map[string]svg.Anchor)
+		for id, a := range layout.Pos {
+			pos[id] = a
+		}
+		f, err := os.Create(*svgDebugPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "failed to create svg-debug file:", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		if err := svg.DebugLayout(f, g, pos); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to write debug layout: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if *svgAssetsPath != "" {
+		if err := svg.WriteAssetFiles(*svgAssetsPath); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to write svg assets: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if *svgDotPath != "" {
+		g := p.BuildGraphFor(&p)
+		dot, err := svg.BuildDot(g, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to build svg-dot: %v\n", err)
+			os.Exit(1)
+		}
+		f, err := os.Create(*svgDotPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "failed to create svg-dot file:", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		if _, err := f.WriteString(dot); err != nil {
+			fmt.Fprintln(os.Stderr, "failed to write svg-dot:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	// Shared helper: compute layout and install it so
+	// WritePlantSVG picks up graphviz positions instead of
+	// the hardcoded fallback constants.
+	computeAndSetLayout := func() (*svg.Layout, error) {
+		layout, err := svg.ComputeLayout(&p)
+		if err != nil {
+			return nil, fmt.Errorf("compute layout: %w", err)
+		}
+		svg.SetLayout(layout)
+		return layout, nil
+	}
+
+	if *svgLayoutPath != "" {
+		_, err := computeAndSetLayout()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to compute layout: %v\n", err)
+			os.Exit(1)
+		}
+		f, err := os.Create(*svgLayoutPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "failed to create svg-layout file:", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		if err := svg.WritePlantSVG(f, &p); err != nil {
+			fmt.Fprintln(os.Stderr, "failed to export svg-layout:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if *svgPath != "" {
+		if _, err := computeAndSetLayout(); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to compute layout: %v\n", err)
+			os.Exit(1)
+		}
 		f, err := os.Create(*svgPath)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "failed to create svg file:", err)

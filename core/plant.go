@@ -2119,6 +2119,21 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	edge("CST", "TurbineAFWPump", &target.Outside.TurbineAFWPump.CSTValve, nil)
 	edge("TurbineAFWPump", "SG", &target.Outside.TurbineAFWPump.ServiceWaterValve, nil)
 
+	// Standalone nodes without simulation edges, included so the
+	// P&ID graph and Graphviz layout are complete.
+	add("SISAccumulators", "SafetyInjectionSystem", nil)
+	add("EFWSTank", "EmergencyFeedwaterSystem", &target.AuxiliaryBuilding.EmergencyFeedwaterSystem)
+	add("CCWSHX", "ComponentCoolingWaterSystem", &target.AuxiliaryBuilding.ComponentCoolingWaterSystem)
+	add("RHRS_A", "ResidualHeatRemovalSystem", &target.AuxiliaryBuilding.ResidualHeatRemovalSystem)
+	add("RHRS_B", "ResidualHeatRemovalSystem", &target.AuxiliaryBuilding.ResidualHeatRemovalSystem)
+	add("SFP", "SpentFuelPool", &target.AuxiliaryBuilding.SpentFuelPoolCoolingSystem)
+	add("Diesel", "DieselGenerator", &target.AuxiliaryBuilding.DieselGenerator)
+	add("FuelTank", "FuelTank", nil)
+	add("Transformer", "StationTransformer", &target.ReactorBuilding.StationTransformer)
+	add("ESF_A", "ESFBus", &target.Electrical.ESFBusA)
+	add("ESF_B", "ESFBus", &target.Electrical.ESFBusB)
+	add("Grid", "OffsiteGrid", &target.ReactorBuilding.Grid)
+
 	return g
 }
 

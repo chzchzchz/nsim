@@ -15,8 +15,8 @@
 ## Nuclear Physics
 
 * Physics questions may be resolved by checking wikpedia.
-* Access wikpedia articles via web fetch tool of url https://en.wikipedia.org/wiki/<ARTICLE_NAME>
-* Cache wikipedia articles in specs/<ARTICLE_NAME>.txt
+* Access wikpedia articles via (non-agentic) ordinary web fetch tool of url https://en.wikipedia.org/wiki/<ARTICLE_NAME>
+* Cache wikipedia articles in specs/wiki/<ARTICLE_NAME>.txt
 * Article "Category:Nuclear_technology" is a good place to start.
 * Note that the Westinghouse PWR document is the primary source of truth.
 
