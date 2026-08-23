@@ -226,9 +226,9 @@ func (c *CVCS) applyLevelControl(pzrLevelFraction float64) {
 // clamped flat outside that band so shutdown and overload hold the
 // nearest anchor.
 func programmedPzrLevel(tavg Temperature) float64 {
-	fullLoadTavgF := (CoreReferenceInletF + CoreReferenceOutletF) / 2
+	fullLoadTavgF := RCSFullLoadTavgF
 	slope := (PzrLevelFullLoadPct - PzrLevelNoLoadPct) /
-		(fullLoadTavgF - PzrLevelNoLoadTavgF)
-	pct := PzrLevelNoLoadPct + (tavg.Float()-PzrLevelNoLoadTavgF)*slope
+		(fullLoadTavgF - RCSNoLoadTavgF)
+	pct := PzrLevelNoLoadPct + (tavg.Float()-RCSNoLoadTavgF)*slope
 	return min(max(pct, PzrLevelNoLoadPct), PzrLevelFullLoadPct)
 }

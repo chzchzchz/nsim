@@ -8,7 +8,10 @@ import (
 	u "github.com/bcicen/go-units"
 )
 
-func (r *ReactorBuilding) Step(sgSteamOutflowFraction float64) ReactorBuilding {
+func (r *ReactorBuilding) Step(
+	sgSteamOutflowFraction float64,
+	turbineLoadFraction float64,
+) ReactorBuilding {
 	ret := *r
 	dt := TimeStep
 	var reliefDischarge Volume
@@ -140,6 +143,24 @@ func (r *ReactorBuilding) Step(sgSteamOutflowFraction float64) ReactorBuilding {
 	//   reactor startup or shutdown, to follow load changes,
 	//   and to control small transient changes in reactivity."
 	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_035.txt:88-93
+	// Automatic rod control: integrate the Tavg program error
+	// into the rod demand before the drive rate-limits toward it.
+	// "The rod control system automatically controls RCS average
+	// coolant temperature (Tavg) as a programmed function of
+	// turbine load."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:24-27
+	// A latched trip freezes integration: the scram forces full
+	// insertion regardless of demand, and pre-spinning withdrawal
+	// for a post-trip reset is not an automatic action.
+	if ret.ReactorPressureVessel.ControlRods.AutoControl &&
+		!ret.ReactorPressureVessel.Trip {
+		powerFraction := float64(ret.ReactorPressureVessel.FissionPower) /
+			float64(CoreRatedThermalPower)
+		ret.ReactorPressureVessel.ControlRods.applyAutoControl(
+			tavg, turbineLoadFraction, powerFraction,
+			float64(ret.ReactorPressureVessel.Reactivity))
+	}
+
 	ret.ReactorPressureVessel.ControlRods =
 		ret.ReactorPressureVessel.ControlRods.Step()
 
@@ -837,6 +858,7 @@ func (p *Plant) Step() {
 
 	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step(
 		p.TurbineBuilding.SteamOfftakeFraction,
+		p.TurbineBuilding.Turbine.Setpoint,
 	)
 	// Latch the RCP DriveReady after the ReactorBuilding step so
 	// the assignment above (which copies the prior state) cannot

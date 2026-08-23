@@ -865,10 +865,17 @@ const (
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:40-43
 	PzrLevelFullLoadPct float64 = 60.0
 
-	// PzrLevelNoLoadTavgF is the no-load anchor of the level
-	// program (°F), the hot-standby reactor coolant temperature.
+	// RCSNoLoadTavgF is the no-load anchor shared by the NSSS
+	// control programs (°F), the hot-standby reactor coolant
+	// temperature.
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:48-53
-	PzrLevelNoLoadTavgF float64 = 557.0
+	RCSNoLoadTavgF float64 = 557.0
+
+	// RCSFullLoadTavgF is the full-load anchor of the NSSS control
+	// programs: the midpoint of the rated inlet/outlet design
+	// temperatures (Table 3.4-1 values carried by
+	// CoreReferenceInletF / CoreReferenceOutletF).
+	RCSFullLoadTavgF = (CoreReferenceInletF + CoreReferenceOutletF) / 2
 
 	// PzrLevelCtrlGainGalPerSecPerPct converts pressurizer level
 	// error (percentage points) into net CVCS flow demand (gal/s).
@@ -992,6 +999,31 @@ type ControlRods struct {
 	// range level."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_223.txt:172
 	DemandInsertion float64
+
+	// AutoControl engages the automatic Tavg-program rod
+	// controller, which integrates the program error into
+	// DemandInsertion each step. The zero value keeps the demand
+	// purely operator-written: "The charging pump flow and
+	// low-pressure letdown valve are controlled manually during
+	// plant startup and cooldown" is the same manual-lineup
+	// convention for the maneuvering systems.
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115-116
+	AutoControl bool
+
+	// programTargetFraction is the slew-limited power target the
+	// automatic controller walks toward the program point, seeded
+	// from live power on first engagement so engaging the
+	// controller never steps the plant. programPrimed suppresses
+	// that zero-value seed on later calls.
+	programTargetFraction float64
+	programPrimed         bool
+
+	// ProgrammedTavg is the last computed output of the
+	// Tavg program, °F. "The rod control system automatically
+	// controls RCS average coolant temperature (Tavg) as a
+	// programmed function of turbine load."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:24-27
+	ProgrammedTavg float64
 
 	// BoronConcentration is the RCS boron concentration in
 	// ppm. Plant.Step propagates CVCS.BoronConcentration here

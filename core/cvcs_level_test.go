@@ -37,7 +37,7 @@ func TestPzrLevelProgramAnchors(t *testing.T) {
 		tavg Temperature
 		want float64
 	}{
-		{"no load", Temperature{Val: PzrLevelNoLoadTavgF, Unit: u.Fahrenheit}, PzrLevelNoLoadPct},
+		{"no load", Temperature{Val: RCSNoLoadTavgF, Unit: u.Fahrenheit}, PzrLevelNoLoadPct},
 		{"full load", fullLoadTavg, PzrLevelFullLoadPct},
 		{"below band clamps", Temperature{Val: 200, Unit: u.Fahrenheit}, PzrLevelNoLoadPct},
 		{"above band clamps", Temperature{Val: 700, Unit: u.Fahrenheit}, PzrLevelFullLoadPct},
@@ -58,7 +58,7 @@ func TestPzrLevelProgramAnchors(t *testing.T) {
 //   letdown flow."
 //   specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:9-12
 func TestPzrLevelControllerBalancesFlows(t *testing.T) {
-	noLoad := Temperature{Val: PzrLevelNoLoadTavgF, Unit: u.Fahrenheit}
+	noLoad := Temperature{Val: RCSNoLoadTavgF, Unit: u.Fahrenheit}
 
 	low := autoCVCS().Step(Volume{}, noLoad, 0.05)
 	assert.InDelta(t, CVCSDesignChargingFlow.Float(),
@@ -88,7 +88,7 @@ func TestPzrLevelControllerBalancesFlows(t *testing.T) {
 // control engaged, so a lost charging pump is observable as an unmet
 // demand rather than phantom injection.
 func TestPzrLevelControllerRespectsLatches(t *testing.T) {
-	noLoad := Temperature{Val: PzrLevelNoLoadTavgF, Unit: u.Fahrenheit}
+	noLoad := Temperature{Val: RCSNoLoadTavgF, Unit: u.Fahrenheit}
 
 	c := autoCVCS()
 	c.ChargingPumpRunning = false

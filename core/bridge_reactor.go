@@ -419,6 +419,30 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Automatic rod control engage switch. With it latched the
+	// controller integrates the Tavg program error into
+	// DemandInsertion each step; the manual demand path above is
+	// then owned by the controller.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:24-27
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/AutoControl"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "AutoControl",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.AutoControl)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorPressureVessel.ControlRods.AutoControl = v
+			return nil
+		},
+	}
+
+
 	// CVCS boron concentration setpoint. The operator writes
 	// the desired RCS boron concentration in ppm directly; this
 	// feeds the reactivity model on the next step. The CVCS
@@ -713,6 +737,20 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("normalized",
 				p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion)
+		},
+	}
+
+
+	// Tavg rod-control program output (chapter 16):
+	// "programmed function of turbine load"
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:24-27
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/ProgrammedTavg"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "ProgrammedTavg",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.ProgrammedTavg)
 		},
 	}
 
