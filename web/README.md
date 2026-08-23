@@ -64,6 +64,23 @@ cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" src/wasm_exec.js
 npx tsc
 ```
 
+## Deploy bundle
+
+```sh
+cd web
+make bundle         # web.tgz — release: minified JS, stripped wasm
+make bundle-debug   # web-debug.tgz — readable JS + sourcemaps,
+                    # wasm keeps full debug info
+```
+
+Both tarballs extract to an `nsim-web/` directory that serves as
+static content from any path (asset URLs are relative):
+
+```sh
+mkdir /srv/www && tar xzf web.tgz -C /srv/www
+# then serve /srv/www/nsim-web/ with any static file server
+```
+
 The wasm build pulls `core`, `bridge`, and `core/svg` from
 the repo's own module path — there is no `replace` directive
 because `web/wasm` is part of the root module.
