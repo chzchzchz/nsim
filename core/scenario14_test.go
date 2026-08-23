@@ -142,7 +142,14 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 		"ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion",
 		"0.60")
 	setControl(t, &p, "TurbineBuilding/Turbine/Setpoint", "0.04")
-	stepN(&p, int(5*time.Second/TimeStep))
+	// The hold outlasts the chain's decay, not the rod travel:
+	// rods seat inside ~0.2 s, and at rho ~ -0.07 pct dk/k the
+	// multiplicative fission update folds power with an e-fold
+	// near 1.4 s, so reaching the source floor from the post-glide
+	// ~1.4 MW takes ~14 s. The Tavg pacing (outlet temperature
+	// moves at most 50 F/hr) holds the doppler term fixed through
+	// the window, so no faster collapse arrives from cooling.
+	stepN(&p, int(15*time.Second/TimeStep))
 
 	// Honest end state: house-load steam draw exceeds what decay
 	// heat can raise, so the header must depart the shell pressure
