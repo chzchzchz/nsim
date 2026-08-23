@@ -124,8 +124,12 @@ func (ct *CoolingTower) Step(fansRunning, driveReady bool,
 	if ret.ColdBasinTemp.Float() <= 0 {
 		ret.ColdBasinTemp = Temperature{Val: target, Unit: u.Fahrenheit}
 	}
+	approach := ret.ApproachF
+	if approach <= 0 {
+		approach = CoolingTowerApproachF
+	}
 	if ret.FanRunning {
-		target = wetBulb.Float() + CoolingTowerApproachF
+		target = wetBulb.Float() + approach
 	}
 	k := dt.Seconds() / CoolingTowerTimeConstant.Seconds()
 	cold := ret.ColdBasinTemp.Float() + k*(target-ret.ColdBasinTemp.Float())

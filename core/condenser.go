@@ -279,10 +279,12 @@ const (
 	// CoolingTowerEvapFractionPerDegF is the evaporative loss
 	// as a fraction of circulating flow per °F of range
 	// (hot return minus cold basin). Derived:
-	// cp·ΔT / h_fg ≈ (1.0 BTU/lb·°F) / (≈1040 BTU/lb) ≈ 9.6e-4
-	// per °F; at the design range across
-	// CirculatingWaterDesignFlowGPM (~1.1M gpm) this yields
-	// ≈ 19,000 gpm peak evaporation.
+	// cp·ΔT / h_fg ≈ (1.0 BTU/lb·°F) / (≈1040 BTU/lb at basin
+	// temperatures) ≈ 9.6e-4 per °F, consistent with the
+	// ≈ 970 BTU/lb absorbed per pound evaporated quoted for
+	// wet towers in specs/wiki/Cooling_tower.txt:1062; at the
+	// design range across CirculatingWaterDesignFlowGPM
+	// (~1.1M gpm) this yields ≈ 19,000 gpm peak evaporation.
 	CoolingTowerEvapFractionPerDegF = 0.00096
 
 	// CoolingTowerBlowdownFraction is the continuous bleed as

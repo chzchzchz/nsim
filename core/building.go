@@ -357,9 +357,19 @@ type CoolingTower struct {
 	// is operating.
 	FanRunning bool
 
-	// ApproachF is the steady-state difference between the
-	// cold-basin temperature and the ambient wet-bulb while
-	// the fans run (°F).
+	// ApproachF is this tower's design approach: the steady-
+	// state difference between the cold-basin temperature and
+	// the entering-air wet-bulb while the fans run (°F). It is
+	// a per-tower parameter, not global state: fill condition
+	// sets how close evaporative cooling gets to the wet-bulb
+	// limit, so a fouled or undersized tower carries a larger
+	// approach.
+	// "The approach is the difference in temperature between
+	// the cooled-water temperature and the entering-air wet
+	// bulb temperature."
+	// specs/wiki/Cooling_tower.txt:1421
+	// Zero falls back to the CoolingTowerApproachF design
+	// default so raw structs stay well-defined.
 	ApproachF float64
 
 	// Basin holds the cold-water inventory the CW pumps draw

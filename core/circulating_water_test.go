@@ -184,6 +184,35 @@ func TestCoolingTowerSteadyStateApproach(t *testing.T) {
 		target, ct.ColdBasinTemp.Float())
 }
 
+// The approach is a per-tower parameter ("The approach is the
+// difference in temperature between the cooled-water temperature
+// and the entering-air wet bulb temperature",
+// specs/wiki/Cooling_tower.txt:1421): a degraded tower (larger
+// approach from fouled or undersized fill) must settle hotter
+// than the design tower under identical load and weather.
+// Physics-forced direction; the magnitudes are conventions.
+func TestCoolingTowerDegradedApproachRunsHotter(t *testing.T) {
+	wetBulb := Temperature{Val: 75.0, Unit: u.Fahrenheit}
+	hot := Temperature{Val: 93.0, Unit: u.Fahrenheit}
+	steps := int(5 * time.Minute / TimeStep)
+
+	design := towerFixture(93.0)
+	degraded := towerFixture(93.0)
+	degraded.ApproachF = CoolingTowerApproachF + 10.0
+
+	for i := 0; i < steps; i++ {
+		design = design.Step(true, true,
+			CirculatingWaterDesignFlowGPM, hot, wetBulb)
+		degraded = degraded.Step(true, true,
+			CirculatingWaterDesignFlowGPM, hot, wetBulb)
+	}
+	assert.Greater(t, degraded.ColdBasinTemp.Float(),
+		design.ColdBasinTemp.Float()+9.0,
+		"want degraded approach (design+10F) to settle ≥9F hotter, "+
+			"got %v vs %v",
+		degraded.ColdBasinTemp.Float(), design.ColdBasinTemp.Float())
+}
+
 // Acceptance 2: losing fan drive soaks the basin toward the
 // hot return water on the cooling-tower time constant, while
 // fans-on keeps it at the approach target.
