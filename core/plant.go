@@ -1136,11 +1136,15 @@ func (p *Plant) Step() {
 	//   - Shared river intake: "serves one circulating water
 	//     pump and one service water pump."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:37-38
+	//   - "Diesel generator coolers" join the component cooling HXs
+	//     as essential loads when the engine runs with cooler flow.
+	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89
 	ccwDuty := p.nextPlant.AuxiliaryBuilding.ComponentCoolingWaterSystem.HXHeatDuty
+	jacketDuty := p.nextPlant.AuxiliaryBuilding.DieselGenerator.JacketHeatDuty
 	p.nextPlant.Outside.ServiceWaterSystem =
 		p.nextPlant.Outside.ServiceWaterSystem.Step(
 			p.Outside.RiverTemp,
-			rcfcHeatOut+ccwDuty,
+			rcfcHeatOut+ccwDuty+jacketDuty,
 		)
 
 	// SFPCS: pump auto-start and purification-flow update

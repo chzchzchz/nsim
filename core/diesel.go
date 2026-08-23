@@ -27,6 +27,12 @@ var (
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:36-37
 	// 7-day (full tank) hint.
 	dieselFuelRate = Volume{Val: 500.0/(4*24), Unit: u.Gallon} // gal/hr at 1.0 frac
+	// Jacket heat rejected through the jacket-water cooler as a
+	// fraction of rated output. The spec gives no number; large
+	// medium-speed diesel gensets reject roughly 5-10% of fuel
+	// input through the jacket circuit, so 0.07 × DieselRatedkW is
+	// used (derived sizing assumption).
+	dieselJacketFraction = 0.07
 )
 
 // Step advances the diesel generator by TimeStep. The state machine,
@@ -138,6 +144,15 @@ func (d *DieselGenerator) Step(swFlowGPM float64) DieselGenerator {
 		} else {
 			ret.CoolantTemp = Temperature{Val: ret.CoolantTemp.Float()-gap*(dt.Seconds()/dieselCoolingTau.Seconds()), Unit: u.Fahrenheit}
 		}
+	}
+	// Jacket-cooler duty handed to the service water: only while the
+	// engine runs and the cooler actually has flow. With no service
+	// water the jacket heats up instead (above) and nothing is
+	// delivered to the SWS.
+	ret.JacketHeatDuty = 0
+	if swFlowing && ret.State == DieselRunning {
+		ret.JacketHeatDuty = Watts(float64(DieselRatedkW) *
+			dieselJacketFraction * float64(ret.RunningFraction))
 	}
 
 	// 5) Cooling trip.

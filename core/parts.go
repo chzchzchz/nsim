@@ -1097,6 +1097,14 @@ type DieselGenerator struct {
 	// (specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89).
 	CoolantTemp Temperature
 
+	// JacketHeatDuty is the heat rate the jacket-water cooler hands
+	// to the Service Water System while the engine runs with cooling
+	// flow (W). Zero when the engine is off or the cooler runs dry;
+	// Plant.Step sums it into the SWS outlet-temperature rise.
+	// "Diesel generator coolers" are a service water load.
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89
+	JacketHeatDuty Watts
+
 	// Generator-side output. See core/parts.go:89 for the PowerGenerator
 	// definition; this field is the "generator" half of the diesel
 	// generator. Voltage / Frequency are ramped up by the diesel step

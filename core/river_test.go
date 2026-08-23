@@ -162,3 +162,55 @@ func TestContainment_SprayCondensationCoolsAtmosphere(t *testing.T) {
 		"want sprayed containment %v cooler than baseline %v",
 		sprayT, baseT)
 }
+
+// The diesel jacket cooler joins the SWS load list once the engine
+// runs with cooling flow: the SWS outlet rise reflects RCFC + CCW
+// HX + jacket duty together.
+//
+// Spec justification:
+//   - "Diesel generator coolers"
+//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89
+func TestSWS_HeatLoadIncludesDieselJacketDuty(t *testing.T) {
+	p := MakePlant()
+	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal =
+		DieselStartSafetyInjection
+	stepN(&p, int(15*time.Second/TimeStep))
+
+	dg := p.AuxiliaryBuilding.DieselGenerator
+	require.True(t, dg.ReadyToLoad,
+		"precondition: diesel ready after 15 s on SI signal")
+	require.Greater(t, float64(dg.JacketHeatDuty), 0.0,
+		"want jacket duty > 0 while running with SW flow, got %v",
+		dg.JacketHeatDuty)
+
+	rcfcSum := 0.0
+	for i := 0; i < RCFCUnitCount; i++ {
+		rcfcSum += p.AuxiliaryBuilding.RCFCUnits[i].HeatTransferRate
+	}
+	duty := float64(p.AuxiliaryBuilding.ComponentCoolingWaterSystem.HXHeatDuty)
+	massKgPerS := ServiceWaterDesignFlow * KilogramsPerGPM
+	wantRise := (rcfcSum + duty + float64(dg.JacketHeatDuty)) /
+		(massKgPerS * SpecificHeatWater) * 9.0 / 5.0
+	sws := p.Outside.ServiceWaterSystem
+	gotRise := sws.OutletTemp.Float() - sws.InletTemp.Float()
+	assert.InDelta(t, wantRise, gotRise, 1e-9,
+		"want SWS outlet rise=%v from all essential loads, got %v",
+		wantRise, gotRise)
+
+	// With no service water flow the dry cooler hands nothing to
+	// the SWS header. A manual start is used because an SI signal
+	// would auto-re-latch the SWS pumps (see
+	// TestSWS_PumpAutoStartsOnSafetySignal), making the dry-cooler
+	// state unreachable through that path.
+	dry := MakePlant()
+	dry.AuxiliaryBuilding.DieselGenerator = enoughFuel()
+	dry.AuxiliaryBuilding.DieselGenerator.StartSignal =
+		DieselStartManual
+	dry.Outside.ServiceWaterSystem.PumpRunning = false
+	stepN(&dry, int(15*time.Second/TimeStep))
+	assert.Zero(t,
+		dry.AuxiliaryBuilding.DieselGenerator.JacketHeatDuty,
+		"want jacket duty=0 with dry cooler, got %v",
+		dry.AuxiliaryBuilding.DieselGenerator.JacketHeatDuty)
+}
