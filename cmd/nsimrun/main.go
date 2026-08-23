@@ -99,4 +99,13 @@ func main() {
 		log.Fatalf("failed to marshal plant JSON: %v", err)
 	}
 	fmt.Println(string(out))
+
+	// End-of-run alarm summary on stderr so scenario replays can
+	// "note any alarms encountered during the power changes"
+	// (specs/pwr_sim/chapter_3/page_039.txt:44-46); stdout stays a
+	// clean single JSON document for -plant chaining.
+	for _, a := range p.Alarms() {
+		fmt.Fprintf(os.Stderr, "alarm at %d ms: %s\n",
+			steps*int(core.TimeStep.Milliseconds()), a)
+	}
 }
