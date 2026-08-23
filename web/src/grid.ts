@@ -68,6 +68,10 @@ export function enablePanelSwaps(grid: HTMLElement): void {
         drag = null;
         if (target) {
             swapTiles(tile, target);
+            // Bubble through #tiles so main.ts persists the layout.
+            tile.dispatchEvent(
+                new CustomEvent("panel-layout-changed", { bubbles: true }),
+            );
         }
     }
 

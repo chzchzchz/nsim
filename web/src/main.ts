@@ -9,8 +9,13 @@ import { renderAlarms, type AlarmEntry, type AlarmPanel } from "./alarms";
 import { initConsole, type ConsolePanel } from "./console";
 import { buildBindings, displayPart, groupByPrefix, type PartBinding } from "./bindings";
 import { enablePanelSwaps } from "./grid";
-import { makeTile } from "./tile";
+import { makeTile, applyMinimized } from "./tile";
 import { copyText } from "./clipboard";
+import {
+    loadPanelLayout,
+    savePanelLayout,
+    PANEL_LAYOUT_VERSION,
+} from "./layout";
 import { Sim } from "./sim";
 
 const COPY_FEEDBACK_MS = 1500;
@@ -51,16 +56,37 @@ async function main(): Promise<void> {
     let sensorRows: SensorRow[] = [];
     const rebuildTiles = (): void => {
         const bindings = buildBindings(sim.plant);
+        const groups = groupByPrefix(bindings);
+        // Saved arrangements only apply when they name exactly the
+        // panels that exist now; anything else falls back to the
+        // alphabetical default.
+        const layout = loadPanelLayout(groups.map((g) => g.prefix));
+        const ordered = layout
+            ? layout.order.map(
+                  (name) => groups.find((g) => g.prefix === name)!,
+              )
+            : groups;
         tilesEl.innerHTML = "";
         sensorRows = [];
-        for (const group of groupByPrefix(bindings)) {
+        for (const group of ordered) {
             tilesEl.appendChild(renderTile(group.prefix, group.bindings, sim.plant, sensorRows));
+        }
+        if (layout) {
+            const minimized = new Set(layout.minimized);
+            for (const el of Array.from(tilesEl.children) as HTMLElement[]) {
+                if (minimized.has(el.dataset.panel ?? "")) {
+                    applyMinimized(el, true);
+                }
+            }
         }
     };
     rebuildTiles();
+    tilesEl.addEventListener("panel-layout-changed", () =>
+        persistTileLayout(tilesEl),
+    );
 
     // Alarm panel: fetches the "alarm"-kind sensor and renders
-    // structured rows; double-click a row to acknowledge it.
+    // structured rows; click a row to acknowledge it.
     let alarmPanel: AlarmPanel | null = null;
     function initAlarms(): void {
         alarmsEl.innerHTML = "";
@@ -165,6 +191,22 @@ main().catch((err) => {
         statusEl.textContent = `init failed: ${err}`;
     }
 });
+
+// persistTileLayout snapshots the current grid order and
+// minimized flags into localStorage; wired to the change events
+// emitted by the swap gesture and the minimize toggles.
+function persistTileLayout(tilesEl: HTMLElement): void {
+    const tiles = Array.from(
+        tilesEl.querySelectorAll<HTMLElement>(":scope > .tile[data-panel]"),
+    );
+    savePanelLayout({
+        version: PANEL_LAYOUT_VERSION,
+        order: tiles.map((t) => t.dataset.panel ?? ""),
+        minimized: tiles
+            .filter((t) => t.classList.contains("minimized"))
+            .map((t) => t.dataset.panel ?? ""),
+    });
+}
 
 // renderTile assembles one tile (one top-level prefix) with a
 // Controls column and a Sensors column. New rows for the global

@@ -138,7 +138,11 @@ The dashboard has these regions:
    (outlined tiles show the pair), drag back inside that band to
    cancel, and release the button to apply the swap. The − button
    at a heading's right edge minimizes the tile to just its header;
-   it becomes + and restores the full panel.
+   it becomes + and restores the full panel. Tile order and
+   minimized flags persist across browser sessions in localStorage
+   (`src/layout.ts`); a saved layout is discarded whenever its
+   schema version differs or its panel names no longer match the
+   current set, falling back to alphabetical defaults.
 
 5. **Command console** (bottom) — submit `TimeOffsetMs Part.Label Value`
    lines that fire relative to the simulation clock; completed rows are

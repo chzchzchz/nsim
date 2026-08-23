@@ -5,7 +5,6 @@
 
 const MINIMIZE_GLYPH = "−";
 const RESTORE_GLYPH = "+";
-
 export interface Tile {
     root: HTMLElement;
     body: HTMLElement;
@@ -14,10 +13,12 @@ export interface Tile {
 // makeTile assembles the collapsed-state container. The toggle
 // button lives inside the <h2> so it stays visible when the body
 // is hidden; presses on it are excluded from the drag-to-swap
-// gesture (see grid.ts).
+// gesture (see grid.ts). The title doubles as the stable layout
+// persistence id via data-panel.
 export function makeTile(title: string): Tile {
     const root = document.createElement("div");
     root.className = "tile";
+    root.dataset.panel = title;
 
     const h = document.createElement("h2");
     const label = document.createElement("span");
@@ -33,6 +34,21 @@ export function makeTile(title: string): Tile {
     return { root, body };
 }
 
+// applyMinimized drives a tile's collapsed state from code (e.g.
+// restoring a saved layout); the header toggle calls it too so the
+// button glyph always matches the class.
+export function applyMinimized(tile: HTMLElement, minimized: boolean): void {
+    tile.classList.toggle("minimized", minimized);
+    const btn = tile.querySelector<HTMLElement>(".tile-toggle");
+    if (!btn) {
+        return;
+    }
+    btn.textContent = minimized ? RESTORE_GLYPH : MINIMIZE_GLYPH;
+    const label = minimized ? "Restore panel" : "Minimize panel";
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+}
+
 function renderMinimizeToggle(tile: HTMLElement): HTMLElement {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -41,10 +57,12 @@ function renderMinimizeToggle(tile: HTMLElement): HTMLElement {
     btn.title = "Minimize panel";
     btn.setAttribute("aria-label", btn.title);
     btn.addEventListener("click", () => {
-        const minimized = tile.classList.toggle("minimized");
-        btn.textContent = minimized ? RESTORE_GLYPH : MINIMIZE_GLYPH;
-        btn.title = minimized ? "Restore panel" : "Minimize panel";
-        btn.setAttribute("aria-label", btn.title);
+        const minimized = !tile.classList.contains("minimized");
+        applyMinimized(tile, minimized);
+        // Bubble through #tiles so main.ts persists the layout.
+        tile.dispatchEvent(
+            new CustomEvent("panel-layout-changed", { bubbles: true }),
+        );
     });
     return btn;
 }
