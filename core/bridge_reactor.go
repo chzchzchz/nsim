@@ -787,32 +787,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			},
 		}
 
-		// Automatic rod-control selector. Engaged, the controller
-		// trims DemandInsertion toward the Tavg program implied by
-		// the turbine load demand; disengaged, bridge writes to
-		// ControlRods/Insertion pass through as before.
-		//   "During operation in the power range, the control rods
-		//    maintain Tavg with reactor power following steam
-		//    demand/turbine power."
-		//    specs/the_westinghouse_pressurized_water_react/chapter_16/page_230.txt:152-162
-		m["ReactorBuilding/RodControl/Auto"] = &bridge.Control{
-			Part:  "ReactorBuilding/RodControl",
-			Label: "Auto",
-			Kind:  "bool",
-			Get: func() string {
-				return bridge.BoolToStr(
-					p.ReactorBuilding.RodControl.Auto)
-			},
-			Set: func(s string) error {
-				v, err := bridge.StrToBool(s)
-				if err != nil {
-					return err
-				}
-				p.ReactorBuilding.RodControl.Auto = v
-				return nil
-			},
-		}
-
 		// Dispatcher load reference for this unit as a fraction of
 		// rated electrical output. Plant.Step latches it into
 		// Turbine.LoadDemandRef, which the electro-hydraulic control
@@ -1096,22 +1070,12 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 	// and the Reactor Water Makeup System."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:37-38
 	m["ReactorBuilding/ReactorPressureVessel/BoronConcentration"] = &bridge.Sensor{
-		Part:  "ReactorBuilding/RodControl",
-		Label: "TavgErrorF",
-		Kind:  "fahrenheit",
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "BoronConcentration",
+		Kind:  "ppm",
 		Get: func() (string, error) {
-			return bridge.FormatSensorValue("fahrenheit",
-				p.ReactorBuilding.RodControl.TavgErrorF)
-		},
-	}
-
-	m["ReactorBuilding/RodControl/ProgramTavgF"] = &bridge.Sensor{
-		Part:  "ReactorBuilding/RodControl",
-		Label: "ProgramTavgF",
-		Kind:  "fahrenheit",
-		Get: func() (string, error) {
-			return bridge.FormatSensorValue("fahrenheit",
-				p.ReactorBuilding.RodControl.ProgramTavgF)
+			return bridge.FormatSensorValue("ppm",
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration)
 		},
 	}
 

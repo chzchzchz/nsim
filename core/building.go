@@ -26,6 +26,7 @@ type ReactorBuilding struct {
 	// paths read it. Operator commands must target the group (the
 	// aggregate control fans out), never this view.
 	ReactorCoolantPump Pump
+
 	Pressurizer           `json:"Pressurizer"`
 	SafetyValve            Valve
 	BlockValve             Valve
