@@ -154,6 +154,103 @@ type Turbine struct {
 	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:114-116
 	ResetRequest bool
 
+	// TripByVacuum latches on low condenser vacuum while running;
+	// trip device 3 of the protective list.
+	// "Low vacuum trip"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:26
+	TripByVacuum bool
+
+	// TripByBearingOil latches when bearing-oil header pressure
+	// falls below TurbineLowBearingOilTripPsi while running; trip
+	// device 2 of the protective list.
+	// "Low bearing oil pressure trip"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:25
+	TripByBearingOil bool
+
+	// GoverningValve is the DEHM-positioned governing-valve bank
+	// (0..1). Admission = StopValve.Open * GoverningValve.Open.
+	// Spec justification:
+	//   - "The control signal is transmitted to the electro-hydraulic
+	//     actuator on the main steam governing valves and reheat steam
+	//     intercept valves."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:41-44
+	GoverningValve Valve
+
+	// SpeedDemand is the pre-breaker operator speed reference as a
+	// fraction of TurbineRatedSpeed (0..1.05).
+	// "(1) Wide range speed control of the turbine from turning gear
+	// to rated speed. This control is accomplished by increasing the
+	// speed demand (reference) to bring shaft speed to its rated value
+	// at a controlled selectable rate."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-76
+	SpeedDemand float64
+
+	// TurningGear engaged holds the rotor at a slow roll with no
+	// steam admission.
+	TurningGear bool
+
+	// FirstStagePressure proxies the HP first-stage pressure the DEHM
+	// controller compares against its reference:
+	// "computes signals comparing turbine speed and first-stage
+	// pressure with reference values established by the dispatcher or
+	// initiated at the operator's panel."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
+	FirstStagePressure Pressure
+
+	// BearingOilPressure (psig) on the turbine-generator lubricating
+	// header. The emergency trip system "uses oil from the
+	// turbine-generator lubricating system"; loss of that oil trips
+	// the turbine.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:24-34
+	BearingOilPressure Pressure
+
+	// LubeOilPumpRunning is the motor-driven auxiliary lubricating
+	// oil pump, used below LubeOilShaftDriveFraction of rated shaft
+	// speed and before startup ("checking the bearing oil pump before
+	// startup").
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_203.txt:87-89
+	LubeOilPumpRunning bool
+
+	// ExtractionNRVClosed latches when any turbine trip dumps
+	// hydraulic air-pilot pressure to the extraction steam
+	// nonreturn valves; while closed no extraction steam flows to
+	// the heaters or MSR.
+	// "The extraction steam nonreturn valves are actuated from the
+	// turbine hydraulic fluid system via an air pilot valve which
+	// dumps the air pressure to each extraction steam air-operated
+	// nonreturn valve."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:100-104
+	ExtractionNRVClosed bool
+
+	// LoadDemandRef is the dispatcher load reference, latched from
+	// Grid.LoadDemand each step by Plant.Step. The DEHM ramps
+	// Setpoint toward it at RampRate while running.
+	// "reference values established by the dispatcher"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
+	LoadDemandRef float64
+
+	// steamDemandGalPerStep is the throttled per-step steam mass the
+	// turbine draws from the SG headers during the most recent Step.
+	// Read back by Plant.Step through SteamDemandGalPerStep().
+	steamDemandGalPerStep float64
+
+	// DumpHoldTimer counts down how much longer a trip or load-
+	// rejection edge holds the condenser dump valves open before the
+	// automatic-reclose logic may shut them.
+	DumpHoldTimer time.Duration
+
+	// LastSetpoint is the Setpoint observed at the end of the most
+	// recent Step. The dump controller compares it against the
+	// current Setpoint to detect a between-step sudden load
+	// reduction.
+	LastSetpoint float64
+
+	// Synchronized mirrors Generator.BreakerClosed, latched by
+	// Plant.Step before the turbine step. It selects DEHM mode:
+	// speed control toward SpeedDemand before synchronization, load
+	// control toward Setpoint after.
+	Synchronized bool
+
 	// GridFrequency is the infinite-bus frequency in Hz that
 	// the governor droop correction compares against
 	// GridRatedFrequency. Plant.Step latches the grid frequency
@@ -190,6 +287,14 @@ type Turbine struct {
 	HPExhaustPressure Pressure
 
 	MoistureSeparatorReheater // embedded MSR state
+}
+
+// SteamDemandGalPerStep is the throttled per-step steam volume the
+// turbine drew from the main-steam headers during its most recent
+// Step, in gallons. Plant.Step routes this draw against the SG and
+// into the condenser mass balance.
+func (t *Turbine) SteamDemandGalPerStep() float64 {
+	return t.steamDemandGalPerStep
 }
 
 // MoistureSeparatorReheater models one combined moisture separator-
@@ -408,6 +513,123 @@ const (
 	// terminal voltage builds up to rated within ~20 steps
 	// when the exciter is active.
 	GeneratorExciterFieldForcingFraction float64 = 0.05
+
+	// Turbine startup, trip, and steam-dump constants.
+	//
+	// Spec justification:
+	//   - Low vacuum trip: "Low vacuum trip" (device 3)
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:26
+	//   - LP exhaust limit basis: "may be operated with a slight
+	//     reduction in load at exhaust pressures as high as eight
+	//     inches HgA during emergency operations."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_199.txt:94
+	//   - Low bearing oil trip: "Low bearing oil pressure trip"
+	//     (device 2)
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:25
+	//   - Dump sizing: "systems to accept 70- to 85-percent steam
+	//     dump"
+	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:59-61
+	//   - Dump trigger: "These valves open under a sudden reduction
+	//     in turbine-generator load (in excess of 10%) or a turbine
+	//     trip."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:9-11
+	//   - Speed control: "Wide range speed control of the turbine
+	//     from turning gear to rated speed."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-76
+
+	// TurbineLowVacuumTripPsia is the condenser back-pressure above
+	// which a running turbine trips. Derived: the spec quotes an
+	// emergency LP exhaust limit of "eight inches HgA" ≈ 3.9 psia
+	// (page_199.txt:94), while the lumped condenser model idles at up
+	// to ~5.5 psia under full steam load; the trip plate sits between
+	// that operating ceiling and atmospheric so full load never
+	// spuriously trips but loss-of-heat-sink does.
+	TurbineLowVacuumTripPsia Pressure = 8.0
+
+	// TurbineLowBearingOilTripPsi is the lubricating-header pressure
+	// below which a running turbine trips. Derived: typical
+	// journal-oil trip plate; the spec states no number.
+	TurbineLowBearingOilTripPsi = 15.0
+
+	// BearingOilDesignPressure is the healthy header pressure with
+	// either the shaft-driven or motor pump carrying the load.
+	// Derived; the spec states no number.
+	BearingOilDesignPressure = 25.0
+
+	// LubeOilDecayTimeConstant (s) is how fast the bearing-oil
+	// header decays with no pump running. Derived.
+	LubeOilDecayTimeConstant = 5.0
+
+	// LubeOilShaftDriveFraction is the shaft-speed fraction of rated
+	// above which the shaft-driven lube-oil pump carries the header
+	// alone. Derived.
+	LubeOilShaftDriveFraction = 0.90
+
+	// TurbineTurningGearRpm is the slow-roll speed held by turning
+	// gear. Derived; the spec does not state an rpm.
+	TurbineTurningGearRpm Velocity = 5.0
+
+	// TurbineSpeedRampRate is the pre-breaker speed-demand ramp,
+	// fraction of rated per second. Derived: full range in ~60 s;
+	// controller resolution is "2 rpm".
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:76
+	TurbineSpeedRampRate = 1.0 / 60.0
+
+	// SyncFreqToleranceHz and SyncVoltageTolFraction bound when the
+	// generator breaker may stay closed. Derived: standard
+	// synchronizer check tolerances; the spec does not state numbers.
+	SyncFreqToleranceHz    = 0.1
+	SyncVoltageTolFraction = 0.10
+
+	// SteamDumpDesignFraction is the dump capacity fraction of
+	// design steam flow. The spec's no-trip option quotes "70- to
+	// 85-percent steam dump"; the low end is chosen.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:59-60
+	SteamDumpDesignFraction = 0.70
+
+	// SteamDumpCapacityGalPerStep is the per-step steam volume the
+	// fully-open condenser dump valves pass, at design header
+	// conditions.
+	SteamDumpCapacityGalPerStep = CondenserDesignSteamLoadGalPer * SteamDumpDesignFraction
+
+	// LoadRejectDetectFraction is the setpoint drop over one step
+	// window that qualifies as a sudden load rejection.
+	// "(in excess of 10%)"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:10
+	LoadRejectDetectFraction = 0.10
+
+	// SteamDumpPressureModeMargin is the SG-pressure multiple above
+	// which the dump enters pressure-control mode (startup/cooldown).
+	// Derived; consistent with the pressure-control-mode description.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:24-26
+	SteamDumpPressureModeMargin = 1.05
+
+	// GoverningValveTrimGain is the per-step integral trim of the
+	// governing valve on first-stage-pressure error. Derived so valve
+	// travel completes over ~10 s at full error.
+	GoverningValveTrimGain = 0.02
+
+	// TurbinePowerResponseSeconds (s) is the first-order lag of
+	// mechanical power behind admitted steam energy. Derived.
+	TurbinePowerResponseSeconds = 2.0
+
+	// SteamDumpValveTravelRate is the dump-valve stroke rate,
+	// fraction of full travel per second (derived: full travel in
+	// 0.5 s). The spec describes automatic operation without a
+	// stated stroke time.
+	SteamDumpValveTravelRate = 2.0
+
+	// SteamDumpHoldTime is how long a load-rejection edge holds the
+	// dump valves open before the automatic-reclose logic takes
+	// over. Derived; the spec says dump "is reduced as rapidly as
+	// conditions permit" without a number.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:73-74
+	SteamDumpHoldTime = 60 * time.Second
+
+	// AtmosphericDumpDesignFraction is the atmospheric relief
+	// capacity as a fraction of rated steam flow. Derived at half
+	// the condenser-dump fraction; the spec gives no number.
+	AtmosphericDumpDesignFraction = 0.35
 )
 
 // Station electrical design constants (plans/p13_1.txt).
@@ -870,6 +1092,15 @@ type PowerGenerator struct {
 	// OPC trip, operator manual trip, grid fault, or SCCW-loss
 	// trip (plans/p30_1.txt).
 	BreakerClosed bool
+
+	// GeneratorMVALimitAlarm latches when apparent power exceeds
+	// RatedMVA and the DEHM clamps output back onto the rating
+	// circle.
+	// "It controls valve changes and monitors output power, the power
+	// factor, and speed to ensure that the limits of the generator
+	// are not exceeded."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
+	GeneratorMVALimitAlarm bool
 
 	// GeneratorExcitationSystem embeds the Westinghouse Mark III
 	// brushless-exciter / WTA-300 voltage regulator model

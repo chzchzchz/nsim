@@ -1,6 +1,7 @@
 package core
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -21,8 +22,21 @@ func closedValve() *float64 {
 	return &v
 }
 
+// steamingTurbine returns a zero Turbine with the governing valves
+// wide open and the lube-oil pump in service at design header
+// pressure, matching the MakePlant operating lineup. A turbine
+// without its bearing-oil pump running trips immediately on low
+// lubricating pressure (page_203.txt:87-89, page_206.txt:25).
+func steamingTurbine() Turbine {
+	return Turbine{
+		GoverningValve:      Valve{Open: 1},
+		LubeOilPumpRunning:  true,
+		BearingOilPressure:  BearingOilDesignPressure,
+	}
+}
+
 func TestTurbine_SteamFlowStartsRunning(t *testing.T) {
-	tr := Turbine{}
+	tr := steamingTurbine()
 	for i := 0; i < 100; i++ {
 		tr = tr.Step(1000, 0, false, openValve())
 	}
@@ -32,7 +46,7 @@ func TestTurbine_SteamFlowStartsRunning(t *testing.T) {
 }
 
 func TestTurbine_ShortSteamLossStaysRunning(t *testing.T) {
-	tr := Turbine{}
+	tr := steamingTurbine()
 	for i := 0; i < 1000; i++ {
 		tr = tr.Step(1000, 0, false, openValve())
 	}
@@ -57,7 +71,7 @@ func TestTurbine_ShortSteamLossStaysRunning(t *testing.T) {
 }
 
 func TestTurbine_SustainedSteamLossTrips(t *testing.T) {
-	tr := Turbine{}
+	tr := steamingTurbine()
 	for i := 0; i < 1000; i++ {
 		tr = tr.Step(1000, 0, false, openValve())
 	}
@@ -80,7 +94,7 @@ func TestTurbine_OverspeedTrips(t *testing.T) {
 }
 
 func TestTurbine_TrippedRequiresReset(t *testing.T) {
-	tr := Turbine{}
+	tr := steamingTurbine()
 	// Trip via sustained steam loss.
 	for i := 0; i < 1000; i++ {
 		tr = tr.Step(1000, 0, false, openValve())
@@ -118,7 +132,10 @@ func TestTurbine_TrippedRequiresReset(t *testing.T) {
 //      through the manual valve controllers."
 //   - specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:114-116
 func TestTurbine_ResetRequestRestartsFromTripped(t *testing.T) {
-	tr := Turbine{}
+	// Healthy operating lineup: without the lube-oil pump in service
+	// and open governing valves the machine cannot roll, and the
+	// steam-loss trip under test could not be reached.
+	tr := steamingTurbine()
 	// Trip via sustained steam loss, then let the rotor coast to
 	// rest.
 	for i := 0; i < 1000; i++ {
@@ -162,7 +179,7 @@ func TestTurbine_StopValveClosedBlocksSteam(t *testing.T) {
 // reaches rated speed; closing the stop valve mid-run causes the
 // rotor to coast down and the turbine eventually trips.
 func TestTurbine_StopValveMidRunCoastsDown(t *testing.T) {
-	tr := Turbine{}
+	tr := steamingTurbine()
 	// Reach rated speed.
 	for i := 0; i < 1000; i++ {
 		tr = tr.Step(1000, 0, false, openValve())
@@ -185,7 +202,7 @@ func TestTurbine_StopValveMidRunCoastsDown(t *testing.T) {
 // Nil stopValveOpen pointer preserves the legacy admission path:
 // steam flow is gated only by the upstream pressure differential.
 func TestTurbine_NilStopValveAllowsSteam(t *testing.T) {
-	tr := Turbine{}
+	tr := steamingTurbine()
 	for i := 0; i < 100; i++ {
 		tr = tr.Step(1000, 0, false, nil)
 	}
@@ -203,9 +220,12 @@ func TestTurbine_NilStopValveAllowsSteam(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:31-32
 func TestTurbine_ExtractionOutputAtRatedLoad(t *testing.T) {
 	tr := Turbine{
-		State:     TurbineRunning,
-		Velocity:  TurbineRatedSpeed,
-		RealPower: TurbineRatedkW,
+		State:              TurbineRunning,
+		Velocity:           TurbineRatedSpeed,
+		RealPower:          TurbineRatedkW,
+		GoverningValve:     Valve{Open: 1},
+		LubeOilPumpRunning: true,
+		BearingOilPressure: BearingOilDesignPressure,
 	}
 	open := 1.0
 	for i := 0; i < 1000; i++ {
@@ -310,13 +330,19 @@ func TestTurbine_LoadRunbackDecreasesSetpoint(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:80-82
 func TestTurbine_SetpointClampsRealPower(t *testing.T) {
 	tr := Turbine{
-		State:     TurbineRunning,
-		Velocity:  TurbineRatedSpeed,
-		RealPower: TurbineRatedkW,
-		Setpoint:  0.5,
+		State:              TurbineRunning,
+		Velocity:           TurbineRatedSpeed,
+		RealPower:          TurbineRatedkW,
+		Setpoint:           0.5,
+		GoverningValve:     Valve{Open: 1},
+		LubeOilPumpRunning: true,
+		BearingOilPressure: BearingOilDesignPressure,
+		Synchronized:       true,
 	}
 	open := 1.0
-	tr = tr.Step(SteamGeneratorShellPressure, 0, false, &open)
+	for i := 0; i < 100; i++ {
+		tr = tr.Step(SteamGeneratorShellPressure, 0, false, &open)
+	}
 	assert.LessOrEqual(t, float64(tr.RealPower), 0.5*float64(TurbineRatedkW),
 		"want RealPower ≤ 50%% rated at Setpoint=0.5, got %v", tr.RealPower)
 	assert.Greater(t, float64(tr.RealPower), 0.0,
@@ -357,16 +383,151 @@ func TestPowerGenerator_ReactivePowerMatchesPowerFactor(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
-	p.TurbineBuilding.Generator.BreakerClosed = true
+	synchronizeAndCloseBreaker(&p)
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	stepN(&p, int(5*time.Second/TimeStep))
 	g := p.TurbineBuilding.Generator
 	if float64(g.RealPower) <= 0 {
 		t.Skipf("precondition: turbine did not produce power in 5 s (RealPower=%v)", g.RealPower)
 	}
-	wantFactor := 1.0/g.PowerFactor - 1.0
+	wantFactor := math.Sqrt(1.0/(g.PowerFactor*g.PowerFactor) - 1.0)
 	assert.InDelta(t, wantFactor*float64(g.RealPower), g.ReactivePower,
 		float64(g.RealPower)*0.05,
 		"want ReactivePower ≈ RealPower * (1/PF - 1) = %v, got %v",
 		wantFactor*float64(g.RealPower), g.ReactivePower)
+}
+
+// Turning gear holds the rotor at a slow roll with no steam
+// admission instead of letting it coast to zero.
+func TestTurbine_TurningGearHoldsSlowRoll(t *testing.T) {
+	tr := steamingTurbine()
+	tr.TurningGear = true
+	tr.Velocity = TurbineRatedSpeed
+	for i := 0; i < int(5*time.Second/TimeStep); i++ {
+		tr = tr.Step(0, 0, false, closedValve())
+	}
+	assert.InDelta(t, float64(TurbineTurningGearRpm), float64(tr.Velocity), 0.5,
+		"want turning gear to hold ~%v rpm, got %v",
+		TurbineTurningGearRpm, tr.Velocity)
+}
+
+// With a speed demand raised before breaker closure the DEHM ramps
+// shaft speed toward the demand at TurbineSpeedRampRate instead of
+// free-accelerating on admitted steam.
+//
+// Spec justification:
+//   - "Wide range speed control of the turbine from turning gear to
+//     rated speed. This control is accomplished by increasing the
+//     speed demand (reference) to bring shaft speed to its rated
+//     value at a controlled selectable rate."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-74
+func TestTurbine_SpeedDemandRampsToRated(t *testing.T) {
+	tr := steamingTurbine()
+	tr.SpeedDemand = 1.0
+	for i := 0; i < int(10*time.Second/TimeStep); i++ {
+		tr = tr.Step(SteamGeneratorShellPressure, 0, false, openValve())
+	}
+	assert.GreaterOrEqual(t, float64(tr.Velocity), 250.0,
+		"want rotor ramping toward demand, got %v rpm after 10 s", tr.Velocity)
+	assert.Less(t, float64(tr.Velocity), float64(TurbineRatedSpeed),
+		"want rotor still below rated after 10 s, got %v", tr.Velocity)
+	for i := 0; i < int(60*time.Second/TimeStep); i++ {
+		tr = tr.Step(SteamGeneratorShellPressure, 0, false, openValve())
+	}
+	assert.InDelta(t, float64(TurbineRatedSpeed), float64(tr.Velocity), 60.0,
+		"want rotor at rated speed demand, got %v", tr.Velocity)
+}
+
+// Condenser back-pressure above TurbineLowVacuumTripPsia trips a
+// running turbine and latches the stop valve shut.
+//
+// Spec justification:
+//   - "Low vacuum trip"
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:26
+func TestTurbine_LowVacuumTrips(t *testing.T) {
+	tr := steamingTurbine()
+	tr.State = TurbineRunning
+	tr.Velocity = TurbineRatedSpeed
+	tr = tr.Step(SteamGeneratorShellPressure, Pressure(TurbineLowVacuumTripPsia+1), false, openValve())
+	assert.True(t, tr.TripByVacuum, "want TripByVacuum latched")
+	assert.Equal(t, TurbineTripped, tr.State, "want Tripped on low vacuum")
+	assert.Zero(t, tr.StopValve.Open, "want stop valve shut on low vacuum trip")
+}
+
+// Loss of the lubricating header decays BearingOilPressure and trips
+// a running turbine once it falls below TurbineLowBearingOilTripPsi.
+//
+// Spec justification:
+//   - "Low bearing oil pressure trip"
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:25
+func TestTurbine_LowBearingOilTrips(t *testing.T) {
+	tr := steamingTurbine()
+	tr.State = TurbineRunning
+	tr.Velocity = TurbineRatedSpeed
+	tr.LubeOilPumpRunning = false
+	for i := 0; i < int(6*time.Second/TimeStep); i++ {
+		tr = tr.Step(SteamGeneratorShellPressure, 0, false, openValve())
+		if tr.State == TurbineTripped {
+			break
+		}
+	}
+	assert.Less(t, float64(tr.BearingOilPressure), TurbineLowBearingOilTripPsi,
+		"want header decayed below trip plate, got %v", tr.BearingOilPressure)
+	assert.True(t, tr.TripByBearingOil, "want TripByBearingOil latched")
+	assert.Equal(t, TurbineTripped, tr.State, "want Tripped on low bearing oil")
+}
+
+// Any trip latch shuts the extraction nonreturn valves, cutting
+// extraction steam to the heaters and MSR.
+//
+// Spec justification:
+//   - "Extraction line nonreturn valves."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:83
+func TestTurbine_TripClosesExtractionNRVs(t *testing.T) {
+	tr := steamingTurbine()
+	tr.State = TurbineRunning
+	tr.Velocity = TurbineRatedSpeed
+	tr.Setpoint = 1.0
+	tr.Synchronized = true
+	tr = tr.Step(SteamGeneratorShellPressure, Pressure(TurbineLowVacuumTripPsia+1), false, openValve())
+	assert.True(t, tr.ExtractionNRVClosed, "want NRVs latched closed on trip")
+	assert.Zero(t, tr.ExtractionSteamFlow.Float(), "want extraction flow cut")
+}
+
+// Mechanical power tracks admitted steam energy: half admission
+// converges to half of rated power with no setpoint ceiling.
+func TestTurbine_RealPowerTracksSteamEnergy(t *testing.T) {
+	tr := steamingTurbine()
+	tr.State = TurbineRunning
+	tr.Velocity = TurbineRatedSpeed
+	tr.GoverningValve = Valve{Open: 0.5}
+	tr.Synchronized = true
+	for i := 0; i < int(10*time.Second/TimeStep); i++ {
+		tr = tr.Step(SteamGeneratorShellPressure, 0, false, openValve())
+	}
+	assert.InDelta(t, 0.5*float64(TurbineRatedkW), float64(tr.RealPower),
+		0.1*float64(TurbineRatedkW),
+		"want RealPower ≈ 50%% of rated at half admission, got %v", tr.RealPower)
+}
+
+// A dispatcher load reference ramps the setpoint toward itself at
+// RampRate while running and not in load-runback.
+//
+// Spec justification:
+//   - "reference values established by the dispatcher"
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
+func TestTurbine_LoadDemandRefRampsSetpoint(t *testing.T) {
+	tr := steamingTurbine()
+	tr.State = TurbineRunning
+	tr.Velocity = TurbineRatedSpeed
+	tr.Setpoint = 0.5
+	tr.RampRate = 0.05
+	tr.LoadDemandRef = 0.7
+	tr.GridFrequency = GridRatedFrequency
+	tr.Synchronized = true
+	for i := 0; i < int(10*time.Second/TimeStep); i++ {
+		tr = tr.Step(SteamGeneratorShellPressure, 0, false, openValve())
+	}
+	assert.InDelta(t, 0.7, tr.Setpoint, 0.01,
+		"want Setpoint ramped to dispatcher reference 0.7, got %v", tr.Setpoint)
 }

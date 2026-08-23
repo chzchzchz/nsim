@@ -180,10 +180,6 @@ const AtmosphericPressure Pressure = 14.7
 //     SteamGeneratorFullLoadSteamFlow × 4 loops / steps-per-second.
 //     The per-SG spec value is 3,813,000 lb/hr (480 kg/s).
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:49-56
-//   - SteamDumpOpenThreshold — condenser pressure above which the
-//     dump valves open automatically to relieve inertial heat. Not
-//     stated in the spec; sized above design vacuum but well below
-//     atmospheric.
 //   - StopValveCloseDelay — hydraulic time for the auto-stop-oil
 //     system to dump fluid pressure and close all stop valves
 //     after a trip signal. The spec describes mechanical-hydraulic
@@ -201,7 +197,6 @@ const (
 	CondenserCWRise                  float64  = 15
 	CondenserDesignCWFlowGPM         float64  = 20000
 	CondenserDesignSteamLoadGalPer   float64  = 100
-	SteamDumpOpenThreshold           Pressure = 5.0
 	StopValveCloseDelay                       = 50 * time.Millisecond
 	CondenserVacuumTimeConstant      float64  = 2.0
 	CondenserNoCWDegradeTimeConstant float64  = 5.0

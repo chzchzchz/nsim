@@ -45,25 +45,46 @@ func TestCondenser_NoCWDegradesToAtmospheric(t *testing.T) {
 		"want pressure below 1.5× atmospheric, got %v", c.Pressure)
 }
 
-// With a sustained steam dump into the condenser, the pressure
-// rises above SteamDumpOpenThreshold and the turbine's DumpValve
-// opens.
-func TestCondenser_HighSteamLoadOpensDumpValve(t *testing.T) {
+// The steam-dump controller opens the dump valves on a turbine trip
+// and recloses them automatically once steam is readmitted to the
+// turbine.
+//
+// Spec justification:
+//   - "These valves open under a sudden reduction in turbine-
+//     generator load (in excess of 10%) or a turbine trip."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:9-11
+//   - "The dump valves close automatically as steam is admitted to
+//     the turbine."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:32-33
+func TestCondenser_TripOpensDumpValveAndReclosesOnAdmission(t *testing.T) {
 	tb := TurbineBuilding{
 		Condenser: Condenser{
 			Pressure:           CondenserDesignVacuum,
 			VacuumPumpRunning:  true,
 			CirculatingWaterIn: Temperature{Val: CondenserDesignCWIn, Unit: u.Fahrenheit},
-			CondensingRate:     Volume{Val: CondenserDesignSteamLoadGalPer*2, Unit: u.Gallon},
 		},
-		Turbine: Turbine{StopValve: Valve{Open: 1.0}, DumpValve: Valve{Open: 0}},
+		Turbine: Turbine{
+			State:              TurbineTripped,
+			GoverningValve:     Valve{Open: 1},
+			LubeOilPumpRunning: true,
+			BearingOilPressure: BearingOilDesignPressure,
+		},
 	}
-	for i := 0; i < int(5*time.Second/TimeStep); i++ {
+	for i := 0; i < int(2*time.Second/TimeStep); i++ {
 		tb = tb.StepWithSteam(SteamGeneratorShellPressure, true)
 	}
-	assert.Greater(t, tb.Condenser.Pressure, SteamDumpOpenThreshold,
-		"want condenser pressure above dump threshold, got %v", tb.Condenser.Pressure)
-	assert.NotZero(t, tb.Turbine.DumpValve.Open, "want DumpValve open")
+	assert.Greater(t, tb.Turbine.DumpValve.Open, 0.9,
+		"want DumpValve opened by the trip, got %v", tb.Turbine.DumpValve.Open)
+
+	// Readmit steam: the dump valves ramp closed again.
+	tb.Turbine.State = TurbineRunning
+	tb.Turbine.StopValve.Open = 1.0
+	for i := 0; i < int(2*time.Second/TimeStep); i++ {
+		tb = tb.StepWithSteam(SteamGeneratorShellPressure, true)
+	}
+	assert.Zero(t, tb.Turbine.DumpValve.Open,
+		"want DumpValve closed once steam is admitted, got %v",
+		tb.Turbine.DumpValve.Open)
 }
 
 // Each step accumulates the previous step's CondensingRate into

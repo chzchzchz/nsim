@@ -17,7 +17,7 @@ func TestSteamGenerator_FullHeatInputRaisesPressure(t *testing.T) {
 		HeatInput: SteamGeneratorFullLoadHeatInput,
 	}
 	for i := 0; i < int(time.Second/TimeStep); i++ {
-		sg = sg.Step()
+		sg = sg.Step(0)
 	}
 	assert.Positive(t, sg.Pressure, "Pressure should rise with HeatInput")
 	assert.LessOrEqual(t, sg.Pressure, SteamGeneratorShellPressure,
@@ -32,7 +32,7 @@ func TestSteamGenerator_NoHeatInputNoSteam(t *testing.T) {
 		Water:  Volume{Val: 1000, Unit: u.Gallon},
 	}
 	for i := 0; i < int(time.Second/TimeStep); i++ {
-		sg = sg.Step()
+		sg = sg.Step(0)
 	}
 	assert.Zero(t, sg.Pressure, "Pressure should stay at 0 with no HeatInput")
 }
@@ -47,7 +47,7 @@ func TestSteamGenerator_WaterDepletionDecaysPressure(t *testing.T) {
 		HeatInput: SteamGeneratorFullLoadHeatInput,
 	}
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		sg = sg.Step()
+		sg = sg.Step(0)
 	}
 	assert.Zero(t, sg.Water.Float(), "Water should be fully depleted")
 	assert.Less(t, sg.Pressure, SteamGeneratorShellPressure,
@@ -63,7 +63,7 @@ func TestSteamGenerator_PressureClampedAtDesign(t *testing.T) {
 		HeatInput: SteamGeneratorFullLoadHeatInput,
 	}
 	for i := 0; i < 1000; i++ {
-		sg = sg.Step()
+		sg = sg.Step(0)
 	}
 	assert.LessOrEqual(t, sg.Pressure, SteamGeneratorShellDesignPressure,
 		"Pressure should be clamped at %v, got %v", SteamGeneratorShellDesignPressure, sg.Pressure)

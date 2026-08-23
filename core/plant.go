@@ -3,11 +3,12 @@ package core
 import (
 	"encoding/json"
 	"io"
+	"math"
 
 	u "github.com/bcicen/go-units"
 )
 
-func (r *ReactorBuilding) Step() ReactorBuilding {
+func (r *ReactorBuilding) Step(sgSteamOutflowFraction float64) ReactorBuilding {
 	ret := *r
 	dt := TimeStep
 	ret.Pressurizer = ret.Pressurizer.Step(&ret.PORV)
@@ -243,7 +244,7 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 			float64(rpv.TotalThermalPower()) / float64(SteamGeneratorLoopCount),
 		)
 	}
-	ret.SteamGenerator = ret.SteamGenerator.Step()
+	ret.SteamGenerator = ret.SteamGenerator.Step(sgSteamOutflowFraction)
 
 	// SIS: passive accumulator discharge and HHSI pump
 	// injection. The accumulator discharges into the RCS cold
@@ -365,12 +366,14 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 	ret.Condenser = c
 
 	stopOpen := ret.Turbine.StopValve.Open
+	prevSetpoint := ret.Turbine.LastSetpoint
 	ret.Turbine = ret.Turbine.Step(
 		sgPressure,
 		c.Pressure,
 		false,
 		&stopOpen,
 	)
+	ret.Turbine.LastSetpoint = ret.Turbine.Setpoint
 
 	// Generator excitation system. The brushless exciter is
 	// shaft-driven: it can only produce field current when
@@ -430,36 +433,30 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 		ret.Generator.BreakerClosed = false
 	}
 
-	// Generator terminal state. Voltage and frequency track rated
-	// values whenever the breaker is closed and the rotor is at
-	// speed; otherwise they decay to zero (the generator has no
-	// excitation or grid back-feed when off-line).
+	// Generator terminal state. Terminal frequency tracks shaft
+	// speed and terminal voltage builds under the regulator whenever
+	// the rotor spins with the exciter active. The breaker gates
+	// real/reactive power export, not the presence of terminal
+	// voltage: a spinning generator with field applied is live.
 	//
 	// Spec: "Output voltage: 24,000 to 26,000 volts, three-phase,
 	// 60 Hz"
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21
 	// "Speed: 1800 rpm"
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:22
-	rated := ret.Turbine.State == TurbineRunning &&
-		float64(ret.Turbine.Velocity) >= float64(TurbineRatedSpeed)*0.99
-	if ret.Generator.BreakerClosed && rated && ret.Generator.ExciterActive {
-		ret.Generator.Voltage = GeneratorRatedVoltage
-		ret.Generator.Frequency = GeneratorRatedFrequency
-	} else if ret.Generator.BreakerClosed && ret.Generator.ExciterActive {
-		// Rotor spinning up: terminal voltage builds
-		// toward rated at the regulator's forcing rate.
-		// "The high-frequency permanent magnet generator
-		// provides power to the automatic voltage
-		// regulator which regulates and controls the
-		// output of the exciter."
-		// specs/the_westinghouse_pressurized_water_react/chapter_15/page_212.txt:27-30
+	spinFrac := float64(0)
+	if TurbineRatedSpeed > 0 {
+		spinFrac = float64(ret.Turbine.Velocity) / float64(TurbineRatedSpeed)
+	}
+	spinFrac = min(max(spinFrac, 0), 1)
+	if spinFrac >= 0.01 && ret.Generator.ExciterActive {
+		ret.Generator.Frequency = spinFrac * GridRatedFrequency
 		voltageTarget := GeneratorRatedVoltage
-		ret.Generator.Voltage += (voltageTarget - ret.Generator.Voltage) *
+		ret.Generator.Voltage += (voltageTarget-ret.Generator.Voltage)*
 			GeneratorExciterFieldForcingFraction
 		if ret.Generator.Voltage > GeneratorRatedVoltage*0.99 {
 			ret.Generator.Voltage = GeneratorRatedVoltage
 		}
-		ret.Generator.Frequency = 0
 	} else {
 		ret.Generator.Voltage = 0
 		ret.Generator.Frequency = 0
@@ -475,13 +472,15 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 	// "Power factor: 0.9, short circuit ratio: 0.58"
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:19
 	if ret.Generator.BreakerClosed && ret.Turbine.RealPower > 0 {
-		ret.Generator.RealPower = ret.Turbine.RealPower
+		gross := float64(ret.Turbine.RealPower)
 		pf := ret.Generator.PowerFactor
 		if pf <= 0 {
 			pf = GeneratorPowerFactor
 		}
-		ret.Generator.ReactivePower =
-			float64(ret.Turbine.RealPower) * (1.0/pf - 1.0)
+		q := gross * math.Sqrt(1.0/(pf*pf)-1.0)
+		gross, q = clampMVA(&ret.Generator, gross, q)
+		ret.Generator.RealPower = Watts(gross)
+		ret.Generator.ReactivePower = q
 	} else {
 		ret.Generator.RealPower = 0
 		ret.Generator.ReactivePower = 0
@@ -497,30 +496,71 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 		ret.Generator.BreakerClosed = false
 	}
 
-	// Steam dump: open when condenser pressure is above the
-	// threshold. The dump valve provides a relief path for
-	// inertial heat from the SG when the turbine cannot accept
-	// steam (trip or low load).
-	// "Condenser steam dump valves" (item 8 of the protective
-	// features list) — these open automatically on load reduction.
-	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:62
-	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:5-11
-	if c.Pressure > SteamDumpOpenThreshold {
-		ret.Turbine.DumpValve.Open = 1.0
-	} else {
-		ret.Turbine.DumpValve.Open = 0.0
+	// Steam dump controller. The dump valves open on a sudden load
+	// rejection (in excess of 10%), a turbine trip, or pressure-mode
+	// operation during startup/cooldown; they reclose automatically as
+	// steam is readmitted to the turbine and pressure falls.
+	//
+	// Spec: "These valves open under a sudden reduction in turbine-
+	// generator load (in excess of 10%) or a turbine trip."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:9-11
+	// "These valves are also utilized in the pressure control mode
+	// during plant startup and plant cooldown."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:24-25
+	// "The dump valves close automatically as steam is admitted to
+	// the turbine."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:32-33
+	tripped := ret.Turbine.State == TurbineTripped
+	dt := TimeStep
+	loadReject := prevSetpoint-ret.Turbine.Setpoint >= LoadRejectDetectFraction
+	pressureMode := sgPressure > Pressure(SteamDumpPressureModeMargin*float64(SteamGeneratorShellPressure))
+	if loadReject {
+		ret.Turbine.DumpHoldTimer = SteamDumpHoldTime
+	} else if ret.Turbine.DumpHoldTimer > 0 {
+		ret.Turbine.DumpHoldTimer -= dt
+	}
+	// A turbine trip holds the valves open by state alone, so they
+	// close automatically as soon as steam is readmitted to the
+	// restarted turbine; a load rejection holds them for a fixed
+	// ride-through window instead.
+	wantDump := tripped || pressureMode || ret.Turbine.DumpHoldTimer > 0
+	target := 0.0
+	if wantDump {
+		target = 1.0
+	}
+	travel := SteamDumpValveTravelRate * dt.Seconds()
+	switch {
+	case ret.Turbine.DumpValve.Open < target:
+		ret.Turbine.DumpValve.Open = min(ret.Turbine.DumpValve.Open+travel, target)
+	case ret.Turbine.DumpValve.Open > target:
+		ret.Turbine.DumpValve.Open = max(ret.Turbine.DumpValve.Open-travel, target)
 	}
 
-	// CondensingRate: pass the turbine's exhaust mass flow back
-	// into the condenser so its level/pressure step can react.
-	// The condensing rate tracks the turbine's mechanical output
-	// regardless of breaker state — the condenser sees exhaust
-	// steam whether or not the unit is exporting to the grid.
+	// CondensingRate: the condenser sees the turbine exhaust plus
+	// whatever the dump valves route into it. The SG-side draw
+	// (exhaust + dump) is exported so Plant.Step can debit the
+	// steam generator inventory and header pressure.
+	// "The main condenser condenses the exhaust from the main
+	// turbines [...] There is also sufficient surface to condense
+	// steam from the steam dump system with an acceptable increase
+	// in turbine back pressure."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:14-19
+	condenseGalPerStep := 0.0
+	turbineFrac := 0.0
 	if ret.Turbine.State == TurbineRunning {
-		ret.Condenser.CondensingRate = Volume{Val: steamMassFromPower(ret.Turbine.RealPower), Unit: u.Gallon}
-	} else {
-		ret.Condenser.CondensingRate = Volume{Val: 0, Unit: u.Gallon}
+		condenseGalPerStep = ret.Turbine.SteamDemandGalPerStep()
+		if CondenserDesignSteamLoadGalPer > 0 {
+			turbineFrac = condenseGalPerStep / CondenserDesignSteamLoadGalPer
+		}
 	}
+	// Dump delivery scales with available header pressure: an open
+	// dump valve cannot pass design steam against a depressurised SG.
+	pressureRatio := min(max(float64(sgPressure)/float64(SteamGeneratorShellPressure), 0), 1)
+	dumpedGalPerStep := ret.Turbine.DumpValve.Open * SteamDumpCapacityGalPerStep *
+		pressureRatio
+	dumpFrac := ret.Turbine.DumpValve.Open * SteamDumpDesignFraction * pressureRatio
+	ret.Condenser.CondensingRate = Volume{Val: condenseGalPerStep + dumpedGalPerStep, Unit: u.Gallon}
+	ret.SteamOfftakeFraction = turbineFrac + dumpFrac
 
 	// Feedwater heater train: four LP stages between the
 	// condenser hotwell and the deaerator, then two HP stages on
@@ -640,18 +680,31 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 	return ret
 }
 
-// steamMassFromPower converts electrical RealPower into per-step
-// steam mass condensed at the condenser. Sized for a 1000 MWe
-// turbine exhausting roughly 480 kg/s of steam per SG × 4 SGs at
-// full load; we ignore feedwater-heater extractions and treat the
-// mass flow as proportional to RealPower / TurbineRatedkW.
-func steamMassFromPower(p Watts) float64 {
-	if TurbineRatedkW <= 0 {
-		return 0
+// generatorReactive returns reactive power for real power p at power
+// factor pf: Q = P*tan(acos(pf)). At the design pf of 0.9 that is
+// 0.484*p.
+// "Power factor: 0.9, short circuit ratio: 0.58"
+// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:19
+func generatorReactive(p float64, pf float64) float64 {
+	return p * math.Sqrt(1.0/(pf*pf)-1.0)
+}
+
+// clampMVA scales apparent power back onto the generator rating
+// circle and raises GeneratorMVALimitAlarm when clamping engages.
+// "It controls valve changes and monitors output power, the power
+// factor, and speed to ensure that the limits of the generator are
+// not exceeded."
+// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
+func clampMVA(gen *PowerGenerator, realWatts, reactiveVars float64) (float64, float64) {
+	s := math.Hypot(realWatts, reactiveVars)
+	limitW := GeneratorRatedMVA * 1000.0 // kVA rating expressed in watts
+	if s > limitW && s > 0 {
+		scale := limitW / s
+		gen.GeneratorMVALimitAlarm = true
+		return realWatts*scale, reactiveVars*scale
 	}
-	frac := float64(p) / float64(TurbineRatedkW)
-	frac = min(max(frac, 0), 1)
-	return frac * CondenserDesignSteamLoadGalPer
+	gen.GeneratorMVALimitAlarm = false
+	return realWatts, reactiveVars
 }
 
 // Plant represents all state relevant to the facility.
@@ -745,7 +798,9 @@ func (p *Plant) Step() {
 	p.nextPlant.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.DriveReady =
 		p.nextPlant.Electrical.ESFBusB.Energized
 
-	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step()
+	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step(
+		p.TurbineBuilding.SteamOfftakeFraction,
+	)
 	// Latch the RCP DriveReady after the ReactorBuilding step so
 	// the assignment above (which copies the prior state) cannot
 	// clobber it. The bridge sensor then reflects the actual
@@ -1233,6 +1288,9 @@ func (p *Plant) Step() {
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
 	p.nextPlant.ReactorBuilding.Grid = p.ReactorBuilding.Grid.Step()
 	p.TurbineBuilding.Turbine.GridFrequency = p.nextPlant.ReactorBuilding.Grid.Frequency
+	p.TurbineBuilding.Turbine.LoadDemandRef = p.nextPlant.ReactorBuilding.Grid.LoadDemand
+	p.TurbineBuilding.Turbine.Synchronized =
+		p.nextPlant.TurbineBuilding.Generator.BreakerClosed
 
 	cwPumpRunning := p.Outside.CirculatingWaterPump.Running
 	// Condenser flow is gated on both the operator latch
@@ -1434,13 +1492,32 @@ func (p *Plant) Step() {
 		gross := float64(p.nextPlant.TurbineBuilding.Turbine.RealPower)
 		net := gross - p.nextPlant.ReactorBuilding.HouseLoad.TotalMW
 		net = max(net, 0)
-		p.nextPlant.TurbineBuilding.Generator.RealPower = Watts(net)
 		pf := p.nextPlant.TurbineBuilding.Generator.PowerFactor
 		if pf <= 0 {
 			pf = GeneratorPowerFactor
 		}
-		p.nextPlant.TurbineBuilding.Generator.ReactivePower =
-			net * (1.0/pf - 1.0)
+		q := generatorReactive(net, pf)
+		net, q = clampMVA(&p.nextPlant.TurbineBuilding.Generator, net, q)
+		p.nextPlant.TurbineBuilding.Generator.RealPower = Watts(net)
+		p.nextPlant.TurbineBuilding.Generator.ReactivePower = q
+	}
+
+	// Synchronism check: the generator breaker may stay closed only
+	// while terminal frequency and voltage match the grid within
+	// tolerance. An out-of-step close (or a grid disturbance that
+	// pulls the unit out of tolerance) pops the breaker.
+	//
+	// Spec: DEHM supports "automatic synchronizers" as remote
+	// equipment.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:90-92
+	gen := &p.nextPlant.TurbineBuilding.Generator
+	gridRef := p.nextPlant.ReactorBuilding.Grid
+	if gen.BreakerClosed {
+		inSync := math.Abs(gen.Frequency-gridRef.Frequency) <= SyncFreqToleranceHz &&
+			math.Abs(gen.Voltage-gridRef.Voltage) <= SyncVoltageTolFraction*gridRef.Voltage
+		if !inSync {
+			gen.BreakerClosed = false
+		}
 	}
 
 	// Cross-building DriveReady wiring for the AFW pumps. The fluid
@@ -1740,6 +1817,15 @@ func MakePlant() Plant {
 	// (5% per minute, ≈0.000833/s) at construction time.
 	p.TurbineBuilding.Turbine.Setpoint = 0
 	p.TurbineBuilding.Turbine.RampRate = TurbineLoadRunbackRate
+
+	// Governing valves default wide open so admission follows the
+	// stop valve until the DEHM trim takes over at a nonzero
+	// reference. The lube-oil pump runs and the header sits at
+	// design pressure, matching the pre-startup lineup where the
+	// bearing oil pump is verified before rolling the turbine.
+	p.TurbineBuilding.Turbine.GoverningValve.Open = 1
+	p.TurbineBuilding.Turbine.LubeOilPumpRunning = true
+	p.TurbineBuilding.Turbine.BearingOilPressure = BearingOilDesignPressure
 
 	// Grid interface defaults (plans/p13_1.txt). At construction
 	// the off-site grid is available (SAT can be energised),

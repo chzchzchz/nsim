@@ -83,6 +83,11 @@ const (
 	SteamGeneratorShellPressure       Pressure = 920
 	SteamGeneratorShellDesignPressure Pressure = 1000
 	LatentHeatOfSteamization          Watts    = 2.26e6
+
+	// SteamGallonWaterM3 is the liquid-water volume (m^3) the SG
+	// inventory loses per gallon of steam drawn off, matching the
+	// ~1 kg/L convention used by the boil-rate integration.
+	SteamGallonWaterM3 = 3.785 / 1000.0
 )
 // SteamGeneratorFullLoadSteamFlow is the per-SG steam flow at rated
 // load, sized for 480 kg/s of saturated steam at 920 psia. The spec
@@ -103,8 +108,10 @@ var SteamGeneratorFullLoadSteamFlow = Volume{Val: 480*2.2046*3600*0.47/7.4805, U
 var SteamGeneratorFullLoadHeatInput Watts = Watts(480 * float64(LatentHeatOfSteamization))
 
 // Step advances the steam generator by TimeStep. It implements the
-// shell-side heat-transfer / boil-off step described in
-// plans/p6_1.txt.
+// shell-side heat-transfer / boil-off step described in plans/p6_1.txt,
+// the steam offtake drawn by turbine admission and the condenser dump
+// (passed in as a fraction of rated steam flow), and the atmospheric
+// dump read from this struct's own valves.
 //
 // Spec justification:
 //   - "Pressurized water reactors utilize a closed-cycle system
@@ -115,29 +122,48 @@ var SteamGeneratorFullLoadHeatInput Watts = Watts(480 * float64(LatentHeatOfStea
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
 //   - "Full load pressure, shell side: 920 psia (63 bar)" (Table 3.4-1)
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_066.txt:36,80-82
-func (s *SteamGenerator) Step() SteamGenerator {
+//   - Inertial heat leaves through the dump valves when turbine demand
+//     falls short of production:
+//     "This heat is rejected to the condenser through the steam dump
+//     valves and to the atmosphere for the initial phase of large load
+//     reductions."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:6-8
+func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 	ret := *s
 	dt := TimeStep
 
-	// 1) Boil rate. HeatInput (Watts) -> mass rate via latent heat
-	// of vaporisation; the result is then applied as a volume
-	// decrement on the shell-side water inventory. With HeatInput
-	// == 0 the SG does not generate steam on its own; the fluid
-	// graph (see simulateFluidFlow) is then the only thing that
-	// mutates Water.
+	// Rated boil-off capacity in liquid-equivalent m^3/s, the design
+	// reference the offtake fraction is measured against. At rated
+	// heat input this vaporises 480 kg/s of water.
+	ratedBoilM3PerSec := float64(SteamGeneratorFullLoadHeatInput) /
+		float64(LatentHeatOfSteamization) / 1000.0
+
+	boilRateM3PerSec := 0.0
 	if ret.HeatInput > 0 {
 		boilRateGPerSec := float64(ret.HeatInput) / float64(LatentHeatOfSteamization)
-		boilVolume := boilRateGPerSec / 1000.0 // kg/s -> m^3/s assuming ~1 kg/L water
-		newWater := ret.Water.Float() - boilVolume*dt.Seconds()
-		newWater = min(max(newWater, 0), ret.Volume.Float())
-		ret.Water = vol(ret.Water, newWater)
+		boilRateM3PerSec = boilRateGPerSec / 1000.0 // kg/s -> m^3/s at ~1 kg/L
 	}
 
-	// 1b) Atmospheric dump debit. Dumping to atmosphere spends
-	// secondary inventory; only the condenser dump returns it
-	// ("During plant cooldown, steam is dumped to the condensers
-	// [...] rather than to atmosphere through the atmospheric dump
-	// valves. This conserves condensate in the system.",
+	// Steam offtake drawn from the shell side this step (turbine
+	// admission + condenser dump), referenced to rated full-load
+	// steam flow and converted to the same liquid-equivalent volume
+	// convention as the boil-off. The atmospheric valves are read
+	// below because they live on this struct.
+	offtakeM3 := steamOutflowFraction * ratedBoilM3PerSec * dt.Seconds()
+
+	// Mass balance: boil-off production minus steam offtake.
+	newWater := ret.Water.Float() - offtakeM3
+	if ret.HeatInput > 0 {
+		newWater -= boilRateM3PerSec * dt.Seconds()
+	}
+	newWater = min(max(newWater, 0), ret.Volume.Float())
+	ret.Water = vol(ret.Water, newWater)
+
+	// Atmospheric dump debit. Dumping to atmosphere spends secondary
+	// inventory; only the condenser dump returns it ("During plant
+	// cooldown, steam is dumped to the condensers [...] rather than to
+	// atmosphere through the atmospheric dump valves. This conserves
+	// condensate in the system.",
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:33-37).
 	// "ASME Code safety valves and power operated relief and
 	// atmospheric dump valves are located on each steam line
@@ -152,19 +178,24 @@ func (s *SteamGenerator) Step() SteamGenerator {
 	}
 
 	// 2) Pressure response. While HeatInput > 0 and there is water
-	// to boil, Pressure relaxes toward SteamGeneratorShellPressure
-	// at a rate proportional to the gap. With no HeatInput there
-	// is no steam generation and Pressure stays where it is. With
-	// Water depleted and HeatInput still > 0, Pressure decays
-	// toward zero (no more steam to keep it up).
+	// to boil, Pressure relaxes toward the shell pressure scaled by
+	// how much of the boil-off capacity is left after the offtake:
+	// drawing faster than the SG can raise steam sags the header
+	// pressure. With no HeatInput there is no steam generation and
+	// Pressure decays toward zero.
 	pressure := float64(ret.Pressure)
-	if ret.HeatInput > 0 {
-		if ret.Water.Float() > 0 {
-			gap := float64(SteamGeneratorShellPressure) - pressure
-			pressure += gap * dt.Seconds() // relax on ~1 s timescale
-		} else if pressure > 0 {
-			pressure -= pressure * dt.Seconds() // decay toward zero
+	if ret.HeatInput > 0 && ret.Water.Float() > 0 {
+		ratio := 1.0
+		if steamOutflowFraction > 1.0 {
+			ratio = 1.0 / steamOutflowFraction
 		}
+		target := float64(SteamGeneratorShellPressure) * ratio
+		gap := target - pressure
+		pressure += gap * dt.Seconds()
+	} else if ret.HeatInput > 0 && pressure > 0 {
+		// Water depleted while still boiling: no more steam to
+		// keep the header up.
+		pressure -= pressure * dt.Seconds()
 	}
 	pressure = max(pressure, 0)
 

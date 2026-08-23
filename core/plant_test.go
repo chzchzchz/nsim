@@ -1,6 +1,7 @@
 package core
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -105,6 +106,31 @@ func TestPlant_HeaterTrainRaisesFeedwaterTemperature(t *testing.T) {
 	assert.GreaterOrEqual(t, rise, 0.0, "want non-negative HP heater rise, got %v", rise)
 }
 
+// synchronizeAndCloseBreaker brings the turbine to rated speed with
+// the breaker open, then closes the breaker once terminal voltage and
+// frequency are inside the synchronism window. This is the spec's
+// startup order: DEHM speed control to rated, synchronizer check,
+// breaker close (page_201.txt:70-92). Plant.Step's synchronism check
+// would immediately clear a close onto an out-of-step machine.
+func synchronizeAndCloseBreaker(p *Plant) {
+	p.TurbineBuilding.Generator.BreakerClosed = false
+	for i := 0; i < int(30*time.Second/TimeStep); i++ {
+		p.Step()
+		p.Update()
+		g := p.TurbineBuilding.Generator
+		fOK := g.Frequency >= GridRatedFrequency-SyncFreqToleranceHz
+		dV := g.Voltage - p.ReactorBuilding.Grid.Voltage
+		if dV < 0 {
+			dV = -dV
+		}
+		vOK := dV <= SyncVoltageTolFraction*p.ReactorBuilding.Grid.Voltage
+		if fOK && vOK {
+			break
+		}
+	}
+	p.TurbineBuilding.Generator.BreakerClosed = true
+}
+
 // When the reactor trips, the breaker must open so the unit stops
 // exporting power to the grid. Plant.Step cascades the trip
 // through the protective-layer wiring.
@@ -121,8 +147,8 @@ func TestPlant_ReactorTripOpensBreaker(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
-	p.TurbineBuilding.Generator.BreakerClosed = true
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	synchronizeAndCloseBreaker(&p)
 	stepN(&p, int(2*time.Second/TimeStep))
 	require.True(t, p.TurbineBuilding.Generator.BreakerClosed,
 		"precondition: want BreakerClosed before trip, got false")
@@ -168,8 +194,8 @@ func TestPlant_BreakerCloseEnergizesUATAndSubtractsHouseLoad(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
-	p.TurbineBuilding.Generator.BreakerClosed = true
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	synchronizeAndCloseBreaker(&p)
 	stepN(&p, int(5*time.Second/TimeStep))
 	require.True(t, p.TurbineBuilding.Generator.BreakerClosed,
 		"precondition: want BreakerClosed, got false")
@@ -205,8 +231,8 @@ func TestPlant_ReactorTripTransfersHouseLoadToSAT(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
-	p.TurbineBuilding.Generator.BreakerClosed = true
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	synchronizeAndCloseBreaker(&p)
 	stepN(&p, int(2*time.Second/TimeStep))
 	require.Equal(t, "UAT",
 		p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom,
@@ -459,4 +485,121 @@ func TestPlant_StepPropagatesPlantOperation(t *testing.T) {
 		"want Mode=ColdShutdown after step")
 	assert.True(t, p.PlantOperation.AuxFeedwaterInUse,
 		"want AuxFeedwaterInUse=true in ColdShutdown")
+}
+
+// The synchronism check pops the breaker when it is closed onto an
+// out-of-step machine: with the rotor stationary the terminal
+// frequency and voltage are far outside the sync window, so
+// Plant.Step clears BreakerClosed on the next step.
+//
+// Spec justification:
+//   - DEHM supports "automatic synchronizers" as remote equipment.
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:90-92
+func TestPlant_BreakerCloseRequiresSyncTolerance(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
+	p.TurbineBuilding.Generator.BreakerClosed = true
+	stepN(&p, int(time.Second/TimeStep))
+	assert.False(t, p.TurbineBuilding.Generator.BreakerClosed,
+		"want breaker popped when closed out of synchronism")
+}
+
+// A sudden setpoint drop larger than 10% is a load rejection: the
+// dump valves open, the condenser sees the dumped steam, and the SG
+// header sags because total draw exceeds boil-off capacity.
+//
+// Spec justification:
+//   - "These valves open under a sudden reduction in turbine-
+//     generator load (in excess of 10%) or a turbine trip."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:9-11
+//   - "This heat is rejected to the condenser through the steam dump
+//     valves"
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:6-7
+func TestPlant_LoadRejectOpensDumpAndRoutesSteam(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
+	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	synchronizeAndCloseBreaker(&p)
+	stepN(&p, int(5*time.Second/TimeStep))
+	require.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State,
+		"precondition: want turbine running")
+
+	p.TurbineBuilding.Turbine.Setpoint = 0.5
+	stepN(&p, int(2*time.Second/TimeStep))
+	assert.Greater(t, p.TurbineBuilding.Turbine.DumpValve.Open, 0.9,
+		"want dump valves opened by load rejection, got %v",
+		p.TurbineBuilding.Turbine.DumpValve.Open)
+	assert.Greater(t, p.TurbineBuilding.Condenser.CondensingRate.Float(), 0.0,
+		"want condenser receiving dumped steam")
+	assert.Greater(t, p.TurbineBuilding.SteamOfftakeFraction, 1.0,
+		"want SG offtake above boil-off capacity during dump, got %v",
+		p.TurbineBuilding.SteamOfftakeFraction)
+	assert.Less(t, float64(p.ReactorBuilding.SteamGenerator.Pressure),
+		0.95*float64(SteamGeneratorShellPressure),
+		"want SG header pressure sagging under dump load, got %v",
+		p.ReactorBuilding.SteamGenerator.Pressure)
+}
+
+// The atmospheric dump valve relieves SG inventory and pressure
+// directly to atmosphere without adding condensate to the condenser.
+//
+// Spec justification:
+//   - "ASME Code safety valves and power operated relief and
+//     atmospheric dump valves are located on each steam line
+//     upstream of the stop valves."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+//   - "During plant cooldown, steam is dumped to the condensers to
+//     provide a heat sink rather than to atmosphere through the
+//     atmospheric dump valves."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:33-36
+func TestPlant_AtmosphericDumpRelievesSGOnly(t *testing.T) {
+	run := func(atmOpen float64) (Pressure, Volume) {
+		p := MakePlant()
+		p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
+		p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
+		p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open = atmOpen
+		stepN(&p, int(5*time.Second/TimeStep))
+		return p.ReactorBuilding.SteamGenerator.Pressure,
+			p.TurbineBuilding.Condenser.CondensingRate
+	}
+	pClosed, cClosed := run(0)
+	pOpen, cOpen := run(1)
+	assert.Less(t, float64(pOpen), float64(pClosed),
+		"want atmospheric relief to sag SG header pressure, open=%v closed=%v",
+		pOpen, pClosed)
+	// Exhaust to the condenser tracks turbine admission only; with
+	// the header sagging the condenser sees no extra steam, whereas
+	// a condenser dump would push its rate up.
+	assert.LessOrEqual(t, cOpen.Float(), cClosed.Float(),
+		"want atmospheric relief not to add condenser duty, open=%v closed=%v",
+		cOpen.Float(), cClosed.Float())
+}
+
+// Apparent power above the 1370 MVA rating is scaled back onto the
+// rating circle and raises the MVA-limit alarm.
+//
+// Spec justification:
+//   - "Rating: 1370 mva"
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:18
+//   - "output power, the power factor, and speed to ensure that the
+//     limits of the generator are not exceeded."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
+func TestPowerGenerator_MVAEnforced(t *testing.T) {
+	gen := PowerGenerator{RatedMVA: GeneratorRatedMVA}
+	p := 1.5e9
+	q := 0.7e9
+	p2, q2 := clampMVA(&gen, p, q)
+	s := math.Hypot(p2, q2)
+	assert.LessOrEqual(t, s, GeneratorRatedMVA*1000.0*1.0001,
+		"want apparent power clamped onto the rating circle, got %v VA", s)
+	assert.True(t, gen.GeneratorMVALimitAlarm, "want MVA-limit alarm raised")
+
+	gen2 := PowerGenerator{RatedMVA: GeneratorRatedMVA}
+	p3, q3 := clampMVA(&gen2, 1.0e9, 0.4843e9)
+	assert.InDelta(t, 1.0e9, p3, 1.0)
+	assert.False(t, gen2.GeneratorMVALimitAlarm,
+		"want no alarm when within rating")
+	_ = q3
 }

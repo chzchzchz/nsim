@@ -159,6 +159,78 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Turbine speed demand (chapter 15): pre-breaker wide-range
+	// speed control reference as a fraction of rated speed.
+	// "(1) Wide range speed control of the turbine from turning gear
+	// to rated speed."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-76
+	m["TurbineBuilding/Turbine/SpeedDemand"] = &bridge.Control{
+		Part:  "TurbineBuilding/Turbine",
+		Label: "SpeedDemand",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.TurbineBuilding.Turbine.SpeedDemand)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.Turbine.SpeedDemand = v
+			return nil
+		},
+	}
+
+
+	// Turning gear (chapter 15 startup): holds the rotor at a slow
+	// roll with no steam admission.
+	m["TurbineBuilding/Turbine/TurningGear"] = &bridge.Control{
+		Part:  "TurbineBuilding/Turbine",
+		Label: "TurningGear",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(p.TurbineBuilding.Turbine.TurningGear)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.Turbine.TurningGear = v
+			return nil
+		},
+	}
+
+
+	// Motor-driven auxiliary lube-oil pump (chapter 15): the DEHM
+	// supervises operation "from checking the bearing oil pump before
+	// startup"; loss of the header trips the turbine.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_203.txt:87-89
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:25
+	m["TurbineBuilding/Turbine/LubeOilPump"] = &bridge.Control{
+		Part:  "TurbineBuilding/Turbine",
+		Label: "LubeOilPump",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.TurbineBuilding.Turbine.LubeOilPumpRunning)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.Turbine.LubeOilPumpRunning = v
+			return nil
+		},
+	}
+
+
 	// Main feedwater control valve (chapter 15):
 	// "A signal from the Feedwater Control System also sets
 	// the position of the motor-driven feedwater pump discharge
@@ -305,6 +377,85 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("hz",
 				p.TurbineBuilding.Generator.Frequency)
+		},
+	}
+
+
+	// Governing-valve bank position (chapter 15): DEHM-positioned
+	// governing valves throttle admission behind the stop valves.
+	// "The control signal is transmitted to the electro-hydraulic
+	// actuator on the main steam governing valves and reheat steam
+	// intercept valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:41-44
+	m["TurbineBuilding/Turbine/GoverningValve"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/Turbine",
+		Label: "GoverningValve",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.TurbineBuilding.Turbine.GoverningValve.Open)
+		},
+	}
+
+
+	// First-stage pressure (chapter 15): DEHM controller input.
+	// "computes signals comparing turbine speed and first-stage
+	// pressure with reference values established by the dispatcher or
+	// initiated at the operator's panel."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
+	m["TurbineBuilding/Turbine/FirstStagePressure"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/Turbine",
+		Label: "FirstStagePressure",
+		Kind:  "psig",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("psi",
+				p.TurbineBuilding.Turbine.FirstStagePressure)
+		},
+	}
+
+
+	// Bearing-oil header pressure (chapter 15): trip input for the
+	// low bearing oil pressure device.
+	// "Low bearing oil pressure trip"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:25
+	m["TurbineBuilding/Turbine/BearingOilPressure"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/Turbine",
+		Label: "BearingOilPressure",
+		Kind:  "psig",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("psi",
+				p.TurbineBuilding.Turbine.BearingOilPressure)
+		},
+	}
+
+
+	// Extraction nonreturn valve status (chapter 15): latched shut on
+	// any turbine trip.
+	// "Extraction line nonreturn valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:83
+	m["TurbineBuilding/Turbine/ExtractionNRVClosed"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/Turbine",
+		Label: "ExtractionNRVClosed",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.BoolToStr(
+				p.TurbineBuilding.Turbine.ExtractionNRVClosed), nil
+		},
+	}
+
+
+	// Generator MVA-limit alarm (chapter 15): apparent power exceeded
+	// the rating and the DEHM clamped output onto the rating circle.
+	// "output power, the power factor, and speed to ensure that the
+	// limits of the generator are not exceeded."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
+	m["TurbineBuilding/Generator/MVALimitAlarm"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/Generator",
+		Label: "MVALimitAlarm",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.BoolToStr(
+				p.TurbineBuilding.Generator.GeneratorMVALimitAlarm), nil
 		},
 	}
 

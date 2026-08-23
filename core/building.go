@@ -248,6 +248,14 @@ type TurbineBuilding struct {
 	Turbine  `json:"Turbine"`
 	Generator PowerGenerator
 
+	// SteamOfftakeFraction is the steam mass drawn from the
+	// main-steam headers during the most recent StepWithSteam,
+	// expressed as a fraction of rated full-load steam flow:
+	// turbine admission plus condenser steam dump. Plant.Step passes
+	// it into SteamGenerator.Step so the draw debits shell inventory
+	// and header pressure. One-step lag, same style as CondensingRate.
+	SteamOfftakeFraction float64
+
 	Condenser `json:"Condenser"`
 	MakeupValve      Valve
 	RejectValve      Valve

@@ -103,11 +103,15 @@ func TestTurbineExtractionSteamFlow_ScalesWithLoad(t *testing.T) {
 	// First step: rotor spinning up, partial load.
 	zeroLoadFlow := tr.ExtractionSteamFlow.Float()
 
-	// Pin rated load by direct construction of a Running turbine.
+	// Pin rated load by direct construction of a Running turbine in
+	// the healthy operating lineup.
 	rated := Turbine{
-		State:     TurbineRunning,
-		Velocity:  TurbineRatedSpeed,
-		RealPower: TurbineRatedkW,
+		State:              TurbineRunning,
+		Velocity:           TurbineRatedSpeed,
+		RealPower:          TurbineRatedkW,
+		GoverningValve:     Valve{Open: 1},
+		LubeOilPumpRunning: true,
+		BearingOilPressure: BearingOilDesignPressure,
 	}
 	for i := 0; i < 1000; i++ {
 		rated = rated.Step(sgP, condP, false, &stopOpen)

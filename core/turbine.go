@@ -35,10 +35,10 @@ import (
 //   - Tripped -> Off when reset is requested and Velocity has decayed
 //     to 0.
 //
-// SteamFlow is the pressure differential across the steam-inlet
-// valve, in arbitrary "psi-equivalent" units. The turbine converts it
-// into angular Velocity up to TurbineRatedSpeed and into RealPower up
-// to TurbineRatedkW.
+// SteamFlow is the throttled steam demand drawn from the main-steam
+// headers: design full-load flow scaled by valve admission and header
+// pressure. The turbine converts it into angular Velocity up to
+// TurbineRatedSpeed and into RealPower up to TurbineRatedkW.
 func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveOpen *float64) Turbine {
 	ret := *t
 	dt := TimeStep
@@ -62,8 +62,38 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 		// authoritative for steam admission.
 		admission = 1.0
 	}
-	steamFlow := float64(sgPressure-condPressure) * admission
+	// Governing valves throttle in series behind the stop valves;
+	// the auto-stop-oil trip closes both.
+	admission *= ret.GoverningValve.Open
+	ret.FirstStagePressure = Pressure(float64(sgPressure) * admission)
+
+	// Throttled design-flow steam demand (gal/step). At full
+	// admission and rated header pressure this equals the condenser's
+	// design full-load steam load, so the SG draw, condenser duty,
+	// and dump capacity share one scale.
+	steamFlow := CondenserDesignSteamLoadGalPer * admission *
+		float64(sgPressure) / float64(SteamGeneratorShellPressure)
 	steamFlow = max(steamFlow, 0)
+	ret.steamDemandGalPerStep = steamFlow
+
+	// Lubricating-oil header. The motor-driven auxiliary pump holds
+	// design pressure when running; with the pump off the header
+	// decays toward zero. A turbine rolled without its lube-oil pump
+	// in service trips immediately on low bearing-oil pressure —
+	// matching the pre-startup checklist item "checking the bearing
+	// oil pump before startup".
+	//
+	// Spec: the DEHM supervises operation "from checking the bearing
+	// oil pump before startup".
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_203.txt:87-89
+	// The trip device itself: "Low bearing oil pressure trip"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:25
+	if ret.LubeOilPumpRunning {
+		ret.BearingOilPressure = BearingOilDesignPressure
+	} else {
+		decay := float64(ret.BearingOilPressure) * (dt.Seconds() / LubeOilDecayTimeConstant)
+		ret.BearingOilPressure = Pressure(max(float64(ret.BearingOilPressure)-decay, 0))
+	}
 
 	// Load runback (DEHM protective layer). When any reactor-
 	// protection signal asserts (reactor trip, dropped rod, high
@@ -83,6 +113,21 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 	if ret.LoadRunback && ret.Setpoint > 0 {
 		ret.Setpoint -= ret.RampRate * dt.Seconds()
 		ret.Setpoint = max(ret.Setpoint, 0)
+	}
+
+	// Dispatcher load reference. When the grid dispatch supplies a
+	// demand, the DEHM ramps the operator setpoint toward it at the
+	// controlled selectable rate unless a protective runback holds
+	// priority.
+	//
+	// Spec: "reference values established by the dispatcher"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
+	if ret.LoadDemandRef > 0 && ret.State == TurbineRunning && !ret.LoadRunback {
+		if ret.Setpoint < ret.LoadDemandRef {
+			ret.Setpoint = min(ret.Setpoint+ret.RampRate*dt.Seconds(), ret.LoadDemandRef)
+		} else if ret.Setpoint > ret.LoadDemandRef {
+			ret.Setpoint = max(ret.Setpoint-ret.RampRate*dt.Seconds(), ret.LoadDemandRef)
+		}
 	}
 
 	// Frequency-droop governor. When the infinite-bus frequency
@@ -147,10 +192,45 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 		ret.State = TurbineTripped
 	}
 
-	// Reset clears the OPC trip latch once the rotor has
-	// stopped.
-	if reset && ret.OPCTrip && ret.Velocity < turbineStopThreshold {
+	// Low-vacuum trip. The LP exhaust limit is eight inches HgA; the
+	// emergency trip plate sits just above it.
+	//
+	// Spec: "Low vacuum trip"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:26
+	// "...exhaust pressures as high as eight inches HgA during
+	// emergency operations."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_199.txt:94
+	if ret.State == TurbineRunning && condPressure > TurbineLowVacuumTripPsia {
+		ret.TripByVacuum = true
+	}
+
+	// Low bearing-oil-pressure trip. The emergency trip system uses
+	// lubricating-system oil; loss of header pressure releases auto
+	// stop oil and closes all steam control valves.
+	//
+	// Spec: "Low bearing oil pressure trip"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:25
+	if ret.State == TurbineRunning &&
+		float64(ret.BearingOilPressure) < TurbineLowBearingOilTripPsi {
+		ret.TripByBearingOil = true
+	}
+	// Any emergency-trip release closes all steam control valves and
+	// shuts the extraction nonreturn valves via the air pilot.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:24-34
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:100-104
+	if ret.TripByVacuum || ret.TripByBearingOil {
+		ret.ExtractionNRVClosed = true
+		ret.GoverningValve.Open = 0
+		ret.StopValve.Open = 0
+		ret.State = TurbineTripped
+	}
+
+	// Reset clears all trip latches once the rotor has stopped.
+	if reset && ret.Velocity < turbineStopThreshold {
 		ret.OPCTrip = false
+		ret.TripByVacuum = false
+		ret.TripByBearingOil = false
+		ret.ExtractionNRVClosed = false
 	}
 
 	switch ret.State {
@@ -184,8 +264,24 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 		if float64(ret.Velocity) > float64(TurbineRatedSpeed)*TurbineOverspeedTripRatio {
 			ret.State = TurbineTripped
 		} else if steamFlow > 0 {
-			ret.Velocity += Velocity(steamFlow * dt.Seconds() * turbineRampGain)
-			ret.Velocity = min(ret.Velocity, TurbineRatedSpeed)
+			// Wide-range speed control engages when the operator
+			// has raised a pre-breaker speed demand; with no
+			// demand selected the rotor follows admitted steam.
+			// "Wide range speed control of the turbine from
+			// turning gear to rated speed."
+			// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
+			if !ret.Synchronized && ret.SpeedDemand > 0 {
+				target := Velocity(ret.SpeedDemand * float64(TurbineRatedSpeed))
+				rampStep := Velocity(float64(TurbineRatedSpeed) * TurbineSpeedRampRate * dt.Seconds())
+				if ret.Velocity < target {
+					ret.Velocity = min(ret.Velocity+rampStep, target)
+				} else {
+					ret.Velocity = max(ret.Velocity-rampStep, target)
+				}
+			} else {
+				ret.Velocity += Velocity(steamFlow * dt.Seconds() * turbineRampGain)
+				ret.Velocity = min(ret.Velocity, TurbineRatedSpeed)
+			}
 		} else {
 			ret.Velocity -= Velocity(float64(ret.Velocity) * turbineCoastRate * dt.Seconds())
 			ret.Velocity = max(ret.Velocity, 0)
@@ -193,6 +289,9 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 	default:
 		ret.Velocity -= Velocity(float64(ret.Velocity) * turbineCoastRate * dt.Seconds())
 		ret.Velocity = max(ret.Velocity, 0)
+		if ret.TurningGear {
+			ret.Velocity = max(ret.Velocity, TurbineTurningGearRpm)
+		}
 	}
 
 	if ret.State == TurbineRunning &&
@@ -200,24 +299,49 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 		ret.State = TurbineTripped
 	}
 
-	// RealPower tracks shaft speed up to the operator-selected
-	// Setpoint. The setpoint ceiling is what the DEHM would
-	// enforce via the governing valves; we approximate that by
-	// clamping RealPower after the speed-based calculation.
-	// Setpoint == 0 means "no demand selected" (operator has
-	// not yet called for a load); we leave the velocity-derived
-	// power uncapped so existing tests that don't set a Setpoint
-	// keep working, and Plant.Step's synchronisation path
-	// enforces a real ceiling once the operator closes the
-	// breaker at a non-zero setpoint.
+	// DEHM governing-valve trim: bias the valve so the first-stage
+	// pressure tracks the active reference (the load Setpoint after
+	// synchronization, the speed demand before it). With no active
+	// reference the valve is left wherever the operator or the last
+	// trim put it.
+	//
+	// Spec: "computes signals comparing turbine speed and first-stage
+	// pressure with reference values established by the dispatcher or
+	// initiated at the operator's panel."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
+	ref := 0.0
+	if ret.Synchronized {
+		ref = ret.Setpoint
+	} else {
+		ref = ret.SpeedDemand
+	}
+	if ret.State == TurbineRunning && ref > 0 && ret.StopValve.Open > 0 {
+		errFrac := ref - float64(ret.FirstStagePressure)/float64(SteamGeneratorShellPressure)
+		ret.GoverningValve.Open += GoverningValveTrimGain * errFrac
+		ret.GoverningValve.Open = min(max(ret.GoverningValve.Open, 0), 1)
+	}
+
+	// RealPower tracks admitted steam energy through a short lag,
+	// not shaft speed. The synchronized Setpoint is the ceiling the
+	// DEHM enforces via the governing valves; Setpoint == 0 means
+	// "no demand selected" and leaves the steam-derived power
+	// uncapped.
 	//
 	// Spec: "After generator breaker closure, the ability to
 	// increase or decrease electrical load at a controlled
 	// selectable rate."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:80-82
-	if ret.State == TurbineRunning && TurbineRatedSpeed > 0 {
-		ret.RealPower = Watts(float64(ret.Velocity) / float64(TurbineRatedSpeed) * float64(TurbineRatedkW))
-		if ret.Setpoint > 0 {
+	steamFrac := 0.0
+	if CondenserDesignSteamLoadGalPer > 0 {
+		steamFrac = steamFlow / CondenserDesignSteamLoadGalPer
+	}
+	steamFrac = min(max(steamFrac, 0), 1)
+	if ret.State == TurbineRunning {
+		alpha := dt.Seconds() / TurbinePowerResponseSeconds
+		alpha = min(alpha, 1)
+		targetPower := Watts(steamFrac * float64(TurbineRatedkW))
+		ret.RealPower += Watts((float64(targetPower) - float64(ret.RealPower)) * alpha)
+		if ret.Synchronized && ret.Setpoint > 0 {
 			maxPower := ret.Setpoint * float64(TurbineRatedkW)
 			ret.RealPower = Watts(min(float64(ret.RealPower), maxPower))
 		}
@@ -238,7 +362,11 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:30-34
 	loadFraction := float64(ret.RealPower) / float64(TurbineRatedkW)
 	loadFraction = max(loadFraction, 0)
-	ret.ExtractionSteamFlow = Volume{Val: loadFraction*FeedwaterDesignFlow.Float(), Unit: u.Gallon}
+	extraction := loadFraction * FeedwaterDesignFlow.Float()
+	if ret.ExtractionNRVClosed {
+		extraction = 0
+	}
+	ret.ExtractionSteamFlow = Volume{Val: extraction, Unit: u.Gallon}
 
 	// HP exhaust quality falls with load fraction because the
 	// HP turbine does less expansion work per pound of steam.
