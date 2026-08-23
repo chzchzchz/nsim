@@ -2,6 +2,7 @@ package core
 
 import (
 	"testing"
+	"time"
 
 	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
@@ -124,6 +125,36 @@ func TestFeedwaterRegulator_ValveDemandClampedToUnitRange(t *testing.T) {
 	assert.Zero(t, lo.Step().ValveDemand,
 		"want ValveDemand clamped to 0.0 at the low end, got %v",
 		lo.Step().ValveDemand)
+}
+
+// Conditional-integration anti-windup: a long stretch with the level
+// above setpoint must not wind the integral deeply negative while the
+// valve sits clamped shut, or the proportional term cannot reopen it
+// when the level finally drops and the steam generator drains
+// unchecked for the whole unwind time. With e = -30, two minutes
+// clamped shut stores IntegralError = -3600 under plain integration;
+// recovering from +1 percent error (Ki = 0.1/s^2) would then take
+// ~100 minutes before the valve cracks open. With the anti-windup the
+// integrator freezes and Kp*e alone reopens the demand on the first
+// step below setpoint.
+func TestFeedwaterRegulator_AntiWindupAllowsRecovery(t *testing.T) {
+	r := FeedwaterRegulator{
+		LevelSetpoint: FeedwaterLevelSetpoint,
+		Level:         80,
+		Running:       true,
+	}
+	for range int(120 * time.Second / TimeStep) {
+		r = r.Step()
+	}
+	assert.Zero(t, r.IntegralError,
+		"want integrator frozen while demand is clamped past its limit, got %v",
+		r.IntegralError)
+
+	r.Level = 49
+	r2 := r.Step()
+	assert.Greater(t, r2.ValveDemand, 0.45,
+		"want valve reopened by proportional action once level drops below "+
+			"setpoint, got %v", r2.ValveDemand)
 }
 
 // Steam flow feedforward contributes to ValveDemand even when the

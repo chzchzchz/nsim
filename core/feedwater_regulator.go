@@ -14,9 +14,10 @@ package core
 //	Ki = 1 / FeedwaterRegulatorIntegralTime (integral gain, 1/s^2)
 //	K_ff = FeedwaterSteamFlowGain         (feedforward, dimensionless)
 //
-// The integral term accumulates only when Running is true, which
-// prevents integrator windup during shutdown. ValveDemand is
-// clamped to [0.0, 1.0] before return.
+// The integral term accumulates only while Running is true, and a
+// conditional-integration anti-windup freezes it whenever the
+// already-clamped output would otherwise be driven deeper into
+// saturation. ValveDemand is clamped to [0.0, 1.0] before return.
 //
 // Spec justification:
 //   - Three-element control: "Feedwater flow to each steam
@@ -66,9 +67,22 @@ func (r *FeedwaterRegulator) Step() FeedwaterRegulator {
 	}
 
 	eLevel := ret.LevelSetpoint - ret.Level
-	ret.IntegralError += eLevel * TimeStep.Seconds()
 
+	// Conditional-integration anti-windup: freeze the integrator
+	// whenever the demand already sits past a limit and further
+	// accumulation would push it deeper into saturation. Without this,
+	// a long period with the level above setpoint (valve clamped shut)
+	//	winds the integral deeply negative, and the proportional term
+	//	cannot reopen the valve for hours after the level finally drops
+	//	below setpoint; the SG drains unchecked the whole time.
 	demand := kp*eLevel + ki*ret.IntegralError + ffInput
+	saturatedHigh := demand > 1 && eLevel > 0
+	saturatedLow := demand < 0 && eLevel < 0
+	if !saturatedHigh && !saturatedLow {
+		ret.IntegralError += eLevel * TimeStep.Seconds()
+	}
+
+	demand = kp*eLevel + ki*ret.IntegralError + ffInput
 	demand = min(max(demand, 0), 1)
 	ret.ValveDemand = demand
 
