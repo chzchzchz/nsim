@@ -108,6 +108,8 @@ func (r *ReactorBuilding) Step(sgSteamOutflowFraction float64) ReactorBuilding {
 		sgLevelPct,
 		ret.ReactorPressureVessel.Inlet.Float(),
 		containmentGauge,
+		float64(ret.ReactorPressureVessel.TotalThermalPower()) /
+			float64(CoreRatedThermalPower),
 	)
 	// Propagate the reactor trip to the reactor pressure
 	// vessel so the RPV step drops rods and follows the

@@ -4259,6 +4259,18 @@ const (
 	// temperature (°F) below which a trip signal is generated.
 	RPSLowTcoldTrip float64 = 530.0
 
+	// RPSAtPowerPermissiveFraction is the reactor power fraction
+	// below which the "at-power" reactor trips are not enabled
+	// (the P-7 permissive). Cold-condition lineups and startups
+	// operate far below this level with low Tcold expected, so
+	// low-Tcold trip contributions are blocked until the plant
+	// exceeds it.
+	// "When reactor power increases above 10%, verify the 'Nuclear
+	// At-Power' Permissive P-10 light illuminates and the
+	// 'At-Power' Permissive P-7 light extinguishes."
+	// specs/westinghouse_plant_operations/chapter_19/page_018.txt:3-5
+	RPSAtPowerPermissiveFraction float64 = 0.10
+
 	// RPSHighContainmentPressureTrip is the containment
 	// pressure (psig) above which a trip signal is generated.
 	// Equal to the containment design pressure so a

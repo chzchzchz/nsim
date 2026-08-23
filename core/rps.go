@@ -39,6 +39,7 @@ func (r *ReactorProtectionSystem) Step(
 	sgLevelPct float64,
 	tcoldF float64,
 	containmentPressureGauge Pressure,
+	powerFrac float64,
 ) ReactorProtectionSystem {
 	ret := *r
 
@@ -59,6 +60,19 @@ func (r *ReactorProtectionSystem) Step(
 	// "A 2/4 logic means that a trip occurs when at least 2
 	// signals out of 4 indicate a trip condition."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:119-121
+	// P-7 at-power trip permissive: below the at-power level
+	// the "at-power" reactor trips are not enabled, so low Tcold
+	// — expected throughout cold-condition lineup and startup —
+	// contributes no trip signal and no SI/steamline-isolation
+	// trigger until the plant exceeds the permissive.
+	//
+	// "When reactor power increases above 10%, verify the 'Nuclear
+	// At-Power' Permissive P-10 light illuminates and the
+	// 'At-Power' Permissive P-7 light extinguishes." NOTE: "The
+	// 'at-power' reactor trips are now enabled."
+	// specs/westinghouse_plant_operations/chapter_19/page_018.txt:3-7
+	atPowerTripsEnabled := powerFrac >= RPSAtPowerPermissiveFraction
+
 	var trips int
 	if sgLevelPct < RPSLowSteamGeneratorLevelTrip {
 		trips++
@@ -69,7 +83,7 @@ func (r *ReactorProtectionSystem) Step(
 	if steamlinePressure < RPSLowSteamlinePressureTrip {
 		trips++
 	}
-	if tcoldF < RPSLowTcoldTrip {
+	if tcoldF < RPSLowTcoldTrip && atPowerTripsEnabled {
 		trips++
 	}
 	if containmentPressureGauge > RPSHighContainmentPressureTrip {
@@ -100,7 +114,7 @@ func (r *ReactorProtectionSystem) Step(
 	if !ret.SafetyInjectionActuated {
 		if containmentPressureGauge > RPSHighContainmentPressureTrip ||
 			steamlinePressure < RPSLowSteamlinePressureTrip ||
-			tcoldF < RPSLowTcoldTrip ||
+			(tcoldF < RPSLowTcoldTrip && atPowerTripsEnabled) ||
 			ret.ManualTrip {
 			ret.SafetyInjectionActuated = true
 		}
@@ -112,7 +126,7 @@ func (r *ReactorProtectionSystem) Step(
 	if !ret.SteamlineIsolationActuated {
 		if containmentPressureGauge > RPSHighContainmentPressureTrip ||
 			steamlinePressure < RPSLowSteamlinePressureTrip ||
-			tcoldF < RPSLowTcoldTrip ||
+			(tcoldF < RPSLowTcoldTrip && atPowerTripsEnabled) ||
 			ret.ManualTrip {
 			ret.SteamlineIsolationActuated = true
 		}

@@ -46,14 +46,14 @@ func TestRPS_InitialStateHasNoTrip(t *testing.T) {
 func TestRPS_TwoTripConditionsDeclareReactorTrip(t *testing.T) {
 	r := ReactorProtectionSystem{}
 	// One trip: low SG level (15%) alone should not trip.
-	r1 := r.Step(SteamGeneratorShellPressure, 10, CoreReferenceInletF, 0)
+	r1 := r.Step(SteamGeneratorShellPressure, 10, CoreReferenceInletF, 0, 1)
 	assert.False(t, r1.ReactorTripped,
 		"want ReactorTripped=false with one trip condition, got %v",
 		r1.ReactorTripped)
 	assert.InDelta(t, 1, r1.TripSignalCount, 1e-9,
 		"want TripSignalCount=1, got %v", r1.TripSignalCount)
 	// Two trips: low SG level + low steamline pressure → trip.
-	r2 := r.Step(100, 10, CoreReferenceInletF, 0)
+	r2 := r.Step(100, 10, CoreReferenceInletF, 0, 1)
 	assert.True(t, r2.ReactorTripped,
 		"want ReactorTripped=true with two trip conditions, got %v",
 		r2.ReactorTripped)
@@ -70,7 +70,7 @@ func TestRPS_TwoTripConditionsDeclareReactorTrip(t *testing.T) {
 func TestRPS_ManualTripOverridesVoting(t *testing.T) {
 	r := ReactorProtectionSystem{ManualTrip: true}
 	r2 := r.Step(SteamGeneratorShellPressure, 50,
-		CoreReferenceInletF, 0)
+		CoreReferenceInletF, 0, 1)
 	assert.True(t, r2.ReactorTripped,
 		"want ReactorTripped=true on manual trip, got %v",
 		r2.ReactorTripped)
@@ -86,7 +86,7 @@ func TestRPS_ManualTripOverridesVoting(t *testing.T) {
 func TestRPS_ReactorTripLatches(t *testing.T) {
 	r := ReactorProtectionSystem{ReactorTripped: true}
 	r2 := r.Step(SteamGeneratorShellPressure, 50,
-		CoreReferenceInletF, 0)
+		CoreReferenceInletF, 0, 1)
 	assert.True(t, r2.ReactorTripped,
 		"want ReactorTripped=true after latch, got %v", r2.ReactorTripped)
 }
@@ -109,7 +109,7 @@ func TestRPS_HighContainmentPressureActuatesESFAS(t *testing.T) {
 	// Drive 2 trips: high containment pressure + low steamline
 	// pressure.
 	r2 := r.Step(100, 50, CoreReferenceInletF,
-		RPSHighContainmentPressureTrip+1)
+		RPSHighContainmentPressureTrip+1, 1)
 	assert.True(t, r2.ReactorTripped,
 		"want ReactorTripped=true, got %v", r2.ReactorTripped)
 	assert.True(t, r2.SafetyInjectionActuated,
@@ -133,7 +133,7 @@ func TestRPS_TurbineTripFollowsReactorTrip(t *testing.T) {
 	r := ReactorProtectionSystem{}
 	// Drive 2 trips: low steamline pressure + low SG level.
 	r2 := r.Step(100, RPSLowSteamGeneratorLevelTrip-1,
-		CoreReferenceInletF, 0)
+		CoreReferenceInletF, 0, 1)
 	assert.True(t, r2.ReactorTripped,
 		"want ReactorTripped=true, got %v", r2.ReactorTripped)
 	assert.True(t, r2.TurbineTripActuated,
@@ -147,7 +147,7 @@ func TestRPS_TurbineTripFollowsReactorTrip(t *testing.T) {
 func TestRPS_ManualTripDoesNotStartContainmentSpray(t *testing.T) {
 	r := ReactorProtectionSystem{ManualTrip: true}
 	r2 := r.Step(SteamGeneratorShellPressure, 50,
-		CoreReferenceInletF, 0)
+		CoreReferenceInletF, 0, 1)
 	assert.True(t, r2.ReactorTripped,
 		"want ReactorTripped=true on manual trip, got %v",
 		r2.ReactorTripped)
@@ -166,10 +166,47 @@ func TestRPS_LowSGLevelStartsAuxFeedPumps(t *testing.T) {
 	r := ReactorProtectionSystem{}
 	r2 := r.Step(SteamGeneratorShellPressure,
 		RPSLowSteamGeneratorLevelTrip-1,
-		CoreReferenceInletF, 0)
+		CoreReferenceInletF, 0, 1)
 	assert.True(t, r2.AuxiliaryFeedPumpsStartActuated,
 		"want AuxiliaryFeedPumpsStartActuated=true with low SG "+
 			"level, got %v", r2.AuxiliaryFeedPumpsStartActuated)
+}
+
+// Low Tcold contributes no trip signal while the plant operates
+// below the at-power permissive (P-7): cold-condition lineups run
+// with low Tcold expected, so the condition neither votes toward
+// a reactor trip nor actuates SI / steamline isolation until the
+// plant exceeds the permissive.
+//
+// Spec justification:
+//   - "When reactor power increases above 10%, verify the 'Nuclear
+//     At-Power' Permissive P-10 light illuminates and the 'At-Power'
+//     Permissive P-7 light extinguishes." NOTE: "The 'at-power'
+//     reactor trips are now enabled."
+//     specs/westinghouse_plant_operations/chapter_19/page_018.txt:3-7
+func TestRPS_LowTcoldBlockedBelowAtPowerPermissive(t *testing.T) {
+	r := ReactorProtectionSystem{}
+	coldTcold := 140.0
+	belowPermissive := RPSAtPowerPermissiveFraction / 2
+
+	// Below the permissive the low-Tcold condition is blocked.
+	r1 := r.Step(SteamGeneratorShellPressure, 50,
+		coldTcold, 0, belowPermissive)
+	assert.Equal(t, 0, r1.TripSignalCount,
+		"want no trip signals with low Tcold blocked")
+	assert.False(t, r1.ReactorTripped)
+	assert.False(t, r1.SafetyInjectionActuated,
+		"want SI blocked with low Tcold below P-7")
+	assert.False(t, r1.SteamlineIsolationActuated)
+
+	// Above the permissive low Tcold counts as one voted signal
+	// (not enough to trip alone) and actuates SI.
+	r2 := r.Step(SteamGeneratorShellPressure, 50,
+		coldTcold, 0, RPSAtPowerPermissiveFraction*2)
+	assert.Equal(t, 1, r2.TripSignalCount,
+		"want exactly the low-Tcold signal above the permissive")
+	assert.False(t, r2.ReactorTripped)
+	assert.True(t, r2.SafetyInjectionActuated)
 }
 
 // When the plant wires RPS into Plant.Step, the
@@ -205,7 +242,7 @@ func TestRPS_ResetClearsLatchesAndRevotes(t *testing.T) {
 	// containment pressure) so the trip and its ESFAS outputs
 	// latch.
 	r = r.Step(100, 50, CoreReferenceInletF,
-		RPSHighContainmentPressureTrip+1)
+		RPSHighContainmentPressureTrip+1, 1)
 	assert.True(t, r.ReactorTripped, "precondition: want ReactorTripped=true")
 	assert.True(t, r.SafetyInjectionActuated,
 		"precondition: want SafetyInjectionActuated=true")
@@ -216,7 +253,7 @@ func TestRPS_ResetClearsLatchesAndRevotes(t *testing.T) {
 	r.Reset()
 	assert.False(t, r.ReactorTripped)
 	assert.False(t, r.ManualTrip)
-	r2 := r.Step(SteamGeneratorShellPressure, 50, CoreReferenceInletF, 0)
+	r2 := r.Step(SteamGeneratorShellPressure, 50, CoreReferenceInletF, 0, 1)
 	assert.False(t, r2.ReactorTripped,
 		"want no re-trip after reset with clear channels")
 	assert.False(t, r2.SafetyInjectionActuated)
@@ -225,11 +262,11 @@ func TestRPS_ResetClearsLatchesAndRevotes(t *testing.T) {
 	// Step re-declares the trip on its own.
 	r3 := ReactorProtectionSystem{}
 	r3 = r3.Step(100, 50, CoreReferenceInletF,
-		RPSHighContainmentPressureTrip+1)
+		RPSHighContainmentPressureTrip+1, 1)
 	require.True(t, r3.ReactorTripped)
 	r3.Reset()
 	r4 := r3.Step(100, 50, CoreReferenceInletF,
-		RPSHighContainmentPressureTrip+1)
+		RPSHighContainmentPressureTrip+1, 1)
 	assert.True(t, r4.ReactorTripped,
 		"want re-trip while 2/4 voting still demands one")
 }
