@@ -261,10 +261,63 @@ const (
 	// design CW flow.
 	CondenserDesignCWRiseF = 18.0
 
-	// CoolingTowerApproachF is the assumed temperature
-	// difference between the tower cold-water basin and the
-	// ambient wet-bulb (°F) when a mechanical-draft cooling
-	// tower is the CW source. The spec does not state a value;
-	// 5 °F is typical for modern mechanical-draft towers.
+	// CoolingTowerApproachF is the steady-state difference
+	// between the tower cold-basin temperature and the ambient
+	// wet-bulb (°F) while the fans run. The spec does not state
+	// a value; 5 °F is typical for modern mechanical-draft
+	// towers.
 	CoolingTowerApproachF = 5.0
+
+	// CoolingTowerBasinCapacityGal is the cooling-tower basin
+	// inventory (gal).
+	// "The cooled water falls into the cooling tower basin [...]
+	// The cooling tower basin has a capacity of 5.2 x 106
+	// gallons."
+	// specs/westinghouse_tech_manual/chapter_14/page_1044.txt:37-39
+	CoolingTowerBasinCapacityGal = 5_200_000.0
+
+	// CoolingTowerEvapFractionPerDegF is the evaporative loss
+	// as a fraction of circulating flow per °F of range
+	// (hot return minus cold basin). Derived:
+	// cp·ΔT / h_fg ≈ (1.0 BTU/lb·°F) / (≈1040 BTU/lb) ≈ 9.6e-4
+	// per °F; at the design range across
+	// CirculatingWaterDesignFlowGPM (~1.1M gpm) this yields
+	// ≈ 19,000 gpm peak evaporation.
+	CoolingTowerEvapFractionPerDegF = 0.00096
+
+	// CoolingTowerBlowdownFraction is the continuous bleed as
+	// a fraction of circulating flow. "Due to system
+	// impurities, a continuous blowdown is performed on the
+	// circulating water system."
+	// specs/westinghouse_tech_manual/chapter_14/page_1044.txt:12-17
+	// Derived magnitude: ~0.25% of flow, typical for 2-4
+	// cycles of concentration.
+	CoolingTowerBlowdownFraction = 0.0025
+
+	// CoolingTowerMakeupFlowGPM is the makeup supply capacity
+	// (gal/min) when the makeup valve is fully open. Derived:
+	// covers peak evaporation (≈19k gpm) plus blowdown
+	// (≈2.75k gpm) with margin.
+	CoolingTowerMakeupFlowGPM = 25_000.0
+
+	// CoolingTowerTimeConstant is the first-order response
+	// time of the bulk cold-basin temperature to its target
+	// (fans on: wet bulb + approach; fans off: hot return
+	// water). Derived: the basin turns over in seconds at
+	// design flow but bulk mixing lags, so a minute-scale
+	// constant represents fill/basin thermal inertia.
+	CoolingTowerTimeConstant = 60 * time.Second
+
+	// CoolingTowerMinSuctionGal is the basin level below which
+	// the CW pumps lose suction (gal). Derived: ~5% of basin
+	// capacity, similar to the vortex-limit margin noted for
+	// the condensate storage tank (~6% of capacity) in
+	// core/outside.go.
+	CoolingTowerMinSuctionGal = 260_000.0
+
+	// OutsideDefaultWetBulbF is the default ambient wet-bulb
+	// temperature (°F). Derived: matches the effective source
+	// temperature the previous fixed-offset tower model used
+	// (the river default of 75 °F).
+	OutsideDefaultWetBulbF = 75.0
 )

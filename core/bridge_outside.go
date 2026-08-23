@@ -2,6 +2,8 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
+	"strconv"
 
 	"github.com/chzchzchz/nsim/bridge"
 )
@@ -145,6 +147,58 @@ func addOutsideControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Cooling tower makeup valve (chapter 14 tech manual):
+	// "This inventory loss, combined with losses due to
+	// evaporation and drift, requires two cooling tower makeup
+	// pumps [...]"
+	// specs/westinghouse_tech_manual/chapter_14/page_1044.txt:12-17
+	m["Outside/CoolingTower/MakeupValve/Open"] = &bridge.Control{
+		Part:  "Outside/CoolingTower",
+		Label: "MakeupValve",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.Outside.CoolingTower.MakeupValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.Outside.CoolingTower.MakeupValve.Open = v
+			return nil
+		},
+	}
+
+	// Cooling tower continuous blowdown valve.
+	// "Due to system impurities, a continuous blowdown is
+	// performed on the circulating water system."
+	// specs/westinghouse_tech_manual/chapter_14/page_1044.txt:12-17
+	m["Outside/CoolingTower/BlowdownValve/Open"] = &bridge.Control{
+		Part:  "Outside/CoolingTower",
+		Label: "BlowdownValve",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.Outside.CoolingTower.BlowdownValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.Outside.CoolingTower.BlowdownValve.Open = v
+			return nil
+		},
+	}
+
+
 	// Alarm reset (chapter 8 annunciator):
 	// "Turned off by operator acknowledgement."
 	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:66-67
@@ -213,6 +267,45 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
 				p.Outside.CirculatingWaterPump.DriveReady)
+		},
+	}
+
+	// Cooling-tower basin level. The CW pumps draw suction from
+	// this basin when the tower is the configured CW source;
+	// below CoolingTowerMinSuctionGal they lose suction.
+	// "The cooled water falls into the cooling tower basin [...]
+	// The cooling tower basin has a capacity of 5.2 x 106 gallons."
+	// specs/westinghouse_tech_manual/chapter_14/page_1044.txt:37-39
+	m["Outside/CoolingTower/Basin/Level"] = &bridge.Sensor{
+		Part:  "Outside/CoolingTower",
+		Label: "BasinLevel",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.Outside.CoolingTower.Basin.Level.Float())
+		},
+	}
+
+	// Cold-basin temperature: the temperature of the water the
+	// CW pumps return to the condenser in tower-source mode.
+	m["Outside/CoolingTower/ColdBasinTemp"] = &bridge.Sensor{
+		Part:  "Outside/CoolingTower",
+		Label: "ColdBasinTemp",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.Outside.CoolingTower.ColdBasinTemp.Float())
+		},
+	}
+
+	// Evaporation loss into the tower (drift folded in).
+	m["Outside/CoolingTower/EvaporationFlow"] = &bridge.Sensor{
+		Part:  "Outside/CoolingTower",
+		Label: "EvaporationFlow",
+		Kind:  "gpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gpm",
+				p.Outside.CoolingTower.EvaporationFlow.Float())
 		},
 	}
 

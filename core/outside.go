@@ -28,13 +28,20 @@ type Outside struct {
 	CirculatingWaterSystem CirculatingWaterSystem
 
 	// CoolingTower models the mechanical-draft cooling tower
-	// as an alternate CW source. The CWS Step consults
-	// CoolingTower.FanRunning to decide whether to apply the
-	// cooling-tower approach temperature.
+	// as an alternate CW source with its own basin inventory
+	// and cold-basin temperature. The CWS draws suction from
+	// the basin when SourceIsCoolingTower is set.
 	// "Depending on the plant, the source of circulating
 	// water may be a river, lake, ocean, or cooling tower."
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
 	CoolingTower `json:"CoolingTower"`
+
+	// AmbientWetBulbTemp drives cooling-tower evaporative
+	// performance. The wet-bulb is the evaporative lower
+	// bound: "effectively the lowest temperature that may be
+	// achieved by evaporative cooling".
+	// specs/wiki/Wet-bulb_temperature.txt:775
+	AmbientWetBulbTemp Temperature
 
 	// ServiceWaterSystem models the SWS — the ultimate heat
 	// sink for the plant. The pumps live in a separate
@@ -59,7 +66,8 @@ type Outside struct {
 	RiverTemp Temperature
 }
 
-func (o *Outside) Step(electricalDriveReady bool) Outside {
+func (o *Outside) Step(electricalDriveReady bool,
+	condenserOutlet Temperature) Outside {
 	ret := *o
 	// Circulating Water System step. The CW pump count is
 	// collapsed to the spec's "one per half-condenser"
@@ -71,6 +79,16 @@ func (o *Outside) Step(electricalDriveReady bool) Outside {
 	if cwRunning && electricalDriveReady {
 		cwPumps = CirculatingWaterPumpCount
 	}
+	// The tower steps first so the CWS reads this tick's
+	// basin level and cold-basin temperature; it uses last
+	// tick's circulating flow (a 1 ms lag).
+	ret.CoolingTower = o.CoolingTower.Step(
+		cwRunning,
+		electricalDriveReady,
+		o.CirculatingWaterSystem.FlowGPM,
+		condenserOutlet,
+		o.AmbientWetBulbTemp,
+	)
 	ret.CirculatingWaterSystem = o.CirculatingWaterSystem.Step(
 		cwRunning,
 		electricalDriveReady,
@@ -78,11 +96,5 @@ func (o *Outside) Step(electricalDriveReady bool) Outside {
 		o.RiverTemp,
 		&o.CoolingTower,
 	)
-	// The cooling-tower fan mirrors the CW pump state in
-	// the simplified model; both gates share the same
-	// upstream power bus, so a plant-blackout that drops
-	// electricalDriveReady also stops the fan.
-	// See plans/x/uat_sat_gating.md.
-	ret.CoolingTower = o.CoolingTower.Step(cwRunning, electricalDriveReady)
 	return ret
 }

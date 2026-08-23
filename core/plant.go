@@ -624,7 +624,11 @@ func (p *Plant) Step() {
 	// The cross-building source pointers must point at
 	// nextPlant (where the fresh state is being written), not
 	// at p (the current state being read).
-	p.nextPlant.Outside = p.Outside.Step(plantDriveReady)
+	// The tower's hot inlet is the condenser CW outlet stepped
+	// in the previous tick's TurbineBuilding pass (a 1 ms lag,
+	// same as the tower's flow input).
+	p.nextPlant.Outside = p.Outside.Step(
+		plantDriveReady, p.TurbineBuilding.Condenser.CWOut)
 	// Latch the CW pump DriveReady (naming-convention
 	// counterpart to ServiceWaterSystem.DriveReady) so the
 	// bridge can publish it as a sensor. The pump motors ride
@@ -1472,7 +1476,8 @@ func MakePlant() Plant {
 			Capacity: Volume{Val: 450000, Unit: u.Gallon},
 			Part:     Part{Temperature: Temperature{Val: 80, Unit: u.Fahrenheit}},
 		},
-		RiverTemp: Temperature{Val: 75, Unit: u.Fahrenheit},
+		RiverTemp:          Temperature{Val: 75, Unit: u.Fahrenheit},
+		AmbientWetBulbTemp: Temperature{Val: OutsideDefaultWetBulbF, Unit: u.Fahrenheit},
 	}
 	p.AuxiliaryBuilding.DieselGenerator = DieselGenerator{
 		Speed: 0,
@@ -1527,6 +1532,16 @@ func MakePlant() Plant {
 	p.Outside.CoolingTower = CoolingTower{
 		FanRunning: false,
 		ApproachF:  CoolingTowerApproachF,
+		Basin: Tank{
+			Level:    Volume{Val: CoolingTowerBasinCapacityGal, Unit: u.Gallon},
+			Capacity: Volume{Val: CoolingTowerBasinCapacityGal, Unit: u.Gallon},
+		},
+		ColdBasinTemp: Temperature{
+			Val: OutsideDefaultWetBulbF + CoolingTowerApproachF,
+			Unit: u.Fahrenheit,
+		},
+		MakeupValve:   Valve{Open: 1.0},
+		BlowdownValve: Valve{Open: 1.0},
 	}
 
 	// Generator defaults (plans/p12_1.txt).
@@ -2101,6 +2116,14 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 
 	add("Condenser", "Condenser", &target.TurbineBuilding.Condenser)
 	add("CST", "CondensateStorageTank", &target.Outside.CondensateStorageTank)
+	add("CoolingTower", "CoolingTower", &target.Outside.CoolingTower)
+	// Hot return water condenser → tower basin; makeup refills
+	// the basin. The CW pumps draw from the basin when the
+	// tower is the configured source.
+	// specs/westinghouse_tech_manual/chapter_14/page_1044.txt:1-3
+	edge("Condenser", "CoolingTower", nil, nil)
+	edge("CoolingTower", "CoolingTower",
+		&target.Outside.CoolingTower.MakeupValve, nil)
 	add("HDT", "HeaterDrainTank", &target.TurbineBuilding.HeaterDrainTank)
 	add("LPHeaterDrain", "LowPressureHeaterDrain",
 		&target.TurbineBuilding.LowPressureHeater)

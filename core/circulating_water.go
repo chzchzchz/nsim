@@ -63,18 +63,22 @@ func (c *CirculatingWaterSystem) Step(
 	}
 
 	ret.InletTemp = sourceTemp
-	if ret.SourceIsCoolingTower &&
-		coolingTower != nil &&
-		coolingTower.FanRunning {
-		// Cooling tower returns water at
-		// (wet-bulb + approach). The simplified model
-		// treats the "source temp" passed to this Step
-		// as the ambient wet-bulb.
-		approach := coolingTower.ApproachF
-		if approach <= 0 {
-			approach = CoolingTowerApproachF
+	if ret.SourceIsCoolingTower && coolingTower != nil {
+		// The CW pumps draw from the tower basin, so the
+		// condenser inlet is the live cold-basin temperature
+		// regardless of fan state; fans change how fast the
+		// basin cools (CoolingTower.Step), not the suction
+		// temperature.
+		// "The circulating water pumps circulate the water
+		// from the cooling tower basin through the main
+		// condenser and back to the cooling tower."
+		// specs/westinghouse_tech_manual/chapter_14/page_1044.txt:1-3
+		ret.InletTemp = coolingTower.ColdBasinTemp
+		if ret.FlowGPM > 0 &&
+			coolingTower.Basin.Level.Float() < CoolingTowerMinSuctionGal {
+			ret.PumpsInService = 0 // lost suction: basin drained
+			ret.FlowGPM = 0
 		}
-		ret.InletTemp = Temperature{Val: sourceTemp.Float()+approach, Unit: u.Fahrenheit}
 	}
 
 	// The condenser Step will overwrite OutletTemp with the
@@ -87,21 +91,64 @@ func (c *CirculatingWaterSystem) Step(
 }
 
 // Step advances the CoolingTower state machine by one
-// timestep. The simplified model tracks only the fan
-// running flag; fill hydraulics, fan curves, and drift loss
-// are not modelled. The tower fan shares the same upstream
-// power bus as the CW pump motors, so driveReady is the same
-// readiness signal (plans/x/uat_sat_gating.md).
+// timestep. The model tracks fan state, basin inventory, and a
+// bulk cold-basin temperature:
 //
-// Spec justification:
-//   - Cooling tower is one of the four CW sources listed in
-//     the spec: "river, lake, ocean, or cooling tower."
-//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
-func (ct *CoolingTower) Step(fanRunning, driveReady bool) CoolingTower {
+//   - With fans running, the basin relaxes toward
+//     ambient wet-bulb + CoolingTowerApproachF; without them it
+//     soaks toward the hot return water. The wet-bulb is the
+//     evaporative lower bound: "effectively the lowest
+//     temperature that may be achieved by evaporative cooling".
+//     specs/wiki/Wet-bulb_temperature.txt:775
+//   - Evaporation scales with circulating flow times the range
+//     (cp·ΔT/h_fg fraction); continuous blowdown bleeds a fixed
+//     fraction of flow. Both deplete the basin.
+//     "This inventory loss, combined with losses due to
+//     evaporation and drift, requires two cooling tower makeup
+//     pumps [...]"
+//     specs/westinghouse_tech_manual/chapter_14/page_1044.txt:12-17
+//   - The makeup valve refills the basin at
+//     CoolingTowerMakeupFlowGPM when open.
+//
+// cwFlowGPM is the previous tick's circulating flow (a 1 ms lag
+// consistent with the copy-into-nextPlant ordering).
+func (ct *CoolingTower) Step(fansRunning, driveReady bool,
+	cwFlowGPM float64, hotInlet, wetBulb Temperature) CoolingTower {
 	ret := *ct
-	ret.FanRunning = fanRunning && driveReady
-	if ret.ApproachF <= 0 {
-		ret.ApproachF = CoolingTowerApproachF
+	dt := TimeStep
+
+	ret.FanRunning = fansRunning && driveReady
+	ret.HotInletTemp = hotInlet
+
+	target := hotInlet.Float()
+	if ret.ColdBasinTemp.Float() <= 0 {
+		ret.ColdBasinTemp = Temperature{Val: target, Unit: u.Fahrenheit}
 	}
+	if ret.FanRunning {
+		target = wetBulb.Float() + CoolingTowerApproachF
+	}
+	k := dt.Seconds() / CoolingTowerTimeConstant.Seconds()
+	cold := ret.ColdBasinTemp.Float() + k*(target-ret.ColdBasinTemp.Float())
+	ret.ColdBasinTemp = Temperature{Val: cold, Unit: u.Fahrenheit}
+
+	rangeF := max(hotInlet.Float()-ret.ColdBasinTemp.Float(), 0)
+	level := ret.Basin.Level.Float()
+	if ret.Basin.Level.UnitType().Name == "" {
+		ret.Basin.Level = vol(ret.Basin.Level, level)
+	}
+	makeup := ret.MakeupValve.Open * CoolingTowerMakeupFlowGPM / 60.0
+	if cwFlowGPM > 0 {
+		evapGPM := cwFlowGPM * CoolingTowerEvapFractionPerDegF * rangeF
+		ret.EvaporationFlow = Volume{Val: evapGPM / 60.0, Unit: u.Gallon}
+		blowdown := cwFlowGPM * CoolingTowerBlowdownFraction / 60.0 *
+			ret.BlowdownValve.Open
+		level += (makeup - evapGPM/60.0 - blowdown) * dt.Seconds()
+	} else {
+		ret.EvaporationFlow = Volume{}
+		level += makeup * dt.Seconds()
+	}
+	level = min(max(level, 0), CoolingTowerBasinCapacityGal)
+	ret.Basin.Level = vol(ret.Basin.Level, level)
+
 	return ret
 }

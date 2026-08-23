@@ -336,15 +336,20 @@ type TurbineBuilding struct {
 }
 
 // CoolingTower models a mechanical-draft cooling tower as an
-// alternative CW source. The simplified model tracks fan
-// state and approach temperature relative to ambient
-// wet-bulb. It does not model fill hydraulics, fan curves, or
-// drift loss.
+// alternative CW source. The simplified model tracks fan state, basin
+// inventory (evaporation + blowdown out, makeup in), and a bulk
+// cold-basin temperature that relaxes toward wet-bulb + approach with
+// fans running and soaks toward the hot return water without them. It
+// does not model fill hydraulics, fan curves, or drift as a separate
+// stream (drift is folded into the evaporation fraction).
 //
 // Spec justification:
 //   - CWS source may be "a river, lake, ocean, or cooling
 //     tower."
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
+//   - "The cooled water falls into the cooling tower basin [...]
+//     The cooling tower basin has a capacity of 5.2 x 106 gallons."
+//     specs/westinghouse_tech_manual/chapter_14/page_1044.txt:37-39
 type CoolingTower struct {
 	Part
 
@@ -352,10 +357,40 @@ type CoolingTower struct {
 	// is operating.
 	FanRunning bool
 
-	// ApproachF is the temperature difference between the
-	// tower cold-water basin and the ambient wet-bulb
-	// temperature (°F). Sized at CoolingTowerApproachF (5 °F)
-	// — a typical approach for modern mechanical-draft
-	// towers.
+	// ApproachF is the steady-state difference between the
+	// cold-basin temperature and the ambient wet-bulb while
+	// the fans run (°F).
 	ApproachF float64
+
+	// Basin holds the cold-water inventory the CW pumps draw
+	// from.
+	// specs/westinghouse_tech_manual/chapter_14/page_1044.txt:37-39
+	Basin Tank
+
+	// ColdBasinTemp is the temperature of the water the CW
+	// pumps return to the condenser. It relaxes toward
+	// AmbientWetBulbTemp + ApproachF with fans running and
+	// toward HotInletTemp without them.
+	ColdBasinTemp Temperature
+
+	// HotInletTemp is the condenser CW outlet temperature
+	// returning to the tower (°F).
+	HotInletTemp Temperature
+
+	// EvaporationFlow is the current evaporation loss
+	// (gal/s), proportional to circulating flow times the
+	// range (hot minus cold). Drift is folded into this
+	// fraction.
+	EvaporationFlow Volume
+
+	// MakeupValve meters makeup supply into the basin;
+	// BlowdownValve bleeds a continuous fraction of
+	// circulating flow.
+	// "Due to system impurities, a continuous blowdown is
+	// performed on the circulating water system. This
+	// inventory loss, combined with losses due to evaporation
+	// and drift, requires two cooling tower makeup pumps [...]"
+	// specs/westinghouse_tech_manual/chapter_14/page_1044.txt:12-17
+	MakeupValve   Valve
+	BlowdownValve Valve
 }
