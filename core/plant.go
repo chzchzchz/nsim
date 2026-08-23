@@ -203,13 +203,13 @@ func (r *ReactorBuilding) Step(sgSteamOutflowFraction float64) ReactorBuilding {
 	//     has been taken over by the RHRS, and the steam dump
 	//     system may be shutdown."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:35-37
-	rcsPressure := float64(ret.Pressurizer.Pressure)
+rcsPressurePsig := float64(ret.Pressurizer.Pressure - AtmosphericPressure)
 	// The CCWS was already stepped this timestep by
 	// AuxiliaryBuilding.Step (single-writer discipline); the RHRS
 	// reads that fresh OutletTemp here.
 	ret.Aux.ResidualHeatRemovalSystem = ret.Aux.ResidualHeatRemovalSystem.Step(
 		ret.ReactorPressureVessel.Outlet,
-		rcsPressure,
+		rcsPressurePsig,
 		ret.Aux.ComponentCoolingWaterSystem.OutletTemp,
 	)
 	if ret.Aux.ResidualHeatRemovalSystem.HasTakenOver {
@@ -1687,12 +1687,10 @@ func MakePlant() Plant {
 	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
 
 	// Pressurizer design defaults: 60% liquid, 40% steam
-	// bubble, pressure at PressurizerHeaterTarget. The RPS
-	// reads Pressurizer pressure; without an explicit
-	// initialisation the bubble is empty and Pressure
-	// collapses to PressurizerBasePressure (1500 psi),
-	// below the RPSLowPressurizerPressureTrip (1800 psi)
-	// setpoint.
+	// bubble, pressure at PressurizerHeaterTarget. Without an
+	// explicit initialisation the bubble is empty and Pressure
+	// collapses to PressurizerBasePressure, below the RPS
+	// low-pressurizer-pressure setpoint.
 	//
 	// HeatersOn is left at its zero value (false) so that
 	// tests which override Pressure to a high value are not

@@ -247,3 +247,31 @@ func TestRHRS_EndToEndCooldownTransfersHeatFromRCS(t *testing.T) {
 		"want ReturnFlow within design bound, got %v",
 		r.TrainA.ReturnFlow.Float()+r.TrainB.ReturnFlow.Float())
 }
+
+// The entry interlock compares like units end to end through the full
+// plant step: a cooled, depressurized water-solid pressurizer at the
+// solid-plant standstill pressure latches RHRS Running.
+//
+// Spec justification:
+//   - "When the reactor coolant temperature has dropped to 350F (177C)
+//     and the pressure has been reduced to less than approximately 400
+//     psig (28 bar), the RHR equipment is placed in operation."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
+func TestRHRS_EntryLatchesFromCooledPlantState(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.Trip = true
+	p.ReactorBuilding.ReactorPressureVessel.FissionPower = 0
+	p.ReactorBuilding.ReactorPressureVessel.DecayHeatFast = 0
+	p.ReactorBuilding.ReactorPressureVessel.DecayHeatSlow = 0
+	p.ReactorBuilding.ReactorPressureVessel.Outlet =
+		Temperature{Val: RHRSTempThreshold - 10, Unit: u.Fahrenheit}
+	pz := &p.ReactorBuilding.Pressurizer
+	pz.Water = Volume{Val: 1500, Unit: u.Gallon}
+	pz.SteamBubble = Volume{}
+	pz.Pressure = PressurizerBasePressure
+
+	stepN(&p, int(time.Second / TimeStep))
+
+	assert.True(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.Running,
+		"a cooled plant under the 400 psig ceiling must latch RHRS entry")
+}

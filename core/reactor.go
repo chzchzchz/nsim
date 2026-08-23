@@ -76,14 +76,25 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 		ret.TimeSinceTrip = 0
 	}
 
-	// 2) Primary-side thermal model.
+	// 2) Primary-side thermal model. Heat flow drives the coolant
+	// temperature: the relaxation strength scales with produced
+	// power, so a zero-fission core holds its temperature instead of
+	// being dragged toward the full-load reference (cold and hot-soak
+	// states stay put until an active cooling system takes over).
 	powerFrac := float64(ret.TotalThermalPower()) / float64(CoreRatedThermalPower)
 	powerFrac = max(powerFrac, 0)
 	refDeltaF := CoreReferenceOutletF - CoreReferenceInletF
 	targetOutlet := CoreReferenceInletF + powerFrac*refDeltaF
 
 	outletF := ret.Outlet.Float()
-	outletF += (targetOutlet - outletF) * (dt.Seconds() / PrimaryThermalTimeConstant)
+	// Heating needs produced power; passive cooling toward a lower
+	// target (steam dump, SG heat sink) proceeds at the full rate so
+	// boration and power cuts still show their cooling signature.
+	relax := dt.Seconds() / PrimaryThermalTimeConstant
+	if targetOutlet > outletF {
+		relax *= powerFrac
+	}
+	outletF += (targetOutlet - outletF) * relax
 	outletF = max(outletF, 0)
 	ret.Outlet = Temperature{Val: outletF, Unit: u.Fahrenheit}
 
@@ -99,7 +110,10 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 		blend := CoreInletBlendFraction * powerFrac * rcpFlowFrac
 		targetInlet := CoreReferenceInletF*(1-blend) + outletF*blend
 		inletF := ret.Inlet.Float()
-		inletF += (targetInlet - inletF) * (dt.Seconds() / PrimaryInletTimeConstant)
+		// Power-scaled like the outlet: no produced heat means no
+		// forcing toward the full-load cold-leg reference.
+		inletF += (targetInlet - inletF) *
+			(dt.Seconds() / PrimaryInletTimeConstant) * powerFrac
 		inletF = max(inletF, 0)
 		ret.Inlet = Temperature{Val: inletF, Unit: u.Fahrenheit}
 	}

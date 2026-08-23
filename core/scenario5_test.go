@@ -28,6 +28,10 @@ func scenario5Vessel() ReactorPressureVessel {
 	r.Insertion = 1
 	r.DemandInsertion = 1
 	r.BoronConcentration = CVCSInitialBoron
+	// No-load equilibrium carries its rated xenon load; without it the
+	// folded reactivity reference reads a fresh core as ~2.7% light.
+	r.Iodine135 = 1
+	r.Xenon135 = 1
 	return r
 }
 
@@ -85,18 +89,46 @@ func rAtRest(t *testing.T, boron float64, insertion float64) float32 {
 
 func TestScenario5_CrossingStepYieldsSustainedRiseWithoutRodMotion(t *testing.T) {
 	const (
-		crossingDemand = 0.0445
-		hold           = 300 * time.Second
+		measure      = 2 * time.Second
+		boron        = 600.0
+		withdrawStep = 0.000625 // rod worth 4.5%/unit -> ~+0.0028% dk/k
 	)
-	samples := runReactivityApproach(t, 600, crossingDemand, hold)
 
-	first := samples[len(samples)-2]
-	final := samples[len(samples)-1]
-	require.Greater(t, float64(final), float64(first),
+	// Critical insertion in closed form: with the coolant frozen at
+	// the reference temperature and xenon at rated equilibrium, every
+	// reactivity term except the rod worth is constant, so the
+	// crossing sits exactly at constOffset / 4.5 percent per unit.
+	r0 := scenario5Vessel()
+	r0.BoronConcentration = boron
+	r0.Insertion = 0
+	constOffset := float64(r0.Step(0).Reactivity)
+	atCritical := constOffset / 4.5
+
+	r := scenario5Vessel()
+	r.BoronConcentration = boron
+	r.Insertion = atCritical
+	r = r.Step(0)
+	require.InDelta(t, 0.0, float64(r.Reactivity), 1e-6,
+		"closed-form critical position must null reactivity")
+
+	// At criticality the chain holds steady at the source floor;
+	// growth begins once the withdrawal makes rho positive. The short
+	// window keeps the average startup rate inside the spec band
+	// against ongoing xenon buildup.
+	first := r.FissionPower
+	r.Insertion = atCritical - withdrawStep
+	for range int(measure / TimeStep) {
+		r = r.Step(0)
+	}
+	final := r.FissionPower
+
+	require.Greater(t, float64(final), float64(CoreNeutronSourcePower),
 		"sustained rise expected past the crossing step")
+	require.InDelta(t, atCritical-withdrawStep, r.Insertion, 1e-9,
+		"insertion must stay fixed through the rise")
 
 	decades := math.Log10(float64(final) / float64(first))
-	surDPM := decades / (hold.Seconds() / 60)
+	surDPM := decades / (measure.Seconds() / 60)
 	assert.Greater(t, surDPM, 0.2, "startup rate should be positive")
 	assert.LessOrEqual(t, surDPM, 1.0,
 		"steady-state startup rate must stay within the spec band")

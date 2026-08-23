@@ -351,3 +351,28 @@ func TestReactor_FissionRegrowsFromSourceAfterScram(t *testing.T) {
 		"fission power never regrew past 10%% of rated (final %v W)",
 		r.FissionPower)
 }
+
+// A zero-fission core holds its coolant temperature: the outlet
+// relaxation strength scales with produced power, so cold and hot-soak
+// states stay put instead of drifting toward the full-load reference.
+//
+// Spec: the cold startup initial condition holds "<140" F RCS coolant.
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:48-51
+func TestReactor_ZeroPowerHoldsTemperature(t *testing.T) {
+	r := ReactorPressureVessel{
+		ControlRods: ControlRods{BoronConcentration: CVCSInitialBoron},
+		Outlet:      Temperature{Val: 135, Unit: u.Fahrenheit},
+		Inlet:       Temperature{Val: 135, Unit: u.Fahrenheit},
+		Xenon135:    1,
+	}
+	r.FissionPower = CoreNeutronSourcePower
+
+	for range int(60 * time.Second / TimeStep) {
+		r = r.Step(RCPRatedSpeed)
+	}
+
+	assert.InDelta(t, 135.0, r.Outlet.Float(), 0.5,
+		"a zero-fission core must not be dragged toward full-load temperature")
+	assert.InDelta(t, 135.0, r.Inlet.Float(), 0.5,
+		"the inlet must hold as well with no flow-driven blend")
+}

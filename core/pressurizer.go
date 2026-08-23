@@ -207,13 +207,25 @@ type Pressurizer struct {
 //     pressure in accordance with the applicable temperature-pressure
 //     curves." specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:42-43
 const (
-	PressurizerBasePressure    Pressure = 1500
+	// PressurizerBasePressure is the water-solid standstill pressure.
+	// The spec's cold condition holds "<400 psig" and RHRS entry needs
+	// "less than approximately 400 psig", so the solid-plant floor
+	// must sit inside that regime for cooldown chains to reach RHR
+	// entry; 375 psia (~360 psig) places it just under the ceiling.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:48-58
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
+	PressurizerBasePressure Pressure = 375
 	PressurizerHeaterTarget    Pressure = 2250
 	PressurizerHeaterRate      Pressure = 200 // psi/s while HeatersOn
 	PressurizerSprayMin        Pressure = 1400
 	PressurizerSprayRate       Pressure = 300 // psi/s at SprayOpen == 1
 	PressurizerAmbientDecay    Pressure = 5   // psi/s cooldown when idle
-	PressurizerBubbleStiffness float64  = 2.5 // psi per gallon of bubble
+	// PressurizerBubbleStiffness converts heater and spray pressure
+	// changes into displaced liquid volume during boiloff and
+	// condensation. Rescaled against PressurizerBasePressure so the
+	// no-load 300 gal bubble still holds 2250 psia.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:66-67
+	PressurizerBubbleStiffness float64 = 6.25 // psi per gallon of bubble
 	PressurizerPORVTrip        Pressure = 2500
 
 	// PressurizerSafetySetpoint is where the self-actuating ASME

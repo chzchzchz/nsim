@@ -125,7 +125,7 @@ func TestPressurizer_BubbleFormationFromWaterSolid(t *testing.T) {
 		Pressure:  PressurizerBasePressure,
 		HeatersOn: true,
 	}
-	steps := int(4 * time.Second / TimeStep)
+	steps := int(12 * time.Second / TimeStep)
 	for i := 0; i < steps; i++ {
 		pz, _ = pz.Step(nil, nil, nil)
 	}
