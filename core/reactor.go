@@ -54,8 +54,7 @@ import (
 //     (6.15 m3/sec) Design head 280 ft (85.3 m)"
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_056.txt:124-130
 //     (cited for context; not directly used in the model).
-func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {
-	ret := *r
+func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	ret := *r
 	dt := TimeStep
 
 	// 0) Trip forces full rod insertion per the scram definition:
@@ -150,7 +149,21 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_223.txt:172
 	rodReactivity := float32(ret.ControlRods.Insertion) * CoreRodWorthABCD
 	dopplerDeltaF := outletF - float64(CoreDopplerReferenceTempF)
-	dopplerPcm := float32(dopplerDeltaF * CoreDopplerPcmPerDegF)
+	// Net temperature coefficient (Doppler + moderator) varies
+	// with RCS boron concentration: small positive at beginning
+	// of life with full soluble-boron shim, substantially
+	// negative at end of life with boron depleted. The
+	// interpolation crosses zero at CoreNetTempCoefZeroCrossBoron
+	// so the simplified model reproduces the BOL/EOL spec
+	// behaviour:
+	//   "At the beginning of life, the effect on reactivity is
+	//    small since the moderator temperature coefficient is
+	//    small. At the end of life, the coefficient is
+	//    substantially more negative due to depletion and
+	//    removal of shim boron [...]"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122
+	tempCoef := netTempCoef(ret.ControlRods.BoronConcentration)
+	dopplerPcm := float32(dopplerDeltaF * tempCoef)
 	boronDelta := (ret.ControlRods.BoronConcentration - CVCSInitialBoron) / 100.0
 	boronPcm := float32(boronDelta) * CoreBoronWorthPer100ppm
 	ret.Reactivity = rodReactivity + dopplerPcm + boronPcm
@@ -182,6 +195,16 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {
 	if ret.ThermalPower < 0 {
 		ret.ThermalPower = 0
 	}
+	// Rated cap. At BOL the net temperature coefficient can be
+	// small positive (specs/.../chapter_2/page_037.txt:117-122);
+	// without rod-by-rod control, even a +1 pcm/°F coefficient
+	// diverges to infinity in this simplified one-state-point
+	// model. Real plants stay subcritical via control rods; the
+	// simulation uses rated as the cap and treats any further
+	// power demand as a rod-withdrawal request.
+	if ret.ThermalPower > CoreRatedThermalPower {
+		ret.ThermalPower = CoreRatedThermalPower
+	}
 	// RCP shaft-loss heat enters the primary coolant (chapter
 	// 16 temperature balance). Added after the reactivity-based
 	// power so the SG HeatInput sees the total primary-side
@@ -195,4 +218,39 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {
 	ret.ThermalPower += ret.PumpHeatInput
 
 	return ret
+}
+
+// netTempCoef returns the combined Doppler + moderator
+// temperature coefficient (pcm/°F) at the given RCS boron
+// concentration. The interpolation is linear between
+// CoreNetTempCoefAtZeroBoronPcmPerDegF (end-of-life, low
+// boron: substantially more negative) and
+// CoreNetTempCoefAtRefBoronPcmPerDegF (beginning-of-life,
+// CVCSInitialBoron: small positive).
+//
+// Boron values inside (0, CVCSInitialBoron] interpolate.
+// Boron < 0 is clamped to the EOL anchor. Boron == 0 returns
+// the EOL anchor — a real plant with full dilution has the
+// most-negative combined coefficient per the spec.
+//
+// Spec:
+//   - "At the beginning of life, the effect on reactivity is
+//     small since the moderator temperature coefficient is
+//     small [positive]. At the end of life, the coefficient is
+//     substantially more negative due to depletion and removal
+//     of shim boron [...]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122
+//   - "+7 pcm/°F" moderator effect at 1700 ppm with burnable
+//     absorbers reducing the boron need
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_039.txt:51-56
+func netTempCoef(boron float64) float64 {
+	if boron <= 0 {
+		return CoreNetTempCoefAtZeroBoronPcmPerDegF
+	}
+	if boron >= CVCSInitialBoron {
+		return CoreNetTempCoefAtRefBoronPcmPerDegF
+	}
+	t := boron / CVCSInitialBoron
+	return CoreNetTempCoefAtZeroBoronPcmPerDegF +
+		t*(CoreNetTempCoefAtRefBoronPcmPerDegF-CoreNetTempCoefAtZeroBoronPcmPerDegF)
 }

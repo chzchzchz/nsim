@@ -154,24 +154,32 @@ func TestBridge_SensorsReflectState(t *testing.T) {
 // rod insertions and compares after 5 s of simulated time.
 // DemandInsertion is set equal to Insertion so the rod drive
 // does not move during the test. Both plants are seeded at
-// CoreRatedThermalPower so the rod reactivity term modulates
-// power from step 1; otherwise a cold plant (power=0) would
-// have no power for the rod term to affect.
+// half-rated thermal power so the rod reactivity term modulates
+// power from step 1 without immediately saturating at the
+// CoreRatedThermalPower cap.
+//
+// Spec justification for rod worth: "the differential rod worth
+// or neutron capability is near zero at the top and bottom
+// ends of the core" (specs/.../chapter_2/page_037.txt:124-132),
+// so rod motion near the extremes has small effect on outlet.
 func TestThermal_RodWithdrawalRaisesOutlet(t *testing.T) {
 	const steps = int(5 * time.Second / TimeStep)
+	const seedPower = CoreRatedThermalPower / 2
 
 	// Insertion 0.7 = rods 30% withdrawn (mostly inserted).
 	low := MakePlant()
 	low.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0.7
 	low.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0.7
-	low.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	low.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = CVCSInitialBoron
+	low.ReactorBuilding.ReactorPressureVessel.ThermalPower = seedPower
 	stepN(&low, steps)
 
 	// Insertion 0.2 = rods 80% withdrawn (mostly out).
 	high := MakePlant()
 	high.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0.2
 	high.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0.2
-	high.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	high.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = CVCSInitialBoron
+	high.ReactorBuilding.ReactorPressureVessel.ThermalPower = seedPower
 	stepN(&high, steps)
 
 	lowOut := low.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
@@ -182,11 +190,24 @@ func TestThermal_RodWithdrawalRaisesOutlet(t *testing.T) {
 }
 
 // Diluting boron (setpoint below current concentration, CVCS
-// in Dilution mode) raises outlet temperature. The CVCS
-// dilution path reduces RCS boron, the boron reactivity
-// term becomes less negative, and the thermal model relaxes
-// to a higher outlet target.
-func TestThermal_BoronDilutionRaisesOutlet(t *testing.T) {
+// in Dilution mode) shifts the net temperature coefficient
+// toward more-negative values per spec. The model couples the
+// Doppler+moderator coefficient to RCS boron, so dropping
+// boron reduces the combined coefficient and the power
+// correction drops. The outlet cools as the reactor power
+// falls below rated.
+//
+// Spec justification:
+//   - "the moderator temperature coefficient would be on the
+//     order of +7 pcm/°F" at BOL with full soluble-boron shim
+//     (specs/.../chapter_2/page_039.txt:54-55).
+//   - "the coefficient is substantially more negative due to
+//     depletion and removal of shim boron"
+//     (specs/.../chapter_2/page_037.txt:119-121).
+// The dilution path therefore cools the plant rather than
+// heating it; operators use boron to swing reactivity, not
+// temperature.
+func TestThermal_BoronDilutionCoolsOutlet(t *testing.T) {
 	const steps = int(30 * time.Second / TimeStep)
 
 	base := MakePlant()
@@ -195,14 +216,62 @@ func TestThermal_BoronDilutionRaisesOutlet(t *testing.T) {
 	diluted := MakePlant()
 	diluted.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSDilution
 	diluted.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
-	// Drop the boron concentration so the reactivity term
-	// shifts positive (less negative).
+	// Drop the boron concentration so the net temperature
+	// coefficient becomes more negative and power falls below
+	// rated.
 	diluted.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = CVCSInitialBoron - 500
 	stepN(&diluted, steps)
 
 	baseOut := base.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 	dilOut := diluted.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
-	assert.Greater(t, dilOut, baseOut,
-		"want diluted outlet (%v) > baseline outlet (%v)",
+	assert.Less(t, dilOut, baseOut,
+		"want diluted outlet (%v) < baseline outlet (%v)",
 		dilOut, baseOut)
+}
+
+// Starting from a cold operating point with the fission_4
+// control geometry (0 insertion, RCP on), CVCS boron boration
+// raises the RCS boron concentration.  The increased negative
+// boron reactivity suppresses fission power, the outlet target
+// drops, and the actual outlet temperature relaxes downward.
+//
+// The live control sequence (bridge path) is:
+//
+//   bridge.Set("AuxiliaryBuilding/ChemicalVolumeControlSystem/Mode", "Boration")
+//   bridge.Set("AuxiliaryBuilding/ChemicalVolumeControlSystem/
+//             BTRSRecirculationPumpRunning", "true")
+//   bridge.Set("AuxiliaryBuilding/ChemicalVolumeControlSystem/
+//             BoronSetpoint", "<higher ppm>")
+//
+// Because BoronSetpoint writes both the CVCS field and
+// RPV.ControlRods.BoronConcentration (bridge.go:815-829),
+// plant.go:49-50 keeps them synchronised on every Plant.Step.
+func TestThermal_Fission4_BorationLowersOutlet(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorCoolantPump.Running = true
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
+	// Start at 10 ppm boron (fission_4 starting point) with the
+	// CVCS in VolumeControl mode so no automatic chemistry
+	// motion occurs during warmup.
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 10
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = true
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = true
+
+	const warmup = int(60 * time.Second / TimeStep)
+	stepN(&p, warmup)
+	baseOut := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+
+	// Switch to boration: CVCS drives boron upward from 10 ppm
+	// at CVCSBorationRate (0.8 ppm/s).
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSBoration
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
+
+	const steps = int(100 * time.Second / TimeStep)
+	stepN(&p, steps)
+	boratedOut := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+
+	assert.Less(t, boratedOut, baseOut,
+		"want outlet after boration (%v °F) < baseline at 10 ppm (%v °F)",
+		boratedOut, baseOut)
 }

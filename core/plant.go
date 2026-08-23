@@ -188,7 +188,23 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 		)
 		ret.SteamGenerator.HeatInput = 0
 	} else {
-		ret.SteamGenerator.HeatInput = rpv.ThermalPower
+		// Per-loop SG heat input: the lumped single-SG model
+		// represents SteamGeneratorLoopCount primary loops, so
+		// each SG carries one loop's fraction of the core
+		// thermal output. Without this division the single
+		// SG would see the full CoreRatedThermalPower (~3.8
+		// GW), roughly 3.5× the per-SG design rating of
+		// SteamGeneratorFullLoadHeatInput (~1.08 GW at 480 kg/s
+		// steam flow).
+		// Spec: "Number and type: 1 vertical, U-tube steam
+		// generator with integral steam-drum per loop"
+		// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:31-32
+		// Spec: "Steam flow per steam generator: 3,813,000
+		// lb/hr (480 kg/sec)"
+		// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
+		ret.SteamGenerator.HeatInput = Watts(
+			float64(rpv.ThermalPower) / float64(SteamGeneratorLoopCount),
+		)
 	}
 	ret.SteamGenerator = ret.SteamGenerator.Step()
 

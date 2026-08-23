@@ -30,6 +30,9 @@ func (s *SteamGenerator) Step() SteamGenerator {
 		if newWater < 0 {
 			newWater = 0
 		}
+		if newWater > ret.Volume.Float() {
+			newWater = ret.Volume.Float()
+		}
 		ret.Water = vol(ret.Water, newWater)
 	}
 

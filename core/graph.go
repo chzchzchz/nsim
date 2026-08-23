@@ -199,6 +199,37 @@ func simulateFluidFlow(g *PlantGraph, dt time.Duration) {
 		} else if flow < 0 && toCap > 0 && toLevel < -flow {
 			flow = -toLevel
 		}
+		// Clamp the destination so it cannot exceed its
+		// finite capacity (e.g. SteamGenerator shell volume).
+		// Without this the destination monotonically grows
+		// past Volume in the SG case because the primary-loop
+		// edges push volume in faster than the boil rate pulls
+		// it out at low primary-to-secondary ΔT.
+		// Spec: the SG shell has a finite design volume
+		// (Table 3.4-1, specs/.../chapter_3/page_065.txt:24-61).
+		// Note that for negative flow the actual transfer
+		// reverses: the "to" node is the source and the "from"
+		// node is the destination, so the capacity clamp must
+		// apply to whichever node is receiving volume.
+		if flow > 0 && toCap > 0 {
+			room := toCap - toLevel
+			if room <= 0 {
+				flow = 0
+			} else if room < flow {
+				flow = room
+			}
+		}
+		if flow < 0 && fromCap > 0 {
+			// flow < 0 means volume moves from `to` to `from`,
+			// so `from` is the receiver. Clamp `from` to its
+			// capacity.
+			room := fromCap - fromLevel
+			if room <= 0 {
+				flow = 0
+			} else if -flow > room {
+				flow = -room
+			}
+		}
 		if flow == 0 {
 			continue
 		}

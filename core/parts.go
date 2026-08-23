@@ -1699,8 +1699,33 @@ var DieselLowFuelLevel = u.NewValue(50, u.Gallon)
 // but does not state a plant-wide rated thermal power. The number
 // below is sized so that four SGs at SteamGeneratorFullLoadHeatInput
 // match the standard 4-loop plant scale (~3.4 GWt).
+//
+// SteamGeneratorLoopCount is the number of primary loops the
+// lumped single-SG model represents. SteamGeneratorFullLoadHeatInput
+// is the per-SG vaporising duty (specs/.../chapter_3/page_065.txt:56,
+// 480 kg/s), so CoreRatedThermalPower = SteamGeneratorLoopCount ×
+// SteamGeneratorFullLoadHeatInput. The ReactorBuilding wiring
+// (core/plant.go) routes rpv.ThermalPower through the SG, so the
+// per-loop heat flux the SG actually sees is
+// rpv.ThermalPower / SteamGeneratorLoopCount.
+//
+//   "Number and type: 1 vertical, U-tube steam generator with
+//    integral steam-drum per loop"
+//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:31-32
+//   "2-Loop Plant / 3-Loop Plant / 4-Loop Plant"
+//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:41-43
 const (
 	CoreRatedThermalPower Watts = 3_800_000_000
+
+	// SteamGeneratorLoopCount is the number of primary coolant
+	// loops the plant represents. The lumped SG model uses
+	// this to scale the per-loop heat input so the single SG
+	// does not carry the full core thermal output (one SG is
+	// rated for ~480 kg/s of steam, per
+	// specs/.../chapter_3/page_065.txt:56). The 4-loop
+	// configuration matches CoreRatedThermalPower ≈ 4 ×
+	// SteamGeneratorFullLoadHeatInput.
+	SteamGeneratorLoopCount = 4
 )
 
 // Decay-heat model constants.
@@ -1825,9 +1850,57 @@ const (
 	// CoreDopplerPcmPerDegF is the PWR net temperature coefficient
 	// of reactivity (combined Doppler + moderator temperature
 	// effect) expressed in pcm per degree Fahrenheit, applied to
-	// the outlet temperature. A negative value means rising outlet
-	// temperature reduces reactivity (stable).
+	// the outlet temperature. The simplified linear model
+	// interpolates between end-of-life (low boron: substantially
+	// more negative per the spec) and beginning-of-life (high
+	// boron: small positive per the spec).
+	//
+	// Spec justification:
+	//   - "At the beginning of life, the effect on reactivity is
+	//     small since the moderator temperature coefficient is
+	//     small [positive]. At the end of life, the coefficient is
+	//     substantially more negative due to depletion and removal
+	//     of shim boron, and the effect on reactivity addition is
+	//     greater."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122
+	//   - "If soluble boron were the sole means of control, the
+	//     concentration would be on the order of 1700 ppm and the
+	//     moderator temperature coefficient would be on the order
+	//     of +7 pcm/°F (a 15°F [...] increase in moderator
+	//     temperature creates 0.001 reactivity increase)."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_039.txt:51-56
+	//
+	// The first-core case at 1000 ppm boron (with burnable
+	// absorbers reducing the soluble-boron need from the 1700 ppm
+	// bare-core value, per page_039.txt:51-56) yields a small
+	// positive coefficient via the linear interpolation. End of
+	// life (boron approaching 0 ppm) yields a substantially more
+	// negative coefficient. The interpolation is anchored on
+	// CoreNetTempCoefAtZeroBoronPcmPerDegF and
+	// CoreNetTempCoefAtRefBoronPcmPerDegF.
 	CoreDopplerPcmPerDegF float64 = -1.0
+
+	// CoreNetTempCoefAtRefBoronPcmPerDegF is the combined
+	// Doppler+moderator temperature coefficient at the
+	// beginning-of-life RCS boron concentration
+	// (CVCSInitialBoron = 1000 ppm). Sized slightly positive so
+	// the model reproduces the "moderator temperature coefficient
+	// is small [positive]" BOL behaviour described in
+	// specs/.../chapter_2/page_037.txt:117-122 and the BOL
+	// "+7 pcm/°F" moderator effect at 1700 ppm with burnable
+	// absorbers reducing it in
+	// specs/.../chapter_2/page_039.txt:51-56.
+	CoreNetTempCoefAtRefBoronPcmPerDegF float64 = 1.0
+
+	// CoreNetTempCoefAtZeroBoronPcmPerDegF is the combined
+	// Doppler+moderator temperature coefficient at zero RCS
+	// boron, representing end-of-life where the soluble boron
+	// shim has been depleted and the moderator temperature
+	// coefficient is substantially more negative per the spec.
+	// Spec: "the coefficient is substantially more negative
+	// due to depletion and removal of shim boron"
+	// specs/.../chapter_2/page_037.txt:119-121
+	CoreNetTempCoefAtZeroBoronPcmPerDegF float64 = -2.0
 )
 
 // Reactor Coolant Pump dynamics constants (plans/p33_1.txt).
