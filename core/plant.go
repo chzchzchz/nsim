@@ -178,7 +178,7 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 		)
 		decayW := float64(ret.ReactorPressureVessel.TotalThermalPower())
 		netW := decayW - rejectionW
-		rcsMassKg := 3_500_000.0 * 0.453592
+		rcsMassKg := 3_500_000.0 * KilogramsPerPound
 		deltaTK := netW / (rcsMassKg * 4186.0) * dt.Seconds()
 		ret.ReactorPressureVessel.Outlet = Temperature{Val: rcsOutletF+deltaTK*9.0/5.0, Unit: u.Fahrenheit}
 		ret.SteamGenerator.HeatInput = 0
@@ -967,7 +967,7 @@ func (p *Plant) Step() {
 	spray := p.nextPlant.AuxiliaryBuilding.ContainmentSpraySystem
 	var cssHeatOut Watts
 	if spray.Running && spray.DriveReady && spray.SprayHeaderOpen {
-		massKgPerS := spray.SprayFlow * 0.0631
+		massKgPerS := spray.SprayFlow * KilogramsPerGPM
 		cssHeatOut = Watts(massKgPerS * float64(LatentHeatOfSteamization))
 	}
 	// RCS break enthalpy release is deferred until a break-flow

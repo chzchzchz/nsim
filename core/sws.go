@@ -64,8 +64,8 @@ func (s *ServiceWaterSystem) Step(
 	ret.Flow = min(ret.Flow, ServiceWaterDesignFlow)
 
 	// Outlet temperature: source temperature plus the heat-
-	// load-driven rise. Mass flow in kg/s = gpm × 0.0631.
-	massKgPerS := ret.Flow * 0.0631
+	// load-driven rise. Mass flow in kg/s = gpm × KilogramsPerGPM.
+	massKgPerS := ret.Flow * KilogramsPerGPM
 	cpWater := 4186.0
 	if massKgPerS > 0 && float64(heatLoad) > 0 {
 		deltaF := float64(heatLoad) / (massKgPerS * cpWater) *

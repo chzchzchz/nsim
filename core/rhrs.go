@@ -83,7 +83,7 @@ func (t *RHRSTrain) Step(
 		ret.HeatExchanger.HeatTransferRate = 0
 		return ret
 	}
-	fwMassKg := float64(RHRSTrainDesignFlow) * 3.785
+	fwMassKg := float64(RHRSTrainDesignFlow) * KilogramsPerGallon
 	maxDuty := fwMassKg * 4186.0 * (rcsOut - ccwIn)
 	eff := 0.7
 	ret.HeatExchanger.HeatTransferRate = Watts(eff * maxDuty)

@@ -124,7 +124,7 @@ func TestSWSTotalHeatLoadIncludesCCWDuty(t *testing.T) {
 	require.Greater(t, duty, 0.0,
 		"want CCW HXHeatDuty > 0 in steady state, got %v", duty)
 
-	massKgPerS := ServiceWaterDesignFlow * 0.0631
+	massKgPerS := ServiceWaterDesignFlow * KilogramsPerGPM
 	wantRise := (rcfcSum + duty) / (massKgPerS * 4186.0) * 9.0 / 5.0
 	sws := p.Outside.ServiceWaterSystem
 	gotRise := sws.OutletTemp.Float() - sws.InletTemp.Float()
