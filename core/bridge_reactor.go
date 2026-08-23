@@ -784,10 +784,67 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = v
 			p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = v
 			return nil
-		},
-	}
+			},
+		}
 
-}
+		// Automatic rod-control selector. Engaged, the controller
+		// trims DemandInsertion toward the Tavg program implied by
+		// the turbine load demand; disengaged, bridge writes to
+		// ControlRods/Insertion pass through as before.
+		//   "During operation in the power range, the control rods
+		//    maintain Tavg with reactor power following steam
+		//    demand/turbine power."
+		//    specs/the_westinghouse_pressurized_water_react/chapter_16/page_230.txt:152-162
+		m["ReactorBuilding/RodControl/Auto"] = &bridge.Control{
+			Part:  "ReactorBuilding/RodControl",
+			Label: "Auto",
+			Kind:  "bool",
+			Get: func() string {
+				return bridge.BoolToStr(
+					p.ReactorBuilding.RodControl.Auto)
+			},
+			Set: func(s string) error {
+				v, err := bridge.StrToBool(s)
+				if err != nil {
+					return err
+				}
+				p.ReactorBuilding.RodControl.Auto = v
+				return nil
+			},
+		}
+
+		// Dispatcher load reference for this unit as a fraction of
+		// rated electrical output. Plant.Step latches it into
+		// Turbine.LoadDemandRef, which the electro-hydraulic control
+		// ramps Setpoint toward while the unit is synchronized; the
+		// operator panel writes the same reference directly:
+		//   "...comparing turbine speed and first-stage pressure with
+		//    reference values established by the dispatcher or
+		//    initiated at the operator's panel."
+		//    specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:36-41
+		m["ReactorBuilding/Grid/LoadDemand"] = &bridge.Control{
+			Part:  "ReactorBuilding/Grid",
+			Label: "LoadDemand",
+			Kind:  "normalized",
+			Get: func() string {
+				return fmt.Sprintf("%v",
+					p.ReactorBuilding.Grid.LoadDemand)
+			},
+			Set: func(s string) error {
+				validated, err := bridge.ConvertControlValue("normalized", s)
+				if err != nil {
+					return err
+				}
+				v, err := strconv.ParseFloat(validated, 64)
+				if err != nil {
+					return err
+				}
+				p.ReactorBuilding.Grid.LoadDemand = v
+				return nil
+			},
+		}
+
+	}
 
 // addReactorBuildingSensors adds Sensor entries keyed by the namespace managed by this file to m.
 func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
@@ -1032,6 +1089,31 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+
+	// Reactor coolant boron concentration (chapter 7):
+	// "Control of the reactor coolant's boron concentration
+	// involves both the Boron Thermal Regeneration System (BTRS)
+	// and the Reactor Water Makeup System."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:37-38
+	m["ReactorBuilding/ReactorPressureVessel/BoronConcentration"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/RodControl",
+		Label: "TavgErrorF",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.ReactorBuilding.RodControl.TavgErrorF)
+		},
+	}
+
+	m["ReactorBuilding/RodControl/ProgramTavgF"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/RodControl",
+		Label: "ProgramTavgF",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.ReactorBuilding.RodControl.ProgramTavgF)
+		},
+	}
 
 	// Reactor coolant boron concentration (chapter 7):
 	// "Control of the reactor coolant's boron concentration

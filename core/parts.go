@@ -1951,9 +1951,15 @@ type Grid struct {
 	// (SAT) picks up house load when this is non-zero.
 	Voltage float64
 
-	// LoadDemand is the external grid's MW demand on this
-	// plant. It is a pure input: the grid does not model
-	// other generators or area control error.
+	// LoadDemand is the dispatcher's load reference for this
+	// unit as a fraction of rated electrical output (0..1).
+	// It is a pure input: the grid does not model other
+	// generators or area control error. Plant.Step latches it
+	// into Turbine.LoadDemandRef, which the electro-hydraulic
+	// control ramps Setpoint toward while synchronized:
+	//   "...reference values established by the dispatcher or
+	//    initiated at the operator's panel."
+	//    specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:36-41
 	LoadDemand float64
 }
 
