@@ -136,7 +136,7 @@ func TestTurbineExtractionSteamFlow_ScalesWithLoad(t *testing.T) {
 func TestMSR_HalfLoadPowerGivesSuperheatedLPInlet(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 
 	stepN(&p, int(5*time.Second/TimeStep))
 	require.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State,
@@ -164,7 +164,7 @@ func TestMSR_HalfLoadPowerGivesSuperheatedLPInlet(t *testing.T) {
 func TestMSR_DrainFlowsToHotwell(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	hotwellBefore := p.TurbineBuilding.Condenser.HotwellLevel.Float()
 
 	stepN(&p, int(2*time.Second/TimeStep))

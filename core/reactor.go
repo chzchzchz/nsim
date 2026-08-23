@@ -1,7 +1,6 @@
 package core
 
 import (
-	"math"
 	"time"
 
 	u "github.com/bcicen/go-units"
@@ -77,7 +76,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	}
 
 	// 2) Primary-side thermal model.
-	powerFrac := float64(ret.ThermalPower) / float64(CoreRatedThermalPower)
+	powerFrac := float64(ret.TotalThermalPower()) / float64(CoreRatedThermalPower)
 	powerFrac = max(powerFrac, 0)
 	refDeltaF := CoreReferenceOutletF - CoreReferenceInletF
 	targetOutlet := CoreReferenceInletF + powerFrac*refDeltaF
@@ -138,7 +137,11 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	//   - "Withdraw rods to criticality and raise output to power
 	//     range level."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_223.txt:172
-	rodReactivity := float32(ret.ControlRods.Insertion) * CoreRodWorthABCD
+	// All reactivity contributions are combined on one scale:
+	// percent Δk/k (the power-defect correction divides by 100).
+	// 1 pcm = 0.001% Δk/k, so pcm-valued coefficients convert
+	// with a factor of 1/1000.
+	rodPct := float32(ret.ControlRods.Insertion) * CoreRodWorthABCD * 100
 	outletFClamped := min(max(outletF, DopplerClampLowF), DopplerClampHighF)
 	dopplerDeltaF := outletFClamped - float64(CoreDopplerReferenceTempF)
 	// Net temperature coefficient (Doppler + moderator) varies
@@ -155,64 +158,68 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	//    removal of shim boron [...]"
 	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122
 	tempCoef := netTempCoef(ret.ControlRods.BoronConcentration)
-	dopplerPcm := float32(dopplerDeltaF * tempCoef)
+	dopplerPct := float32(dopplerDeltaF*tempCoef) / 1000
 	boronDelta := (ret.ControlRods.BoronConcentration - CVCSInitialBoron) / 100.0
-	boronPcm := float32(boronDelta) * CoreBoronWorthPer100ppm
-	ret.Reactivity = rodReactivity + dopplerPcm + boronPcm
+	boronPct := float32(boronDelta) * CoreBoronWorthPer100ppm
+	ret.Reactivity = rodPct + dopplerPct + boronPct
 
-	// 5) Thermal power output. At-power: rated scaled by the
-	// reactivity power-defect correction. After trip: decay-heat
-	// curve from p7 (unchanged).
-	powerFrac32 := float32(powerFrac)
-	if ret.Trip {
-		t := ret.TimeSinceTrip.Seconds()
-		if t < CoreDecayHeatFastTimeConstant.Seconds() {
-			fast := float32(CoreDecayHeatShutdownFraction +
-				(1.0-CoreDecayHeatShutdownFraction)*
-					math.Exp(-float64(t)/CoreDecayHeatFastTimeConstant.Seconds()))
-			powerFrac32 = fast
-		} else {
-			tSlow := t - CoreDecayHeatFastTimeConstant.Seconds()
-			slow := float32(CoreDecayHeatMinFraction +
-				(CoreDecayHeatShutdownFraction-CoreDecayHeatMinFraction)*
-					math.Exp(-tSlow/CoreDecayHeatTimeConstant.Seconds()))
-			powerFrac32 = slow
-		}
+	// 5) Thermal power = fission chain power + fission-product
+	// decay heat (+ RCP shaft loss, added below). The two nuclear
+	// components obey different physics and are evolved separately:
+	//
+	//   - Fission power responds to reactivity: the quasi-static
+	//     power-defect relation scales the previous fission power
+	//     by 1 + rho/100 every step. One equation set governs
+	//     operation and shutdown alike; a scram simply drives rho
+	//     negative via full rod insertion
+	//     (specs/the_westinghouse_pressurized_water_react/glossary.md:142)
+	//     and the chain collapses on its own.
+	//   - Decay heat is fission-product beta decay: production is
+	//     proportional to fission power while the inventory drains
+	//     at fixed radioactive decay constants that reactivity
+	//     cannot influence (specs/wiki/Decay_heat.txt).
+	powerCorrection := 1.0 + float64(ret.Reactivity)/100.0
+	if powerCorrection < 0 {
+		powerCorrection = 0
 	}
-	// Decay heat is fission-product beta decay: its magnitude is a
-	// function of prior power and time since trip only, not of
-	// reactivity (specs/Decay_heat.txt), so the power-defect
-	// correction applies to critical operation only.
-	powerCorrection := 1.0
-	if !ret.Trip {
-		powerCorrection += float64(ret.Reactivity) / 100.0
-		if powerCorrection < 0 {
-			powerCorrection = 0
-		}
-	}
-	ret.ThermalPower = Watts(float64(CoreRatedThermalPower) * float64(powerFrac32) * powerCorrection)
-	ret.ThermalPower = max(ret.ThermalPower, 0)
-	// Rated cap. At BOL the net temperature coefficient can be
-	// small positive (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:117-122);
-	// without rod-by-rod control, even a +1 pcm/°F coefficient
-	// diverges to infinity in this simplified one-state-point
-	// model. Real plants stay subcritical via control rods; the
-	// simulation uses rated as the cap and treats any further
-	// power demand as a rod-withdrawal request.
-	ret.ThermalPower = min(ret.ThermalPower, CoreRatedThermalPower)
+	ret.FissionPower = Watts(float64(ret.FissionPower) * powerCorrection)
+	ret.FissionPower = max(ret.FissionPower, 0)
+	ret.FissionPower = min(ret.FissionPower, CoreRatedThermalPower)
+	dtS := dt.Seconds()
+	fastTarget := float64(ret.FissionPower) * CoreDecayHeatFastFraction
+	slowTarget := float64(ret.FissionPower) * CoreDecayHeatSlowFraction
+	ret.DecayHeatFast += Watts((fastTarget - float64(ret.DecayHeatFast)) * dtS / CoreDecayHeatFastTimeConstant.Seconds())
+	ret.DecayHeatSlow += Watts((slowTarget - float64(ret.DecayHeatSlow)) * dtS / CoreDecayHeatTimeConstant.Seconds())
 	// RCP shaft-loss heat enters the primary coolant (chapter
-	// 16 temperature balance). Added after the reactivity-based
-	// power so the SG HeatInput sees the total primary-side
-	// flux when the ReactorBuilding wiring copies
-	// ret.ThermalPower into SteamGenerator.HeatInput.
+	// 16 temperature balance). The rated cap and the pump
+	// contribution are applied in TotalThermalPower, the number
+	// the ReactorBuilding wiring routes into SteamGenerator.HeatInput.
 	//
 	// Spec: "Primary temperature is maintained through the
 	// balanced use of reactor coolant pump heat input and a
 	// steam dump system..."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:108-115
-	ret.ThermalPower += ret.PumpHeatInput
-
 	return ret
+}
+
+// TotalThermalPower is the per-step heat flux consumed by the
+// downstream systems: fission power plus fission-product decay
+// heat, capped at rated, plus RCP shaft loss.
+func (r *ReactorPressureVessel) TotalThermalPower() Watts {
+	nuclear := r.FissionPower + r.DecayHeatFast + r.DecayHeatSlow
+	return max(min(nuclear, CoreRatedThermalPower), 0) + r.PumpHeatInput
+}
+
+// SeedSteadyStatePower initializes the fission and fission-product
+// inventories to the equilibrium of steady operation at total
+// thermal power p, with decay heat contributing its
+// shutdown-fraction share (specs/wiki/Decay_heat.txt). A zero-valued
+// vessel is a core with no operating history: no fission power, no
+// decay heat.
+func (r *ReactorPressureVessel) SeedSteadyStatePower(p Watts) {
+	r.FissionPower = Watts(float64(p) * (1 - CoreDecayHeatShutdownFraction))
+	r.DecayHeatFast = Watts(float64(p) * CoreDecayHeatFastFraction)
+	r.DecayHeatSlow = Watts(float64(p) * CoreDecayHeatSlowFraction)
 }
 
 // netTempCoef returns the combined Doppler + moderator
@@ -256,20 +263,33 @@ type ReactorPressureVessel struct {
 	FuelRods
 	ControlRods
 	Reactivity float32
-	DecayHeat  float32
 
-	// ThermalPower is the per-step heat flux produced by the core
-	// and consumed downstream by the SG's HeatInput. Rated when
-	// the operator has the reactor running at power; decays via
-	// the standard shutdown curve when Trip is set.
-	ThermalPower Watts
+	// FissionPower is the heat from the fission chain reaction
+	// alone. It rescales by the power-defect correction every
+	// step and collapses when the core is subcritical (rods
+	// inserted, boron present).
+	FissionPower Watts
+
+	// DecayHeatFast and DecayHeatSlow are fission-product decay
+	// inventories: produced in proportion to FissionPower,
+	// drained at fixed radioactive decay constants that
+	// reactivity cannot touch.
+	//   "at the moment of reactor shutdown, decay heat from these
+	//    radioactive sources is still 6.5% of the previous core
+	//    power ... About 1 hour after shutdown, the decay heat
+	//    will be about 1.5% ... After a day, the decay heat falls
+	//    to 0.4%"
+	//   specs/wiki/Decay_heat.txt
+	DecayHeatFast Watts
+	DecayHeatSlow Watts
 
 	// TimeSinceTrip is 0 while running and accumulates after Trip.
 	TimeSinceTrip time.Duration
 
 	// Trip is the operator-controlled trip flag. Set true to drop
-	// the rods; the per-step output then follows the decay-heat
-	// curve.
+	// the rods into the fully inserted scram position; fission
+	// power then collapses through the same reactivity equations
+	// that govern operation, leaving fission-product decay heat.
 	Trip bool
 
 	// Inlet is the temperature of coolant entering the core via the
@@ -295,10 +315,9 @@ type ReactorPressureVessel struct {
 
 	// PumpHeatInput is the per-step shaft-loss heat dumped
 	// into the coolant by the reactor coolant pump, varying
-	// with Velocity² (plans/p33_1.txt). Zero when the pump is
-	// stopped; full RCPRatedHeatInput at RCPRatedSpeed. The
-	// RPV Step adds this into ThermalPower so the SG HeatInput
-	// sees the total primary-side flux.
+	// with Velocity². Zero when the pump is stopped; full
+	// RCPRatedHeatInput at RCPRatedSpeed. TotalThermalPower adds
+	// it so the SG HeatInput sees the total primary-side flux.
 	//
 	// Spec: "Primary temperature is maintained through the
 	// balanced use of reactor coolant pump heat input and a
@@ -318,9 +337,9 @@ type ReactorPressureVessel struct {
 // is the per-SG vaporising duty (specs/the_westinghouse_pressurized_water_react//chapter_3/page_065.txt:56,
 // 480 kg/s), so CoreRatedThermalPower = SteamGeneratorLoopCount ×
 // SteamGeneratorFullLoadHeatInput. The ReactorBuilding wiring
-// (core/plant.go) routes rpv.ThermalPower through the SG, so the
-// per-loop heat flux the SG actually sees is
-// rpv.ThermalPower / SteamGeneratorLoopCount.
+// (core/plant.go) routes rpv.TotalThermalPower() through the
+// SG, so the per-loop heat flux the SG actually sees is
+// rpv.TotalThermalPower() / SteamGeneratorLoopCount.
 //
 //   "Number and type: 1 vertical, U-tube steam generator with
 //    integral steam-drum per loop"
@@ -343,25 +362,38 @@ const (
 // Decay-heat model constants.
 //
 // Spec justification:
-//   - The spec does not state a decay-heat curve; the model follows
-//     the textbook two-branch approximation of ANSI/ANS-5.1 (1971).
-//     The fast branch (half-life ~ 40 s) drops the reactor from
-//     rated to the ~6.5% shutdown level; the slow branch (e-folding
-//     ~ 20 h) tracks the residual heat the Residual Heat Removal
-//     System is designed to remove. The 20-hour cooldown target is
-//     cited in
+//   - Equilibrium share: "at the moment of reactor shutdown, decay
+//     heat from these radioactive sources is still 6.5% of the
+//     previous core power" (specs/wiki/Decay_heat.txt);
+//     CoreDecayHeatShutdownFraction is the sum of the two pool
+//     equilibria at steady full power.
+//   - Fast pool: short-lived fission products dominate the first
+//     minutes after shutdown; the 50 s CoreDecayHeatFastTimeConstant
+//     tracks the delayed-neutron-dominated rundown.
+//   - Slow pool: the 20 h e-folding matches the residual heat the
+//     Residual Heat Removal System is designed to remove. The
+//     20-hour cooldown target is cited in
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_083.txt:104-105
 //     ("reduce the RCS temperature to 140°F (60°C) within 20 hours
 //     following reactor shutdown").
+//
+// Two pools approximate the continuous fission-product spectrum:
+// they reproduce the 6.5% shutdown level and the ~0.4% level about
+// a day after shutdown (specs/wiki/Decay_heat.txt), but collapse
+// the intermediate hours and underestimate the ~1.5% the wiki
+// reports at 1 hour (model ≈ 0.55%).
 const (
-	CoreDecayHeatShutdownFraction float64 = 0.065 // 6.5% of rated
-	CoreDecayHeatMinFraction      float64 = 0.005 // long tail ~0.5%
+	CoreDecayHeatShutdownFraction float64 = 0.065 // 6.5% of rated at equilibrium
+	CoreDecayHeatFastFraction     float64 = 0.060
+	CoreDecayHeatSlowFraction     float64 = 0.005
 	CoreDecayHeatTimeConstant             = 20 * time.Hour
 	CoreDecayHeatFastTimeConstant         = 50 * time.Second
 
-	// Reactivity contributions. ABCD is the absolute delta-k at
-	// full rod insertion, scaled so withdrawing the rods from 0 to
-	// 1 shifts reactivity by 45 pcm in the positive direction.
+	// CoreRodWorthABCD is the full-insertion ABCD rod-bank worth
+	// as a fraction of Δk/k: −4.5% (−4500 pcm), applied on the
+	// percent Δk/k scale in Step. The Westinghouse spec does not
+	// state a numeric rod worth; the value is a model assumption
+	// typical of a full rod-bank worth.
 	CoreRodWorthABCD float32 = -0.045
 
 	// Design full-load average coolant temperature (°F); the

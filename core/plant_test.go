@@ -25,7 +25,7 @@ func TestPlant_ReactorTripCascadesToTurbine(t *testing.T) {
 	p := MakePlant()
 	// Bring the reactor to rated power; let the SG build pressure.
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	stepN(&p, int(2*time.Second/TimeStep))
 	// Manually trip the reactor.
 	p.ReactorBuilding.ReactorPressureVessel.Trip = true
@@ -120,7 +120,7 @@ func TestPlant_HeaterTrainRaisesFeedwaterTemperature(t *testing.T) {
 func TestPlant_ReactorTripOpensBreaker(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Generator.BreakerClosed = true
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	stepN(&p, int(2*time.Second/TimeStep))
@@ -143,7 +143,7 @@ func TestPlant_ReactorTripOpensBreaker(t *testing.T) {
 func TestPlant_BreakerOpenZerosRealPower(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Generator.BreakerClosed = false
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	stepN(&p, int(5*time.Second/TimeStep))
@@ -167,7 +167,7 @@ func TestPlant_BreakerOpenZerosRealPower(t *testing.T) {
 func TestPlant_BreakerCloseEnergizesUATAndSubtractsHouseLoad(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Generator.BreakerClosed = true
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	stepN(&p, int(5*time.Second/TimeStep))
@@ -204,7 +204,7 @@ func TestPlant_BreakerCloseEnergizesUATAndSubtractsHouseLoad(t *testing.T) {
 func TestPlant_ReactorTripTransfersHouseLoadToSAT(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Generator.BreakerClosed = true
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	stepN(&p, int(2*time.Second/TimeStep))

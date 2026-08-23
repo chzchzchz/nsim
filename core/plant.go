@@ -174,7 +174,7 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 		) + float64(
 			ret.Aux.ResidualHeatRemovalSystem.TrainB.HeatExchanger.HeatTransferRate,
 		)
-		decayW := float64(ret.ReactorPressureVessel.ThermalPower)
+		decayW := float64(ret.ReactorPressureVessel.TotalThermalPower())
 		netW := decayW - rejectionW
 		rcsMassKg := 3_500_000.0 * 0.453592
 		deltaTK := netW / (rcsMassKg * 4186.0) * dt.Seconds()
@@ -196,7 +196,7 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 		// lb/hr (480 kg/sec)"
 		// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
 		ret.SteamGenerator.HeatInput = Watts(
-			float64(rpv.ThermalPower) / float64(SteamGeneratorLoopCount),
+			float64(rpv.TotalThermalPower()) / float64(SteamGeneratorLoopCount),
 		)
 	}
 	ret.SteamGenerator = ret.SteamGenerator.Step()
@@ -1390,7 +1390,7 @@ func (p *Plant) Step() {
 		p.nextPlant.PlantOperation.Mode,
 		p.nextPlant.ReactorBuilding.ReactorPressureVessel.Outlet,
 		p.nextPlant.ReactorBuilding.ReactorPressureVessel.Pressure,
-		p.nextPlant.ReactorBuilding.ReactorPressureVessel.ThermalPower,
+		p.nextPlant.ReactorBuilding.ReactorPressureVessel.TotalThermalPower(),
 		CoreRatedThermalPower,
 		p.nextPlant.AuxiliaryBuilding.ResidualHeatRemovalSystem.Running,
 		runningRCPs,

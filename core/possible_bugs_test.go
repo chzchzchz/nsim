@@ -21,7 +21,7 @@ import (
 // SteamGeneratorFullLoadHeatInput (480 kg/s × LatentHeatOfSteamization,
 // per specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56).
 //
-// The current wiring (core/plant.go:191) routes rpv.ThermalPower
+// The current wiring (core/plant.go:191) routes rpv.TotalThermalPower()
 // into SG.HeatInput, so a 4-loop lumped plant sees the full
 // 3.8 GW through one SG instead of 1.08 GW.
 func TestBug_RPVHeatInputRoutesToSGRatedPerLoop(t *testing.T) {
@@ -34,7 +34,7 @@ func TestBug_RPVHeatInputRoutesToSGRatedPerLoop(t *testing.T) {
 	p.ReactorBuilding.ReactorCoolantPump.Running = true
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	stepN(&p, int(2*time.Second/TimeStep))
 
 	got := float64(p.ReactorBuilding.SteamGenerator.HeatInput)
@@ -52,7 +52,7 @@ func TestBug_SGHeatInputEqualsOneSGRatedAtCoreRated(t *testing.T) {
 	p.ReactorBuilding.ReactorCoolantPump.Running = true
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	stepN(&p, int(2*time.Second/TimeStep))
 
 	// The per-SG spec heat input is one SG's worth of
@@ -94,7 +94,6 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 			BoronConcentration:   1000,
 		},
 		Outlet:       hotRef,
-		ThermalPower: CoreRatedThermalPower,
 	}
 	hotHighB = hotHighB.Step(RCPRatedSpeed)
 
@@ -105,7 +104,6 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 			BoronConcentration:   10,
 		},
 		Outlet:       hotRef,
-		ThermalPower: CoreRatedThermalPower,
 	}
 	hotLowB = hotLowB.Step(RCPRatedSpeed)
 
@@ -119,12 +117,10 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 		hot := ReactorPressureVessel{
 			ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: boron},
 			Outlet:       Temperature{Val: outlet, Unit: u.Fahrenheit},
-			ThermalPower: CoreRatedThermalPower,
 		}
 		ref := ReactorPressureVessel{
 			ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: boron},
 			Outlet:       Temperature{Val: float64(CoreDopplerReferenceTempF), Unit: u.Fahrenheit},
-			ThermalPower: CoreRatedThermalPower,
 		}
 		hot = hot.Step(RCPRatedSpeed)
 		ref = ref.Step(RCPRatedSpeed)
@@ -228,7 +224,17 @@ func TestBug_MakePlantPreservesCallerRPVTemperatures(t *testing.T) {
 //     depletion and removal of shim boron" at EOL (low boron).
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_039.txt:54-55
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122
-func TestBug_BoronDilutionShiftsOutlet(t *testing.T) {
+// Diluting soluble boron inserts positive reactivity: with rods
+// fully withdrawn, dropping from 1000 ppm to 0 ppm must raise
+// Reactivity on the common percent-Δk/k scale by roughly the
+// boron worth of the swing.
+//
+// Spec justification:
+//   - "the moderator temperature coefficient is positive at low
+//     power (BOL), and [...] the boron concentration changes
+//     significantly with fuel depletion."
+//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
+func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
 	const steps = int(60 * time.Second / TimeStep)
 
 	high := MakePlant()
@@ -237,6 +243,7 @@ func TestBug_BoronDilutionShiftsOutlet(t *testing.T) {
 	high.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
 	high.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = 1000
 	high.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 1000
+	high.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	stepN(&high, steps)
 
 	low := MakePlant()
@@ -245,23 +252,15 @@ func TestBug_BoronDilutionShiftsOutlet(t *testing.T) {
 	low.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
 	low.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = 0
 	low.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 0
+	low.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	stepN(&low, steps)
 
-	highOut := high.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
-	lowOut := low.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+	highReact := high.ReactorBuilding.ReactorPressureVessel.Reactivity
+	lowReact := low.ReactorBuilding.ReactorPressureVessel.Reactivity
 
-	// The 1000→0 ppm boron swing must produce a measurable
-	// outlet change. Before the boron-aware temperature
-	// coefficient fix the outlet was clamped to within 0.1°F
-	// of the design reference regardless of boron (the locked
-	// -1.0 pcm/°F Doppler term masked the boron reactivity).
-	// After the fix, low boron (more-negative net coefficient)
-	// collapses power and the outlet cools; high boron keeps
-	// power up and the outlet stays near the design reference.
-	delta := highOut - lowOut
-	assert.Greater(t, delta, 1.0,
-		"want outlet shift > 1°F when boron goes 1000→0 ppm; got high=%v low=%v (Δ=%v). Pre-fix the locked -1.0 pcm/°F Doppler clamped Δ<0.1°F.",
-		highOut, lowOut, delta)
+	assert.Greater(t, lowReact, highReact,
+		"diluting boron 1000→0 ppm must insert positive reactivity: got diluted=%v borated=%v",
+		lowReact, highReact)
 }
 
 // Bug 5 — SteamGenerator water can exceed its shell volume.

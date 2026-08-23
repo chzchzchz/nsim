@@ -175,7 +175,7 @@ func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 func TestCVCS_BorationIncreasesBoronAtExpectedRate(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	stepN(&p, int(1*time.Second/TimeStep))
 	boronBefore := p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration
 
@@ -204,7 +204,7 @@ func TestCVCS_BorationIncreasesBoronAtExpectedRate(t *testing.T) {
 func TestCVCS_DilutionDecreasesBoronAtExpectedRate(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	stepN(&p, int(1*time.Second/TimeStep))
 	boronBefore := p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration
 
@@ -235,7 +235,7 @@ func TestCVCS_DilutionDecreasesBoronAtExpectedRate(t *testing.T) {
 func TestCVCS_MakeupValveRaisesVCTLevel(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	// Stop the charging pump and letdown valve so the VCT is
 	// not being depleted by charging-pump suction; then
 	// opening the makeup valve should be the only inflow.

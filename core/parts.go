@@ -560,12 +560,15 @@ const (
 	CVCSInitialBoron float64 = 1000.0
 
 	// CoreBoronWorthPer100ppm is the reactivity contribution
-	// of 100 ppm of dissolved boric acid. Negative — boron
-	// is a neutron absorber. Sized at ≈ −50 pcm per 100 ppm
-	// so a 1000 ppm HZP inventory gives ≈ −500 pcm of boron
-	// reactivity, which is consistent with the spec's
-	// "critical boron concentration" and rod-bank withdrawal
-	// sequences for a four-loop Westinghouse plant.
+	// of 100 ppm of dissolved boric acid, consumed as percent
+	// Δk/k per 100 ppm on the unified reactivity scale
+	// (−0.05% = −50 pcm). Negative — boron is a neutron
+	// absorber. Sized so a 1000 ppm HZP inventory gives
+	// ≈ −500 pcm of boron reactivity, consistent with the
+	// spec's "critical boron concentration" and rod-bank
+	// withdrawal sequences for a four-loop Westinghouse plant;
+	// the spec does not state a worth numerically, and real
+	// soluble-boron worths run larger (order −1% per 100 ppm).
 	// "the moderator temperature coefficient is positive at
 	// low power (BOL), and [...] the boron concentration
 	// changes significantly with fuel depletion."

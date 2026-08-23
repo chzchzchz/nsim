@@ -162,7 +162,16 @@ func TestBridge_SensorsReflectState(t *testing.T) {
 // or neutron capability is near zero at the top and bottom
 // ends of the core" (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:124-132),
 // so rod motion near the extremes has small effect on outlet.
-func TestThermal_RodWithdrawalRaisesOutlet(t *testing.T) {
+// Withdrawing the rods raises reactivity: at lower rod insertion
+// the rod term is less negative on the one percent-Δk/k scale.
+// Both plants are seeded at half-rated thermal power so fission
+// power is live from step 1, and DemandInsertion is set equal to
+// Insertion so the rod drive does not move during the test.
+//
+// Spec justification for rod worth: "the differential rod worth
+// or neutron capability is near zero at the top and bottom
+// ends of the core" (specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:124-132).
+func TestThermal_RodWithdrawalRaisesReactivity(t *testing.T) {
 	const steps = int(5 * time.Second / TimeStep)
 	const seedPower = CoreRatedThermalPower / 2
 
@@ -171,7 +180,7 @@ func TestThermal_RodWithdrawalRaisesOutlet(t *testing.T) {
 	low.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0.7
 	low.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0.7
 	low.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = CVCSInitialBoron
-	low.ReactorBuilding.ReactorPressureVessel.ThermalPower = seedPower
+	low.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(seedPower)
 	stepN(&low, steps)
 
 	// Insertion 0.2 = rods 80% withdrawn (mostly out).
@@ -179,14 +188,14 @@ func TestThermal_RodWithdrawalRaisesOutlet(t *testing.T) {
 	high.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0.2
 	high.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0.2
 	high.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = CVCSInitialBoron
-	high.ReactorBuilding.ReactorPressureVessel.ThermalPower = seedPower
+	high.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(seedPower)
 	stepN(&high, steps)
 
-	lowOut := low.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
-	highOut := high.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
-	assert.Less(t, lowOut, highOut,
-		"want outlet at Insertion=0.7 (%v) < outlet at Insertion=0.2 (%v)",
-		lowOut, highOut)
+	lowReact := low.ReactorBuilding.ReactorPressureVessel.Reactivity
+	highReact := high.ReactorBuilding.ReactorPressureVessel.Reactivity
+	assert.Greater(t, highReact, lowReact,
+		"want reactivity at Insertion=0.2 (%v) > at Insertion=0.7 (%v)",
+		highReact, lowReact)
 }
 
 // Diluting boron (setpoint below current concentration, CVCS
@@ -212,7 +221,7 @@ func TestThermal_RodWithdrawalRaisesOutlet(t *testing.T) {
 // Reactivity state. It must NOT bend thermal power once the unit
 // is scrambled: decay heat is fission-product beta decay, a
 // function of prior power and time since trip only
-// (specs/Decay_heat.txt).
+// (specs/wiki/Decay_heat.txt).
 //
 // Regression: the reactivity power-defect correction used to
 // multiply the tripped branch too, so the dilution here cooled
@@ -251,7 +260,7 @@ func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 
 	assert.NotEqual(t, baseRP.Reactivity, dilRP.Reactivity,
 		"dilution must shift Reactivity (%v vs %v)", baseRP.Reactivity, dilRP.Reactivity)
-	assert.Equal(t, baseRP.ThermalPower, dilRP.ThermalPower,
+	assert.Equal(t, baseRP.TotalThermalPower(), dilRP.TotalThermalPower(),
 		"scrammed decay heat must be identical despite different reactivity")
 	assert.Equal(t, baseRP.Outlet, dilRP.Outlet,
 		"outlet must track decay heat identically despite different reactivity")

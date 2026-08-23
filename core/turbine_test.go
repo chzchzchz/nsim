@@ -316,7 +316,7 @@ func TestPowerGenerator_DefaultsMatchSpec(t *testing.T) {
 func TestPowerGenerator_ReactivePowerMatchesPowerFactor(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.ThermalPower = CoreRatedThermalPower
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Generator.BreakerClosed = true
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	stepN(&p, int(5*time.Second/TimeStep))
