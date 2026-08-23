@@ -27,7 +27,6 @@ Full path (shown below) references to specification files (with line numbers) sh
 
 * Set "description" in tool json if tool is failing for no reason.
 * Prefer godoc mcp tool commands to analyze source code.
-* godoc access for this package should use github.com/chzchzchz/nsim for the package base (ignore any "alt" substrings)
 * godoc mcp must query local packages by relative path with working_dir set to this repo root, e.g. path "./core", working_dir "/home/chz/go/src/github.com/chzchzchz/nsim-alt6". Never pass the import path (github.com/chzchzchz/nsim/core) as path: the module is not published, so the tool tries a remote git fetch and fails with "could not read Username for 'https://github.com'". Local resolution still reports the correct import path because go.mod declares module github.com/chzchzchz/nsim.
 * Prefer gopls mcp's lsp tool commands for mechanical code changes.
 * cmd/nsimrun can simulate a Plant using plant json (see cmd/nsimrun/README.md)
