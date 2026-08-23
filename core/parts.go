@@ -9,7 +9,10 @@ import (
 type Part struct {
 	Name   string
 	Damage float32
-	Temperature
+	// Temperature is a named field rather than embedded so its
+	// JSON methods do not promote into Part-embedding structs,
+	// which would serialize them as bare UnitVals.
+	Temperature Temperature
 	// Installation is time of installation since epoch.
 	Installation time.Duration
 }

@@ -11,10 +11,10 @@ package core
 // from the auxiliary Step and the cross-building Plant.Step logic
 // land in one place.
 type ReactorBuilding struct {
-	ReactorPressureVessel
-	SteamGenerator
+	ReactorPressureVessel `json:"ReactorPressureVessel"`
+	SteamGenerator        `json:"SteamGenerator"`
 	ReactorCoolantPump Pump
-	Pressurizer
+	Pressurizer           `json:"Pressurizer"`
 	SafetyValve           Valve
 	BlockValve            Valve
 	PORV                  Valve
@@ -237,10 +237,10 @@ type ReactorBuilding struct {
 
 // Turbine building holds the secondary loop, excluding the steam generator.
 type TurbineBuilding struct {
-	Turbine
+	Turbine  `json:"Turbine"`
 	Generator PowerGenerator
 
-	Condenser
+	Condenser `json:"Condenser"`
 	MakeupValve      Valve
 	RejectValve      Valve
 	RecirculateValve Valve

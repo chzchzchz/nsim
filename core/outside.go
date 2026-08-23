@@ -34,7 +34,7 @@ type Outside struct {
 	// "Depending on the plant, the source of circulating
 	// water may be a river, lake, ocean, or cooling tower."
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
-	CoolingTower
+	CoolingTower `json:"CoolingTower"`
 
 	// ServiceWaterSystem models the SWS — the ultimate heat
 	// sink for the plant. The pumps live in a separate

@@ -72,7 +72,7 @@ type AuxiliaryBuilding struct {
 	// supplied from physically and electrically independent
 	// diesel generators located on the site."
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:28-31
-	DieselGenerator
+	DieselGenerator `json:"DieselGenerator"`
 
 	// Transformer models the station auxiliary transformer
 	// that steps down offsite grid voltage to plant
@@ -81,7 +81,7 @@ type AuxiliaryBuilding struct {
 	// distribution bus voltage, normally 6600 volts, by
 	// one or more system auxiliary transformers."
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:45-49
-	Transformer
+	Transformer `json:"Transformer"`
 
 	// SpentFuelPoolCoolingSystem models the SFP cooling.
 	// The spent fuel pool is in a separate compartment on

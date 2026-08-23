@@ -3,30 +3,40 @@ package core
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPlantMarshalUnmarshal(t *testing.T) {
 	p := MakePlant()
 	p.Electrical.ESFBusA.Energized = true
 	p.Electrical.OffsiteSourceA.Voltage = DieselRatedVoltage
+	p.Outside.RiverTemp.Val = 88
+	p.ReactorBuilding.ReactorCoolantPump.Running = true
+	p.ReactorBuilding.ReactorCoolantPump.Damage = 0.25
+	p.Outside.CondensateStorageTank.Level.Val = 123456
 
 	b, err := json.Marshal(p)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	var p2 Plant
-	if err := json.Unmarshal(b, &p2); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, json.Unmarshal(b, &p2))
 
-	if p.Electrical.ESFBusA.Energized != p2.Electrical.ESFBusA.Energized {
-		t.Fatalf("round-trip failed: %v != %v", p.Electrical.ESFBusA.Energized, p2.Electrical.ESFBusA.Energized)
-	}
-	if p.Electrical.OffsiteSourceA.Voltage != p2.Electrical.OffsiteSourceA.Voltage {
-		t.Fatalf("round-trip failed: %v != %v", p.Electrical.OffsiteSourceA.Voltage, p2.Electrical.OffsiteSourceA.Voltage)
-	}
-	if p2.nextPlant != nil {
-		t.Fatal("nextPlant should be nil after unmarshal")
-	}
+	assert.Nil(t, p2.nextPlant)
+	assert.Equal(t, p.Electrical.ESFBusA.Energized, p2.Electrical.ESFBusA.Energized,
+		"ESF bus energized flag must survive the round trip")
+	assert.Equal(t, p.Electrical.OffsiteSourceA.Voltage, p2.Electrical.OffsiteSourceA.Voltage,
+		"offsite source voltage must survive the round trip")
+
+	// nextPlant is internal simulation scratch state: excluded from
+	// JSON by design and rebuilt by Step, so it is not part of the
+	// round-trip contract.
+	p.nextPlant = nil
+	assert.Equal(t, p, p2,
+		"every plant field must survive the round trip")
+
+	b2, err := json.Marshal(&p2)
+	require.NoError(t, err)
+	require.Equal(t, b, b2, "re-marshaled plant must be byte-identical")
 }

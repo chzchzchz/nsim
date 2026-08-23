@@ -590,11 +590,11 @@ func steamMassFromPower(p Watts) float64 {
 
 // Plant represents all state relevant to the facility.
 type Plant struct {
-	ReactorBuilding
-	AuxiliaryBuilding
-	TurbineBuilding
-	Outside
-	Electrical
+	ReactorBuilding     `json:"ReactorBuilding"`
+	AuxiliaryBuilding   `json:"AuxiliaryBuilding"`
+	TurbineBuilding     `json:"TurbineBuilding"`
+	Outside             `json:"Outside"`
+	Electrical          `json:"Electrical"`
 	// PlantOperation is the Chapter 16 operational-mode
 	// layer (plans/p32_1.txt) that tracks the mode state
 	// machine (ColdShutdown → HotStandby → PowerOperation)
