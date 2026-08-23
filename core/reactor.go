@@ -191,7 +191,8 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	// nominal equilibrium load (operators have diluted against it), so
 	// deviations produce the correct signs, xenon above equilibrium
 	// negative, below positive, without disturbing existing equilibria.
-	xenonPct := float32(CoreXenonEquilibriumWorthPct * (ret.Xenon135 - 1.0))
+	xenonPct := float32(CoreXenonEquilibriumWorthPct *
+		(xenonNormalized(ret.Xenon135) - 1.0))
 	ret.Reactivity = rodPct + dopplerPct + boronPct + xenonPct
 
 	// 5) Thermal power = fission chain power + fission-product
@@ -262,7 +263,7 @@ func (r *ReactorPressureVessel) SeedSteadyStatePower(p Watts) {
 	r.DecayHeatSlow = Watts(float64(p) * CoreDecayHeatSlowFraction)
 	pFraction := min(float64(p)/float64(CoreRatedThermalPower), 1.0)
 	r.Iodine135 = pFraction
-	r.Xenon135 = xenonEquilibriumXenon(pFraction)
+	r.Xenon135 = xenonEquilibriumPhysical(pFraction)
 }
 
 // Xenon-135 fission-product model constants. Inventories are
@@ -295,14 +296,15 @@ const (
 	// puts ~95% of xenon production on the iodine-decay path.
 	CoreXenonDirectYieldFraction float64 = 0.05
 
-	// CoreXenonIodineToXenonEquilibriumRatio is the iodine-to-xenon
-	// rated-equilibrium inventory ratio carried by the normalized
-	// coupling term. Because rated burnup suppresses the absolute
-	// xenon inventory far below the iodine inventory, one unit of
-	// normalized iodine decay feeds ~R units of normalized xenon:
-	// this ratio is what produces the classic multi-equilibrium
-	// post-shutdown iodine pit. Derived:
-	// (lambdaX + burnup) / lambdaI.
+	// CoreXenonIodineToXenonEquilibriumRatio is the rated-equilibrium
+	// iodine-to-xenon inventory ratio. Because rated burnup suppresses
+	// the absolute xenon inventory far below the iodine inventory, one
+	// unit of normalized iodine corresponds to ~R units of rated-
+	// normalized xenon worth: this is what produces the classic multi-
+	// equilibrium post-shutdown iodine pit. Derived:
+	// (lambdaX + burnup) / lambdaI. It converts the stored physical
+	// xenon concentration into rated-normalized units at the worth
+	// site (xenonNormalized).
 	CoreXenonIodineToXenonEquilibriumRatio = (CoreXenon135DecayRatePerSecond +
 		CoreXenonBurnRateAtFullPowerPerSecond) /
 		CoreIodine135DecayRatePerSecond
@@ -318,9 +320,11 @@ const (
 
 // advanceXenon evolves the iodine-135 / xenon-135 fission-product
 // pair over dt, sub-stepping so callers may pass long horizons (the
-// plant step passes TimeStep). Inventories are normalized to their
-// rated-power equilibrium, so 1.0 means "at rated equilibrium" and a
-// zero value means no xenon present (fresh core).
+// plant step passes TimeStep). Iodine-135 is normalized to its rated-
+// power equilibrium (1.0 at rated); Xenon135 is carried as the
+// physical concentration relative to the normalized iodine scale,
+// so its rated equilibrium sits at lambdaI/(lambdaX+burn) ~= 0.1 and
+// readers convert through xenonNormalized.
 //
 // Spec justification:
 //   - "Produced via iodine-135, Xenon-135 is a fission product with
@@ -344,8 +348,7 @@ func (r *ReactorPressureVessel) advanceXenon(dt time.Duration) {
 		lambdaX := CoreXenon135DecayRatePerSecond
 		r.Iodine135 += (p - r.Iodine135) * lambdaI * h
 		production := ((1-CoreXenonDirectYieldFraction)*r.Iodine135 +
-			CoreXenonDirectYieldFraction*p) * lambdaI *
-			CoreXenonIodineToXenonEquilibriumRatio
+			CoreXenonDirectYieldFraction*p) * lambdaI
 		destruction := (lambdaX + CoreXenonBurnRateAtFullPowerPerSecond*p) * r.Xenon135
 		r.Xenon135 += (production - destruction) * h
 		r.Iodine135 = max(r.Iodine135, 0)
@@ -353,14 +356,21 @@ func (r *ReactorPressureVessel) advanceXenon(dt time.Duration) {
 	}
 }
 
-// xenonEquilibriumXenon returns the normalized xenon-135 steady state
-// at fractional rated power. The equilibrium-ratio construction makes
-// the value exactly 1 at rated power.
-func xenonEquilibriumXenon(p float64) float64 {
-	production := CoreIodine135DecayRatePerSecond * p *
-		CoreXenonIodineToXenonEquilibriumRatio
-	return production / (CoreXenon135DecayRatePerSecond +
-		CoreXenonBurnRateAtFullPowerPerSecond*p)
+// xenonEquilibriumPhysical returns the physical steady-state xenon-135
+// concentration at fractional rated power, on the same scale the ODE
+// integrates: Xeq(p) = lambdaI*p / (lambdaX + burn*p). At rated this
+// is ~0.1003 because burnup holds the inventory far below iodine.
+func xenonEquilibriumPhysical(p float64) float64 {
+	return CoreIodine135DecayRatePerSecond * p /
+		(CoreXenon135DecayRatePerSecond +
+			CoreXenonBurnRateAtFullPowerPerSecond*p)
+}
+
+// xenonNormalized converts a stored physical xenon-135 concentration
+// into rated-normalized units (1.0 = rated equilibrium), the scale the
+// reactivity worth is expressed in.
+func xenonNormalized(x float64) float64 {
+	return x * CoreXenonIodineToXenonEquilibriumRatio
 }
 
 // netTempCoef returns the combined Doppler + moderator
@@ -428,8 +438,11 @@ type ReactorPressureVessel struct {
 	TimeSinceTrip time.Duration
 
 	// Iodine135 and Xenon135 are fission-product reactivity
-	// inventories normalized to their rated-power equilibrium
-	// (1.0 = rated equilibrium, 0 = none, fresh core). Xenon-135 is
+	// inventories. Iodine135 is normalized to its rated-power
+	// equilibrium (1.0 = rated equilibrium, 0 = none); Xenon135 is
+	// stored as the physical concentration on the iodine scale, whose
+	// rated equilibrium is ~lambdaI/(lambdaX+burn) ~= 0.1 — route
+	// display/worth reads through xenonNormalized. Xenon-135 is
 	// the strongest known neutron absorber and its swings dominate
 	// slow reactivity behavior during maneuvering and after power
 	// changes.

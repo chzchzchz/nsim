@@ -22,6 +22,17 @@ import (
 //     the turbine trip devices [...] causes all steam control
 //     valves to close."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:28-34
+// The seeded pressurizer must describe a plant that exists before the
+// first Step: the steam bubble is the vapor space above the liquid
+// inventory, so Water + SteamBubble must equal Volume exactly.
+func TestPlant_MakePlantPressurizerSeedCoherent(t *testing.T) {
+	p := MakePlant()
+	pzr := p.ReactorBuilding.Pressurizer
+	assert.Equal(t, pzr.Volume.Float(),
+		pzr.Water.Float()+pzr.SteamBubble.Float(),
+		"Water + SteamBubble must equal Volume")
+}
+
 func TestPlant_ReactorTripCascadesToTurbine(t *testing.T) {
 	p := MakePlant()
 	// Bring the reactor to rated power; let the SG build pressure.

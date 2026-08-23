@@ -68,3 +68,45 @@ func TestSteamGenerator_PressureClampedAtDesign(t *testing.T) {
 	assert.LessOrEqual(t, sg.Pressure, SteamGeneratorShellDesignPressure,
 		"Pressure should be clamped at %v, got %v", SteamGeneratorShellDesignPressure, sg.Pressure)
 }
+
+// Offtake exactly matched to production holds the header at the shell
+// pressure regardless of the absolute power level: the pressure-mode
+// dump band and nominal operation both stay reachable.
+//
+// "Steam flow per steam generator: 3,813,000 lb/hr (480 kg/sec)"
+// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
+func TestSteamGenerator_BalancedDemandHoldsShellPressure(t *testing.T) {
+	for _, supply := range []float64{1.0, 0.5} {
+		sg := SteamGenerator{
+			Volume:    Volume{Val: 1000, Unit: u.Gallon},
+			Water:     Volume{Val: 1000, Unit: u.Gallon},
+			Pressure:  SteamGeneratorShellPressure,
+			HeatInput: Watts(supply * float64(SteamGeneratorFullLoadHeatInput)),
+		}
+		for i := 0; i < int(10*time.Second/TimeStep); i++ {
+			sg = sg.Step(supply)
+		}
+		assert.InDelta(t, float64(SteamGeneratorShellPressure),
+			float64(sg.Pressure), 1e-6,
+			"matched demand at supply %v must hold shell pressure", supply)
+	}
+}
+
+// Drawing more steam than the available heat can raise sags the
+// header toward what production actually holds; a decay-heat-only
+// core serving house-load draw must not read as an infinite steam
+// source pinned at the shell pressure.
+func TestSteamGenerator_UndersupplySagsHeader(t *testing.T) {
+	sg := SteamGenerator{
+		Volume:    Volume{Val: 1000, Unit: u.Gallon},
+		Water:     Volume{Val: 1000, Unit: u.Gallon},
+		Pressure:  SteamGeneratorShellPressure,
+		HeatInput: Watts(0.01 * float64(SteamGeneratorFullLoadHeatInput)),
+	}
+	for i := 0; i < int(30*time.Second/TimeStep); i++ {
+		sg = sg.Step(0.04)
+	}
+	want := float64(SteamGeneratorShellPressure) * 0.01 / 0.04
+	assert.InDelta(t, want, float64(sg.Pressure), want*0.05,
+		"header should sag toward the production-held target %v", want)
+}

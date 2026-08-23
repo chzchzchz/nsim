@@ -30,8 +30,10 @@ func scenario5Vessel() ReactorPressureVessel {
 	r.BoronConcentration = CVCSInitialBoron
 	// No-load equilibrium carries its rated xenon load; without it the
 	// folded reactivity reference reads a fresh core as ~2.7% light.
+	// Intentional update (physical-xenon storage): rated equilibrium
+	// is the physical concentration on the iodine scale.
 	r.Iodine135 = 1
-	r.Xenon135 = 1
+	r.Xenon135 = xenonEquilibriumPhysical(1)
 	return r
 }
 

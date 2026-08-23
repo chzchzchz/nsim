@@ -1748,7 +1748,7 @@ func MakePlant() Plant {
 		Volume:      Volume{Val: 1500, Unit: u.Gallon},
 		Water:       Volume{Val: 900, Unit: u.Gallon}, // 60% liquid
 		Pressure:    PressurizerHeaterTarget,
-		SteamBubble: Volume{Val: 300, Unit: u.Gallon},
+		SteamBubble: Volume{Val: 600, Unit: u.Gallon},
 	}
 	p.TurbineBuilding.HeaterDrainTank = Tank{
 		Level:    Volume{Val: 0, Unit: u.Gallon},

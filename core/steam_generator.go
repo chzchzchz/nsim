@@ -182,9 +182,10 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 
 	// 2) Pressure response. While HeatInput > 0 and there is water
 	// to boil, Pressure relaxes toward the shell pressure scaled by
-	// how much of the boil-off capacity is left after the offtake:
-	// drawing faster than the SG can raise steam sags the header
-	// pressure. Atmospheric relief draws from the same header as the
+	// the balance of steam production against offtake: demand above
+	// production sags the header toward what the boil can hold,
+	// and production above demand lifts it. Atmospheric relief draws
+	// from the same header as the
 	// turbine and condenser dump ("This heat is rejected to the
 	// condenser through the steam dump valves and to the atmosphere",
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:6-7),
@@ -193,24 +194,30 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 	pressure := float64(ret.Pressure)
 	if ret.HeatInput > 0 && ret.Water.Float() > 0 {
 		outflow := steamOutflowFraction + advFraction
-		ratio := 1.0
-		if outflow > 1.0 {
-			ratio = 1.0 / outflow
-		}
-		// Boiling beyond what the outlets take lifts the header
-		// above nominal: with the turbine shut and the dumps
-		// closed this is the only path to the steam-dump
-		// pressure-mode setpoint during startup.
-		// "These valves are also utilized in the pressure control
-		//  mode during plant startup and plant cooldown."
-		// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:24-26
-		excess := boilRateM3PerSec/ratedBoilM3PerSec - outflow
-		surplusTarget := float64(SteamGeneratorShellPressure) *
-			min(1.0+excess,
-				float64(SteamGeneratorShellDesignPressure)/float64(SteamGeneratorShellPressure))
-		target := float64(SteamGeneratorShellPressure) * ratio
-		if surplusTarget > target {
-			target = surplusTarget
+		supply := boilRateM3PerSec / ratedBoilM3PerSec
+		target := float64(SteamGeneratorShellPressure)
+		switch {
+		case outflow > supply && outflow > 0:
+			// Drawing harder than the SG raises steam sags
+			// the header toward what production can hold;
+			// otherwise any draw would be served from an
+			// infinite energy source and hold the low-
+			// steamline protection channel artificially
+			// healthy.
+			target *= supply / outflow
+		case supply > outflow:
+			// Boiling beyond what the outlets take lifts
+			// the header above nominal: with the turbine
+			// shut and the dumps closed this is the only
+			// path to the steam-dump pressure-mode setpoint
+			// during startup.
+			// "These valves are also utilized in the pressure control
+			//  mode during plant startup and plant cooldown."
+			// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:24-26
+			surplusTarget := float64(SteamGeneratorShellPressure) *
+				min(1.0+(supply-outflow),
+					float64(SteamGeneratorShellDesignPressure)/float64(SteamGeneratorShellPressure))
+			target = max(target, surplusTarget)
 		}
 		gap := target - pressure
 		pressure += gap * dt.Seconds()

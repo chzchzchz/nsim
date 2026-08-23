@@ -84,9 +84,20 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 			}
 			assert.False(t, p.ReactorBuilding.ReactorPressureVessel.Trip,
 				"reactor must not trip during the glide")
-			assert.Greater(t, float64(p.ReactorBuilding.SteamGenerator.Pressure),
-				float64(RPSLowSteamlinePressureTrip),
-				"SG pressure must stay above the low-steamline trip")
+			// The setpoint chase leads the falling heat input in
+			// 8 percent steps, so late in the glide the header
+			// legitimately sags below the low-steamline setpoint.
+			// The guard is therefore honesty, not health: once
+			// the process variable crosses the trip point the
+			// protection channel must engage instead of sitting
+			// artificially healthy.
+			if float64(p.ReactorBuilding.SteamGenerator.Pressure) <
+				float64(RPSLowSteamlinePressureTrip) {
+				assert.True(t, p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionActuated,
+					"low steamline pressure must actuate safety injection")
+				assert.True(t, p.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationActuated,
+					"low steamline pressure must isolate the steamlines")
+			}
 			assert.Zero(t, p.TurbineBuilding.Turbine.DumpValve.Open,
 				"condenser dump valves stay shut while the setpoint chase tracks production")
 			curMW := totalMW()
@@ -114,6 +125,28 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 		"0.02")
 	setControl(t, &p, "TurbineBuilding/Turbine/Setpoint", "0.04")
 	stepN(&p, int(5*time.Second/TimeStep))
+
+	// Honest end state: house-load steam draw exceeds what decay
+	// heat can raise, so the header must depart the shell pressure
+	// (or the turbine must trip on steam loss) instead of pinning
+	// at an infinite-energy 920 psia.
+	tailPressureOK := false
+	for i := 0; i < int(120*time.Second/TimeStep); i++ {
+		p.Step()
+		p.Update()
+		if float64(p.ReactorBuilding.SteamGenerator.Pressure) < 900 ||
+			p.TurbineBuilding.Turbine.State == TurbineTripped {
+			tailPressureOK = true
+			break
+		}
+	}
+	assert.True(t, tailPressureOK,
+		"header must sag below 900 psia or trip the turbine on steam loss")
+
+	// The subcritical fold rides the small negative reactivity and
+	// needs tens of seconds to drain the fission chain to the
+	// neutron-source floor.
+	stepN(&p, int(60*time.Second/TimeStep))
 
 	rpv := p.ReactorBuilding.ReactorPressureVessel
 	assert.LessOrEqual(t, float64(rpv.FissionPower), 100.0,

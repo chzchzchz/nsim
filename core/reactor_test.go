@@ -157,7 +157,9 @@ func TestReactor_OutletAtReferenceGivesZeroDoppler(t *testing.T) {
 		// Pin the rated-equilibrium xenon load so only the Doppler
 		// term can move Reactivity; a zero inventory would read as
 		// a fresh core missing its nominal equilibrium poison.
-		Xenon135: 1,
+		// Intentional update (physical-xenon storage): rated
+		// equilibrium is now the physical concentration.
+		Xenon135: xenonEquilibriumPhysical(1),
 	}
 	r = r.Step(RCPRatedSpeed)
 	assert.GreaterOrEqual(t, r.Reactivity, float32(-1),
@@ -363,7 +365,7 @@ func TestReactor_ZeroPowerHoldsTemperature(t *testing.T) {
 		ControlRods: ControlRods{BoronConcentration: CVCSInitialBoron},
 		Outlet:      Temperature{Val: 135, Unit: u.Fahrenheit},
 		Inlet:       Temperature{Val: 135, Unit: u.Fahrenheit},
-		Xenon135:    1,
+		Xenon135:    xenonEquilibriumPhysical(1),
 	}
 	r.FissionPower = CoreNeutronSourcePower
 
