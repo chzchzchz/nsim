@@ -94,12 +94,8 @@ func (c *GeneratorCoolingSystem) Step(
 	}
 
 	blowFraction := h2BlowerFraction
-	if blowFraction > 1 {
-		blowFraction = 1
-	}
-	if blowFraction < 0 {
-		blowFraction = 0
-	}
+	blowFraction = min(blowFraction, 1)
+	blowFraction = max(blowFraction, 0)
 	for i := range ret.HydrogenCoolerEffectiveness {
 		ret.HydrogenCoolerEffectiveness[i] = blowFraction
 	}

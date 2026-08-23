@@ -118,9 +118,7 @@ func (c *CVCS) Step(
 		delta -= VCTBTRSCirculation * dt.Seconds()
 	}
 	newVCT := ret.VCTLevel.Float() + delta
-	if newVCT < 0 {
-		newVCT = 0
-	}
+	newVCT = max(newVCT, 0)
 	ret.VCTLevel = Volume{Val: newVCT, Unit: u.Gallon}
 
 	// VCT high-level condition: divert BTRS outflow to BRS
@@ -149,9 +147,7 @@ func (c *CVCS) Step(
 		if ret.BTRSRecirculationPumpRunning {
 			ret.DilutionRate = CVCSDilutionRate
 			ret.BoronConcentration -= CVCSDilutionRate * dt.Seconds()
-			if ret.BoronConcentration < 0 {
-				ret.BoronConcentration = 0
-			}
+			ret.BoronConcentration = max(ret.BoronConcentration, 0)
 		}
 	case CVCSLetdown:
 		// Operator must correct VCT level (e.g. manual

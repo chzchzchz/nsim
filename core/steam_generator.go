@@ -145,12 +145,7 @@ func (s *SteamGenerator) Step() SteamGenerator {
 		boilRateGPerSec := float64(ret.HeatInput) / float64(LatentHeatOfSteamization)
 		boilVolume := boilRateGPerSec / 1000.0 // kg/s -> m^3/s assuming ~1 kg/L water
 		newWater := ret.Water.Float() - boilVolume*dt.Seconds()
-		if newWater < 0 {
-			newWater = 0
-		}
-		if newWater > ret.Volume.Float() {
-			newWater = ret.Volume.Float()
-		}
+		newWater = min(max(newWater, 0), ret.Volume.Float())
 		ret.Water = vol(ret.Water, newWater)
 	}
 
@@ -169,16 +164,12 @@ func (s *SteamGenerator) Step() SteamGenerator {
 			pressure -= pressure * dt.Seconds() // decay toward zero
 		}
 	}
-	if pressure < 0 {
-		pressure = 0
-	}
+	pressure = max(pressure, 0)
 
 	// 3) Pressure trip. Cap at the design pressure. A real SG
 	// would relieve via the SG safety valves (out of scope per
 	// plans/p6_1.txt).
-	if pressure > float64(SteamGeneratorShellDesignPressure) {
-		pressure = float64(SteamGeneratorShellDesignPressure)
-	}
+	pressure = min(pressure, float64(SteamGeneratorShellDesignPressure))
 	ret.Pressure = Pressure(pressure)
 
 	return ret

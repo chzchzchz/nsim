@@ -78,9 +78,7 @@ func (d *DieselGenerator) Step(swFlowGPM float64) DieselGenerator {
 	switch ret.State {
 	case DieselCranking:
 		ret.Speed += RPM(float64(dieselCrankAccel) * dt.Seconds())
-		if ret.Speed > DieselRatedSpeed {
-			ret.Speed = DieselRatedSpeed
-		}
+		ret.Speed = min(ret.Speed, DieselRatedSpeed)
 		ret.CrankStartTime += dt
 		ret.RunningFraction = 0
 	case DieselRunning:
@@ -102,9 +100,7 @@ func (d *DieselGenerator) Step(swFlowGPM float64) DieselGenerator {
 		}
 	default:
 		ret.Speed -= RPM(float64(ret.Speed) * dieselCoastRate * dt.Seconds())
-		if ret.Speed < 0 {
-			ret.Speed = 0
-		}
+		ret.Speed = max(ret.Speed, 0)
 		ret.RunningFraction = 0
 		ret.ReadyToLoad = false
 	}
@@ -113,9 +109,7 @@ func (d *DieselGenerator) Step(swFlowGPM float64) DieselGenerator {
 	if ret.State == DieselRunning {
 		burn := float64(dieselFuelRate.Float()) * float64(ret.RunningFraction) * dt.Hours()
 		newLevel := ret.Fuel.Level.Float() - burn
-		if newLevel < 0 {
-			newLevel = 0
-		}
+		newLevel = max(newLevel, 0)
 		ret.Fuel.Level = Volume{Val: newLevel, Unit: u.Gallon}
 		if newLevel == 0 {
 			ret.State = DieselTripped
@@ -167,26 +161,18 @@ func (d *DieselGenerator) Step(swFlowGPM float64) DieselGenerator {
 	switch ret.State {
 	case DieselRunning:
 		ret.Generator.Voltage += DieselRatedVoltage * (dt.Seconds() / DieselFieldFlashingTime.Seconds())
-		if ret.Generator.Voltage > DieselRatedVoltage {
-			ret.Generator.Voltage = DieselRatedVoltage
-		}
+		ret.Generator.Voltage = min(ret.Generator.Voltage, DieselRatedVoltage)
 		ret.Generator.Frequency += DieselRatedFrequency * (dt.Seconds() / DieselFieldFlashingTime.Seconds())
-		if ret.Generator.Frequency > DieselRatedFrequency {
-			ret.Generator.Frequency = DieselRatedFrequency
-		}
+		ret.Generator.Frequency = min(ret.Generator.Frequency, DieselRatedFrequency)
 		ret.Generator.RealPower = Watts(float64(DieselRatedkW) * float64(ret.RunningFraction))
 		if ret.ReadyToLoad && !ret.Generator.BreakerClosed {
 			ret.Generator.BreakerClosed = true
 		}
 	default:
 		ret.Generator.Voltage -= DieselRatedVoltage * (dt.Seconds() / DieselFieldFlashingTime.Seconds())
-		if ret.Generator.Voltage < 0 {
-			ret.Generator.Voltage = 0
-		}
+		ret.Generator.Voltage = max(ret.Generator.Voltage, 0)
 		ret.Generator.Frequency -= DieselRatedFrequency * (dt.Seconds() / DieselFieldFlashingTime.Seconds())
-		if ret.Generator.Frequency < 0 {
-			ret.Generator.Frequency = 0
-		}
+		ret.Generator.Frequency = max(ret.Generator.Frequency, 0)
 		ret.Generator.RealPower = 0
 		ret.Generator.BreakerClosed = false
 	}

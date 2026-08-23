@@ -55,9 +55,7 @@ func (h *HydrogenDetectionSuppression) Step() HydrogenDetectionSuppression {
 	}
 
 	ret.HydrogenVolumePercent += dH2
-	if ret.HydrogenVolumePercent < 0 {
-		ret.HydrogenVolumePercent = 0
-	}
+	ret.HydrogenVolumePercent = max(ret.HydrogenVolumePercent, 0)
 
 	// Alarm logic: latch true when the volume percent crosses
 	// the alarm setpoint. Once latched, only operator reset

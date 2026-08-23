@@ -59,9 +59,7 @@ func (c *Condenser) Step(cwIn Temperature, vacuumPumpRunning, cwPumpRunning bool
 		pressure := float64(ret.Pressure)
 		pressure += (float64(AtmosphericPressure) - pressure) *
 			(dt.Seconds() / CondenserNoCWDegradeTimeConstant)
-		if pressure < 0 {
-			pressure = 0
-		}
+		pressure = max(pressure, 0)
 		ret.Pressure = Pressure(pressure)
 		ret.CWOut = cwIn
 		ret.CondensingRate = Volume{Val: 0, Unit: u.Gallon}
@@ -82,16 +80,12 @@ func (c *Condenser) Step(cwIn Temperature, vacuumPumpRunning, cwPumpRunning bool
 	}
 	if steamMass > 0 {
 		loadFactor := steamMass / CondenserDesignSteamLoadGalPer
-		if loadFactor > 1.0 {
-			loadFactor = 1.0
-		}
+		loadFactor = min(loadFactor, 1.0)
 		target += loadFactor * (float64(AtmosphericPressure) - float64(CondenserDesignVacuum)) * 0.3
 	}
 	pressure := float64(ret.Pressure)
 	pressure += (target - pressure) * (dt.Seconds() / CondenserVacuumTimeConstant)
-	if pressure < 0 {
-		pressure = 0
-	}
+	pressure = max(pressure, 0)
 	ret.Pressure = Pressure(pressure)
 
 	// 4) CW outlet temperature. The CW absorbs the latent heat of
@@ -110,9 +104,7 @@ func (c *Condenser) Step(cwIn Temperature, vacuumPumpRunning, cwPumpRunning bool
 	pumpSuctionFlow := cwFlowGpm * 0.01 // gal/s at design flow
 	netInflow := steamMass - pumpSuctionFlow*dt.Seconds()
 	newLevel := ret.HotwellLevel.Float() + netInflow
-	if newLevel < 0 {
-		newLevel = 0
-	}
+	newLevel = max(newLevel, 0)
 	ret.HotwellLevel = Volume{Val: newLevel, Unit: u.Gallon}
 
 	ret.CondensingRate = Volume{Val: 0, Unit: u.Gallon}

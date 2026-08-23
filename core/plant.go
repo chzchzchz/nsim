@@ -126,9 +126,7 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 		rcpV -= rcpV *
 			TimeStep.Seconds() / float64(RCPCoastdownTimeConstant.Seconds())
 	}
-	if rcpV < 0 {
-		rcpV = 0
-	}
+	rcpV = max(rcpV, 0)
 	ret.ReactorCoolantPump.Velocity = Velocity(rcpV)
 
 	// RCP shaft-loss heat entering the primary coolant. The
@@ -280,9 +278,7 @@ func (r *ReactorBuilding) Step() ReactorBuilding {
 			csP -= CSSSprayEffectiveness *
 				ret.Aux.ContainmentSpraySystem.SprayFlow * excess *
 				dt.Seconds()
-			if csP < float64(AtmosphericPressure) {
-				csP = float64(AtmosphericPressure)
-			}
+			csP = max(csP, float64(AtmosphericPressure))
 		}
 	}
 	ret.ContainmentPressure = Pressure(csP)
@@ -372,12 +368,8 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 	// linearly with this fraction.
 	h2Blower := float64(ret.Turbine.Velocity) /
 		float64(TurbineRatedSpeed)
-	if h2Blower > 1 {
-		h2Blower = 1
-	}
-	if h2Blower < 0 {
-		h2Blower = 0
-	}
+	h2Blower = min(h2Blower, 1)
+	h2Blower = max(h2Blower, 0)
 	ret.Generator.GeneratorCoolingSystem =
 		ret.Generator.GeneratorCoolingSystem.Step(h2Blower)
 
@@ -579,12 +571,7 @@ func steamMassFromPower(p Watts) float64 {
 		return 0
 	}
 	frac := float64(p) / float64(TurbineRatedkW)
-	if frac < 0 {
-		frac = 0
-	}
-	if frac > 1 {
-		frac = 1
-	}
+	frac = min(max(frac, 0), 1)
 	return frac * CondenserDesignSteamLoadGalPer
 }
 
@@ -1297,12 +1284,7 @@ func (p *Plant) Step() {
 	if TurbineRatedkW > 0 {
 		loadFraction = float64(p.nextPlant.TurbineBuilding.Turbine.RealPower) /
 			float64(TurbineRatedkW)
-		if loadFraction < 0 {
-			loadFraction = 0
-		}
-		if loadFraction > 1 {
-			loadFraction = 1
-		}
+		loadFraction = min(max(loadFraction, 0), 1)
 	}
 	p.nextPlant.ReactorBuilding.HouseLoad =
 		p.nextPlant.ReactorBuilding.HouseLoad.Step(
@@ -1323,9 +1305,7 @@ func (p *Plant) Step() {
 	if p.nextPlant.TurbineBuilding.Generator.BreakerClosed {
 		gross := float64(p.nextPlant.TurbineBuilding.Turbine.RealPower)
 		net := gross - p.nextPlant.ReactorBuilding.HouseLoad.TotalMW
-		if net < 0 {
-			net = 0
-		}
+		net = max(net, 0)
 		p.nextPlant.TurbineBuilding.Generator.RealPower = Watts(net)
 		pf := p.nextPlant.TurbineBuilding.Generator.PowerFactor
 		if pf <= 0 {

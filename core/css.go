@@ -89,15 +89,11 @@ func (c *ContainmentSpraySystem) Step() ContainmentSpraySystem {
 	if !ret.SuctionSump {
 		dV := flowGpm * (dt / 60.0)
 		newCSST := ret.CSSTLevel.Float() - dV
-		if newCSST < 0 {
-			newCSST = 0
-		}
+		newCSST = max(newCSST, 0)
 		ret.CSSTLevel = Volume{Val: newCSST, Unit: u.Gallon}
 		ratio := SATCapacity.Float() / CSSTCapacity.Float()
 		newSAT := ret.SATLevel.Float() - dV*ratio
-		if newSAT < 0 {
-			newSAT = 0
-		}
+		newSAT = max(newSAT, 0)
 		ret.SATLevel = Volume{Val: newSAT, Unit: u.Gallon}
 
 		// Sump pH adjustment latches once the CSST drains below

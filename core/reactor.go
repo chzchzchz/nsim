@@ -78,17 +78,13 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 
 	// 2) Primary-side thermal model.
 	powerFrac := float64(ret.ThermalPower) / float64(CoreRatedThermalPower)
-	if powerFrac < 0 {
-		powerFrac = 0
-	}
+	powerFrac = max(powerFrac, 0)
 	refDeltaF := CoreReferenceOutletF - CoreReferenceInletF
 	targetOutlet := CoreReferenceInletF + powerFrac*refDeltaF
 
 	outletF := ret.Outlet.Float()
 	outletF += (targetOutlet - outletF) * (dt.Seconds() / PrimaryThermalTimeConstant)
-	if outletF < 0 {
-		outletF = 0
-	}
+	outletF = max(outletF, 0)
 	ret.Outlet = Temperature{Val: outletF, Unit: u.Fahrenheit}
 
 	// The cold-leg / downcomer inlet temperature only blends
@@ -98,17 +94,13 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	// speed even though Running=true is latched, and there is
 	// no flow to drive the inlet-outlet blend.
 	rcpFlowFrac := float64(rcpSpeed) / float64(RCPRatedSpeed)
-	if rcpFlowFrac < 0 {
-		rcpFlowFrac = 0
-	}
+	rcpFlowFrac = max(rcpFlowFrac, 0)
 	if rcpFlowFrac > 0 {
 		blend := CoreInletBlendFraction * powerFrac * rcpFlowFrac
 		targetInlet := CoreReferenceInletF*(1-blend) + outletF*blend
 		inletF := ret.Inlet.Float()
 		inletF += (targetInlet - inletF) * (dt.Seconds() / PrimaryInletTimeConstant)
-		if inletF < 0 {
-			inletF = 0
-		}
+		inletF = max(inletF, 0)
 		ret.Inlet = Temperature{Val: inletF, Unit: u.Fahrenheit}
 	}
 
@@ -118,9 +110,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	pressure := float64(ret.Pressure)
 	pressure += (float64(RPVDesignPressure) - pressure) *
 		(dt.Seconds() / PrimaryPressureTimeConstant)
-	if pressure < 0 {
-		pressure = 0
-	}
+	pressure = max(pressure, 0)
 	ret.Pressure = Pressure(pressure)
 
 	// 4) Reactivity contributions. The rod-bank term follows the
@@ -149,13 +139,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	//     range level."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_223.txt:172
 	rodReactivity := float32(ret.ControlRods.Insertion) * CoreRodWorthABCD
-	outletFClamped := outletF
-	if outletFClamped < DopplerClampLowF {
-		outletFClamped = DopplerClampLowF
-	}
-	if outletFClamped > DopplerClampHighF {
-		outletFClamped = DopplerClampHighF
-	}
+	outletFClamped := min(max(outletF, DopplerClampLowF), DopplerClampHighF)
 	dopplerDeltaF := outletFClamped - float64(CoreDopplerReferenceTempF)
 	// Net temperature coefficient (Doppler + moderator) varies
 	// with RCS boron concentration: small positive at beginning
@@ -207,9 +191,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 		}
 	}
 	ret.ThermalPower = Watts(float64(CoreRatedThermalPower) * float64(powerFrac32) * powerCorrection)
-	if ret.ThermalPower < 0 {
-		ret.ThermalPower = 0
-	}
+	ret.ThermalPower = max(ret.ThermalPower, 0)
 	// Rated cap. At BOL the net temperature coefficient can be
 	// small positive (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:117-122);
 	// without rod-by-rod control, even a +1 pcm/°F coefficient
@@ -217,9 +199,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	// model. Real plants stay subcritical via control rods; the
 	// simulation uses rated as the cap and treats any further
 	// power demand as a rod-withdrawal request.
-	if ret.ThermalPower > CoreRatedThermalPower {
-		ret.ThermalPower = CoreRatedThermalPower
-	}
+	ret.ThermalPower = min(ret.ThermalPower, CoreRatedThermalPower)
 	// RCP shaft-loss heat enters the primary coolant (chapter
 	// 16 temperature balance). Added after the reactivity-based
 	// power so the SG HeatInput sees the total primary-side

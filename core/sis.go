@@ -106,9 +106,7 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 	if ret.HHSIPumpRunning && ret.HHSIDriveReady && ret.HHSISuction == SISSuctionRWST {
 		dW := SISHHSIDesignFlow.Float() * dt.Seconds()
 		newRWST := ret.RWSTLevel.Float() - dW
-		if newRWST < 0 {
-			newRWST = 0
-		}
+		newRWST = max(newRWST, 0)
 		ret.RWSTLevel = Volume{Val: newRWST, Unit: u.Gallon}
 		netFlow := SISHHSIDesignFlow.Float() *
 			(1.0 - SISHHSIMiniFlowFraction)

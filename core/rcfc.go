@@ -80,17 +80,13 @@ func (r *RCFCUnit) Step(
 		deltaT = 0
 	}
 	eff := deltaT / RCFCDesignDeltaT
-	if eff > 1.0 {
-		eff = 1.0
-	}
+	eff = min(eff, 1.0)
 	ret.HeatTransferRate = RCFCDesignHeatRejection * eff
 
 	// Coil outlet: rise above the inlet by the same temperature
 	// that the air drops by, weighted by the design rating.
 	coilOut := coilIn + deltaT*eff
-	if coilOut > airT {
-		coilOut = airT
-	}
+	coilOut = min(coilOut, airT)
 	ret.CoilOutletTemp = Temperature{Val: coilOut, Unit: u.Fahrenheit}
 
 	return ret
@@ -146,9 +142,7 @@ func (c *ContainmentBuilding) Step(
 	cpAir := 1005.0
 	deltaK := netW / (massKg * cpAir) * dt
 	newTempF := ret.Temperature.Float() + deltaK*9.0/5.0
-	if newTempF < -459.67 {
-		newTempF = -459.67
-	}
+	newTempF = max(newTempF, -459.67)
 	ret.Temperature = Temperature{Val: newTempF, Unit: u.Fahrenheit}
 
 	rAir := 287.0

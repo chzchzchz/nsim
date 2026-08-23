@@ -67,12 +67,7 @@ func (h *HouseLoad) Step(
 	ret.TotalMW = ret.FixedMW
 	if generatorOnline {
 		f := generatorOutputFraction
-		if f < 0 {
-			f = 0
-		}
-		if f > 1 {
-			f = 1
-		}
+		f = min(max(f, 0), 1)
 		ret.TotalMW += ret.VariableMW * f
 	}
 	return ret

@@ -45,14 +45,7 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 
 	admission := float64(0)
 	if stopValveOpen != nil {
-		v := *stopValveOpen
-		if v < 0 {
-			v = 0
-		}
-		if v > 1 {
-			v = 1
-		}
-		admission = v
+		admission = min(max(*stopValveOpen, 0), 1)
 	} else {
 		// Legacy call path (no stop valve gating): use 1.0 as a
 		// neutral default. The MakeupValve wiring is no longer
@@ -60,9 +53,7 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 		admission = 1.0
 	}
 	steamFlow := float64(sgPressure-condPressure) * admission
-	if steamFlow < 0 {
-		steamFlow = 0
-	}
+	steamFlow = max(steamFlow, 0)
 
 	// Load runback (DEHM protective layer). When any reactor-
 	// protection signal asserts (reactor trip, dropped rod, high
@@ -81,9 +72,7 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:93-96
 	if ret.LoadRunback && ret.Setpoint > 0 {
 		ret.Setpoint -= ret.RampRate * dt.Seconds()
-		if ret.Setpoint < 0 {
-			ret.Setpoint = 0
-		}
+		ret.Setpoint = max(ret.Setpoint, 0)
 	}
 
 	// Frequency-droop governor. When the infinite-bus frequency
@@ -112,20 +101,12 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 	if ret.GridFrequency != 0 && ret.State == TurbineRunning {
 		freqErr := ret.GridFrequency - GridRatedFrequency
 		droopBias := -freqErr / (GridRatedFrequency * TurbineDroop)
-		if droopBias > TurbineDroopBiasLimit {
-			droopBias = TurbineDroopBiasLimit
-		}
-		if droopBias < -TurbineDroopBiasLimit {
-			droopBias = -TurbineDroopBiasLimit
-		}
+		droopBias = min(droopBias, TurbineDroopBiasLimit)
+		droopBias = max(droopBias, -TurbineDroopBiasLimit)
 		ret.DroopBias = droopBias
 		ret.Setpoint += droopBias
-		if ret.Setpoint > 1.0 {
-			ret.Setpoint = 1.0
-		}
-		if ret.Setpoint < 0 {
-			ret.Setpoint = 0
-		}
+		ret.Setpoint = min(ret.Setpoint, 1.0)
+		ret.Setpoint = max(ret.Setpoint, 0)
 	}
 
 	// OPC alarm at TurbineOPCALarmFraction (103% of rated
@@ -194,20 +175,14 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 			ret.State = TurbineTripped
 		} else if steamFlow > 0 {
 			ret.Velocity += Velocity(steamFlow * dt.Seconds() * turbineRampGain)
-			if ret.Velocity > TurbineRatedSpeed {
-				ret.Velocity = TurbineRatedSpeed
-			}
+			ret.Velocity = min(ret.Velocity, TurbineRatedSpeed)
 		} else {
 			ret.Velocity -= Velocity(float64(ret.Velocity) * turbineCoastRate * dt.Seconds())
-			if ret.Velocity < 0 {
-				ret.Velocity = 0
-			}
+			ret.Velocity = max(ret.Velocity, 0)
 		}
 	default:
 		ret.Velocity -= Velocity(float64(ret.Velocity) * turbineCoastRate * dt.Seconds())
-		if ret.Velocity < 0 {
-			ret.Velocity = 0
-		}
+		ret.Velocity = max(ret.Velocity, 0)
 	}
 
 	if ret.State == TurbineRunning &&
@@ -234,9 +209,7 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 		ret.RealPower = Watts(float64(ret.Velocity) / float64(TurbineRatedSpeed) * float64(TurbineRatedkW))
 		if ret.Setpoint > 0 {
 			maxPower := ret.Setpoint * float64(TurbineRatedkW)
-			if float64(ret.RealPower) > maxPower {
-				ret.RealPower = Watts(maxPower)
-			}
+			ret.RealPower = Watts(min(float64(ret.RealPower), maxPower))
 		}
 	} else {
 		ret.RealPower = 0
@@ -254,18 +227,14 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 	// stage feedwater heaters."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:30-34
 	loadFraction := float64(ret.RealPower) / float64(TurbineRatedkW)
-	if loadFraction < 0 {
-		loadFraction = 0
-	}
+	loadFraction = max(loadFraction, 0)
 	ret.ExtractionSteamFlow = Volume{Val: loadFraction*FeedwaterDesignFlow.Float(), Unit: u.Gallon}
 
 	// HP exhaust quality falls with load fraction because the
 	// HP turbine does less expansion work per pound of steam.
 	ret.HPExhaustQuality = HPExhaustQualityFullLoad -
 		(HPExhaustQualityFullLoad-HPExhaustQualityLowLoad)*(1-loadFraction)
-	if ret.HPExhaustQuality < HPExhaustQualityLowLoad {
-		ret.HPExhaustQuality = HPExhaustQualityLowLoad
-	}
+	ret.HPExhaustQuality = max(ret.HPExhaustQuality, HPExhaustQualityLowLoad)
 	// HP exhaust pressure is slightly below SG pressure due to
 	// the pressure drop across the HP turbine stages.
 	ret.HPExhaustPressure = sgPressure * 0.90

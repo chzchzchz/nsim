@@ -51,9 +51,7 @@ func (s *ServiceWaterSystem) Step(heatLoad Watts) ServiceWaterSystem {
 
 	ret.Flow = ServiceWaterPumpFlow *
 		float64(ServiceWaterEssentialPumpCount)
-	if ret.Flow > ServiceWaterDesignFlow {
-		ret.Flow = ServiceWaterDesignFlow
-	}
+	ret.Flow = min(ret.Flow, ServiceWaterDesignFlow)
 
 	// Outlet temperature: source temperature plus the heat-
 	// load-driven rise. Mass flow in kg/s = gpm × 0.0631.
@@ -62,9 +60,7 @@ func (s *ServiceWaterSystem) Step(heatLoad Watts) ServiceWaterSystem {
 	if massKgPerS > 0 && float64(heatLoad) > 0 {
 		deltaF := float64(heatLoad) / (massKgPerS * cpWater) *
 			9.0 / 5.0
-		if deltaF < 0 {
-			deltaF = 0
-		}
+		deltaF = max(deltaF, 0)
 		ret.OutletTemp = Temperature{Val: ret.InletTemp.Float()+deltaF, Unit: u.Fahrenheit}
 	} else {
 		ret.OutletTemp = ret.InletTemp

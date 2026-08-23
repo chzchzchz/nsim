@@ -69,12 +69,7 @@ func (r *FeedwaterRegulator) Step() FeedwaterRegulator {
 	ret.IntegralError += eLevel * TimeStep.Seconds()
 
 	demand := kp*eLevel + ki*ret.IntegralError + ffInput
-	if demand < 0 {
-		demand = 0
-	}
-	if demand > 1 {
-		demand = 1
-	}
+	demand = min(max(demand, 0), 1)
 	ret.ValveDemand = demand
 
 	return ret

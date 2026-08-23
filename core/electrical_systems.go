@@ -97,9 +97,7 @@ func (e *PlantElectricalSystems) Step() PlantElectricalSystems {
 func (e *PlantElectricalSystems) StepBySeconds(seconds float64) PlantElectricalSystems {
 	ret := *e
 	steps := int(seconds / TimeStep.Seconds())
-	if steps < 1 {
-		steps = 1
-	}
+	steps = max(steps, 1)
 	for i := 0; i < steps; i++ {
 		ret = ret.Step()
 	}

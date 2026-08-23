@@ -694,21 +694,10 @@ type ControlRods struct {
 func (c ControlRods) Step() ControlRods {
 	ret := c
 	demand := ret.DemandInsertion
-	if demand < 0 {
-		demand = 0
-	}
-	if demand > 1 {
-		demand = 1
-	}
+	demand = min(max(demand, 0), 1)
 	delta := demand - c.Insertion
 	maxStep := RodInsertionSpeed * TimeStep.Seconds()
-	if delta > maxStep {
-		ret.Insertion = c.Insertion + maxStep
-	} else if delta < -maxStep {
-		ret.Insertion = c.Insertion - maxStep
-	} else {
-		ret.Insertion = demand
-	}
+	ret.Insertion = c.Insertion + min(max(delta, -maxStep), maxStep)
 	return ret
 }
 type Nozzle struct{ Part }
@@ -5003,12 +4992,8 @@ func ClampRate(current, desiredDelta, posLimit, negLimit float64, dt time.Durati
 	maxDeltaPos := posLimit * dt.Seconds()
 	maxDeltaNeg := negLimit * dt.Seconds()
 	delta := desiredDelta
-	if delta > maxDeltaPos {
-		delta = maxDeltaPos
-	}
-	if delta < maxDeltaNeg {
-		delta = maxDeltaNeg
-	}
+	delta = min(delta, maxDeltaPos)
+	delta = max(delta, maxDeltaNeg)
 	return delta / dt.Seconds()
 }
 

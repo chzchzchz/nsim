@@ -126,9 +126,7 @@ func depleteEFWSSubsystemTank(sub EFWSSubsystem, dt time.Duration) EFWSSubsystem
 	}
 	dV := flow.Float() * dt.Seconds()
 	newLevel := sub.Tank.Level.Float() - dV
-	if newLevel < 0 {
-		newLevel = 0
-	}
+	newLevel = max(newLevel, 0)
 	sub.Tank.Level = Volume{Val: newLevel, Unit: u.Gallon}
 	return sub
 }

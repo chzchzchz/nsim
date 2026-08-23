@@ -48,13 +48,9 @@ func (h *LowPressureHeater) Step(fwInletF float64, steamFlowGalPerStep float64) 
 	// across the LP train).
 	designExtractionPerStage := FeedwaterDesignFlow.Float() * 0.1
 	ratio := steamFlowGalPerStep / designExtractionPerStage
-	if ratio > 1.0 {
-		ratio = 1.0
-	}
+	ratio = min(ratio, 1.0)
 	deltaTF := ratio * LPTemperatureRisePerStage
-	if deltaTF > LPTemperatureRisePerStage*2 {
-		deltaTF = LPTemperatureRisePerStage * 2
-	}
+	deltaTF = min(deltaTF, LPTemperatureRisePerStage*2)
 	ret.TemperatureRise = Temperature{Val: deltaTF, Unit: u.Fahrenheit}
 
 	// Drain accumulation: condensed steam goes to drain level.
@@ -91,13 +87,9 @@ func (h *HighPressureHeater) Step(fwInletF float64, steamFlowGalPerStep float64)
 
 	designExtractionPerStage := FeedwaterDesignFlow.Float() * 0.05
 	ratio := steamFlowGalPerStep / designExtractionPerStage
-	if ratio > 1.0 {
-		ratio = 1.0
-	}
+	ratio = min(ratio, 1.0)
 	deltaTF := ratio * HPTemperatureRisePerStage
-	if deltaTF > HPTemperatureRisePerStage*2 {
-		deltaTF = HPTemperatureRisePerStage * 2
-	}
+	deltaTF = min(deltaTF, HPTemperatureRisePerStage*2)
 	ret.TemperatureRise = Temperature{Val: deltaTF, Unit: u.Fahrenheit}
 
 	ret.DrainLevel = Volume{Val: ret.DrainLevel.Float()+steamFlowGalPerStep*dt.Seconds(), Unit: u.Gallon}

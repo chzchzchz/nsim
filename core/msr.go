@@ -45,9 +45,7 @@ func (m *MoistureSeparatorReheater) Step(
 	// DrainFlow, condensed by the reheater steam. The chevron
 	// separators remove most of the bulk liquid.
 	liquidFraction := 1.0 - inletQuality
-	if liquidFraction < 0 {
-		liquidFraction = 0
-	}
+	liquidFraction = max(liquidFraction, 0)
 	drainGalPerStep := liquidFraction * reheatSteamFlow.Float() * dt.Seconds() * MSRMoistureRemovalEfficiency
 	ret.DrainFlow = Volume{Val: drainGalPerStep, Unit: u.Gallon}
 
@@ -58,9 +56,7 @@ func (m *MoistureSeparatorReheater) Step(
 	// the full MSRReheatTarget.
 	reheatFraction := reheatSteamFlow.Float() /
 		(FeedwaterDesignFlow.Float() * MSRDesignExtractionFraction)
-	if reheatFraction > 1.0 {
-		reheatFraction = 1.0
-	}
+	reheatFraction = min(reheatFraction, 1.0)
 	ret.OutletTemperature = Temperature{Val: inletTemp.Float()+MSRReheatTarget*reheatFraction, Unit: u.Fahrenheit}
 
 	// Reheat steam pressure is passed through for state tracking.

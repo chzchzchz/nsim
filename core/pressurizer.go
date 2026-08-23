@@ -38,14 +38,10 @@ func (p *Pressurizer) Step(porv *Valve) Pressurizer {
 			// volume via the bubble stiffness, then drain that
 			// volume from the liquid inventory.
 			psiRise := float64(PressurizerHeaterRate) * dt.Seconds()
-			if current+psiRise > target {
-				psiRise = target - current
-			}
+			psiRise = min(psiRise, target-current)
 			bubbleRise := psiRise / PressurizerBubbleStiffness
 			newWater := ret.Water.Float() - bubbleRise
-			if newWater < 0 {
-				newWater = 0
-			}
+			newWater = max(newWater, 0)
 			ret.Water = vol(ret.Water, newWater)
 		}
 	}
@@ -59,14 +55,10 @@ func (p *Pressurizer) Step(porv *Valve) Pressurizer {
 		current := float64(PressurizerBasePressure) + bubble*PressurizerBubbleStiffness
 		if current > float64(PressurizerSprayMin) {
 			psiDrop := ret.SprayOpen * float64(PressurizerSprayRate) * dt.Seconds()
-			if current-psiDrop < float64(PressurizerSprayMin) {
-				psiDrop = current - float64(PressurizerSprayMin)
-			}
+			psiDrop = min(psiDrop, current-float64(PressurizerSprayMin))
 			bubbleDrop := psiDrop / PressurizerBubbleStiffness
 			newWater := ret.Water.Float() + bubbleDrop
-			if newWater > ret.Volume.Float() {
-				newWater = ret.Volume.Float()
-			}
+			newWater = min(newWater, ret.Volume.Float())
 			ret.Water = vol(ret.Water, newWater)
 		}
 	}
@@ -86,19 +78,12 @@ func (p *Pressurizer) Step(porv *Valve) Pressurizer {
 	totalVol := ret.Volume.Float()
 	waterVol := ret.Water.Float()
 	bubble := totalVol - waterVol
-	if bubble < 0 {
-		bubble = 0
-	}
-	if bubble > totalVol {
-		bubble = totalVol
-	}
+	bubble = min(max(bubble, 0), totalVol)
 	pressure := float64(PressurizerBasePressure) + bubble*PressurizerBubbleStiffness
 	if ret.HeatersOn && pressure > float64(PressurizerHeaterTarget) {
 		maxBubble := (float64(PressurizerHeaterTarget) - float64(PressurizerBasePressure)) / PressurizerBubbleStiffness
 		newWater := totalVol - maxBubble
-		if newWater < 0 {
-			newWater = 0
-		}
+		newWater = max(newWater, 0)
 		ret.Water = vol(ret.Water, newWater)
 		waterVol = newWater
 		bubble = maxBubble
@@ -117,14 +102,10 @@ func (p *Pressurizer) Step(porv *Valve) Pressurizer {
 		current := float64(ret.Pressure)
 		if current > base {
 			psiDrop := float64(PressurizerAmbientDecay) * dt.Seconds()
-			if current-psiDrop < base {
-				psiDrop = current - base
-			}
+			psiDrop = min(psiDrop, current-base)
 			bubbleDrop := psiDrop / PressurizerBubbleStiffness
 			newWater := waterVol + bubbleDrop
-			if newWater > totalVol {
-				newWater = totalVol
-			}
+			newWater = min(newWater, totalVol)
 			ret.Water = vol(ret.Water, newWater)
 			ret.SteamBubble = Volume{Val: totalVol-newWater, Unit: u.Gallon}
 			ret.Pressure = Pressure(float64(PressurizerBasePressure) +
@@ -141,9 +122,7 @@ func (p *Pressurizer) Step(porv *Valve) Pressurizer {
 	if porv != nil {
 		v := *porv
 		if ret.Pressure > PressurizerPORVTrip {
-			if v.Open < 1 {
-				v.Open = 1
-			}
+			v.Open = max(v.Open, 1)
 		} else if v.Open > 0 {
 			v.Open = 0
 		}
