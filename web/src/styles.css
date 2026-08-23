@@ -76,6 +76,13 @@
             border-bottom: 1px solid #ccc;
             padding-bottom: 4px;
         }
+        .tile > h2 { cursor: grab; user-select: none; }
+        .tile.tile-grabbing > h2 { cursor: grabbing; }
+        .tile.swap-source { outline: 2px solid #3498db; }
+        .tile.swap-target {
+            outline: 2px dashed #e67e22;
+            background: #fff8ef;
+        }
         .tile-body {
             display: grid;
             grid-template-columns: 1fr 1fr;

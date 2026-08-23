@@ -116,6 +116,10 @@ The dashboard has these regions:
    `bridge.GetControlMap` / `bridge.GetSensorMap` becomes a widget /
    table row, grouped one tile per building prefix. Rejected control
    values flash the widget red and log instead of failing silently.
+   Tiles rearrange by mouse: press a tile's prefix heading, drag
+   ~100 px toward a neighbour to mark it as the pending swap
+   (outlined tiles show the pair), drag back inside that band to
+   cancel, and release the button to apply the swap.
 
 5. **Command console** (bottom) — submit `TimeOffsetMs Part.Label Value`
    lines that fire relative to the simulation clock; completed rows are

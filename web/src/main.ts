@@ -8,6 +8,7 @@ import { renderReadout, refreshSensors, type SensorRow } from "./sensors";
 import { renderAlarms, type AlarmEntry, type AlarmPanel, isAlarmKind } from "./alarms";
 import { initConsole, type ConsolePanel } from "./console";
 import { buildBindings, displayPart, groupByPrefix, type PartBinding } from "./bindings";
+import { enablePanelSwaps } from "./grid";
 import { Sim } from "./sim";
 
 declare global {
@@ -35,6 +36,10 @@ async function main(): Promise<void> {
     const statusEl = document.getElementById("sim-status") as HTMLElement;
 
     const sim = new Sim(newPlant);
+
+    // Drag a tile by its prefix heading to swap it with a
+    // neighbour; see grid.ts for the gesture thresholds.
+    enablePanelSwaps(tilesEl);
 
     // Initial SVG mount + tiles. Each top-level prefix gets its
     // own tile; the tile splits into Controls | Sensors columns.
