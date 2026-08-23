@@ -120,9 +120,15 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 	// "If the plant is to be placed in a subcritical hot standby
 	// condition, the control rods are inserted to reduce power level"
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:20-23
+	//
+	// Subcritical hot standby needs real shutdown margin, not a
+	// trim worth: a couple percent of insertion holds criticality
+	// once the moderator warms toward no-load temperature, so the
+	// demand drives the banks deep enough that rod worth dominates
+	// the end-of-cooldown positive Doppler swing.
 	setControl(t, &p,
 		"ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion",
-		"0.02")
+		"0.60")
 	setControl(t, &p, "TurbineBuilding/Turbine/Setpoint", "0.04")
 	stepN(&p, int(5*time.Second/TimeStep))
 
