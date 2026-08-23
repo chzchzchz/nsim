@@ -126,11 +126,30 @@ func RCFCUnitsRunning(units *[RCFCUnitCount]RCFCUnit) int {
 	return n
 }
 
+// Containment atmosphere properties used by the lumped
+// ideal-gas model. Air density 1.2 kg/m³ is representative of
+// containment-atmosphere conditions; the spec states no value
+// (derived sizing assumption).
+const (
+	ft3ToM3              = 0.0283168
+	paPerPsi             = 6894.76
+	airSpecificGasConst   = 287.0 // J/kg·K
+	containmentAirDensity = 1.2   // kg/m³
+	airCp                = 1005.0 // J/kg·K
+)
+
 // Step advances the ContainmentBuilding by one timestep. The
 // step integrates the lumped atmosphere temperature with the
-// net heat input (RCS leak into containment, CSS spray
-// condensation enthalpy removal) minus the RCFC heat sink,
-// then derives absolute pressure via the ideal-gas law.
+// net heat input minus the RCFC heat sink, then derives
+// absolute pressure via the ideal-gas law.
+//
+// heatIn is signed: Plant.Step passes the negative of the CSS
+// spray-condensation enthalpy removal. RCS break enthalpy
+// release (the DBA source: "The minimum design pressure and
+// temperature of the containment are equal to the peak pressure
+// and temperature occurring as the result of any rupture of the
+// RCS") is deferred until a break-flow state exists.
+// specs/the_westinghouse_pressurized_water_react/chapter_6/page_110.txt:14-21
 //
 // Spec justification:
 //   - Containment purpose: "This chapter discusses the design of
@@ -154,17 +173,16 @@ func (c *ContainmentBuilding) Step(
 	dt := TimeStep.Seconds()
 
 	netW := float64(heatIn) - float64(heatOutRCFC)
-	massKg := ret.FreeVolume * 0.0283168 * 1.0 // ft³ → m³, ρ_air ≈ 1 kg/m³
-	cpAir := 1005.0
-	deltaK := netW / (massKg * cpAir) * dt
+	volumeM3 := ret.FreeVolume * ft3ToM3
+	massKg := volumeM3 * containmentAirDensity
+	deltaK := netW / (massKg * airCp) * dt
 	newTempF := ret.Temperature.Float() + deltaK*9.0/5.0
 	newTempF = max(newTempF, -459.67)
 	ret.Temperature = Temperature{Val: newTempF, Unit: u.Fahrenheit}
 
-	rAir := 287.0
 	kelvin := (newTempF + 459.67) * 5.0 / 9.0
-	pPa := massKg * rAir * kelvin / ret.FreeVolume * 0.0283168
-	ret.Pressure = Pressure(pPa/6894.76) + AtmosphericPressure
+	pPa := massKg * airSpecificGasConst * kelvin / volumeM3
+	ret.Pressure = Pressure(pPa / paPerPsi)
 
 	return ret
 }

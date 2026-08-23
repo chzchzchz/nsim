@@ -2,6 +2,7 @@ package core
 
 import (
 	"testing"
+	"time"
 
 	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
@@ -130,4 +131,34 @@ func TestSWSTotalHeatLoadIncludesCCWDuty(t *testing.T) {
 	assert.InDelta(t, wantRise, gotRise, 1e-9,
 		"want SWS outlet rise=%v from RCFC+CCW loads, got %v",
 		wantRise, gotRise)
+}
+
+// CSS spray condensation removes enthalpy from the containment
+// atmosphere: with the spray system forced on, the containment
+// temperature falls below an otherwise identical no-spray plant.
+// Comparative form because the RCFC units already cool the
+// atmosphere from the 120°F startup value on their own.
+//
+// Spec justification:
+//   - "the steam is condensed and falls to the containment floor
+//     as drops of a borated sodium hydroxide solution."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:4-7
+func TestContainment_SprayCondensationCoolsAtmosphere(t *testing.T) {
+	steps := 5 * int(time.Second/TimeStep)
+
+	base := MakePlant()
+	stepN(&base, steps)
+	baseT := base.ReactorBuilding.ContainmentBuilding.Temperature.Float()
+
+	sprayed := MakePlant()
+	css := &sprayed.AuxiliaryBuilding.ContainmentSpraySystem
+	css.Running = true
+	css.DriveReady = true
+	css.SprayHeaderOpen = true
+	stepN(&sprayed, steps)
+	sprayT := sprayed.ReactorBuilding.ContainmentBuilding.Temperature.Float()
+
+	assert.Less(t, sprayT, baseT,
+		"want sprayed containment %v cooler than baseline %v",
+		sprayT, baseT)
 }

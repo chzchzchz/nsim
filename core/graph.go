@@ -115,10 +115,11 @@ func (h *HighPressureHeater) capacity() Volume   { return zeroVolume }
 
 var zeroVolume = Volume{Val: 0, Unit: u.Gallon}
 
-// flowCoefficient is the per-second, per-psi volume transfer rate.
-// Sized so a 100 psid drop across an open valve moves ~1 gpm — fast
-// enough to be observable on test timescales.
-const flowCoefficient = 60.0 / 60.0 // gal per second per psi
+// flowCoefficient is the per-second, per-psi volume transfer
+// rate: an edge moves deltaP × flowCoefficient gallons per
+// second. Derived sizing assumption (the spec states no value);
+// chosen so valve flows respond on observable test timescales.
+const flowCoefficient = 1.0 // gal per second per psi
 
 // pumpHead is the head a running pump adds to an edge in psi. Sized to
 // match the AFWP shutoff head cited in

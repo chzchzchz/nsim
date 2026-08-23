@@ -61,23 +61,7 @@ type SteamGenerator struct {
 
 func (s *SteamGenerator) Update() SteamGenerator {
 	ret := *s
-	// watts := heatTransferred()
 	return ret
-}
-
-func (s *SteamGenerator) heatTransferred() Watts {
-	// Qdot = rate of heat transfer
-	// U = heat transfer coefficient
-	// A = area of heat transfer
-	// deltaT = differential temperature across exchanger
-	/*
-		U := HeatTransferCoefficient
-		A := AreaOfHeatTransfer
-		Tavg := (Thot + Tcold) / 2.0
-		deltaT := Tavg - Tstm
-		Qdot := U*A*deltaT
-	*/
-	return 0
 }
 // SteamGenerator shell-side operating pressure and the latent heat of
 // vaporisation used by the heat-transfer step.

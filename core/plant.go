@@ -951,9 +951,31 @@ func (p *Plant) Step() {
 			p.nextPlant.AuxiliaryBuilding.RCFCUnits[i].HeatTransferRate,
 		)
 	}
+	// CSS spray condensation: spray drops condensing steam from
+	// the containment atmosphere remove latent heat at spray mass
+	// flow × heat of vaporisation.
+	//
+	// Spec justification:
+	//   - "the steam is condensed and falls to the containment
+	//     floor as drops of a borated sodium hydroxide solution."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:4-7
+	//   - Pressure limiting alongside the fan coolers:
+	//     "independently capable of delivering the necessary flow
+	//     to limit containment pressure in conjunction with the
+	//     Reactor Containment Fan Cooler System."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:29-32
+	spray := p.nextPlant.AuxiliaryBuilding.ContainmentSpraySystem
+	var cssHeatOut Watts
+	if spray.Running && spray.DriveReady && spray.SprayHeaderOpen {
+		massKgPerS := spray.SprayFlow * 0.0631
+		cssHeatOut = Watts(massKgPerS * float64(LatentHeatOfSteamization))
+	}
+	// RCS break enthalpy release is deferred until a break-flow
+	// state exists (plans/x/possible_bugs.md, containment model
+	// split); heatIn carries only the negative spray contribution.
 	p.nextPlant.ReactorBuilding.ContainmentBuilding =
 		p.nextPlant.ReactorBuilding.ContainmentBuilding.Step(
-			Watts(0), rcfcHeatOut,
+			-cssHeatOut, rcfcHeatOut,
 		)
 
 	// RPS-driven CIS manual flags. The Reactor Protection
