@@ -23,20 +23,18 @@ import (
 // their shell pressure without tripping any protection function.
 
 // scenario14FullPowerPlant extends the shared full-power lineup with
-// the scenario's CVCS lineup. Charging/letdown flows are fixed
-// constants with no level controller, so both paths are secured to
-// freeze pressurizer inventory inside the no-load band for the
-// duration of the ramp.
+// the scenario's CVCS lineup: the automatic pressurizer level
+// controller balances charging against letdown around the
+// Tavg-programmed level.
 //
-// "pressurizer level represents a balance of injection water flow
-// into the RCS and water letdown flow into the Chemical and Volume
-// Control System."
-// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:15-33
+// "it must maintain the RCS mass inventory, that is,
+// the pressurizer level, by balancing the charging
+// flow to the letdown flow."
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:9-12
 func scenario14FullPowerPlant() Plant {
 	p := scenario10FullPowerPlant()
 	p.ReactorBuilding.Pressurizer.HeatersOn = true
-	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = false
-	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = false
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = true
 	return p
 }
 
