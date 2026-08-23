@@ -152,8 +152,12 @@ func TestReactor_TripWithRodsOutKeepsDecayHeatFloor(t *testing.T) {
 // Allow a tiny tolerance for the single-step transient.
 func TestReactor_OutletAtReferenceGivesZeroDoppler(t *testing.T) {
 	r := ReactorPressureVessel{
-		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
-		Outlet:       Temperature{Val: float64(CoreDopplerReferenceTempF), Unit: u.Fahrenheit},
+		ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
+		Outlet:      Temperature{Val: float64(CoreDopplerReferenceTempF), Unit: u.Fahrenheit},
+		// Pin the rated-equilibrium xenon load so only the Doppler
+		// term can move Reactivity; a zero inventory would read as
+		// a fresh core missing its nominal equilibrium poison.
+		Xenon135: 1,
 	}
 	r = r.Step(RCPRatedSpeed)
 	assert.GreaterOrEqual(t, r.Reactivity, float32(-1),

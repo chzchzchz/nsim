@@ -1,6 +1,7 @@
 package core
 
 import (
+	"math"
 	"time"
 
 	u "github.com/bcicen/go-units"
@@ -161,7 +162,13 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	dopplerPct := float32(dopplerDeltaF*tempCoef) / 1000
 	boronDelta := (ret.ControlRods.BoronConcentration - CVCSInitialBoron) / 100.0
 	boronPct := float32(boronDelta) * CoreBoronWorthPer100ppm
-	ret.Reactivity = rodPct + dopplerPct + boronPct
+	// Xenon contributes reactivity relative to its rated-power
+	// equilibrium: the rod/boron calibration above already carries the
+	// nominal equilibrium load (operators have diluted against it), so
+	// deviations produce the correct signs, xenon above equilibrium
+	// negative, below positive, without disturbing existing equilibria.
+	xenonPct := float32(CoreXenonEquilibriumWorthPct * (ret.Xenon135 - 1.0))
+	ret.Reactivity = rodPct + dopplerPct + boronPct + xenonPct
 
 	// 5) Thermal power = fission chain power + fission-product
 	// decay heat (+ RCP shaft loss, added below). The two nuclear
@@ -198,6 +205,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity) ReactorPressureVessel {	
 	slowTarget := float64(ret.FissionPower) * CoreDecayHeatSlowFraction
 	ret.DecayHeatFast += Watts((fastTarget - float64(ret.DecayHeatFast)) * dtS / CoreDecayHeatFastTimeConstant.Seconds())
 	ret.DecayHeatSlow += Watts((slowTarget - float64(ret.DecayHeatSlow)) * dtS / CoreDecayHeatTimeConstant.Seconds())
+	ret.advanceXenon(dt)
 	// RCP shaft-loss heat enters the primary coolant (chapter
 	// 16 temperature balance). The rated cap and the pump
 	// contribution are applied in TotalThermalPower, the number
@@ -228,6 +236,112 @@ func (r *ReactorPressureVessel) SeedSteadyStatePower(p Watts) {
 	r.FissionPower = Watts(float64(p) * (1 - CoreDecayHeatShutdownFraction))
 	r.DecayHeatFast = Watts(float64(p) * CoreDecayHeatFastFraction)
 	r.DecayHeatSlow = Watts(float64(p) * CoreDecayHeatSlowFraction)
+	pFraction := min(float64(p)/float64(CoreRatedThermalPower), 1.0)
+	r.Iodine135 = pFraction
+	r.Xenon135 = xenonEquilibriumXenon(pFraction)
+}
+
+// Xenon-135 fission-product model constants. Inventories are
+// normalized to their rated-power equilibrium; rates are per second.
+//
+// Spec justification:
+//   - "Produced via iodine-135, Xenon-135 is a fission product with
+//     a 6.7 hour half-life." (iodine half-life; the Westinghouse doc
+//     gives no other xenon data)
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:164-165
+//   - Xe-135 half-life 9.14 h; "the yield of xenon-135 from fission is
+//     about 6.6% (uranium) ... the great majority from iodine-135";
+//     "95% of the 135Xe production is from decay of 135I"; capture at
+//     1e14 flux: "2.65x10-4 s-1, which corresponds to a half-life of
+//     about one hour"; equilibrium in "about 40 to 50 hours"; post-
+//     shutdown peak "about 11 hours after reactor power is decreased".
+//     specs/wiki/Xenon-135.txt
+const (
+	// Derived from the spec's 6.7 hour iodine half-life.
+	CoreIodine135DecayRatePerSecond = math.Ln2 / (6.7 * 3600.0)
+
+	// From the cached article's 9.14 hour xenon half-life.
+	CoreXenon135DecayRatePerSecond = math.Ln2 / (9.14 * 3600.0)
+
+	// Full-power xenon burnup rate: sigma*phi from the article's
+	// 2.65e6 barn / 1e14 n/cm2/s worked example.
+	CoreXenonBurnRateAtFullPowerPerSecond = 2.65e-4
+
+	// Direct fission yield share of xenon production; the article
+	// puts ~95% of xenon production on the iodine-decay path.
+	CoreXenonDirectYieldFraction float64 = 0.05
+
+	// CoreXenonIodineToXenonEquilibriumRatio is the iodine-to-xenon
+	// rated-equilibrium inventory ratio carried by the normalized
+	// coupling term. Because rated burnup suppresses the absolute
+	// xenon inventory far below the iodine inventory, one unit of
+	// normalized iodine decay feeds ~R units of normalized xenon:
+	// this ratio is what produces the classic multi-equilibrium
+	// post-shutdown iodine pit. Derived:
+	// (lambdaX + burnup) / lambdaI.
+	CoreXenonIodineToXenonEquilibriumRatio = (CoreXenon135DecayRatePerSecond +
+		CoreXenonBurnRateAtFullPowerPerSecond) /
+		CoreIodine135DecayRatePerSecond
+
+	// CoreXenonEquilibriumWorthPct is the reactivity contribution of
+	// one unit of normalized xenon inventory, percent delta-k/k.
+	// Assumption: the sources give cross-section and yields but no
+	// integrated worth; the magnitude is set to a typical PWR
+	// equilibrium-xenon worth (~2.7% dk/k) and only its sign and
+	// order are load-bearing in the scenario bands.
+	CoreXenonEquilibriumWorthPct float64 = -2.7
+)
+
+// advanceXenon evolves the iodine-135 / xenon-135 fission-product
+// pair over dt, sub-stepping so callers may pass long horizons (the
+// plant step passes TimeStep). Inventories are normalized to their
+// rated-power equilibrium, so 1.0 means "at rated equilibrium" and a
+// zero value means no xenon present (fresh core).
+//
+// Spec justification:
+//   - "Produced via iodine-135, Xenon-135 is a fission product with
+//     a 6.7 hour half-life."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:164-165
+//   - "When reactor power is decreased or shut down [...] the 135Xe
+//     concentration peaks about 11 hours after reactor power is
+//     decreased" and "95% of the 135Xe production is from decay of
+//     135I"
+//     specs/wiki/Xenon-135.txt
+func (r *ReactorPressureVessel) advanceXenon(dt time.Duration) {
+	const maxSubStep = 60 * time.Second
+	n := int(math.Ceil(dt.Seconds() / maxSubStep.Seconds()))
+	if n < 1 {
+		n = 1
+	}
+	h := dt.Seconds() / float64(n)
+	for range n {
+		p := min(max(float64(r.FissionPower)/float64(CoreFissionPowerAtRated), 0), 1)
+		lambdaI := CoreIodine135DecayRatePerSecond
+		lambdaX := CoreXenon135DecayRatePerSecond
+		r.Iodine135 += (p - r.Iodine135) * lambdaI * h
+		production := ((1-CoreXenonDirectYieldFraction)*r.Iodine135 +
+			CoreXenonDirectYieldFraction*p) * lambdaI *
+			CoreXenonIodineToXenonEquilibriumRatio
+		destruction := (lambdaX + CoreXenonBurnRateAtFullPowerPerSecond*p) * r.Xenon135
+		r.Xenon135 += (production - destruction) * h
+		r.Iodine135 = max(r.Iodine135, 0)
+		r.Xenon135 = max(r.Xenon135, 0)
+	}
+}
+
+// xenonEquilibriumIodine returns the normalized iodine-135 steady
+// state at fractional rated power.
+func xenonEquilibriumIodine(p float64) float64 {
+	return p
+}
+// xenonEquilibriumXenon returns the normalized xenon-135 steady state
+// at fractional rated power. The equilibrium-ratio construction makes
+// the value exactly 1 at rated power.
+func xenonEquilibriumXenon(p float64) float64 {
+	production := CoreIodine135DecayRatePerSecond * p *
+		CoreXenonIodineToXenonEquilibriumRatio
+	return production / (CoreXenon135DecayRatePerSecond +
+		CoreXenonBurnRateAtFullPowerPerSecond*p)
 }
 
 // netTempCoef returns the combined Doppler + moderator
@@ -293,6 +407,21 @@ type ReactorPressureVessel struct {
 
 	// TimeSinceTrip is 0 while running and accumulates after Trip.
 	TimeSinceTrip time.Duration
+
+	// Iodine135 and Xenon135 are fission-product reactivity
+	// inventories normalized to their rated-power equilibrium
+	// (1.0 = rated equilibrium, 0 = none, fresh core). Xenon-135 is
+	// the strongest known neutron absorber and its swings dominate
+	// slow reactivity behavior during maneuvering and after power
+	// changes.
+	//   "An additional concern during power operation is the axial
+	//    power distribution [...] xenon oscillations [...]"
+	//    specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:73-93
+	//   "Produced via iodine-135, Xenon-135 is a fission product
+	//    with a 6.7 hour half-life."
+	//    specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:164-165
+	Iodine135 float64
+	Xenon135  float64
 
 	// Trip is the operator-controlled trip flag. Set true to drop
 	// the rods into the fully inserted scram position; fission
@@ -404,6 +533,13 @@ const (
 	CoreNeutronSourcePower Watts = 1e-9 * CoreRatedThermalPower
 	CoreDecayHeatTimeConstant             = 20 * time.Hour
 	CoreDecayHeatFastTimeConstant         = 50 * time.Second
+
+	// CoreFissionPowerAtRated is the fission-chain output at 100%
+	// rated operation under the modeled 6.5% decay-heat share; the
+	// xenon inventories normalize their power fraction against it so
+	// a seeded full-load plant sits at exactly 1.0.
+	CoreFissionPowerAtRated Watts = Watts(float64(CoreRatedThermalPower) *
+		(1 - CoreDecayHeatShutdownFraction))
 
 	// CoreRodWorthABCD is the full-insertion ABCD rod-bank worth
 	// as a fraction of Δk/k: −4.5% (−4500 pcm), applied on the
