@@ -256,6 +256,60 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Condensate pump (chapter 15): takes suction from the
+	// condenser/CST path feeding the heater drain tank ahead of
+	// the main feedwater pumps; started with the conventional
+	// condensate and feedwater systems during secondary plant
+	// startup.
+	// "Conventional condensate and feedwater systems startup
+	//  procedures would be followed."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:175-177
+	m["TurbineBuilding/CondensatePump/Running"] = &bridge.Control{
+		Part:  "TurbineBuilding/CondensatePump",
+		Label: "Running",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.TurbineBuilding.CondensatePump.Running)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.CondensatePump.Running = v
+			return nil
+		},
+	}
+
+
+	// Main feedwater pump (chapter 16 startup): the SG feedwater
+	// supply is switched from the auxiliary feedwater system to
+	// this system before AFW flow capacity (~3.5-percent steam
+	// flow) is reached.
+	// "the steam generators feedwater supply is switched to the
+	//  main feedwater system; the auxiliary feedwater system is
+	//  secured and lined up for safeguards actuation."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:45-50
+	m["TurbineBuilding/MainFeedwaterPump/Running"] = &bridge.Control{
+		Part:  "TurbineBuilding/MainFeedwaterPump",
+		Label: "Running",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.TurbineBuilding.MainFeedwaterPump.Running)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.MainFeedwaterPump.Running = v
+			return nil
+		},
+	}
+
+
 	// Main feedwater control valve (chapter 15):
 	// "A signal from the Feedwater Control System also sets
 	// the position of the motor-driven feedwater pump discharge
