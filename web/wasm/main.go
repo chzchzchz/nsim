@@ -112,16 +112,21 @@ func (h *plantHandle) setControl(id, value string) error {
 	return nil
 }
 
-// getControlValue returns the current Get() result for the
-// control, or an Error if the id is unknown. The TS side uses
-// this to seed the initial UI state (checkbox checked/unchecked,
-// number input value, dropdown selected option).
-func (h *plantHandle) getControlValue(id string) (string, error) {
-	c, ok := h.controls[id]
-	if !ok {
-		return "", fmt.Errorf("unknown control %q", id)
+// controlValuesJSON returns {"values":{id:value}} for every
+// control so the UI seeds all widget initial states with a single
+// JS<->Go crossing per panel rebuild.
+func (h *plantHandle) controlValuesJSON() (string, error) {
+	values := make(map[string]string, len(h.controls))
+	for id, c := range h.controls {
+		values[id] = c.Get()
 	}
-	return c.Get(), nil
+	b, err := json.Marshal(struct {
+		Values map[string]string `json:"values"`
+	}{values})
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // sensorJSON returns the sensor value as a plain string.
@@ -308,12 +313,12 @@ func jsHandle(h *plantHandle) js.Value {
 		}
 		return nil
 	}))
-	obj.Set("getControlValue", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		v, err := h.getControlValue(args[0].String())
+	obj.Set("controlValuesJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		s, err := h.controlValuesJSON()
 		if err != nil {
 			return js.Global().Get("Error").New(err.Error())
 		}
-		return v
+		return s
 	}))
 	obj.Set("sensorJSON", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		v, err := h.sensorJSON(args[0].String())

@@ -2,6 +2,8 @@
 // scalar sensor readout. Sensors of Kind === "alarm" are routed
 // here; everything else continues through sensors.ts.
 
+import { makeTile } from "./tile";
+
 export interface AlarmEntry {
     id: string;
     description: string;
@@ -17,12 +19,6 @@ export interface AlarmPanel {
     refresh(json: string): void;
 }
 
-const SEVERITY_STYLE: Record<string, { bg: string; fg: string }> = {
-    trip:    { bg: "#c0392b", fg: "#fff" },
-    warning: { bg: "#d68910", fg: "#fff" },
-    info:    { bg: "#229954", fg: "#fff" },
-};
-
 export function renderAlarms(
     container: HTMLElement,
     plant: { sensorJSON(id: string): string | Error; setControl(id: string, value: string): Error | null },
@@ -30,13 +26,8 @@ export function renderAlarms(
 ): AlarmPanel {
     container.innerHTML = "";
 
-    const panel = document.createElement("div");
-    panel.className = "tile";
-    panel.id = "alarm-panel";
-
-    const h = document.createElement("h2");
-    h.textContent = "Alarms";
-    panel.appendChild(h);
+    const { root, body } = makeTile("Alarms");
+    root.id = "alarm-panel";
 
     const ackBtn = document.createElement("button");
     ackBtn.textContent = "Acknowledge All";
@@ -45,11 +36,11 @@ export function renderAlarms(
         const err = plant.setControl("Alarms/AcknowledgeAll", "0");
         if (err instanceof Error) console.error("ack-all failed:", err.message);
     });
-    panel.appendChild(ackBtn);
+    body.appendChild(ackBtn);
 
     const scrollHost = document.createElement("div");
     scrollHost.className = "scroll-host";
-    panel.appendChild(scrollHost);
+    body.appendChild(scrollHost);
 
     const table = document.createElement("table");
     table.className = "data-table";
@@ -60,12 +51,12 @@ export function renderAlarms(
 
     const rowMap = new Map<string, HTMLElement>();
     for (const a of initialAlarms) {
-        const el = buildAlarmRow(a);
+        const el = buildAlarmRow(plant, a);
         tbody.appendChild(el);
         rowMap.set(a.id, el);
     }
 
-    container.appendChild(panel);
+    container.appendChild(root);
 
     function refresh(json: string): void {
         let list: AlarmEntry[];
@@ -82,7 +73,7 @@ export function renderAlarms(
             if (existing) {
                 updateAlarmRow(existing, a);
             } else {
-                const el = buildAlarmRow(a);
+                const el = buildAlarmRow(plant, a);
                 tbody.appendChild(el);
                 rowMap.set(a.id, el);
             }
@@ -98,33 +89,36 @@ export function renderAlarms(
     return { refresh };
 }
 
-function buildAlarmRow(a: AlarmEntry): HTMLTableRowElement {
+function buildAlarmRow(
+    plant: { setControl(id: string, value: string): Error | null },
+    a: AlarmEntry,
+): HTMLTableRowElement {
     const tr = document.createElement("tr") as HTMLTableRowElement;
     updateAlarmRow(tr, a);
-    tr.addEventListener("click", () => {
-        tr.style.opacity = tr.style.opacity === "0.5" ? "1" : "0.5";
-    });
+    // The dim state comes from the alarm data itself on every
+    // refresh; clicking writes the acknowledgment back through
+    // the bridge so the visual state and plant state agree.
+    tr.dataset.alarmId = a.id;
     tr.style.cursor = "pointer";
-    tr.title = "Click to toggle acknowledged (sends Reset)";
-    tr.addEventListener("dblclick", () => {
-        window.dispatchEvent(new CustomEvent("ack-alarm", { detail: a }));
+    tr.title = "Click to acknowledge (sends Reset)";
+    tr.addEventListener("click", () => {
+        const err = plant.setControl("Alarms/Reset", tr.dataset.alarmId ?? "");
+        if (err instanceof Error) console.error("ack failed:", err.message);
     });
     return tr;
 }
 
 function updateAlarmRow(tr: HTMLElement, a: AlarmEntry): void {
-    const styles = SEVERITY_STYLE[a.severity] ?? SEVERITY_STYLE.info;
+    tr.dataset.alarmId = a.id;
     // Acknowledged alarms stay visible but dimmed.
-    tr.style.opacity = a.acknowledged ? "0.5" : "1";
+    tr.classList.toggle("alarm-acked", a.acknowledged);
 
     while (tr.firstChild) tr.removeChild(tr.firstChild);
 
     const tdSev = document.createElement("td");
     const badge = document.createElement("span");
     badge.textContent = a.severity.toUpperCase();
-    badge.style.cssText =
-        `display:inline-block;padding:1px 6px;border-radius:3px;` +
-        `background:${styles.bg};color:${styles.fg};font-size:10px;font-weight:bold;`;
+    badge.className = `sev-badge sev-${a.severity}`;
     tdSev.appendChild(badge);
     tr.appendChild(tdSev);
 

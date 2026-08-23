@@ -20,8 +20,26 @@ export function renderPanel(
         return;
     }
 
+    // One batched wasm call seeds every widget; the snapshot is
+    // immutable metadata for this rebuild, so it is read once and
+    // passed down instead of one crossing per control.
+    const values = readControlValues(plant);
     for (const part of controlParts) {
-        host.appendChild(renderPart(part, plant, display));
+        host.appendChild(renderPart(part, plant, display, values));
+    }
+}
+
+function readControlValues(plant: PlantHandle): Record<string, string> {
+    const raw = plant.controlValuesJSON();
+    if (typeof raw !== "string") {
+        return {};
+    }
+    try {
+        const snap = JSON.parse(raw) as { values?: Record<string, string> };
+        return snap.values ?? {};
+    } catch {
+        console.error("bad control value snapshot:", raw);
+        return {};
     }
 }
 
@@ -29,6 +47,7 @@ function renderPart(
     part: PartBinding,
     plant: PlantHandle,
     display: PartDisplay,
+    values: Record<string, string>,
 ): HTMLElement {
     const fs = document.createElement("fieldset");
     const lg = document.createElement("legend");
@@ -36,12 +55,16 @@ function renderPart(
     fs.appendChild(lg);
 
     for (const e of part.controls) {
-        fs.appendChild(renderControl(e, plant));
+        fs.appendChild(renderControl(e, plant, values));
     }
     return fs;
 }
 
-function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
+function renderControl(
+    e: Entry,
+    plant: PlantHandle,
+    values: Record<string, string>,
+): HTMLElement {
     const { kind, label } = e.meta;
     const row = document.createElement("div");
     row.className = "ctl-row";
@@ -50,11 +73,12 @@ function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
     text.textContent = label;
     row.appendChild(text);
 
-    // Read the control's current value once so the UI reflects
-    // live plant state on initial render. Get returns "0"/"1"
-    // for bool, the raw string for enum/string, and the
-    // canonical numeric string for everything else.
-    const current = plant.getControlValue(e.id);
+    // Read the control's current value from the rebuild-time
+    // snapshot so the UI reflects live plant state on initial
+    // render. Get returns "0"/"1" for bool, the raw string for
+    // enum/string, and the canonical numeric string for everything
+    // else.
+    const current = values[e.id];
     const initial = typeof current === "string" ? current : "";
 
     if (kind === "bool") {

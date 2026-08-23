@@ -15,23 +15,26 @@ export interface UnitInfo {
     // Range string for control inputs (e.g. "[0, 1]"). Null when
     // the kind is unbounded or has no numeric range.
     range: string | null;
+    // Whether sensor values of this kind render as floating-point
+    // numbers. False for bool/enum/string kinds.
+    numeric: boolean;
 }
 
 export const UNITS: Record<string, UnitInfo> = {
-    bool:        { unit: "",     range: null },
-    normalized:  { unit: "",     range: "[0, 1]" },
-    percent:     { unit: "%",    range: "[0, 100]" },
-    rpm:         { unit: "rpm",  range: null },
-    psig:        { unit: "psig", range: null },
-    fahrenheit:  { unit: "°F",   range: null },
-    gallon:      { unit: "gal",  range: null },
-    gpm:         { unit: "gpm",  range: null },
-    watt:        { unit: "W",    range: null },
-    ppm:         { unit: "ppm",  range: null },
-    volt:        { unit: "V",    range: null },
-    hz:          { unit: "Hz",   range: null },
-    string:      { unit: "",     range: null },
-    enum:        { unit: "",     range: null },
+    bool:        { unit: "",     range: null,    numeric: false },
+    normalized:  { unit: "",     range: "[0, 1]",   numeric: true },
+    percent:     { unit: "%",    range: "[0, 100]", numeric: true },
+    rpm:         { unit: "rpm",  range: null,    numeric: true },
+    psig:        { unit: "psig", range: null,    numeric: true },
+    fahrenheit:  { unit: "°F",   range: null,    numeric: true },
+    gallon:      { unit: "gal",  range: null,    numeric: true },
+    gpm:         { unit: "gpm",  range: null,    numeric: true },
+    watt:        { unit: "W",    range: null,    numeric: true },
+    ppm:         { unit: "ppm",  range: null,    numeric: true },
+    volt:        { unit: "V",    range: null,    numeric: true },
+    hz:          { unit: "Hz",   range: null,    numeric: true },
+    string:      { unit: "",     range: null,    numeric: false },
+    enum:        { unit: "",     range: null,    numeric: false },
 };
 
 export function unitFor(kind: string): string {
@@ -42,13 +45,13 @@ export function rangeFor(kind: string): string | null {
     return UNITS[kind]?.range ?? null;
 }
 
-// NUMERIC_KINDS lists the bridge Kinds whose sensor values are
-// rendered as floating-point numbers. Sensors of other Kinds
-// (bool, enum, string) keep their raw string form.
-const NUMERIC_KINDS = new Set([
-    "normalized", "percent", "rpm", "psig", "fahrenheit",
-    "gallon", "gpm", "watt", "ppm", "volt", "hz",
-]);
+// knownKind reports whether the display table covers a bridge
+// Kind; bindings.ts warns on gaps so drift from the Go taxonomy
+// in bridge/convert.go surfaces instead of rendering silently
+// wrong.
+export function knownKind(kind: string): boolean {
+    return kind in UNITS;
+}
 
 // formatSensorValue caps a numeric sensor value at two decimal
 // places. Non-numeric kinds (bool/enum/string) pass through
@@ -58,7 +61,7 @@ const NUMERIC_KINDS = new Set([
 // contract. NaN/Infinity pass through unchanged so the user sees
 // the underlying engine state rather than a misleading "NaN.00".
 export function formatSensorValue(kind: string, raw: string): string {
-    if (!NUMERIC_KINDS.has(kind)) {
+    if (!UNITS[kind]?.numeric) {
         return raw;
     }
     const f = Number(raw);

@@ -5,16 +5,11 @@
 import "./wasm_exec.js";  // pulls in the Go runtime polyfill
 
 export async function loadWasm(): Promise<void> {
-    const go = new (window as any).Go();
+    const go = new window.Go();
     // BASE_URL always ends with "/" and honors Vite's `base`
     // option, so the module resolves under any deploy path.
     const wasmUrl = import.meta.env.BASE_URL + "nsim.wasm";
-    const resp = await fetch(wasmUrl);
-    if (!resp.ok) {
-        throw new Error(`failed to fetch ${wasmUrl}: ${resp.status}`);
-    }
-    const buf = await resp.arrayBuffer();
-    const { instance } = await WebAssembly.instantiate(buf, go.importObject);
+    const { instance } = await instantiate(wasmUrl, go);
     // Fire-and-forget: Go's main() blocks on `select {}`, so go.run()
     // would never resolve. The export (window.nsimNewPlant) is
     // installed synchronously by js.Global().Set during the wasm
@@ -23,4 +18,23 @@ export async function loadWasm(): Promise<void> {
     go.run(instance).catch((err: unknown) => {
         console.error("nsim wasm runtime exited:", err);
     });
+}
+
+// instantiate prefers streaming compilation (compile while the
+// bytes download) and falls back to a buffered fetch for hosts
+// that do not serve .wasm with the application/wasm MIME type.
+async function instantiate(
+    url: string,
+    go: { importObject: WebAssembly.Imports },
+): Promise<WebAssembly.WebAssemblyInstantiatedSource> {
+    try {
+        return await WebAssembly.instantiateStreaming(fetch(url), go.importObject);
+    } catch {
+        const resp = await fetch(url);
+        if (!resp.ok) {
+            throw new Error(`failed to fetch ${url}: ${resp.status}`);
+        }
+        const buf = await resp.arrayBuffer();
+        return WebAssembly.instantiate(buf, go.importObject);
+    }
 }

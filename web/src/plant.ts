@@ -22,7 +22,7 @@ export interface PlantHandle {
     sensorKeys(): string[];
     getMeta(id: string): BridgeMeta | Error;
     setControl(id: string, value: string): Error | null;
-    getControlValue(id: string): string | Error;
+    controlValuesJSON(): string | Error;
     sensorJSON(id: string): string | Error;
     sensorValuesJSON(): string | Error;
     submitCommands(text: string): Error | null;
@@ -34,11 +34,12 @@ export interface PlantHandle {
     toJSON(): string;
 }
 
-// nsimNewPlant is the only top-level wasm export. It returns a
-// fresh PlantHandle wrapping a *core.Plant constructed by
-// core.MakePlant().
 declare global {
     interface Window {
+        Go: any;
+        // nsimNewPlant is the only top-level wasm export. It
+        // returns a fresh PlantHandle wrapping a *core.Plant
+        // constructed by core.MakePlant().
         nsimNewPlant: () => PlantHandle;
     }
 }

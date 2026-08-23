@@ -4,6 +4,7 @@
 // part-grouped panel instead of a flat list of ambiguous names.
 
 import type { BridgeMeta, PlantHandle } from "./plant";
+import { knownKind } from "./units";
 
 export interface Entry {
     id: string;
@@ -88,7 +89,14 @@ function fetchMeta(plant: PlantHandle, ids: string[]): Entry[] {
 
 export function buildBindings(plant: PlantHandle): PartBinding[] {
     const byPart = new Map<string, PartBinding>();
+    const unknownKinds = new Set<string>();
+    const noteKind = (meta: BridgeMeta): void => {
+        if (!knownKind(meta.kind)) {
+            unknownKinds.add(meta.kind);
+        }
+    };
     for (const e of fetchMeta(plant, plant.controlKeys())) {
+        noteKind(e.meta);
         const b = byPart.get(e.meta.part) ?? {
             part: e.meta.part,
             controls: [],
@@ -98,6 +106,7 @@ export function buildBindings(plant: PlantHandle): PartBinding[] {
         byPart.set(e.meta.part, b);
     }
     for (const e of fetchMeta(plant, plant.sensorKeys())) {
+        noteKind(e.meta);
         const b = byPart.get(e.meta.part) ?? {
             part: e.meta.part,
             controls: [],
@@ -105,6 +114,12 @@ export function buildBindings(plant: PlantHandle): PartBinding[] {
         };
         b.sensors.push(e);
         byPart.set(e.meta.part, b);
+    }
+    if (unknownKinds.size > 0) {
+        console.warn(
+            "bridge kinds missing from units.ts display table:",
+            Array.from(unknownKinds).sort().join(", "),
+        );
     }
     return Array.from(byPart.values()).sort((a, b) =>
         a.part.localeCompare(b.part),

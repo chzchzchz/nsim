@@ -109,8 +109,8 @@ The dashboard has these regions:
    name without coordinate hacks.
 
 3. **Alarm panel** — structured rows from the "Plant/Alarms" sensor.
-   Click toggles the acknowledged dim, double-click acknowledges one
-   alarm, **Acknowledge All** clears the annunciator.
+   Click acknowledges one alarm (the row dims via its acknowledged
+   state), **Acknowledge All** clears the annunciator.
 
 4. **Control panel + Sensor read-out tiles** — every entry from
    `bridge.GetControlMap` / `bridge.GetSensorMap` becomes a widget /
@@ -138,10 +138,13 @@ reflects whatever the bridge factory exposes. Add entries in
 up on the next reset.
 
 The `Kind` field on each `bridge.Control` / `bridge.Sensor`
-selects the widget. Currently `controls.ts` infers the widget
-type from the label (`Running` / `HeatersOn` are bool, others
-are normalized numeric); extend that switch when adding kinds
-the UI doesn't yet understand.
+selects the widget: `bool` renders a checkbox, `enum` a labelled
+select (when `Control.Enum` is populated), `string` a text input,
+and everything else a bounded numeric input. Display metadata for
+kinds lives in `src/units.ts`; `buildBindings` warns on kinds the
+table does not cover, so adding a kind in `bridge/convert.go`
+without a units.ts entry surfaces at load instead of rendering
+silently wrong.
 
 ## Testing
 

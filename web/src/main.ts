@@ -5,20 +5,15 @@ import { newPlant } from "./plant";
 import { mountPlant } from "./svg";
 import { renderPanel } from "./controls";
 import { renderReadout, refreshSensors, type SensorRow } from "./sensors";
-import { renderAlarms, type AlarmEntry, type AlarmPanel, isAlarmKind } from "./alarms";
+import { renderAlarms, type AlarmEntry, type AlarmPanel } from "./alarms";
 import { initConsole, type ConsolePanel } from "./console";
 import { buildBindings, displayPart, groupByPrefix, type PartBinding } from "./bindings";
 import { enablePanelSwaps } from "./grid";
+import { makeTile } from "./tile";
+import { copyText } from "./clipboard";
 import { Sim } from "./sim";
 
-const MINIMIZE_GLYPH = "−";
-const RESTORE_GLYPH = "+";
-
-declare global {
-    interface Window {
-        Go: any;
-    }
-}
+const COPY_FEEDBACK_MS = 1500;
 
 async function main(): Promise<void> {
     // Copy wasm_exec.js polyfill into the same origin. We
@@ -89,37 +84,9 @@ async function main(): Promise<void> {
     copyBtn.title = "Copy plant state JSON to clipboard";
     copyBtn.addEventListener("click", async () => {
         const json = sim.plant.toJSON();
-        try {
-            await navigator.clipboard.writeText(json);
-            copyBtn.textContent = "✓";
-            setTimeout(() => { copyBtn.textContent = "📋"; }, 1500);
-        } catch {
-            const ta = document.createElement("textarea");
-            ta.value = json;
-            ta.style.position = "fixed";
-            ta.style.left = "-9999px";
-            ta.style.opacity = "0";
-            ta.readOnly = false;
-            document.body.appendChild(ta);
-            ta.focus();
-            ta.select();
-            const ok = document.execCommand("copy");
-            document.body.removeChild(ta);
-            if (ok) {
-                copyBtn.textContent = "✓";
-                setTimeout(() => { copyBtn.textContent = "📋"; }, 1500);
-            } else {
-                copyBtn.textContent = "!";
-                setTimeout(() => { copyBtn.textContent = "📋"; }, 2000);
-                console.error("copy returned false");
-            }
-        }
-    });
-
-    window.addEventListener("ack-alarm", (ev: Event) => {
-        const a = (ev as CustomEvent<AlarmEntry>).detail;
-        const err = sim.plant.setControl("Alarms/Reset", a.id);
-        if (err) console.error("ack failed:", err);
+        const ok = await copyText(json);
+        copyBtn.textContent = ok ? "✓" : "!";
+        setTimeout(() => { copyBtn.textContent = "📋"; }, COPY_FEEDBACK_MS);
     });
 
     sim.attachUI({
@@ -208,18 +175,7 @@ function renderTile(
     plant: import("./plant").PlantHandle,
     sensorRows: SensorRow[],
 ): HTMLElement {
-    const tile = document.createElement("div");
-    tile.className = "tile";
-    const h = document.createElement("h2");
-    const label = document.createElement("span");
-    label.textContent = prefix || "(other)";
-    h.appendChild(label);
-    h.appendChild(renderMinimizeToggle(tile));
-    tile.appendChild(h);
-
-    const body = document.createElement("div");
-    body.className = "tile-body";
-    tile.appendChild(body);
+    const { root: tile, body } = makeTile(prefix || "(other)");
 
     const ctlCol = document.createElement("div");
     const ctlH = document.createElement("h3");
@@ -240,22 +196,4 @@ function renderTile(
     body.appendChild(ctlCol);
     body.appendChild(senCol);
     return tile;
-}
-
-// renderMinimizeToggle builds the header button that collapses a
-// tile down to its heading and expands it again.
-function renderMinimizeToggle(tile: HTMLElement): HTMLElement {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "tile-toggle";
-    btn.textContent = MINIMIZE_GLYPH;
-    btn.title = "Minimize panel";
-    btn.setAttribute("aria-label", btn.title);
-    btn.addEventListener("click", () => {
-        const minimized = tile.classList.toggle("minimized");
-        btn.textContent = minimized ? RESTORE_GLYPH : MINIMIZE_GLYPH;
-        btn.title = minimized ? "Restore panel" : "Minimize panel";
-        btn.setAttribute("aria-label", btn.title);
-    });
-    return btn;
 }
