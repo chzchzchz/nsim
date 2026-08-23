@@ -269,8 +269,8 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:30-34
 	// These are spring-loaded and self-actuating; the bridge
 	// exposes the aggregate state for visibility. The Step
-	// function auto-trips the safety valve when pressure
-	// exceeds PressurizerPORVTrip.
+	// function auto-trips the safety valve when pressure exceeds
+	// PressurizerSafetySetpoint.
 	m["ReactorBuilding/SafetyValve/Open"] = &bridge.Control{
 		Part:  "ReactorBuilding/SafetyValve",
 		Label: "Open",
@@ -288,6 +288,31 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 				return err
 			}
 			p.ReactorBuilding.SafetyValve.Open = v
+			return nil
+		},
+	}
+
+	// PRT cold-water spray (chapter 3): "Cold water can be
+	// sprayed into the pressurizer relief tank to increase the
+	// heat sink capacity."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:35-37
+	m["ReactorBuilding/PRTSprayValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/PRTSprayValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.ReactorBuilding.PRTSprayValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.PRTSprayValve.Open = v
 			return nil
 		},
 	}
@@ -768,6 +793,22 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("normalized",
 				p.ReactorBuilding.BlockValve.Open)
+		},
+	}
+
+	// PRT rupture-disc state. A burst disc is a one-time device:
+	// once latched it stays burst until maintenance replaces it,
+	// so no runtime reset path exists by design.
+	// "A rupture disc vents the tank to the containment if design
+	// pressure is exceeded."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:37-38
+	m["ReactorBuilding/PRTRuptureDiscBurst"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/PRTRuptureDiscBurst",
+		Label: "RuptureDiscBurst",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.PRTRuptureDiscBurst)
 		},
 	}
 

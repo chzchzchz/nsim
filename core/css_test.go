@@ -211,9 +211,10 @@ func TestCSS_EndToEndHighContainmentPressureStartsCSS(t *testing.T) {
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
-	// Drive containment pressure above the setpoint by forcing
-	// the PORV open; the ReactorBuilding.Step containment model
-	// rises by 100 psig/s while PORV.Open == 1.
+	// Drive containment pressure above the setpoint directly;
+	// relief discharge only reaches containment after a PRT
+	// rupture-disc burst (see prt_relief_test.go), so this test
+	// presets the signal to exercise the CSS auto-start path.
 	p.ReactorBuilding.PORV.Open = 1
 	p.ReactorBuilding.ContainmentPressure = CSSContainmentPressureSetpoint + 10
 	// Step long enough for the diesel to reach ReadyToLoad.

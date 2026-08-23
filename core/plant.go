@@ -11,28 +11,17 @@ import (
 func (r *ReactorBuilding) Step(sgSteamOutflowFraction float64) ReactorBuilding {
 	ret := *r
 	dt := TimeStep
-	ret.Pressurizer = ret.Pressurizer.Step(&ret.PORV)
-
-	// PORV discharge fills the pressurizer relief tank, which
-	// condenses the steam; once full, a rupture disc vents the
-	// tank (and any further discharge path) to containment.
-	//
+	var reliefDischarge Volume
+	ret.Pressurizer, reliefDischarge = ret.Pressurizer.Step(
+		&ret.PORV, &ret.SafetyValve, &ret.BlockValve)
+	// Route the relieved steam-equivalent volume into the PRT
+	// until it fills; a full tank latches the rupture-disc burst
+	// and further relief vents to containment instead.
 	// "Steam from the safety and/or relief valves is piped to the
 	// pressurizer relief tank which contains sufficient water to
 	// condense the steam. [...] A rupture disc vents the tank to
 	// the containment if design pressure is exceeded."
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:32-38
-	if ret.PORV.Open == 1 && !ret.RuptureDiscRuptured {
-		moved := min(PRTReliefFlow*dt.Seconds(), ret.Pressurizer.Water.Float())
-		ret.Pressurizer.Water = vol(ret.Pressurizer.Water,
-			ret.Pressurizer.Water.Float()-moved)
-		prt := min(ret.PressurizedReliefTank.Level.Float()+moved,
-			PRTRuptureCapacity)
-		ret.PressurizedReliefTank.Level = Volume{Val: prt, Unit: u.Gallon}
-		if prt >= PRTRuptureCapacity {
-			ret.RuptureDiscRuptured = true
-		}
-	}
 
 	// Reactor makeup control valve: the operator sets Open
 	// (0..1); Flow is the effective makeup rate actually delivered,
@@ -291,28 +280,42 @@ func (r *ReactorBuilding) Step(sgSteamOutflowFraction float64) ReactorBuilding {
 	)
 	ret.EFWSFeedwaterFlow = ret.Aux.EmergencyFeedwaterSystem.EFWSFeedwaterFlow()
 
-	// CSS: containment pressure model. The simplified
-	// containment pressure rises while the PORV is open (steam
-	// dump into containment) and falls while the CSS is spraying
-	// (effectiveness × spray flow × excess pressure).
+	// Relief routing and CSS: containment pressure model. Relief
+	// discharge goes to the PRT while the rupture disc holds;
+	// after the disc bursts, continued relief vents to
+	// containment. CSS spray condenses steam and drags pressure
+	// toward atmospheric (effectiveness × spray flow × excess).
 	//
 	// Spec justification:
+	//   - "Steam from the safety and/or relief valves is piped to
+	//     the pressurizer relief tank [...]. A rupture disc vents
+	//     the tank to the containment if design pressure is
+	//     exceeded."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:32-38
 	//   - "Initial Injection Mode – Containment spray is
 	//     initiated automatically in response to a containment
 	//     high pressure signal."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-57
-	//   - "comes in contact with the steam in the containment
-	//     atmosphere, the steam is condensed and falls to the
-	//     containment floor as drops of a borated sodium
-	//     hydroxide solution."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:8-11
 	csP := float64(ret.ContainmentPressure)
-	if ret.PORV.Open == 1 {
-		// PORV discharge dumps saturated steam into containment;
-		// model as a constant rise rate. The chosen 100 psig/s
-		// saturates above the design pressure in <1 s, giving a
-		// fast rising signal that triggers the CSS auto-start.
-		csP += 100.0 * dt.Seconds()
+	if reliefDischarge.Float() > 0 {
+		if !ret.PRTRuptureDiscBurst {
+			lvl := min(ret.PressurizedReliefTank.Level.Float()+
+				reliefDischarge.Float(), PressurizedReliefTankCapacityGal)
+			ret.PressurizedReliefTank.Level = vol(
+				ret.PressurizedReliefTank.Level, lvl)
+			if lvl >= PressurizedReliefTankCapacityGal {
+				ret.PRTRuptureDiscBurst = true
+			}
+		} else {
+			csP += ContainmentVentRatePSIGPerS * dt.Seconds()
+		}
+	}
+	if ret.PRTSprayValve.Open > 0 {
+		lvl := min(ret.PressurizedReliefTank.Level.Float()+
+			PressurizedReliefTankSprayGPS*ret.PRTSprayValve.Open*dt.Seconds(),
+			PressurizedReliefTankCapacityGal)
+		ret.PressurizedReliefTank.Level = vol(
+			ret.PressurizedReliefTank.Level, lvl)
 	}
 	cssRunning := ret.Aux.ContainmentSpraySystem.Running
 	if cssRunning && ret.Aux.ContainmentSpraySystem.SprayHeaderOpen {
@@ -1666,14 +1669,6 @@ func MakePlant() Plant {
 		Pressure:    PressurizerHeaterTarget,
 		SteamBubble: Volume{Val: 300, Unit: u.Gallon},
 	}
-	// The PRT starts half full of water to condense incoming
-	// relief steam ("which contains sufficient water to condense
-	// the steam", chapter_3/page_068.txt:32-34); capacity is a
-	// derived figure (see PRTRuptureCapacity).
-	p.ReactorBuilding.PressurizedReliefTank = Tank{
-		Level:    Volume{Val: PRTRuptureCapacity / 2, Unit: u.Gallon},
-		Capacity: Volume{Val: PRTRuptureCapacity, Unit: u.Gallon},
-	}
 	p.TurbineBuilding.HeaterDrainTank = Tank{
 		Level:    Volume{Val: 0, Unit: u.Gallon},
 		Capacity: Volume{Val: HeaterDrainTankCapacityGal, Unit: u.Gallon},
@@ -2020,6 +2015,23 @@ func MakePlant() Plant {
 		SprayFlow:            0,
 	}
 	p.ReactorBuilding.ContainmentPressure = AtmosphericPressure
+
+	// Pressurizer relief path defaults: the PRT starts half full
+	// ("contains sufficient water to condense the steam") with an
+	// intact rupture disc; the relief block valve is open so the
+	// PORV/safety-valve path is available; the PRT spray and both
+	// relief valves start closed.
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:32-38
+	p.ReactorBuilding.PressurizedReliefTank = Tank{
+		Level: Volume{
+			Val: PressurizedReliefTankInitialFraction *
+				PressurizedReliefTankCapacityGal, Unit: u.Gallon,
+		},
+		Capacity: Volume{
+			Val: PressurizedReliefTankCapacityGal, Unit: u.Gallon,
+		},
+	}
+	p.ReactorBuilding.BlockValve = Valve{Open: 1.0}
 
 	// RCFC defaults (plans/p20_1.txt). At construction all
 	// four RCFC units are running at full speed, satisfying

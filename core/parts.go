@@ -878,20 +878,6 @@ var ReactorMakeupDesignFlow Volume = Volume{Val: 60, Unit: u.Gallon}
 //     the tanks to condenser A on a high level in either tank."
 //     specs/westinghouse_tech_manual/chapter_7/page_0636.txt:32-38
 const (
-	// PRTReliefFlow is the per-second volume moved from the
-	// pressurizer to the pressurizer relief tank while the PORV is
-	// open. Derived: sized so one lift at PressurizerPORVTrip moves
-	// ~0.5% of the pressurizer liquid inventory per second, making
-	// the fill visible over tens of seconds without draining the
-	// pressurizer unrealistically fast.
-	PRTReliefFlow float64 = 10.0 // gal/s
-
-	// PRTRuptureCapacity is the PRT level at which the rupture disc
-	// vents the tank to containment. Derived: sized to accept about
-	// 60 s of full PORV flow (PRTReliefFlow * 60). The spec states
-	// no PRT volume.
-	PRTRuptureCapacity = 600.0 // gal
-
 	// AtmosphericDumpFraction is the fraction of full-load SG steam
 	// flow released per second through one fully open atmospheric
 	// dump valve. Derived: relief capacity of order half of

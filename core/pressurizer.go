@@ -7,10 +7,12 @@ import (
 
 // Step advances the pressurizer by TimeStep. It implements the
 // heater/spray energy balance and the bubble-driven pressure model
-// described in plans/p5_1.txt:120-181.
+// described in plans/p5_1.txt:120-181, plus relief-valve actuation and
+// discharge. It returns the steam-equivalent volume relieved this step
+// for the caller to route into the pressurizer relief tank.
 //
 // Spec justification for each block is inline below.
-func (p *Pressurizer) Step(porv *Valve) Pressurizer {
+func (p *Pressurizer) Step(porv, safety, block *Valve) (Pressurizer, Volume) {
 	ret := *p
 	dt := TimeStep
 
@@ -113,12 +115,15 @@ func (p *Pressurizer) Step(porv *Valve) Pressurizer {
 		}
 	}
 
-	// 5) PORV / safety valve. When the pressurizer over-pressurises
-	// past the safety setpoint the valve opens; the step simply
-	// toggles Open and lets the next step's pressure integration
-	// react. "Pressurizer pressure control system [consists of]
-	// pressurizer heaters, spray, and relief valves."
-	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:5-9
+	// 5) Relief valve actuation. The PORV opens automatically at a
+	// setpoint and the code safety valves self-actuate above that;
+	// below their setpoints they re-close. "Reductions in plant
+	// electrical load [...] cause the air-operated relief valves to
+	// open. These valves are automatically opened at a pressure
+	// below system design pressure. [...] If system pressure
+	// continues to rise, self-actuating ASME-code safety valves
+	// will open."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:23-32
 	if porv != nil {
 		v := *porv
 		if ret.Pressure > PressurizerPORVTrip {
@@ -128,8 +133,48 @@ func (p *Pressurizer) Step(porv *Valve) Pressurizer {
 		}
 		*porv = v
 	}
+	if safety != nil {
+		v := *safety
+		if ret.Pressure > PressurizerSafetySetpoint {
+			v.Open = max(v.Open, 1)
+		} else if v.Open > 0 {
+			v.Open = 0
+		}
+		*safety = v
+	}
 
-	return ret
+	// 6) Relief discharge. Steam leaving through an open relief
+	// path shrinks the bubble the same way the spray does,
+	// depressurizing toward base; the returned volume is what the
+	// caller routes into the pressurizer relief tank. The model's
+	// currency is liquid-equivalent gallons on both sides (see
+	// PressurizerBubbleStiffness), so the transfer is 1:1.
+	relief := Volume{}
+	openPaths := 0
+	blockOpen := block != nil && block.Open > 0
+	if blockOpen {
+		if porv != nil && porv.Open > 0 {
+			openPaths++
+		}
+		if safety != nil && safety.Open > 0 {
+			openPaths++
+		}
+	}
+	if openPaths > 0 {
+		totalVol := ret.Volume.Float()
+		gal := min(PressurizerReliefDischargeGalPerSec*
+			float64(openPaths)*dt.Seconds(), ret.SteamBubble.Float())
+		if gal > 0 {
+			ret.Water = vol(ret.Water, min(ret.Water.Float()+gal, totalVol))
+			bubble := totalVol - ret.Water.Float()
+			ret.SteamBubble = Volume{Val: bubble, Unit: u.Gallon}
+			ret.Pressure = Pressure(float64(PressurizerBasePressure) +
+				bubble*PressurizerBubbleStiffness)
+			relief = Volume{Val: gal, Unit: u.Gallon}
+		}
+	}
+
+	return ret, relief
 }
 // Pressurizer models the surge-line volume at the top of the primary
 // loop that holds the steam bubble used for pressure control.
@@ -184,4 +229,47 @@ const (
 	PressurizerAmbientDecay    Pressure = 5   // psi/s cooldown when idle
 	PressurizerBubbleStiffness float64  = 2.5 // psi per gallon of bubble
 	PressurizerPORVTrip        Pressure = 2500
+
+	// PressurizerSafetySetpoint is where the self-actuating ASME
+	// code safety valves open, above the design pressure and the
+	// PORV setpoint so the escalation order is PORV first.
+	// "If system pressure continues to rise, self-actuating
+	// ASME-code safety valves will open."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:30-32
+	// Derived magnitude: design pressure + ~4% margin.
+	PressurizerSafetySetpoint Pressure = 2600
+)
+
+const (
+	// PressurizerReliefDischargeGalPerSec is the lumped steam-
+	// equivalent relief capacity per open relief path (gal/s).
+	// Derived: relieves the steady-state bubble in a few minutes,
+	// matching the spec narrative that relief limits pressure
+	// during transients.
+	PressurizerReliefDischargeGalPerSec = 2.0
+
+	// PressurizedReliefTankCapacityGal sizes the PRT. Derived
+	// from a typical Westinghouse PRT of ≈1700 ft³; the primary
+	// spec states no capacity.
+	PressurizedReliefTankCapacityGal = 12700.0
+
+	// PressurizedReliefTankInitialFraction is the initial water
+	// fraction — the tank "contains sufficient water to condense
+	// the steam" with headspace left for discharge
+	// (chapter_3/page_068.txt:34-35).
+	PressurizedReliefTankInitialFraction = 0.5
+
+	// PressurizedReliefTankSprayGPS is the cold-water spray rate
+	// into the PRT at full valve opening. "Cold water can be
+	// sprayed into the pressurizer relief tank to increase the
+	// heat sink capacity." Derived magnitude.
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:35-37
+	PressurizedReliefTankSprayGPS = 1.0
+
+	// ContainmentVentRatePSIGPerS is the post-burst containment
+	// rise while relief discharge continues through the burst
+	// disc. Derived: fast enough to hold the CSS auto-start
+	// signal against spray condensation, slow enough to observe
+	// the transient.
+	ContainmentVentRatePSIGPerS = 10.0
 )

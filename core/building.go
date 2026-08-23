@@ -20,13 +20,18 @@ type ReactorBuilding struct {
 	PORV                   Valve
 	PressurizedReliefTank  Tank
 
-	// RuptureDiscRuptured latches once the PRT reaches capacity;
-	// further PORV discharge bypasses the tank into the containment
-	// pressure proxy.
+	// PRTRuptureDiscBurst latches once the PRT fills to capacity:
 	// "A rupture disc vents the tank to the containment if design
-	// pressure is exceeded."
+	// pressure is exceeded." After it bursts, further relief
+	// discharge raises ContainmentPressure instead of tank level.
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:37-38
-	RuptureDiscRuptured bool
+	PRTRuptureDiscBurst bool
+
+	// PRTSprayValve meters cold water into the PRT: "Cold water
+	// can be sprayed into the pressurizer relief tank to increase
+	// the heat sink capacity."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:35-37
+	PRTSprayValve Valve
 
 	// Aux points at the canonical AuxiliaryBuilding that lives on
 	// Plant. The Step function reads CVCS / RHRS / CCWS / CSS /
