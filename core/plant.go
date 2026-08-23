@@ -281,6 +281,19 @@ func (r *ReactorBuilding) Step(sgSteamOutflowFraction float64) ReactorBuilding {
 		ret.ReactorPressureVessel.Outlet, rhrsActive,
 	)
 	ret.EFWSFeedwaterFlow = ret.Aux.EmergencyFeedwaterSystem.EFWSFeedwaterFlow()
+	// Credit the running AFW pumps' delivery against the SG
+	// inventory. The flow is gal/s; tanks were already debited in
+	// EFWS.Step so secondary mass is conserved overall.
+	// "supply at least the minimum required flow, within one
+	//  minute of the actuation signal, to at least two effective
+	//  steam generators"
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:23-26
+	if ret.EFWSFeedwaterFlow.Val > 0 {
+		credit := ret.EFWSFeedwaterFlow.Float() * TimeStep.Seconds()
+		sgWater := min(ret.SteamGenerator.Water.Float()+credit,
+			ret.SteamGenerator.Volume.Float())
+		ret.SteamGenerator.Water = Volume{Val: sgWater, Unit: u.Gallon}
+	}
 
 	// Relief routing and CSS: containment pressure model. Relief
 	// discharge goes to the PRT while the rupture disc holds;
@@ -1220,20 +1233,27 @@ func (p *Plant) Step() {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:68-71
 	_ = p.nextPlant.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
 
-	// Flow-modulating valves: assume full-open during the
-	// first 30 minutes after actuation. After that the
-	// operator controls them, but the simplified model leaves
-	// them at full-open for the duration of the run.
+	// Flow-modulating valves: full-open while their pump runs.
+	// The spec assumes no operator action for the first 30
+	// minutes after actuation with the valves full open; manual
+	// starts get the same fail-open treatment, and the simplified
+	// model leaves them at full-open for the duration of the run.
 	//
 	// Spec justification:
 	//   - "it is assumed that no operator action can be taken
 	//     for 30 minutes, and for this period it is assumed
 	//     that these valves will be full open."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:36-39
-	if efws.Active {
+	if efws.SubsystemA.MotorPump.Running {
 		efws.SubsystemA.MotorPump.FlowModulatingValve.Open = 1.0
+	}
+	if efws.SubsystemA.TurbinePump.Running {
 		efws.SubsystemA.TurbinePump.FlowModulatingValve.Open = 1.0
+	}
+	if efws.SubsystemB.MotorPump.Running {
 		efws.SubsystemB.MotorPump.FlowModulatingValve.Open = 1.0
+	}
+	if efws.SubsystemB.TurbinePump.Running {
 		efws.SubsystemB.TurbinePump.FlowModulatingValve.Open = 1.0
 	}
 
@@ -2369,7 +2389,15 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	edge("SG", "Condenser", &target.TurbineBuilding.MakeupValve, nil)
 	edge("Condenser", "CST", &target.TurbineBuilding.RecirculateValve, nil)
 	edge("CST", "HDT", nil, &target.TurbineBuilding.CondensatePump)
-	edge("HDT", "SG", nil, &target.TurbineBuilding.MainFeedwaterPump)
+	// The main-feedwater line is gated by the feedwater control
+	// valve so the regulator's demand throttles delivery; without
+	// the valve the drain tank either siphons the SG dry through
+	// the depressurised suction or overfills it at full pump head.
+	// "Feedwater flow to each steam generator is controlled by a
+	//  feedwater regulator in each feedwater line."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
+	edge("HDT", "SG", &target.TurbineBuilding.MainFeedwaterControlValve,
+		&target.TurbineBuilding.MainFeedwaterPump)
 
 	// LP heater drains cascade back to the condenser.
 	// "Drains from the four low-pressure feedwater heaters are

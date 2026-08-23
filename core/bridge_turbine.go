@@ -289,8 +289,15 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 	// flow) is reached.
 	// "the steam generators feedwater supply is switched to the
 	//  main feedwater system; the auxiliary feedwater system is
-	//  secured and lined up for safeguards actuation."
+	// secured and lined up for safeguards actuation."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:45-50
+	// The operator starts the main feedwater pumps to place the
+	// main feedwater system in service; the running latch gates
+	// the feedwater regulator.
+	// "The feedwater booster pumps draw suction from the deaerator
+	//  water storage tank [...] and supply the main feedwater
+	//  pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:46-50
 	m["TurbineBuilding/MainFeedwaterPump/Running"] = &bridge.Control{
 		Part:  "TurbineBuilding/MainFeedwaterPump",
 		Label: "Running",

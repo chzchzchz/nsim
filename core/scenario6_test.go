@@ -63,7 +63,12 @@ func TestScenario6_AuxToMainFeedwaterGating(t *testing.T) {
 func TestScenario6_MainFeedwaterControlsDeliverInventory(t *testing.T) {
 	p := MakePlant()
 	sg := &p.ReactorBuilding.SteamGenerator
-	sg.Water = Volume{Val: sg.Volume.Float() / 2, Unit: u.Gallon}
+	// Start below the 50-percent level program: the feedwater
+	// regulator only opens the main feedwater control valve when
+	// the level error asks for inventory (the valve gates the
+	// CST -> drain tank -> SG graph edge), so a fixture parked
+	// exactly on program would assert a no-op.
+	sg.Water = Volume{Val: sg.Volume.Float() * 2 / 5, Unit: u.Gallon}
 	start := sg.Water.Float()
 
 	setControl(t, &p, "TurbineBuilding/CondensatePump/Running", "1")

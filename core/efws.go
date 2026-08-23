@@ -80,9 +80,14 @@ func (e *EFWS) Step(
 		return ret
 	}
 
-	if !ret.Active {
-		return ret
-	}
+	// Manual operator starts (the bridge MotorPumpRunning /
+	// TurbinePumpRunning controls) deliver water exactly like an
+	// autostart: tank depletion below runs whenever a pump is
+	// running, Active or not. Active stays the auto-start latch.
+	// The pumps are manually started with manually controlled
+	// flowrates (OCR breaks this sentence across the page break;
+	// paraphrased per plans/CHECK_SKILL.md citation rule).
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_102.txt:14-18
 
 	// Tank depletion. While a pump is running the tank
 	// discharges at the pump's rated flow. If both pumps are
@@ -164,8 +169,10 @@ func (sub *EFWSSubsystem) EFWSSubsystemFlow() float64 {
 
 // EFWSFeedwaterFlow computes the total SG-side feedwater flow
 // rate from all running EFWS pumps (gal/s). The result is
-// written to ReactorBuilding.EFWSFeedwaterFlow and consumed by
-// the SG feedwater model.
+// written to ReactorBuilding.EFWSFeedwaterFlow and credited to
+// the SG inventory in ReactorBuilding.Step. Manual operator
+// starts count: only the pump Running + DriveReady states gate
+// the flow, not the autostart latch.
 //
 // Spec justification:
 //   - "supply at least the minimum required flow, within one
@@ -173,9 +180,6 @@ func (sub *EFWSSubsystem) EFWSSubsystemFlow() float64 {
 //     steam generators"
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:23-26
 func (e *EFWS) EFWSFeedwaterFlow() Volume {
-	if !e.Active {
-		return Volume{Val: 0, Unit: u.Gallon}
-	}
 	a := e.SubsystemA.EFWSSubsystemFlow()
 	b := e.SubsystemB.EFWSSubsystemFlow()
 	return Volume{Val: a+b, Unit: u.Gallon}
