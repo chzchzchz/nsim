@@ -1,0 +1,89 @@
+// Package cmdfile parses and applies time-stamped control
+// commands shared by cmd/nsimrun -cmd files and the web UI
+// command console.
+package cmdfile
+
+import (
+	"fmt"
+	"io"
+	"strings"
+
+	"github.com/chzchzchz/nsim/bridge"
+)
+
+// Command is one time-stamped control action, identical to a
+// line in an nsimrun -cmd file (see cmd/nsimrun/README.md).
+type Command struct {
+	TimeOffsetMs int64
+	ControlKey   string
+	Value        string
+}
+
+// Parse reads zero or more command lines. Blank lines and
+// lines starting with '#' are skipped. Returns an error naming
+// the first offending line; nothing is half-parsed.
+func Parse(r io.Reader) ([]Command, error) {
+	cmds, _, err := parseCmds(r)
+	return cmds, err
+}
+
+// parseCmds returns the commands paired with their trimmed
+// source lines so callers can echo the text as typed.
+func parseCmds(r io.Reader) ([]Command, []string, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read command file: %w", err)
+	}
+	var cmds []Command
+	var lines []string
+	for lineNum, rawLine := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) != 3 {
+			return nil, nil, fmt.Errorf("line %d: want 3 fields (TimeOffset Part.Label Value), got %d", lineNum+1, len(fields))
+		}
+		var offset int64
+		if _, err := fmt.Sscanf(fields[0], "%d", &offset); err != nil {
+			return nil, nil, fmt.Errorf("line %d: invalid TimeOffset %q: %w", lineNum+1, fields[0], err)
+		}
+		cmds = append(cmds, Command{
+			TimeOffsetMs: offset,
+			ControlKey:   fields[1],
+			Value:        fields[2],
+		})
+		lines = append(lines, line)
+	}
+	return cmds, lines, nil
+}
+
+// ResolveKey accepts slash or dot part paths and returns the
+// key present in m, or raw unchanged if neither matches.
+func ResolveKey(m bridge.ControlMap, raw string) string {
+	if _, ok := m[raw]; ok {
+		return raw
+	}
+	slashKey := strings.ReplaceAll(raw, ".", "/")
+	if _, ok := m[slashKey]; ok {
+		return slashKey
+	}
+	return raw
+}
+
+// Apply resolves the key and invokes the control's Set.
+func Apply(m bridge.ControlMap, c Command) error {
+	key := ResolveKey(m, c.ControlKey)
+	ctrl, ok := m[key]
+	if !ok {
+		return fmt.Errorf("unknown control %q", c.ControlKey)
+	}
+	if ctrl.Set == nil {
+		return fmt.Errorf("control %q has no Set function", c.ControlKey)
+	}
+	if err := ctrl.Set(c.Value); err != nil {
+		return fmt.Errorf("set control %q to %q: %w", c.ControlKey, c.Value, err)
+	}
+	return nil
+}

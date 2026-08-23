@@ -6,6 +6,7 @@ import { mountPlant } from "./svg";
 import { renderPanel } from "./controls";
 import { renderReadout, refreshSensors, type SensorRow } from "./sensors";
 import { renderAlarms, type AlarmEntry, isAlarmKind } from "./alarms";
+import { initConsole, type ConsolePanel } from "./console";
 import { buildBindings, displayPart, groupByPrefix, type PartBinding } from "./bindings";
 import { Sim } from "./sim";
 
@@ -25,6 +26,7 @@ async function main(): Promise<void> {
     const pidEl = document.getElementById("pid") as HTMLElement;
     const tilesEl = document.getElementById("tiles") as HTMLElement;
     const alarmsEl = document.getElementById("alarms") as HTMLElement;
+    const consoleEl = document.getElementById("console") as HTMLElement;
     const startBtn = document.getElementById("btn-start") as HTMLButtonElement;
     const stepBtn = document.getElementById("btn-step") as HTMLButtonElement;
     const resetBtn = document.getElementById("btn-reset") as HTMLButtonElement;
@@ -66,6 +68,14 @@ async function main(): Promise<void> {
         alarmPanel = renderAlarms(alarmsEl, sim.plant, initial);
     }
     initAlarms();
+
+    // Command console: submit nsimrun-style command lines that
+    // fire relative to the simulation clock.
+    let consolePanel: ConsolePanel | null = null;
+    function initConsolePanel(): void {
+        consolePanel = initConsole(consoleEl, sim.plant);
+    }
+    initConsolePanel();
 
     copyBtn.title = "Copy plant state JSON to clipboard";
     copyBtn.addEventListener("click", async () => {
@@ -118,6 +128,7 @@ async function main(): Promise<void> {
             mountPlant(pidEl, svg);
             rebuildTiles();
             initAlarms();
+            initConsolePanel();
         },
     });
 
@@ -127,6 +138,8 @@ async function main(): Promise<void> {
             sim.plant.step(sim.ticksPerFrame);
         }
         refreshSensors(sensorRows, sim.plant);
+        // Refresh the command console list from the wasm queue.
+        consolePanel?.refresh();
         // Refresh alarm panel from the structured sensor JSON.
         const alarmJson = sim.plant.sensorJSON("Plant/Alarms");
         if (typeof alarmJson === "string" && alarmPanel) {

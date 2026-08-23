@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/chzchzchz/nsim/bridge"
+	"github.com/chzchzchz/nsim/cmdfile"
 	"github.com/chzchzchz/nsim/core"
 	"github.com/chzchzchz/nsim/core/svg"
 )
@@ -27,24 +28,35 @@ type plantHandle struct {
 	p          *core.Plant
 	simTimeNs  int64
 	createdAt  time.Time
+	queue      *cmdfile.Queue
+	controls   bridge.ControlMap
 }
 
 func newPlantHandle() *plantHandle {
 	p := core.MakePlant()
-	return &plantHandle{p: &p, createdAt: time.Now()}
+	return &plantHandle{
+		p:        &p,
+		createdAt: time.Now(),
+		queue:    &cmdfile.Queue{},
+		controls: p.GetControlMap(),
+	}
 }
 
 // step advances the plant by ticks `Step()`/`Update()` cycles.
 // Each cycle is one `core.TimeStep` (1 ms) of simulated time.
+// Queued console commands whose due time is reached fire at the
+// exact simulated millisecond, independent of ticks per call.
 func (h *plantHandle) step(ticks int) {
 	if ticks <= 0 {
 		return
 	}
-	for i := 0; i < ticks; i++ {
+	for range ticks {
+		next := h.simTimeNs + int64(core.TimeStep)
+		h.queue.FireDue(next, h.controls)
 		h.p.Step()
 		h.p.Update()
+		h.simTimeNs = next
 	}
-	h.simTimeNs += int64(ticks) * int64(core.TimeStep)
 }
 
 func (h *plantHandle) controlKeys() []string {
@@ -93,8 +105,7 @@ func (h *plantHandle) setControl(id, value string) error {
 // this to seed the initial UI state (checkbox checked/unchecked,
 // number input value, dropdown selected option).
 func (h *plantHandle) getControlValue(id string) (string, error) {
-	cm := h.p.GetControlMap()
-	c, ok := cm[id]
+	c, ok := h.controls[id]
 	if !ok {
 		return "", fmt.Errorf("unknown control %q", id)
 	}
@@ -114,6 +125,45 @@ func (h *plantHandle) sensorJSON(id string) (string, error) {
 		return "", err
 	}
 	return v, nil
+}
+
+// submitCommands parses console text and schedules each
+// command relative to the current simulation time.
+func (h *plantHandle) submitCommands(text string) error {
+	return h.queue.Submit(text, h.simTimeNs)
+}
+
+type queueEntryJSON struct {
+	Seq    int64  `json:"seq"`
+	Text   string `json:"text"`
+	DueMs  int64  `json:"dueMs"`
+	Status string `json:"status"`
+	Err    string `json:"err,omitempty"`
+}
+
+type queueJSON struct {
+	Rev     int64            `json:"rev"`
+	Entries []queueEntryJSON `json:"entries"`
+}
+
+// commandQueueJSON snapshots the console queue for the UI list.
+func (h *plantHandle) commandQueueJSON() (string, error) {
+	entries := h.queue.Entries()
+	out := queueJSON{Rev: h.queue.Rev(), Entries: make([]queueEntryJSON, len(entries))}
+	for i, e := range entries {
+		out.Entries[i] = queueEntryJSON{
+			Seq:    e.Seq,
+			Text:   e.Text,
+			DueMs:  e.DueNs / int64(time.Millisecond),
+			Status: e.Status.String(),
+			Err:    e.Err,
+		}
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func (h *plantHandle) getSvg() (string, error) {
@@ -216,6 +266,19 @@ func jsHandle(h *plantHandle) js.Value {
 			return js.Global().Get("Error").New(err.Error())
 		}
 		return v
+	}))
+	obj.Set("submitCommands", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if err := h.submitCommands(args[0].String()); err != nil {
+			return js.Global().Get("Error").New(err.Error())
+		}
+		return nil
+	}))
+	obj.Set("commandQueueJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		s, err := h.commandQueueJSON()
+		if err != nil {
+			return js.Global().Get("Error").New(err.Error())
+		}
+		return s
 	}))
 	obj.Set("getSvg", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		s, err := h.getSvg()
