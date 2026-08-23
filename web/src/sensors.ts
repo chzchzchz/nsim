@@ -1,7 +1,9 @@
 // sensors.ts — build the sensor read-out table from PartBinding[].
 // Each bridge.Sensor becomes a row under a part-level heading that
 // reads "Part.Label"; the value cell is updated in place by
-// refreshSensors() on every animation frame.
+// refreshSensors() on every animation frame. Metadata is immutable,
+// so it is captured once at render time and the per-frame refresh
+// pulls all readings in a single batched call.
 
 import type { Entry, PartBinding, PartDisplay } from "./bindings";
 import type { PlantHandle } from "./plant";
@@ -10,6 +12,9 @@ import { isAlarmKind } from "./alarms";
 
 export interface SensorRow {
     id: string;
+    // Immutable bridge metadata captured at render time so the
+    // hot refresh path never re-fetches it.
+    kind: string;
     cell: HTMLElement;
 }
 
@@ -43,17 +48,14 @@ function renderPartTable(
     display: PartDisplay,
 ): HTMLElement {
     const wrap = document.createElement("div");
-    wrap.style.marginBottom = "8px";
+    wrap.className = "readout-part";
     const h = document.createElement("div");
     h.textContent = display(part.part);
-    h.style.fontWeight = "bold";
-    h.style.borderBottom = "1px solid #ccc";
-    h.style.marginBottom = "2px";
+    h.className = "sub-heading";
     wrap.appendChild(h);
 
     const table = document.createElement("table");
-    table.style.width = "100%";
-    table.style.borderCollapse = "collapse";
+    table.className = "data-table";
     const tbody = document.createElement("tbody");
     table.appendChild(tbody);
     wrap.appendChild(table);
@@ -70,41 +72,55 @@ function renderSensorRow(e: Entry, rows: SensorRow[]): HTMLElement {
 
     const td1 = document.createElement("td");
     td1.textContent = label;
-    td1.style.padding = "2px 6px";
-    td1.style.borderBottom = "1px solid #eee";
     tr.appendChild(td1);
 
     const td2 = document.createElement("td");
     td2.setAttribute("data-sensor", e.id);
-    td2.style.padding = "2px 6px";
-    td2.style.borderBottom = "1px solid #eee";
-    td2.style.fontFamily = "monospace";
+    td2.className = "mono";
     td2.textContent = kind === "bool" ? "…" : (unitFor(kind) ? `… ${unitFor(kind)}` : "…");
     tr.appendChild(td2);
 
-    rows.push({ id: e.id, cell: td2 });
+    rows.push({ id: e.id, kind, cell: td2 });
     return tr;
 }
 
+interface SensorSnapshot {
+    values: Record<string, string>;
+    errors: Record<string, string>;
+}
+
+// refreshSensors updates every value cell from one batched wasm
+// call. On a failed or malformed batch the previous frame's cells
+// are left untouched rather than blanking the read-out.
 export function refreshSensors(rows: SensorRow[], plant: PlantHandle): void {
+    const raw = plant.sensorValuesJSON();
+    if (typeof raw !== "string") {
+        return;
+    }
+    let snap: SensorSnapshot;
+    try {
+        snap = JSON.parse(raw) as SensorSnapshot;
+    } catch {
+        console.error("bad sensor snapshot:", raw);
+        return;
+    }
     for (const r of rows) {
-        const v = plant.sensorJSON(r.id);
-        const m = plant.getMeta(r.id);
-        if (m instanceof Error) {
+        const errMsg = snap.errors[r.id];
+        if (errMsg !== undefined) {
+            r.cell.textContent = `(error: ${errMsg})`;
+            continue;
+        }
+        const v = snap.values[r.id];
+        if (v === undefined) {
             r.cell.textContent = "(unknown)";
             continue;
         }
-        if (typeof v !== "string") {
-            r.cell.textContent = `(error: ${(v as Error).message})`;
+        if (r.kind === "bool") {
+            r.cell.textContent = v === "true" || v === "1" ? "✅" : "❌";
             continue;
         }
-        if (m.kind === "bool") {
-            const on = v === "true" || v === "1";
-            r.cell.textContent = on ? "✅" : "❌";
-            continue;
-        }
-        const formatted = formatSensorValue(m.kind, v);
-        const u = unitFor(m.kind);
+        const formatted = formatSensorValue(r.kind, v);
+        const u = unitFor(r.kind);
         r.cell.textContent = u ? `${formatted} ${u}` : formatted;
     }
 }

@@ -44,10 +44,7 @@ function renderPart(
 function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
     const { kind, label } = e.meta;
     const row = document.createElement("div");
-    row.style.display = "flex";
-    row.style.alignItems = "center";
-    row.style.gap = "6px";
-    row.style.margin = "2px 0";
+    row.className = "ctl-row";
 
     const text = document.createElement("span");
     text.textContent = label;
@@ -65,7 +62,7 @@ function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
         cb.type = "checkbox";
         cb.checked = initial === "1" || initial === "true";
         cb.addEventListener("change", () => {
-            plant.setControl(e.id, cb.checked ? "1" : "0");
+            writeControl(plant, e.id, cb.checked ? "1" : "0", cb);
         });
         row.appendChild(cb);
         return row;
@@ -86,7 +83,7 @@ function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
             }
             sel.value = initial;
             sel.addEventListener("change", () => {
-                plant.setControl(e.id, sel.value);
+                writeControl(plant, e.id, sel.value, sel);
             });
             row.appendChild(sel);
         } else {
@@ -95,7 +92,7 @@ function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
             inp.size = 8;
             inp.value = initial;
             inp.addEventListener("change", () => {
-                plant.setControl(e.id, inp.value);
+                writeControl(plant, e.id, inp.value, inp);
             });
             row.appendChild(inp);
         }
@@ -108,7 +105,7 @@ function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
         inp.size = 8;
         inp.value = initial;
         inp.addEventListener("change", () => {
-            plant.setControl(e.id, inp.value);
+            writeControl(plant, e.id, inp.value, inp);
         });
         row.appendChild(inp);
         return row;
@@ -135,7 +132,7 @@ function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
     }
     num.value = initial === "" ? "0" : initial;
     num.addEventListener("change", () => {
-        plant.setControl(e.id, num.value);
+        writeControl(plant, e.id, num.value, num);
     });
     row.appendChild(num);
 
@@ -143,15 +140,32 @@ function renderControl(e: Entry, plant: PlantHandle): HTMLElement {
     if (u) {
         const unit = document.createElement("span");
         unit.textContent = u;
-        unit.style.opacity = "0.6";
+        unit.className = "ctl-hint";
         row.appendChild(unit);
     }
     if (r) {
         const hint = document.createElement("span");
         hint.textContent = r;
-        hint.style.opacity = "0.4";
-        hint.style.fontSize = "10px";
+        hint.className = "ctl-hint faint";
         row.appendChild(hint);
     }
     return row;
+}
+
+// writeControl applies a widget change and surfaces rejections:
+// the plant keeps its previous state, so the widget flashes and
+// logs instead of silently pretending the set succeeded.
+function writeControl(
+    plant: PlantHandle,
+    id: string,
+    value: string,
+    widget: HTMLElement,
+): void {
+    const err = plant.setControl(id, value);
+    if (!(err instanceof Error)) {
+        return;
+    }
+    console.error(`${id}: ${err.message}`);
+    widget.classList.add("ctl-error");
+    setTimeout(() => widget.classList.remove("ctl-error"), 1500);
 }

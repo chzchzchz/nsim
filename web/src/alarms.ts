@@ -11,13 +11,23 @@ export interface AlarmEntry {
     time_s: number;
 }
 
+// AlarmPanel is the typed handle returned to the caller so the
+// tick loop can drive updates without any casts.
+export interface AlarmPanel {
+    refresh(json: string): void;
+}
+
 const SEVERITY_STYLE: Record<string, { bg: string; fg: string }> = {
     trip:    { bg: "#c0392b", fg: "#fff" },
     warning: { bg: "#d68910", fg: "#fff" },
     info:    { bg: "#229954", fg: "#fff" },
 };
 
-export function renderAlarms(container: HTMLElement, plant: { sensorJSON(id: string): string | Error; setControl(id: string, value: string): Error | null }, initialAlarms: AlarmEntry[]): HTMLElement {
+export function renderAlarms(
+    container: HTMLElement,
+    plant: { sensorJSON(id: string): string | Error; setControl(id: string, value: string): Error | null },
+    initialAlarms: AlarmEntry[],
+): AlarmPanel {
     container.innerHTML = "";
 
     const panel = document.createElement("div");
@@ -30,8 +40,7 @@ export function renderAlarms(container: HTMLElement, plant: { sensorJSON(id: str
 
     const ackBtn = document.createElement("button");
     ackBtn.textContent = "Acknowledge All";
-    ackBtn.style.cssText =
-        "margin-bottom:8px;padding:4px 12px;background:#2c3e50;color:white;border:1px solid #1a252f;cursor:pointer;font-size:13px;";
+    ackBtn.className = "btn";
     ackBtn.addEventListener("click", () => {
         const err = plant.setControl("Alarms/AcknowledgeAll", "0");
         if (err instanceof Error) console.error("ack-all failed:", err.message);
@@ -39,16 +48,11 @@ export function renderAlarms(container: HTMLElement, plant: { sensorJSON(id: str
     panel.appendChild(ackBtn);
 
     const scrollHost = document.createElement("div");
-    scrollHost.style.maxHeight = "300px";
-    scrollHost.style.overflow = "auto";
-    scrollHost.style.border = "1px solid #ddd";
-    scrollHost.style.borderRadius = "4px";
+    scrollHost.className = "scroll-host";
     panel.appendChild(scrollHost);
 
     const table = document.createElement("table");
-    table.style.width = "100%";
-    table.style.borderCollapse = "collapse";
-    table.style.fontSize = "12px";
+    table.className = "data-table";
     scrollHost.appendChild(table);
 
     const tbody = document.createElement("tbody");
@@ -61,7 +65,9 @@ export function renderAlarms(container: HTMLElement, plant: { sensorJSON(id: str
         rowMap.set(a.id, el);
     }
 
-    (panel as any).refresh = (json: string): void => {
+    container.appendChild(panel);
+
+    function refresh(json: string): void {
         let list: AlarmEntry[];
         try {
             list = JSON.parse(json) as AlarmEntry[];
@@ -87,10 +93,9 @@ export function renderAlarms(container: HTMLElement, plant: { sensorJSON(id: str
                 rowMap.delete(id);
             }
         }
-    };
+    }
 
-    container.appendChild(panel);
-    return panel;
+    return { refresh };
 }
 
 function buildAlarmRow(a: AlarmEntry): HTMLTableRowElement {
@@ -109,7 +114,7 @@ function buildAlarmRow(a: AlarmEntry): HTMLTableRowElement {
 
 function updateAlarmRow(tr: HTMLElement, a: AlarmEntry): void {
     const styles = SEVERITY_STYLE[a.severity] ?? SEVERITY_STYLE.info;
-    tr.style.borderBottom = "1px solid #eee";
+    // Acknowledged alarms stay visible but dimmed.
     tr.style.opacity = a.acknowledged ? "0.5" : "1";
 
     while (tr.firstChild) tr.removeChild(tr.firstChild);
@@ -121,28 +126,20 @@ function updateAlarmRow(tr: HTMLElement, a: AlarmEntry): void {
         `display:inline-block;padding:1px 6px;border-radius:3px;` +
         `background:${styles.bg};color:${styles.fg};font-size:10px;font-weight:bold;`;
     tdSev.appendChild(badge);
-    tdSev.style.padding = "4px 6px";
-    tdSev.style.borderBottom = "1px solid #eee";
     tr.appendChild(tdSev);
 
     const tdId = document.createElement("td");
     tdId.textContent = a.id;
-    tdId.style.padding = "4px 6px";
-    tdId.style.borderBottom = "1px solid #eee";
-    tdId.style.fontFamily = "monospace";
+    tdId.className = "mono";
     tr.appendChild(tdId);
 
     const tdDesc = document.createElement("td");
     tdDesc.textContent = a.description;
-    tdDesc.style.padding = "4px 6px";
-    tdDesc.style.borderBottom = "1px solid #eee";
     tr.appendChild(tdDesc);
 
     const tdTime = document.createElement("td");
     tdTime.textContent = a.time_s.toFixed(1) + " s";
-    tdTime.style.padding = "4px 6px";
-    tdTime.style.borderBottom = "1px solid #eee";
-    tdTime.style.whiteSpace = "nowrap";
+    tdTime.className = "nowrap";
     tr.appendChild(tdTime);
 }
 

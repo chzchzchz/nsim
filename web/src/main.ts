@@ -5,7 +5,7 @@ import { newPlant } from "./plant";
 import { mountPlant } from "./svg";
 import { renderPanel } from "./controls";
 import { renderReadout, refreshSensors, type SensorRow } from "./sensors";
-import { renderAlarms, type AlarmEntry, isAlarmKind } from "./alarms";
+import { renderAlarms, type AlarmEntry, type AlarmPanel, isAlarmKind } from "./alarms";
 import { initConsole, type ConsolePanel } from "./console";
 import { buildBindings, displayPart, groupByPrefix, type PartBinding } from "./bindings";
 import { Sim } from "./sim";
@@ -43,6 +43,7 @@ async function main(): Promise<void> {
         throw new Error(`failed to render initial svg: ${(initialSvg as Error).message}`);
     }
     mountPlant(pidEl, initialSvg);
+    let lastSvgHtml = initialSvg;
 
     let sensorRows: SensorRow[] = [];
     const rebuildTiles = (): void => {
@@ -57,7 +58,7 @@ async function main(): Promise<void> {
 
     // Alarm panel: fetches the "alarm"-kind sensor and renders
     // structured rows; double-click a row to acknowledge it.
-    let alarmPanel: HTMLElement | null = null;
+    let alarmPanel: AlarmPanel | null = null;
     function initAlarms(): void {
         alarmsEl.innerHTML = "";
         const raw = sim.plant.sensorJSON("Plant/Alarms");
@@ -126,6 +127,7 @@ async function main(): Promise<void> {
                 throw new Error(`failed to render svg on reset: ${(svg as Error).message}`);
             }
             mountPlant(pidEl, svg);
+            lastSvgHtml = svg;
             rebuildTiles();
             initAlarms();
             initConsolePanel();
@@ -142,13 +144,16 @@ async function main(): Promise<void> {
         consolePanel?.refresh();
         // Refresh alarm panel from the structured sensor JSON.
         const alarmJson = sim.plant.sensorJSON("Plant/Alarms");
-        if (typeof alarmJson === "string" && alarmPanel) {
-            (alarmPanel as any).refresh(alarmJson);
+        if (typeof alarmJson === "string") {
+            alarmPanel?.refresh(alarmJson);
         }
         if (performance.now() - lastSvg > 1000) {
             const svg = sim.plant.getSvg();
-            if (typeof svg === "string") {
+            // Swap only when the diagram actually changed so idle
+            // periods do not re-parse an identical DOM tree.
+            if (typeof svg === "string" && svg !== lastSvgHtml) {
                 pidEl.innerHTML = svg;
+                lastSvgHtml = svg;
             }
             lastSvg = performance.now();
         }

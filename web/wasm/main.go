@@ -31,6 +31,7 @@ type plantHandle struct {
 	queue      *cmdfile.Queue
 	journal    *cmdfile.Journal
 	controls   bridge.ControlMap
+	sensors    bridge.SensorMap
 }
 
 func newPlantHandle() *plantHandle {
@@ -41,6 +42,7 @@ func newPlantHandle() *plantHandle {
 		queue:    &cmdfile.Queue{},
 		journal:  &cmdfile.Journal{},
 		controls: p.GetControlMap(),
+		sensors:  p.GetSensorMap(),
 	}
 }
 
@@ -61,19 +63,20 @@ func (h *plantHandle) step(ticks int) {
 	}
 }
 
+// controlKeys and sensorKeys reflect the cached bridge maps,
+// whose closures dereference live plant state on every call (see
+// core.GetControlMap), so the lists survive Step/Update cycles.
 func (h *plantHandle) controlKeys() []string {
-	cm := h.p.GetControlMap()
-	keys := make([]string, 0, len(cm))
-	for k := range cm {
+	keys := make([]string, 0, len(h.controls))
+	for k := range h.controls {
 		keys = append(keys, k)
 	}
 	return keys
 }
 
 func (h *plantHandle) sensorKeys() []string {
-	sm := h.p.GetSensorMap()
-	keys := make([]string, 0, len(sm))
-	for k := range sm {
+	keys := make([]string, 0, len(h.sensors))
+	for k := range h.sensors {
 		keys = append(keys, k)
 	}
 	return keys
@@ -84,12 +87,12 @@ func (h *plantHandle) sensorKeys() []string {
 // absent, which jsMeta uses to fall through to the other map and
 // ultimately to an error.
 func (h *plantHandle) lookupControl(id string) (*bridge.Control, bool) {
-	c, ok := h.p.GetControlMap()[id]
+	c, ok := h.controls[id]
 	return c, ok
 }
 
 func (h *plantHandle) lookupSensor(id string) (*bridge.Sensor, bool) {
-	s, ok := h.p.GetSensorMap()[id]
+	s, ok := h.sensors[id]
 	return s, ok
 }
 
@@ -121,19 +124,38 @@ func (h *plantHandle) getControlValue(id string) (string, error) {
 	return c.Get(), nil
 }
 
-// sensorJSON returns the sensor value as a JSON-quoted string.
-// The TypeScript side parses it with JSON.parse.
+// sensorJSON returns the sensor value as a plain string.
 func (h *plantHandle) sensorJSON(id string) (string, error) {
-	sm := h.p.GetSensorMap()
-	s, ok := sm[id]
+	s, ok := h.sensors[id]
 	if !ok {
 		return "", fmt.Errorf("unknown sensor %q", id)
 	}
-	v, err := s.Get()
+	return s.Get()
+}
+
+// sensorValuesJSON returns {"values":{id:value},"errors":{id:msg}}
+// for every sensor so the UI polls all readings with a single
+// JS<->Go crossing per frame.
+func (h *plantHandle) sensorValuesJSON() (string, error) {
+	values := make(map[string]string, len(h.sensors))
+	errs := make(map[string]string)
+	for id, s := range h.sensors {
+		v, err := s.Get()
+		if err != nil {
+			errs[id] = err.Error()
+			continue
+		}
+		values[id] = v
+	}
+	out := struct {
+		Values map[string]string `json:"values"`
+		Errors map[string]string `json:"errors"`
+	}{values, errs}
+	b, err := json.Marshal(out)
 	if err != nil {
 		return "", err
 	}
-	return v, nil
+	return string(b), nil
 }
 
 // submitCommands parses console text and schedules each
@@ -293,6 +315,13 @@ func jsHandle(h *plantHandle) js.Value {
 			return js.Global().Get("Error").New(err.Error())
 		}
 		return v
+	}))
+	obj.Set("sensorValuesJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		s, err := h.sensorValuesJSON()
+		if err != nil {
+			return js.Global().Get("Error").New(err.Error())
+		}
+		return s
 	}))
 	obj.Set("submitCommands", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if err := h.submitCommands(args[0].String()); err != nil {

@@ -21,9 +21,12 @@ web/
 │   ├── bindings.ts           map control/sensor keys → part names
 │   ├── controls.ts           build the control panel
 │   ├── sensors.ts            build + refresh the read-out table
+│   ├── alarms.ts             alarm panel (structured "alarm" sensor)
+│   ├── console.ts            command console + journal export
+│   ├── units.ts              display metadata for bridge Kind values
 │   ├── wasm.ts               loadWasm()
 │   └── wasm_exec.js          (copied from $(go env GOROOT)/lib/wasm)
-├── index.html                dashboard skeleton
+├── index.html                dashboard skeleton + shared CSS
 ├── package.json              vite + typescript dev deps
 ├── tsconfig.json             ES2020, strict
 ├── vite.config.ts            dev server on :5173
@@ -86,24 +89,38 @@ same origin as `wasm_exec.js` so the `fetch()` inside
 
 ## UI
 
-The dashboard has three regions:
+The dashboard has these regions:
 
-1. **Simulation control bar** (top):
+1. **Simulation control bar** (top, `position: sticky` — stays pinned
+   while the page scrolls):
    * **Start / Pause** — toggle the tick loop
    * **Step** — advance one tick rate while paused
    * **Reset** — fresh plant, re-rendered SVG and panels
    * **Tick rate** — 1× / 16× / 100× / 1000× `core.TimeStep` per frame
+   * **📋** — copy plant state JSON to the clipboard
    * **Status** — `running @ N s simulated` / `paused @ N s simulated`
 
-2. **P&ID SVG** (left) — the live plant diagram with
-   `<g data-part="Part/Path">` wrappers around every part. The
-   `data-part` value matches the `bridge.Control.Part` and
-   `bridge.Sensor.Part` strings byte-for-byte, so the front
-   end binds to SVG by part name without coordinate hacks.
+2. **P&ID SVG** — the live plant diagram, refreshed at most once per
+   second and only when the markup actually changed. `<g
+   data-part="Part/Path">` wrappers match `bridge.Control.Part` /
+   `bridge.Sensor.Part` byte-for-byte so the front end binds by part
+   name without coordinate hacks.
 
-3. **Control panel + Sensor read-out** (right) — every entry
-   from `bridge.GetControlMap` / `bridge.GetSensorMap` becomes
-   a widget / table row.
+3. **Alarm panel** — structured rows from the "Plant/Alarms" sensor.
+   Click toggles the acknowledged dim, double-click acknowledges one
+   alarm, **Acknowledge All** clears the annunciator.
+
+4. **Control panel + Sensor read-out tiles** — every entry from
+   `bridge.GetControlMap` / `bridge.GetSensorMap` becomes a widget /
+   table row, grouped one tile per building prefix. Rejected control
+   values flash the widget red and log instead of failing silently.
+
+5. **Command console** (bottom) — submit `TimeOffsetMs Part.Label Value`
+   lines that fire relative to the simulation clock; completed rows are
+   struck through, failures show their error. **⬇ Export log (.json)**
+   downloads every control change of the run for headless replay via
+   `nsimrun -cmd nsim-commands.json` (see cmd/nsimrun/README.md).
+   Reset clears the queue and journal together with the old plant.
 
 ## Wiring new controls / sensors
 
@@ -129,4 +146,12 @@ loop in `make dev` is the canonical test:
 3. Click **Pause**, click **Step** — read-out jumps once
 4. Toggle `ReactorBuilding/ReactorCoolantPump/Running` — the
    RCP RPM overlay changes within one frame
-5. Click **Reset** — read-out and SVG return to initial state
+5. Enter an out-of-range value in a numeric control — the
+   widget flashes red and the console logs the rejection
+6. Submit `1000 ReactorBuilding.ReactorCoolantPump.Running 0`
+   in the command console — the row is struck through ≈1 sim-s
+   later; **⬇ Export log (.json)** downloads the journal
+7. Scroll the page — the simulation control bar stays pinned
+   at the top
+8. Click **Reset** — read-out, SVG, alarms, console list, and
+   journal all return to their initial state

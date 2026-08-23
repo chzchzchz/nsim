@@ -6,9 +6,12 @@ import "./wasm_exec.js";  // pulls in the Go runtime polyfill
 
 export async function loadWasm(): Promise<void> {
     const go = new (window as any).Go();
-    const resp = await fetch("/nsim.wasm");
+    // BASE_URL always ends with "/" and honors Vite's `base`
+    // option, so the module resolves under any deploy path.
+    const wasmUrl = import.meta.env.BASE_URL + "nsim.wasm";
+    const resp = await fetch(wasmUrl);
     if (!resp.ok) {
-        throw new Error(`failed to fetch nsim.wasm: ${resp.status}`);
+        throw new Error(`failed to fetch ${wasmUrl}: ${resp.status}`);
     }
     const buf = await resp.arrayBuffer();
     const { instance } = await WebAssembly.instantiate(buf, go.importObject);
