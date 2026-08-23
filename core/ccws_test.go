@@ -1,6 +1,7 @@
 package core
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -198,4 +199,23 @@ func TestCCWS_EndToEndSafetyInjectionStartsPumps(t *testing.T) {
 	assert.True(t, ccws.PumpRunning,
 		"want CCWS PumpRunning=true after SI+diesel ready, got %v",
 		ccws.PumpRunning)
+}
+
+// Plant.Step must advance the CCWS exactly one timestep per call.
+// ReactorBuilding.Step and AuxiliaryBuilding.Step both used to step
+// it, doubling the recovery-lag rate (single-writer discipline,
+// plans/CHECK_SKILL.md section 5).
+func TestCCWS_SteppedOncePerPlantStep(t *testing.T) {
+	p := MakePlant()
+	ccws := &p.AuxiliaryBuilding.ComponentCoolingWaterSystem
+	ccws.PumpRunning = true
+	ccws.DriveReady = true
+	ccws.InletTemp = Temperature{Val: 120, Unit: u.Fahrenheit}
+	stepN(&p, 1)
+
+	dtTau := TimeStep.Seconds() / CCWSRecoveryTimeConstant.Seconds()
+	want := 120.0 - (120.0-CCWSInletSteadyStateTemp)*(1.0-math.Exp(-dtTau))
+	got := p.AuxiliaryBuilding.ComponentCoolingWaterSystem.InletTemp.Float()
+	assert.InDelta(t, want, got, 1e-9,
+		"want InletTemp moved one lag-step to %v, got %v", want, got)
 }

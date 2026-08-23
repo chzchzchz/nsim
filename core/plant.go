@@ -7,10 +7,7 @@ import (
 	u "github.com/bcicen/go-units"
 )
 
-func (r *ReactorBuilding) Step(
-	swSupplyTemp Temperature,
-	swFlowAvail bool,
-) ReactorBuilding {
+func (r *ReactorBuilding) Step() ReactorBuilding {
 	ret := *r
 	ret.Pressurizer = ret.Pressurizer.Step(&ret.PORV)
 	// Reactor makeup control valve: the operator sets Open
@@ -165,10 +162,9 @@ func (r *ReactorBuilding) Step(
 	dt := TimeStep
 	rcsOutletF := ret.ReactorPressureVessel.Outlet.Float()
 	rcsPressure := float64(ret.Pressurizer.Pressure)
-	ret.Aux.ComponentCoolingWaterSystem = ret.Aux.ComponentCoolingWaterSystem.Step(
-		swSupplyTemp,
-		swFlowAvail,
-	)
+	// The CCWS was already stepped this timestep by
+	// AuxiliaryBuilding.Step (single-writer discipline); the RHRS
+	// reads that fresh OutletTemp here.
 	ret.Aux.ResidualHeatRemovalSystem = ret.Aux.ResidualHeatRemovalSystem.Step(
 		ret.ReactorPressureVessel.Outlet,
 		rcsPressure,
@@ -672,10 +668,7 @@ func (p *Plant) Step() {
 	p.nextPlant.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.DriveReady =
 		p.nextPlant.Electrical.ESFBusB.Energized
 
-	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step(
-		p.Outside.ServiceWaterSystem.InletTemp,
-		p.Outside.ServiceWaterSystem.Flow > 0,
-	)
+	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step()
 
 	// Refueling operations step. The phase machine advances
 	// based on phase-relative time; the cavity flood/drain
