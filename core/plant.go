@@ -1342,7 +1342,7 @@ func (p *Plant) Step() {
 	//     by a feedwater regulator in each feedwater line. The
 	//     regulator is controlled by steam generator level,
 	//     steam flow and feedwater flow."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-72
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
 	sg := p.nextPlant.ReactorBuilding.SteamGenerator
 	sgLevelPct := 0.0
 	if sg.Volume.Float() > 0 {
@@ -1613,9 +1613,11 @@ func (p *Plant) Step() {
 	if p.nextPlant.ReactorBuilding.ReactorCoolantPump.Running {
 		runningRCPs = 1
 	}
-	steamFlowFraction := float64(
-		p.nextPlant.ReactorBuilding.SteamGenerator.Pressure,
-	) / float64(SteamGeneratorShellPressure)
+	// Steam-flow fraction as an actual offtake fraction of rated
+	// capacity: the pressure-ratio proxy formerly used here read
+	// "main feedwater in service" whenever the SG sat near design
+	// pressure, which is the normal state of every hot lineup.
+	steamFlowFraction := p.nextPlant.TurbineBuilding.SteamOfftakeFraction
 	// nextPlant is a zero-valued scratch pad; seed the operational
 	// layer with the operator-configured mode so Step advances the
 	// lineup the plant actually sits in (mode definitions:
@@ -2326,7 +2328,7 @@ func MakePlant() Plant {
 	//     by a feedwater regulator in each feedwater line. The
 	//     regulator is controlled by steam generator level,
 	//     steam flow and feedwater flow."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-72
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
 	p.TurbineBuilding.MainFeedwaterControlValve = Valve{Open: 0}
 	p.TurbineBuilding.FeedwaterRegulator = FeedwaterRegulator{
 		LevelSetpoint: FeedwaterLevelSetpoint,

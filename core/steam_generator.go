@@ -197,7 +197,21 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 		if outflow > 1.0 {
 			ratio = 1.0 / outflow
 		}
+		// Boiling beyond what the outlets take lifts the header
+		// above nominal: with the turbine shut and the dumps
+		// closed this is the only path to the steam-dump
+		// pressure-mode setpoint during startup.
+		// "These valves are also utilized in the pressure control
+		//  mode during plant startup and plant cooldown."
+		// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:24-26
+		excess := boilRateM3PerSec/ratedBoilM3PerSec - outflow
+		surplusTarget := float64(SteamGeneratorShellPressure) *
+			min(1.0+excess,
+				float64(SteamGeneratorShellDesignPressure)/float64(SteamGeneratorShellPressure))
 		target := float64(SteamGeneratorShellPressure) * ratio
+		if surplusTarget > target {
+			target = surplusTarget
+		}
 		gap := target - pressure
 		pressure += gap * dt.Seconds()
 	} else if ret.HeatInput > 0 && pressure > 0 {

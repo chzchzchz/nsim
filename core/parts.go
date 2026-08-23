@@ -600,9 +600,14 @@ const (
 
 	// SteamDumpPressureModeMargin is the SG-pressure multiple above
 	// which the dump enters pressure-control mode (startup/cooldown).
-	// Derived; consistent with the pressure-control-mode description.
-	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:24-26
-	SteamDumpPressureModeMargin = 1.05
+	// Derived; sized so the mode arms once no-outlet boiling lifts
+	// the header even ~1 percent above nominal — the
+	// point-of-adding-heat condition where the spec has the dump
+	// valves opening automatically. Full-load operation sits at
+	// 1.000 of shell pressure and never arms it.
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:24-26
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:164-170
+	SteamDumpPressureModeMargin = 1.005
 
 	// GoverningValveTrimGain is the per-step integral trim of the
 	// governing valve on first-stage-pressure error. Derived so valve
@@ -1458,7 +1463,7 @@ var FeedwaterDesignFlow Volume = Volume{Val: 380, Unit: u.Gallon} // gal/s
 //     is controlled by a feedwater regulator in each feedwater line.
 //     The regulator is controlled by steam generator level, steam
 //     flow and feedwater flow."
-//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-72
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
 //   - Pump speed / control valve link: "A signal from the
 //     Feedwater Control System also sets the speed of the
 //     turbine-driven main feedwater pumps and the position of the
@@ -1512,7 +1517,7 @@ const (
 //     generator is controlled by a feedwater regulator in each
 //     feedwater line. The regulator is controlled by steam
 //     generator level, steam flow and feedwater flow."
-//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-72
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
 //   - Pump speed / control valve link: "A signal from the
 //     Feedwater Control System also sets the speed of the
 //     turbine-driven main feedwater pumps and the position of the

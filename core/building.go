@@ -290,7 +290,7 @@ type TurbineBuilding struct {
 	// a feedwater regulator in each feedwater line. The
 	// regulator is controlled by steam generator level, steam
 	// flow and feedwater flow."
-	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-72
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
 	FeedwaterRegulator FeedwaterRegulator
 
 	// Downstream of the condensate pumps are the

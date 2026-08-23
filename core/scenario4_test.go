@@ -37,6 +37,14 @@ func setControl(t *testing.T, p *Plant, path, value string) {
 // specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:21-22
 func TestScenario4_VacuumPumpControlEstablishesVacuum(t *testing.T) {
 	p := MakePlant()
+	// E1 vacuum establishment happens with the reactor offline: no
+	// fission or decay heat means no steam production, so the dump
+	// pressure mode never arms and the condenser sees no load while
+	// the pumps pull down.
+	rpv := &p.ReactorBuilding.ReactorPressureVessel
+	rpv.FissionPower = CoreNeutronSourcePower
+	rpv.DecayHeatFast = 0
+	rpv.DecayHeatSlow = 0
 	p.TurbineBuilding.Condenser.VacuumPumpRunning = false
 	p.TurbineBuilding.Condenser.Pressure = AtmosphericPressure
 	// E1 requires vacuum established BEFORE any steam admission; a

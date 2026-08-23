@@ -59,7 +59,7 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 	// Feedwater regulator valve demand (chapter 15):
 	// "Feedwater flow to each steam generator is controlled by
 	// a feedwater regulator in each feedwater line."
-	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-72
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
 	m["TurbineBuilding/FeedwaterRegulator/ValveDemand"] = &bridge.Control{
 		Part:  "TurbineBuilding/FeedwaterRegulator",
 		Label: "ValveDemand",

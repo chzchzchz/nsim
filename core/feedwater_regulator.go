@@ -23,7 +23,7 @@ package core
 //     generator is controlled by a feedwater regulator in each
 //     feedwater line. The regulator is controlled by steam
 //     generator level, steam flow and feedwater flow."
-//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-72
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
 //   - Pump speed / control valve link: "A signal from the
 //     Feedwater Control System also sets the speed of the
 //     turbine-driven main feedwater pumps and the position of the
