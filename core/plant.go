@@ -198,10 +198,11 @@ func (r *ReactorBuilding) Step(
 	// ReactorPressureVessel step so the ReactorTripped latch
 	// is available when RPV drops rods this step. The RPS
 	// evaluates trip conditions from the current process
-	// variables (steamline pressure, SG level, Tcold,
-	// containment pressure) and computes ESFAS outputs.
-	// Pressurizer-pressure and high-level trips are deferred
-	// at this fidelity band (see rps.go preamble).
+	// variables (steamline pressure, pressurizer pressure,
+	// SG level, Tcold, containment pressure, forced-coolant
+	// flow) and computes ESFAS outputs. The high-pressurizer-
+	// level trip is deferred at this fidelity band (see rps.go
+	// preamble).
 	//
 	// Spec justification:
 	//   - 2/4 voting: "A 2/4 logic means that a trip occurs
