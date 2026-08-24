@@ -1684,7 +1684,10 @@ func (p *Plant) Step() {
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:64-66
 	if p.nextPlant.TurbineBuilding.Generator.BreakerClosed {
 		gross := float64(p.nextPlant.TurbineBuilding.Turbine.RealPower)
-		net := gross - p.nextPlant.ReactorBuilding.HouseLoad.TotalMW
+		// TotalMW is in MW; convert once to the generator's watt
+		// scale here so the subtraction stays one-unit-per-sum.
+		net := gross -
+			p.nextPlant.ReactorBuilding.HouseLoad.TotalMW*1_000_000
 		net = max(net, 0)
 		pf := p.nextPlant.TurbineBuilding.Generator.PowerFactor
 		if pf <= 0 {

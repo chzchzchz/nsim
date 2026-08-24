@@ -223,6 +223,14 @@ func TestPlant_BreakerCloseEnergizesUATAndSubtractsHouseLoad(t *testing.T) {
 		"want net < gross (house load subtracted), got net=%v gross=%v",
 		p.TurbineBuilding.Generator.RealPower,
 		p.TurbineBuilding.Turbine.RealPower)
+	// Wiring check: the subtraction consumes TotalMW on the MW
+	// scale converted to watts, so at full load the gap is the
+	// fixed plus variable station demand.
+	wantNet := float64(p.TurbineBuilding.Turbine.RealPower) -
+		p.ReactorBuilding.HouseLoad.TotalMW*1_000_000
+	assert.InDelta(t, wantNet,
+		float64(p.TurbineBuilding.Generator.RealPower), 1.0,
+		"want net = gross - house load in watts")
 }
 
 // End-to-end: a reactor trip opens the generator breaker and

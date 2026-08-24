@@ -231,6 +231,38 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Dispatcher load demand on the unit, as a fraction of rated
+	// electrical output. The DEHM latches it as the turbine's load
+	// reference each step.
+	//   - "computes signals comparing turbine speed and first-stage
+	//     pressure with reference values established by the
+	//     dispatcher or initiated at the operator's panel."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
+	//   - "The main power system is made up of the plant main
+	//     generator and the associated controls necessary to
+	//     transmit power to the off-site distribution grid."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:17-19
+	m["ReactorBuilding/Grid/LoadDemand"] = &bridge.Control{
+		Part:  "ReactorBuilding/Grid",
+		Label: "LoadDemand",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.ReactorBuilding.Grid.LoadDemand)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.Grid.LoadDemand = v
+			return nil
+		},
+	}
+
 
 	// Pressurizer heaters (chapter 16 startup):
 	// "All pressurizer heaters are energized to start the

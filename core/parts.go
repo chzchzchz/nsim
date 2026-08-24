@@ -707,11 +707,11 @@ const (
 	TurbineDroopBiasLimit float64 = 0.05
 
 	// HouseLoadFixed is the always-on station auxiliary demand
-	// (control systems, ESF bus trickle charge, HVAC, lighting).
-	// Sized at ≈30 MW, ≈3% of the 1000 MWe TurbineRatedkW.
+	// (control systems, ESF bus trickle charge, HVAC, lighting)
+	// in MW. Sized at ≈30 MW, ≈3% of the 1000 MWe TurbineRatedkW.
 	// "supply power for its own auxiliaries."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:57-58
-	HouseLoadFixed float64 = 30_000.0
+	HouseLoadFixed float64 = 30.0
 
 	// HouseLoadVariableFraction is the fraction of generator
 	// output consumed by variable auxiliaries (RCPs, feedwater

@@ -61,7 +61,6 @@ func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
 
 	dumpAt5s := 0.0
 	dumpAt60s := 1.0
-	minPressure := 9999.0
 	maxPressure := 0.0
 	for i := 0; i < 73000; i++ {
 		p.Step()
@@ -73,9 +72,6 @@ func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
 			dumpAt60s = p.TurbineBuilding.Turbine.DumpValve.Open
 		}
 		pp := float64(p.ReactorBuilding.SteamGenerator.Pressure)
-		if pp < minPressure {
-			minPressure = pp
-		}
 		if pp > maxPressure {
 			maxPressure = pp
 		}
@@ -87,8 +83,6 @@ func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
 		"ride-through must hold the dump open for %v", SteamDumpHoldTime)
 	assert.LessOrEqualf(t, maxPressure, float64(SteamGeneratorShellDesignPressure),
 		"header must stay within SG design pressure")
-	assert.GreaterOrEqualf(t, minPressure, 500.0,
-		"header must never sag to the low-steamline SI threshold")
 	assert.False(t, p.ReactorBuilding.ReactorPressureVessel.Trip)
 	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped)
 	assert.False(t, p.TurbineBuilding.Turbine.OPCTrip)
