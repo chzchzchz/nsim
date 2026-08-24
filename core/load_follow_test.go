@@ -18,14 +18,14 @@ import (
 //    [...]" (paraphrase) specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:109-123
 //
 // The rod-position program I(pf) holds rho = 0 on the Tavg program
-// T(pf) = 558 + 63*pf at B = 600 ppm, inside the negative-coef region
+// T(pf) = 558 + 63*pf at B = 442.86 ppm, inside the negative-coef region
 // where the power/temperature loop is self-stabilizing (net temperature
 // coefficient negative with depletion,
 // specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122).
 
 const (
-	loadFollowBoron        = 600.0
-	loadFollowBoronPlateau = 614.17
+	loadFollowBoron        = 442.8571
+	loadFollowBoronPlateau = 857.1429
 
 	// loadFollowBoronPlateauXenon is the reserve-restoring boron
 	// concentration at the 50-percent plateau once the iodine/xenon
@@ -36,10 +36,10 @@ const (
 	// production reactivity block at half-power fission-product
 	// equilibrium; reusing the pre-xenon 614.17 leaves the core
 	// strongly supercritical, asserted below.
-	loadFollowBoronPlateauXenon = 1027.38
+	loadFollowBoronPlateauXenon = 1243.3788
 
-	loadFollowRodsFull = 0.04222222
-	loadFollowRodsHalf = 0.04362222
+	loadFollowRodsFull = 0.01
+	loadFollowRodsHalf = 0.05092223
 )
 
 func loadFollowFixture(insertion, boron, outletF float64, seedPower Watts) ReactorPressureVessel {
@@ -172,10 +172,13 @@ func loadFollowFixedPoint(boron, outletF float64, seedPower Watts) ReactorPressu
 	}
 	r.SeedSteadyStatePower(seedPower)
 	dop := (outletF - float64(CoreDopplerReferenceTempF)) *
+		CoreDopplerBasePcmPerDegF / 1000 *
+		(float64(seedPower) / float64(CoreRatedThermalPower))
+	mod := (outletF - float64(CoreDopplerReferenceTempF)) *
 		netTempCoef(boron) / 1000
 	bor := (boron - CVCSInitialBoron) / 100 * float64(CoreBoronWorthPer100ppm)
 	xe := CoreXenonEquilibriumWorthPct * (xenonNormalized(r.Xenon135) - 1.0)
-	insertion := -(dop + bor + xe) / (float64(CoreRodWorthABCD) * 100)
+	insertion := -(dop + mod + bor + xe) / (float64(CoreRodWorthABCD) * 100)
 	r.ControlRods.Insertion = insertion
 	r.ControlRods.DemandInsertion = insertion
 	return r

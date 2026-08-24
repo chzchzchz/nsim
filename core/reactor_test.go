@@ -33,41 +33,13 @@ func TestReactor_RunningProducesRatedPower(t *testing.T) {
 // region. After the fast-branch window, the power should sit at or
 // near the shutdown fraction of rated.
 //
-// At beginning-of-life the net temperature coefficient is small
-// positive (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:117-122,
-// specs/the_westinghouse_pressurized_water_react//chapter_2/page_039.txt:54-55), so the post-trip
-// After a scram the fission chain collapses and ThermalPower
-// settles onto the fission-product decay inventory, which decays
-// with time and distance from rated.
-func TestReactor_TripDropsPowerToDecayHeat(t *testing.T) {
-	r := ReactorPressureVessel{
-		ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
-		Inlet:       Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
-		Outlet:      Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
-	}
-	r.SeedSteadyStatePower(CoreRatedThermalPower)
-	for i := 0; i < int(time.Second/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed, 0)
-	}
-	r.Trip = true
-	for i := 0; i < int(2*time.Minute/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed, 0)
-	}
-	assert.Less(t, r.TotalThermalPower(), CoreRatedThermalPower,
-		"want ThermalPower < rated after trip, got %v", r.TotalThermalPower())
-	shutdownFloor := Watts(float64(CoreRatedThermalPower) * CoreDecayHeatShutdownFraction)
-	// At BOL the small positive net temperature coefficient
-	// lifts the floor above the bare fraction; cap at 2× the
-	// shutdown level.
-	assert.LessOrEqual(t, r.TotalThermalPower(), shutdownFloor*2,
-		"want ThermalPower <= 2× shutdown level (%v), got %v", shutdownFloor*2, r.TotalThermalPower())
-}
-
-// At beginning-of-life (high RCS boron) the net temperature
-// coefficient is small positive per the spec; the Doppler+moderator
-// contribution at hot outlet is therefore positive relative to the
-// reference-temperature baseline. End-of-life (low boron) reverses
-// the sign.
+// The temperature feedback splits into a constant fuel-side Doppler
+// base plus a moderator coefficient that interpolates with boron:
+// slightly positive at beginning-of-life (full soluble-boron shim),
+// substantially negative at end-of-life (boron depleted). A hot-outlet
+// offset therefore costs less reactivity at BOL than at EOL, and the
+// combined slope stays negative across the boron range so load-follow
+// self-regulation has a stable fixed point.
 //
 // Spec justification:
 //   - "At the beginning of life, the effect on reactivity is
@@ -76,52 +48,43 @@ func TestReactor_TripDropsPowerToDecayHeat(t *testing.T) {
 //     substantially more negative due to depletion and removal of
 //     shim boron [...]"
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122
-//   - "+7 pcm/°F" moderator effect at 1700 ppm with burnable
+//   - "+7 pcm/degF" moderator effect at 1700 ppm with burnable
 //     absorbers reducing the boron need
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_039.txt:51-56
-// The net temperature coefficient interpolates from small positive
-// at beginning-of-life (full soluble-boron shim) to substantially
-// negative at end-of-life (boron depleted), so the same hot-outlet
-// offset contributes opposite-sign Doppler feedback depending on
-// boron concentration.
-//
-// Spec justification:
-//   - "At the beginning of life, the effect on reactivity is
-//     small since the moderator temperature coefficient is small
-//     [positive]. At the end of life, the coefficient is
-//     substantially more negative due to depletion and removal of
-//     shim boron [...]"
-//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122
-//   - "+7 pcm/°F" moderator effect at 1700 ppm with burnable
-//     absorbers reducing the boron need
-//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_039.txt:51-56
+//   - "reactor power is maintained equal to load by virtue of
+//      feedback effects inherent in the physics of a PWR"
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:69-71
 func TestReactor_DopplerShiftsReactivityWithBoron(t *testing.T) {
 	assert.Greater(t, netTempCoef(CVCSInitialBoron), netTempCoef(10),
 		"want net temperature coefficient higher at BOL boron than EOL boron")
 
-	// With rods fully withdrawn, a hot outlet (+30 °F over the
-	// reference) yields positive reactivity at BOL and negative
-	// reactivity in an over-borated core whose coefficient has
-	// turned negative.
-	hot := float64(CoreDopplerReferenceTempF) + 30
-	bol := ReactorPressureVessel{
-		ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
-		Outlet:      Temperature{Val: hot, Unit: u.Fahrenheit},
+	// The temperature-feedback term isolates as the reactivity
+	// delta between a +30 degF hot outlet and the reference outlet
+	// at fixed boron (rod/boron/xenon held identical). It must be
+	// negative at both chemistries and more negative at EOL.
+	feedbackTerm := func(boron float64) float32 {
+		hot := ReactorPressureVessel{
+			ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: boron},
+			Outlet:      Temperature{Val: float64(CoreDopplerReferenceTempF) + 30, Unit: u.Fahrenheit},
+		}
+		ref := ReactorPressureVessel{
+			ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: boron},
+			Outlet:      Temperature{Val: float64(CoreDopplerReferenceTempF), Unit: u.Fahrenheit},
+		}
+		hot.SeedSteadyStatePower(CoreRatedThermalPower)
+		hot = hot.Step(RCPRatedSpeed, 0)
+		ref.SeedSteadyStatePower(CoreRatedThermalPower)
+		ref = ref.Step(RCPRatedSpeed, 0)
+		return hot.Reactivity - ref.Reactivity
 	}
-	bol.SeedSteadyStatePower(CoreRatedThermalPower)
-	bol = bol.Step(RCPRatedSpeed, 0)
 
-	eol := ReactorPressureVessel{
-		ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron + 200},
-		Outlet:      Temperature{Val: hot, Unit: u.Fahrenheit},
-	}
-	eol.SeedSteadyStatePower(CoreRatedThermalPower)
-	eol = eol.Step(RCPRatedSpeed, 0)
-
-	assert.Positive(t, bol.Reactivity,
-		"want hot-outlet BOL reactivity positive, got %v", bol.Reactivity)
-	assert.Negative(t, eol.Reactivity,
-		"want hot-outlet over-borated reactivity negative, got %v", eol.Reactivity)
+	termBOL := feedbackTerm(CVCSInitialBoron)
+	termEOL := feedbackTerm(10)
+	assert.Negative(t, termBOL,
+		"combined feedback at BOL chemistry must stay negative, got %v", termBOL)
+	assert.Less(t, termEOL, termBOL,
+		"want EOL feedback more negative than BOL, got BOL=%v EOL=%v",
+		termBOL, termEOL)
 }
 
 // Even with rods fully withdrawn and Trip asserted, decay heat

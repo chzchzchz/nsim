@@ -243,21 +243,35 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 	rodPct := float32(ret.ControlRods.Insertion) * CoreRodWorthABCD * 100
 	outletFClamped := min(max(outletF, DopplerClampLowF), DopplerClampHighF)
 	dopplerDeltaF := outletFClamped - float64(CoreDopplerReferenceTempF)
-	// Net temperature coefficient (Doppler + moderator) varies
-	// with RCS boron concentration: small positive at beginning
-	// of life with full soluble-boron shim, substantially
-	// negative at end of life with boron depleted. The
-	// interpolation crosses zero at CoreNetTempCoefZeroCrossBoron
-	// so the simplified model reproduces the BOL/EOL spec
-	// behaviour:
+	// The temperature feedback splits into two regimes that the
+	// combined-coefficient model conflated. The fuel-side Doppler /
+	// power-defect base is a constant negative slope: "power defect -
+	// The negative reactivity associated with an increase in reactor
+	// core power due to temperature feedback effects from an increase
+	// in fuel and moderator temperature."
+	//   specs/the_westinghouse_pressurized_water_react/back_matter/page_244.txt:60-62
+	// On top of it the moderator coefficient varies with RCS boron
+	// concentration: slightly positive at beginning of life with full
+	// soluble-boron shim, substantially negative at end of life with
+	// boron depleted, so the combined slope stays negative across the
+	// boron range and load-follow self-regulation has a stable fixed
+	// point:
+	//   "reactor power is maintained equal to load by virtue of
+	//    feedback effects inherent in the physics of a PWR"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:69-71
 	//   "At the beginning of life, the effect on reactivity is
 	//    small since the moderator temperature coefficient is
 	//    small. At the end of life, the coefficient is
 	//    substantially more negative due to depletion and
 	//    removal of shim boron [...]"
 	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122
-	tempCoef := netTempCoef(ret.ControlRods.BoronConcentration)
-	dopplerPct := float32(dopplerDeltaF*tempCoef) / 1000
+	// The Doppler base scales with the power fraction: it is a
+	// fuel-heating effect, so a cold zero-power core carries no
+	// Doppler deficit and cold-shutdown margin stays a boron/rod
+	// question rather than a temperature artifact.
+	dopplerPct := float32(powerFrac*dopplerDeltaF*CoreDopplerBasePcmPerDegF) / 1000
+	moderatorPct := float32(dopplerDeltaF*
+		netTempCoef(ret.ControlRods.BoronConcentration)) / 1000
 	boronDelta := (ret.ControlRods.BoronConcentration - CVCSInitialBoron) / 100.0
 	boronPct := float32(boronDelta) * CoreBoronWorthPer100ppm
 	// Xenon contributes reactivity relative to its rated-power
@@ -271,7 +285,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 	axialFrac := ret.AxialOffset / 100
 	xenonPct := float32(CoreXenonEquilibriumWorthPct *
 		(xenonNormalized(ret.Xenon135+axialFrac*ret.Xenon135AxialDeviation/2) - 1.0))
-	ret.Reactivity = rodPct + dopplerPct + boronPct + xenonPct
+	ret.Reactivity = rodPct + dopplerPct + moderatorPct + boronPct + xenonPct
 
 	// 5) Thermal power = fission chain power + fission-product
 	// decay heat (+ RCP shaft loss, added below). The two nuclear
@@ -480,9 +494,10 @@ func xenonNormalized(x float64) float64 {
 	return x * CoreXenonIodineToXenonEquilibriumRatio
 }
 
-// netTempCoef returns the combined Doppler + moderator
-// temperature coefficient (pcm/°F) at the given RCS boron
-// concentration. The interpolation is linear between
+// netTempCoef returns the moderator temperature coefficient
+// (pcm/°F) at the given RCS boron concentration. The fuel-side
+// Doppler base is carried separately by CoreDopplerBasePcmPerDegF.
+// The interpolation is linear between
 // CoreNetTempCoefAtZeroBoronPcmPerDegF (end-of-life, low
 // boron: substantially more negative) and
 // CoreNetTempCoefAtRefBoronPcmPerDegF (beginning-of-life,
@@ -832,54 +847,50 @@ const (
 	// further.
 	CoreFlowDegradedFloorFrac float64 = 0.25
 
-	// CoreDopplerPcmPerDegF is the PWR net temperature coefficient
-	// of reactivity (combined Doppler + moderator temperature
-	// effect) expressed in pcm per degree Fahrenheit, applied to
-	// the outlet temperature. The simplified linear model
-	// interpolates between end-of-life (low boron: substantially
-	// more negative per the spec) and beginning-of-life (high
-	// boron: small positive per the spec).
-	//
-	// Spec justification:
-	//   - "At the beginning of life, the effect on reactivity is
-	//     small since the moderator temperature coefficient is
-	//     small [positive]. At the end of life, the coefficient is
-	//     substantially more negative due to depletion and removal
-	//     of shim boron, and the effect on reactivity addition is
-	//     greater."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122
-	//   - "If soluble boron were the sole means of control, the
-	//     concentration would be on the order of 1700 ppm and the
-	//     moderator temperature coefficient would be on the order
-	//     of +7 pcm/°F (a 15°F [...] increase in moderator
-	//     temperature creates 0.001 reactivity increase)."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_2/page_039.txt:51-56
-	//
-	// The first-core case at 1000 ppm boron (with burnable
-	// absorbers reducing the soluble-boron need from the 1700 ppm
-	// bare-core value, per page_039.txt:51-56) yields a small
-	// positive coefficient via the linear interpolation. End of
-	// life (boron approaching 0 ppm) yields a substantially more
-	// negative coefficient. The interpolation is anchored on
-	// CoreNetTempCoefAtZeroBoronPcmPerDegF and
-	// CoreNetTempCoefAtRefBoronPcmPerDegF.
-	CoreDopplerPcmPerDegF float64 = -1.0
+	// CoreDopplerBasePcmPerDegF is the fuel-side Doppler /
+	// power-defect base of the temperature feedback, a constant
+	// negative slope applied to the outlet-temperature deviation.
+	// Splitting it out of the boron interpolation keeps the combined
+	// feedback negative across the whole boron range so load-follow
+	// self-regulation has a stable fixed point:
+	//   "reactor power is maintained equal to load by virtue of
+	//    feedback effects inherent in the physics of a PWR"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:69-71
+	// The magnitude is a sizing convention: the source defines the
+	// power defect qualitatively, not numerically -
+	//   "power defect - The negative reactivity associated with an
+	//    increase in reactor core power due to temperature feedback
+	//    effects from an increase in fuel and moderator temperature."
+	//   specs/the_westinghouse_pressurized_water_react/back_matter/page_244.txt:60-62
+	CoreDopplerBasePcmPerDegF float64 = -4.0
 
-	// CoreNetTempCoefAtRefBoronPcmPerDegF is the combined
-	// Doppler+moderator temperature coefficient at the
-	// beginning-of-life RCS boron concentration
-	// (CVCSInitialBoron = 1000 ppm). Sized slightly positive so
+	// CoreRatedCriticalBoronPpm is the RCS boron concentration at
+	// which the fresh core sits exactly critical at rated power with
+	// the rod bank fully withdrawn, derived by solving
+	//   0 = deltaF*(CoreDopplerBasePcmPerDegF + netTempCoef(b))/1000
+	//       + (b - CVCSInitialBoron)/100 * CoreBoronWorthPer100ppm
+	// for b at the rated outlet temperature. It is the fresh-core
+	// seed MakePlant dilutes to: with a realistic negative power
+	// defect, full-power criticality at the reference shim would sit
+	// far subcritical.
+	CoreRatedCriticalBoronPpm float64 = 571.4
+
+	// CoreNetTempCoefAtRefBoronPcmPerDegF is the moderator
+	// temperature coefficient at the beginning-of-life RCS boron
+	// concentration (CVCSInitialBoron = 1000 ppm), the fuel-side
+	// Doppler base being carried separately by
+	// CoreDopplerBasePcmPerDegF. Sized slightly positive so
 	// the model reproduces the "moderator temperature coefficient
 	// is small [positive]" BOL behaviour described in
-	// specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:117-122 and the BOL
+	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122 and the BOL
 	// "+7 pcm/°F" moderator effect at 1700 ppm with burnable
 	// absorbers reducing it in
-	// specs/the_westinghouse_pressurized_water_react//chapter_2/page_039.txt:51-56.
+	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_039.txt:51-56.
 	CoreNetTempCoefAtRefBoronPcmPerDegF float64 = 1.0
 
-	// CoreNetTempCoefAtZeroBoronPcmPerDegF is the combined
-	// Doppler+moderator temperature coefficient at zero RCS
-	// boron, representing end-of-life where the soluble boron
+	// CoreNetTempCoefAtZeroBoronPcmPerDegF is the moderator
+	// temperature coefficient at zero RCS boron, representing
+	// end-of-life where the soluble boron
 	// shim has been depleted and the moderator temperature
 	// coefficient is substantially more negative per the spec.
 	// Spec: "the coefficient is substantially more negative

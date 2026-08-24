@@ -2374,7 +2374,7 @@ func MakePlant() Plant {
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem = CVCS{
 		Mode:               CVCSVolumeControl,
 		VCTLevel:           Volume{Val: VCTDesignLevel, Unit: u.Gallon},
-		BoronConcentration: CVCSInitialBoron,
+		BoronConcentration: CoreRatedCriticalBoronPpm,
 	}
 
 	// RHRS defaults (plans/p15_1.txt). Both pumps are off and
@@ -2787,7 +2787,7 @@ func MakePlant() Plant {
 	}
 
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration =
-		CVCSInitialBoron
+		CoreRatedCriticalBoronPpm
 	// Control rods start fully withdrawn (Insertion=0) for normal
 	// operation. A trip forces full insertion (Insertion=1.0) via
 	// the clamp in ReactorPressureVessel.Step (plans/x/trip.md).

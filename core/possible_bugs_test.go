@@ -69,88 +69,41 @@ func TestBug_SGHeatInputEqualsOneSGRatedAtCoreRated(t *testing.T) {
 		perSG, float64(p.ReactorBuilding.SteamGenerator.HeatInput))
 }
 
-// Bug 3 reproduction: at beginning-of-life with low boron the
-// moderator temperature coefficient is small positive (+7 pcm/°F
-// per specs/the_westinghouse_pressurized_water_react//chapter_2/page_039.txt:54-55). The model
-// currently applies CoreDopplerPcmPerDegF = -1.0 unconditionally
-// (core/parts.go:1825-1830) which gives a strong negative
-// feedback regardless of boron concentration.
-//
-// We check two reactors — one at high boron (≈1000 ppm) and one
-// at low boron (≈10 ppm). The Doppler+moderator term should not
-// be the same strong negative number for both: the low-boron
-// (BOL) reactor should have a much smaller magnitude (and the
-// sign should not be locked negative regardless of boron).
+// Bug 3 follow-up: the temperature-feedback contribution isolates as
+// the delta in reactivity between a hot outlet and the reference
+// outlet at fixed boron. Under the split coefficient model the
+// combined slope is negative at both chemistries (the fuel-side
+// Doppler base dominates the slightly-positive BOL moderator term)
+// and grows more negative as boron depletes:
+//   "the coefficient is substantially more negative due to
+//    depletion and removal of shim boron"
+//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:119-121
 func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
-	// Same thermal state (Outlet = ref + 30°F) at two RCS boron
-	// concentrations. The reactivity term from Doppler+moderator
-	// should reflect the boron-dependent sign/magnitude per the
-	// spec, not a constant -1.0 pcm/°F.
-	hotRef := Temperature{Val: float64(CoreDopplerReferenceTempF)+30, Unit: u.Fahrenheit}
-	hotHighB := ReactorPressureVessel{
-		ControlRods: ControlRods{
-			Insertion:            0,
-			DemandInsertion:      0,
-			BoronConcentration:   1000,
-		},
-		Outlet:       hotRef,
-	}
-	hotHighB = hotHighB.Step(RCPRatedSpeed, 0)
-
-	hotLowB := ReactorPressureVessel{
-		ControlRods: ControlRods{
-			Insertion:            0,
-			DemandInsertion:      0,
-			BoronConcentration:   10,
-		},
-		Outlet:       hotRef,
-	}
-	hotLowB = hotLowB.Step(RCPRatedSpeed, 0)
-
-	// The Doppler+moderator contribution is the delta in
-	// reactivity relative to the same Outlet at reference
-	// temperature. With Outlet above reference, the net
-	// temperature coefficient at BOL (low boron) should be
-	// near zero or slightly positive per spec, not strongly
-	// negative.
-	dopplerTerm := func(boron float64, outlet float64) float32 {
+	feedbackTerm := func(boron float64) float32 {
 		hot := ReactorPressureVessel{
-			ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: boron},
-			Outlet:       Temperature{Val: outlet, Unit: u.Fahrenheit},
+			ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: boron},
+			Outlet:      Temperature{Val: float64(CoreDopplerReferenceTempF) + 30, Unit: u.Fahrenheit},
 		}
 		ref := ReactorPressureVessel{
-			ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: boron},
-			Outlet:       Temperature{Val: float64(CoreDopplerReferenceTempF), Unit: u.Fahrenheit},
+			ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: boron},
+			Outlet:      Temperature{Val: float64(CoreDopplerReferenceTempF), Unit: u.Fahrenheit},
 		}
+		hot.SeedSteadyStatePower(CoreRatedThermalPower)
 		hot = hot.Step(RCPRatedSpeed, 0)
+		ref.SeedSteadyStatePower(CoreRatedThermalPower)
 		ref = ref.Step(RCPRatedSpeed, 0)
 		return hot.Reactivity - ref.Reactivity
 	}
 
-	highBTerm := dopplerTerm(1000, float64(CoreDopplerReferenceTempF)+30)
-	lowBTerm := dopplerTerm(10, float64(CoreDopplerReferenceTempF)+30)
+	bolTerm := feedbackTerm(CVCSInitialBoron)
+	eolTerm := feedbackTerm(10)
 
-	// Spec at BOL (high boron): "the moderator temperature
-	// coefficient would be on the order of +7 pcm/°F"
-	// (specs/the_westinghouse_pressurized_water_react//chapter_2/page_039.txt:54-55). With Doppler
-	// adding ~-2 pcm/°F the combined net temperature
-	// coefficient at BOL is small positive, so an outlet rise
-	// above reference produces positive (or near-zero)
-	// reactivity contribution — NOT -30 pcm (the locked-negative
-	// -1.0 pcm/°F × 30°F).
-	assert.Greater(t, highBTerm, float32(-5),
-		"want high-boron (BOL) Doppler+moderator term near zero or positive; got %v pcm (combined net temperature coefficient should reflect BOL +7 pcm/°F moderator effect, specs/the_westinghouse_pressurized_water_react//chapter_2/page_039.txt:54-55)",
-		highBTerm)
-	// Spec at EOL (low boron): "the coefficient is
-	// substantially more negative due to depletion and removal
-	// of shim boron"
-	// (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:119-121). The Doppler
-	// term at EOL is more negative than at BOL.
-	assert.Less(t, lowBTerm, highBTerm,
-		"want low-boron (EOL) Doppler+moderator term more negative than high-boron (BOL); got high=%v low=%v",
-		highBTerm, lowBTerm)
+	assert.Negative(t, bolTerm,
+		"want BOL combined feedback negative under the split model, got %v pcm", bolTerm)
+	assert.Less(t, eolTerm, bolTerm,
+		"want EOL feedback more negative than BOL, got BOL=%v EOL=%v",
+		bolTerm, eolTerm)
 }
-
 // Bug 4 reproduction: MakePlant unconditionally sets
 // ReactorPressureVessel.Outlet to CoreReferenceOutletF and
 // Inlet to CoreReferenceInletF regardless of the loaded

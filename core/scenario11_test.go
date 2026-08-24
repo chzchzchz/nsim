@@ -47,17 +47,23 @@ func TestScenario11_ColdShutdownMarginHoldsWithoutRodCredit(t *testing.T) {
 		marginTarget = -1.0
 	)
 
-	p := MakePlant()
-	p.ReactorBuilding.ReactorPressureVessel.Insertion = 0
-	p.ReactorBuilding.ReactorPressureVessel.Outlet = Temperature{Val: coldF, Unit: u.Fahrenheit}
-	// ReactorBuilding.Step propagates CVCS boron into the reactivity
-	// model each tick, so seeding the CVCS value is sufficient.
-	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = targetBoron
+	// Sample on a coherent just-tripped state: coolant at the cold
+	// reference, fission and decay heat at zero, xenon still at its
+	// rated equilibrium (worth 0 - the margin must hold before the
+	// poison decays away), rods fully withdrawn. Stepping the RPV
+	// directly isolates the reactivity evaluation from plant-side
+	// thermal transients.
+	rpv := MakePlant().ReactorBuilding.ReactorPressureVessel
+	rpv.Insertion = 0
+	rpv.Inlet = Temperature{Val: coldF, Unit: u.Fahrenheit}
+	rpv.Outlet = Temperature{Val: coldF, Unit: u.Fahrenheit}
+	rpv.FissionPower = 0
+	rpv.DecayHeatFast = 0
+	rpv.DecayHeatSlow = 0
+	rpv.ControlRods.BoronConcentration = targetBoron
 
-	p.Step()
-	p.Update()
+	rpv = rpv.Step(RCPRatedSpeed, 0)
 
-	rpv := p.ReactorBuilding.ReactorPressureVessel
 	assert.LessOrEqual(t, float64(rpv.Reactivity), marginTarget,
 		"cold shutdown margin must hold with no rod credit, rho=%v", rpv.Reactivity)
 	assert.Equal(t, targetBoron,

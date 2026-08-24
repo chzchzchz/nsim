@@ -38,7 +38,13 @@ func TestScenario9_BorationShiftsReactivityWithXenonPinned(t *testing.T) {
 	stepN(&p, 1)
 
 	delta := rpv.Reactivity - before
-	want := float32(200.0/100.0) * CoreBoronWorthPer100ppm
+	// The shift carries two terms: the direct boron worth AND the
+	// moderator-coefficient move as the interpolation rides the
+	// boron concentration (the same dc/dB coupling the load-follow
+	// naive-boration check locks in).
+	want := float32((1200.0 - CoreRatedCriticalBoronPpm) / 100.0) * CoreBoronWorthPer100ppm +
+		float32((float64(CoreReferenceOutletF)-float64(CoreDopplerReferenceTempF))*
+			(netTempCoef(1200)-netTempCoef(CoreRatedCriticalBoronPpm))/1000)
 	assert.InDelta(t, want, delta, 0.005,
 		"want the 200 ppm boration to shift reactivity %v dk/k, got %v",
 		want, delta)

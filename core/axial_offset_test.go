@@ -127,14 +127,18 @@ func TestAxialOffset_ZeroDeviationReducesToLumpedReactivity(t *testing.T) {
 	stepped := r.Step(RCPRatedSpeed, 0)
 
 	rodPct := float32(0.04222222) * CoreRodWorthABCD * 100
-	dopplerPct := float32((float64(CoreReferenceOutletF) -
+	powerFrac := float64(r.TotalThermalPower()) / float64(CoreRatedThermalPower)
+	dopplerBasePct := float32(powerFrac * (float64(CoreReferenceOutletF) -
+		float64(CoreDopplerReferenceTempF)) *
+		CoreDopplerBasePcmPerDegF) / 1000
+	moderatorPct := float32((float64(CoreReferenceOutletF) -
 		float64(CoreDopplerReferenceTempF)) *
 		netTempCoef(loadFollowBoron)) / 1000
 	boronPct := float32((loadFollowBoron - CVCSInitialBoron) / 100.0 *
 		float64(CoreBoronWorthPer100ppm))
 	xenonPct := float32(CoreXenonEquilibriumWorthPct *
 		(xenonNormalized(xenonEquilibriumPhysical(1.0)) - 1.0))
-	assert.InDelta(t, float64(rodPct+dopplerPct+boronPct+xenonPct),
+	assert.InDelta(t, float64(rodPct+dopplerBasePct+moderatorPct+boronPct+xenonPct),
 		float64(stepped.Reactivity), 1e-4,
 		"zero-skew reactivity must equal the lumped calibration")
 }
