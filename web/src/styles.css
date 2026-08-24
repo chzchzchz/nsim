@@ -30,9 +30,11 @@
             cursor: not-allowed;
             opacity: 0.6;
         }
-        header#sim-bar select {
+        header#sim-bar select,
+        header#sim-bar input[type="number"] {
             padding: 4px 6px;
             font-size: 14px;
+            width: 90px;
         }
         header#sim-bar #sim-status,
         header#sim-bar #sps-indicator {

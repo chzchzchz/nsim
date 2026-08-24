@@ -11,15 +11,16 @@
         <button id="btn-step">⏭ Step</button>
         <button id="btn-reset">↺ Reset</button>
         <label>
-            Tick rate
-            <select id="tick-rate">
-                <option value="1">1× (1 ms / frame)</option>
-                <option value="16" selected>16× (16 ms / frame)</option>
-                <option value="100">100× (100 ms / frame)</option>
-                <option value="1000">1000× (1 s / frame)</option>
-                <option value="5000">5000× (5 s / frame)</option>
-                <option value="10000">10000× (10 s / frame)</option>
-            </select>
+            Frames/s
+            <input id="fps-input" type="number" min="1" max="240"
+                   value="60" size="4" step="1"
+                   title="Interface refresh cadence (1-240)" />
+        </label>
+        <label>
+            Steps/s
+            <input id="sps-input" type="number" min="0" max="1000000"
+                   value="1000" size="7" step="1"
+                   title="Simulated milliseconds executed per real second (0-1000000)" />
         </label>
         <span id="sps-indicator" title="Actual plant steps per wall-clock second versus the requested rate at 60 frames/s">steps/s: —</span>
         <button id="btn-copy" aria-label="Copy plant state JSON to clipboard">📋</button>

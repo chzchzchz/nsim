@@ -115,14 +115,16 @@ The dashboard has these regions:
    * **Start / Pause** — toggle the tick loop
    * **Step** — advance one tick rate while paused
    * **Reset** — fresh plant, re-rendered SVG and panels
-   * **Tick rate** — 1× / 16× / 100× / 1000× / 5000× / 10000×
-     `core.TimeStep` per frame
-   * **steps/s** — actual plant steps per wall-clock second versus
-     the requested rate (ticks × 60 frames/s), refreshed every
-     second; a large gap means the browser cannot keep up with
-     the selected speed. Panel read-outs refresh at most 10× per
-     second regardless of the simulation rate; paused single
-     steps always update immediately
+   * **Frames/s** — interface refresh cadence (1–240); panel
+     read-outs repaint at most this often
+   * **Steps/s** — simulated milliseconds executed per real
+     second (0–1000000); the loop converts elapsed wall time to
+     an exact step count, so speed stays accurate despite frame
+     jitter. After a hidden-tab gap at most 1 s of sim time
+     executes immediately and the rest is dropped
+   * **steps/s** — actual plant steps per wall-clock second
+     versus the entered Steps/s target, refreshed every second;
+     a large gap means the browser cannot keep up
    * **📋** — copy plant state JSON to the clipboard
    * **Status** — `running @ N s simulated` / `paused @ N s simulated`
 
@@ -190,7 +192,8 @@ anything the browser renders:
 
 1. Open `http://localhost:5173`
 2. Click **Start** — sensor read-out updates at 60 Hz
-3. Click **Pause**, click **Step** — read-out jumps once
+3. Click **Pause**, click **Step** — read-out jumps one simulated
+   millisecond
 4. Toggle `ReactorBuilding/ReactorCoolantPump/Running` — the
    RCP RPM overlay changes within one frame
 5. Enter an out-of-range value in a numeric control — the

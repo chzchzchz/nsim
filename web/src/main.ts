@@ -19,15 +19,14 @@ import {
 import { Sim } from "./sim";
 
 const COPY_FEEDBACK_MS = 1500;
-// Throughput accounting: the desired rate assumes the nominal
-// requestAnimationFrame cadence; the measured side counts real
-// plant steps over a one-second window.
-const NOMINAL_FRAME_RATE = 60;
+// Stepping runs on a wall-clock accumulator so the achieved rate
+// tracks Steps/s regardless of frame jitter; after a hidden-tab
+// gap at most this much sim time executes before the remainder is
+// dropped (the simulation falls behind rather than freezing).
+const MAX_CATCHUP_S = 1;
+// Throughput accounting: the measured side counts real plant
+// steps over a one-second window.
 const SPS_WINDOW_MS = 1000;
-// Panel refreshes (sensors, console, alarms) are decoupled from
-// the simulation rate: at high tick rates stepping many times per
-// frame must not force a full DOM pass every frame.
-const UI_REFRESH_INTERVAL_MS = 100;
 
 async function main(): Promise<void> {
     // Copy wasm_exec.js polyfill into the same origin. We
@@ -43,7 +42,8 @@ async function main(): Promise<void> {
     const startBtn = document.getElementById("btn-start") as HTMLButtonElement;
     const stepBtn = document.getElementById("btn-step") as HTMLButtonElement;
     const resetBtn = document.getElementById("btn-reset") as HTMLButtonElement;
-    const tickRateSel = document.getElementById("tick-rate") as HTMLSelectElement;
+    const fpsInput = document.getElementById("fps-input") as HTMLInputElement;
+    const spsInput = document.getElementById("sps-input") as HTMLInputElement;
     const copyBtn = document.getElementById("btn-copy") as HTMLButtonElement;
     const statusEl = document.getElementById("sim-status") as HTMLElement;
     const spsEl = document.getElementById("sps-indicator") as HTMLElement;
@@ -129,7 +129,8 @@ async function main(): Promise<void> {
         startBtn,
         stepBtn,
         resetBtn,
-        tickRate: tickRateSel,
+        fpsInput,
+        spsInput,
         status: statusEl,
         pidEl,
         onReset: () => {
@@ -147,6 +148,10 @@ async function main(): Promise<void> {
 
     let lastSvg = performance.now();
     let lastUiRefreshMs = 0;
+    // Wall-clock stepping accumulator: elapsed real time converts
+    // to Steps/s debt, executed in whole steps each frame.
+    let lastStepWallMs = performance.now();
+    let stepDebt = 0;
     // Throughput window state; updated by updateStepRate below.
     let windowStartMs = performance.now();
     let spsWindowSteps = 0;
@@ -160,19 +165,28 @@ async function main(): Promise<void> {
         // kill the render loop permanently.
         requestAnimationFrame(tick);
         try {
+            const nowMs = performance.now();
             if (sim.running) {
-                sim.plant.step(sim.ticksPerFrame);
-                spsWindowSteps += sim.ticksPerFrame;
+                const elapsedS = Math.min(
+                    (nowMs - lastStepWallMs) / 1000, MAX_CATCHUP_S);
+                stepDebt += elapsedS * sim.stepsPerSecond;
+                const dueSteps = Math.floor(stepDebt);
+                if (dueSteps > 0) {
+                    sim.plant.step(dueSteps);
+                    spsWindowSteps += dueSteps;
+                    stepDebt -= dueSteps;
+                }
             }
+            lastStepWallMs = nowMs;
             const simMs = sim.plant.simTimeMs();
             // Paused single-steps bypass the throttle so the
             // read-out reacts immediately; while running the
-            // panels update at most once per UI_REFRESH_INTERVAL_MS
-            // regardless of how many ticks each frame steps.
-            const uiDue = performance.now() - lastUiRefreshMs >=
-                UI_REFRESH_INTERVAL_MS;
+            // panels refresh at most once per frame-interval
+            // regardless of how many steps each frame executes.
+            const uiDue = nowMs - lastUiRefreshMs >=
+                1000 / sim.framesPerSecond;
             if (simMs !== lastRefreshedMs && (uiDue || !sim.running)) {
-                lastUiRefreshMs = performance.now();
+                lastUiRefreshMs = nowMs;
                 lastRefreshedMs = simMs;
                 refreshSensors(sensorRows, sim.plant);
                 // Refresh the command console list from the wasm queue.
@@ -195,7 +209,7 @@ async function main(): Promise<void> {
                 lastTickError = "";
             }
             sim.refreshStatus();
-            updateStepRate(performance.now());
+            updateStepRate(nowMs);
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             if (msg !== lastTickError) {
@@ -223,8 +237,7 @@ async function main(): Promise<void> {
             return;
         }
         const actualSps = Math.round(spsWindowSteps / (elapsedMs / 1000));
-        const desiredSps = sim.ticksPerFrame * NOMINAL_FRAME_RATE;
-        spsEl.textContent = `steps/s: ${actualSps} / ${desiredSps}`;
+        spsEl.textContent = `steps/s: ${actualSps} / ${sim.stepsPerSecond}`;
         spsWindowSteps = 0;
         windowStartMs = nowMs;
     }

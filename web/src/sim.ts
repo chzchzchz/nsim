@@ -8,16 +8,27 @@ export interface SimUI {
     startBtn: HTMLButtonElement;
     stepBtn: HTMLButtonElement;
     resetBtn: HTMLButtonElement;
-    tickRate: HTMLSelectElement;
+    fpsInput: HTMLInputElement;
+    spsInput: HTMLInputElement;
     status: HTMLElement;
     pidEl: HTMLElement;
     onReset: () => void;
 }
 
+const FPS_MIN = 1;
+const FPS_MAX = 240;
+const SPS_MIN = 0;
+const SPS_MAX = 1000000;
+
 export class Sim {
     plant: PlantHandle;
     running = false;
-    ticksPerFrame = 16;
+    // Operator-entered targets: interface refresh cadence and
+    // simulated milliseconds executed per wall-clock second. The
+    // tick loop turns Steps/s into an exact step count via a
+    // wall-clock accumulator, so frame jitter never skews speed.
+    framesPerSecond = 60;
+    stepsPerSecond = 1000;
     private factory: () => PlantHandle;
     private ui?: SimUI;
 
@@ -31,8 +42,15 @@ export class Sim {
         ui.startBtn.addEventListener("click", () => this.toggle());
         ui.stepBtn.addEventListener("click", () => this.stepOnce());
         ui.resetBtn.addEventListener("click", () => this.reset());
-        ui.tickRate.addEventListener("change", () => {
-            this.ticksPerFrame = parseInt(ui.tickRate.value, 10) || 1;
+        ui.fpsInput.addEventListener("change", () => {
+            this.framesPerSecond = clampInt(
+                ui.fpsInput, FPS_MIN, FPS_MAX, this.framesPerSecond,
+            );
+        });
+        ui.spsInput.addEventListener("change", () => {
+            this.stepsPerSecond = clampInt(
+                ui.spsInput, SPS_MIN, SPS_MAX, this.stepsPerSecond,
+            );
         });
         this.refreshStatus();
         this.refreshButtons();
@@ -48,7 +66,8 @@ export class Sim {
         if (this.running) {
             return;
         }
-        this.plant.step(this.ticksPerFrame);
+        // One press advances exactly one simulated millisecond.
+        this.plant.step(1);
     }
 
     reset(): void {
@@ -74,4 +93,16 @@ export class Sim {
         this.ui.startBtn.textContent = this.running ? "⏸ Pause" : "▶ Start";
         (this.ui.stepBtn as HTMLButtonElement).disabled = this.running;
     }
+}
+
+function clampInt(
+    input: HTMLInputElement,
+    min: number,
+    max: number,
+    fallback: number,
+): number {
+    const v = parseInt(input.value, 10);
+    const clamped = Number.isNaN(v) ? fallback : Math.min(max, Math.max(min, v));
+    input.value = String(clamped);
+    return clamped;
 }
