@@ -2,6 +2,7 @@ package core
 
 import (
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -769,6 +770,53 @@ var scenarioCatalog = []Scenario{
 			*p = q
 		},
 	},
+	{
+		ID:       "btrs-boron-cycling",
+		Number:   31,
+		Category: "Auxiliary system operations",
+		Title:    "BTRS dilution and boration cycling",
+		StartState: "At-power lineup with automatic charging/letdown " +
+			"level control, the volume control tank mid-band, and the " +
+			"BTRS isolated.",
+		Objective: "Cycle boron without liquid effluent: dilute on the " +
+			"cold regeneration beds to the target concentration, isolate " +
+			"the loop between modes, then borate back to the starting " +
+			"rated-critical value through the setpoint drive while " +
+			"watching VCT level and bed saturation.",
+		Apply: func(p *Plant) {
+			q := fullPowerLineup()
+			cvcs := &q.AuxiliaryBuilding.ChemicalVolumeControlSystem
+			cvcs.AutoLevelControl = true
+			cvcs.ChargingPumpRunning = true
+			cvcs.LetdownValveOpen = true
+			cvcs.VCTLevel = Volume{Val: 450, Unit: u.Gallon}
+			q.ReactorBuilding.ReactorMakeupControlValve.Auto = true
+			*p = q
+		},
+		// Procedure-timed offsets from plans/x/scenario/31.txt: each
+		// leg moves 25 ppm at CVCSBorationRate (25 ppm / 0.8 ppm/s =
+		// 31.25 s), behind a core warmup window and a between-mode
+		// isolation interval. The setpoint targets the lineup's own
+		// rated-critical starting concentration. Bed reconditioning
+		// between modes is not modeled (GAP-1 in the plan).
+		Script: []ScriptCommand{
+			{AtMs: 15000,
+				ControlKey: "AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode",
+				Value:      "Dilution"},
+			{AtMs: 15000,
+				ControlKey: "AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRSPump",
+				Value:      "1"},
+			{AtMs: 46250,
+				ControlKey: "AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode",
+				Value:      "VolumeControl"},
+			{AtMs: 46250,
+				ControlKey: "AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRSPump",
+				Value:      "0"},
+			{AtMs: 58750,
+				ControlKey: "ReactorBuilding/ReactorPressureVessel/ControlRods/BoronSetpoint",
+				Value: strconv.FormatFloat(CoreRatedCriticalBoronPpm, 'f', -1, 64)},
+		},
+	},
 }
 
 // CheckResult reports whether an evolution's end-state bounds hold on
@@ -1242,6 +1290,34 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 			"spray tank drained to Lo-Lo")
 		c.require(css.SuctionSump, "pumps on sump recirculation")
 		c.require(css.Running, "spray still operating")
+		return c.result()
+	},
+	"btrs-boron-cycling": func(p *Plant) CheckResult {
+		var c checkBounds
+		// The round trip releases chemistry back to volume control
+		// inside the setpoint tolerance (core/cvcs.go:250-269); mode
+		// directions:
+		// specs/the_westinghouse_pressurized_water_react/chapter_4/page_081.txt:12-31
+		cvcs := &p.AuxiliaryBuilding.ChemicalVolumeControlSystem
+		c.require(!cvcs.BoronSetpointTracking && cvcs.Mode == CVCSVolumeControl &&
+			!cvcs.BTRSRecirculationPumpRunning,
+			"setpoint drive released chemistry to volume control")
+		c.require(math.Abs(cvcs.BoronConcentration-CoreRatedCriticalBoronPpm) <=
+			CVCSBoronSetpointTolerancePpm,
+			"boron round-tripped to its rated-critical starting concentration")
+		// Saturation advanced past zero is what separates the completed
+		// cycle from the untouched start lineup; the capacity constant
+		// itself is a derived model choice (GAP-2 in
+		// plans/x/scenario/31.txt).
+		c.require(cvcs.BTRSBedSaturation > 0,
+			"coolant actually circulated through the BTRS beds")
+		c.require(cvcs.BRSHoldupLevel.Float() == 0,
+			"no liquid effluent sent to the Boron Recycle System")
+		vct := cvcs.VCTLevel.Float()
+		c.require(vct >= VCTLowLevel && vct <= VCTHighLevel,
+			"volume control tank kept inside its normal band")
+		c.require(!p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+			"no trip through the evolution")
 		return c.result()
 	},
 }
