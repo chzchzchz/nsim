@@ -140,6 +140,10 @@
             padding: 4px 8px;
             border: 1px solid #ccc;
             border-radius: 4px;
+            /* Fieldsets refuse to shrink below their widest content
+               unless this is relaxed, so the Controls column
+               overflows across the Sensors column. */
+            min-inline-size: auto;
         }
         #controls legend,
         .tile legend { font-weight: bold; font-size: 12px; }
@@ -172,6 +176,9 @@
         }
         .data-table { width: 100%; border-collapse: collapse; }
         .data-table td { padding: 2px 6px; border-bottom: 1px solid #eee; }
+        /* Inside the two-column tiles a wide id must break instead
+           of pushing the table into the neighbouring column. */
+        .tile .data-table td { overflow-wrap: anywhere; }
         .data-table th {
             padding: 2px 6px;
             border-bottom: 2px solid #ccc;
@@ -202,6 +209,7 @@
         }
         .ctl-row {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             gap: 6px;
             margin: 2px 0;
