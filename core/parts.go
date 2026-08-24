@@ -1789,6 +1789,57 @@ type MakeupValve struct {
 	Part
 	Open float64
 	Flow Volume
+
+	// Auto engages the volume-control-tank low-level initiation:
+	// a VCT level at or below VCTLowLevel latches Initiated until
+	// the tank is restored to VCTDesignLevel, forcing full makeup
+	// flow regardless of the manual Open position. The zero value
+	// keeps the historical manual-only valve.
+	// "Low-level signals from the volume control tank initiate
+	// reactor makeup control or flow from the refueling water
+	// storage tank as a backup."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:1-4
+	// "The reactor coolant makeup is automatically controlled and
+	// the boron concentration properly adjusted."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:107-109
+	Auto bool
+
+	// Initiated latches while the automatic low-level signal has
+	// the makeup control system adding water.
+	Initiated bool
+}
+
+// applyAutoMakeup runs the volume-control-tank low-level initiation
+// while Auto is engaged: a level at or below VCTLowLevel latches
+// Initiated, and the latch clears once the tank is restored to its
+// design band, so a boundary-straddling level cannot chatter the
+// valve. With Auto off the latch is forced clear and the valve stays
+// manual.
+// "Low-level signals from the volume control tank initiate reactor
+// makeup control or flow from the refueling water storage tank as a
+// backup."
+// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:1-4
+func (m *MakeupValve) applyAutoMakeup(vctLevelGal float64) {
+	if !m.Auto {
+		m.Initiated = false
+		return
+	}
+	if vctLevelGal <= VCTLowLevel {
+		m.Initiated = true
+	}
+	if m.Initiated && vctLevelGal >= VCTDesignLevel {
+		m.Initiated = false
+	}
+}
+
+// effectiveOpen is the valve position the flow derivation sees: an
+// initiated automatic signal forces full makeup regardless of the
+// manual position.
+func (m *MakeupValve) effectiveOpen() float64 {
+	if m.Auto && m.Initiated {
+		return max(m.Open, 1)
+	}
+	return m.Open
 }
 
 // Grid models the infinite bus at the station switchyard. It is a
@@ -4410,6 +4461,18 @@ type ReactorProtectionSystem struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:8-21
 	ManualSI bool
 
+	// ChannelTest isolates one monitored input for calibration
+	// and testing: while isolated, that measurement is forced
+	// away from its trip setpoints before any voting or ESFAS
+	// trigger evaluates, so a stimulus injected into the tested
+	// channel cannot actuate protections. The zero value runs all
+	// channels in service.
+	// "The protection system normally uses 2/4 logic but reverts
+	// to a safe 2/3 logic when part of the system is being tested
+	// or is involved in maintenance."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:114-118
+	ChannelTest RPSChannelTest
+
 	// TripSignalCount tracks how many of the redundant trip
 	// channels are demanding a trip. The simplified model
 	// collapses the four channels into a single integer and
@@ -4757,6 +4820,34 @@ const (
 	// specs/the_westinghouse_pressurized_water_react/chapter_9/page_156.txt:1-3
 	PlantComputerSequenceOfEventsBufferSize = 1000
 )
+
+// RPSChannelTest selects which monitored input is isolated for
+// calibration/testing. The bridge exposes these as enum strings.
+type RPSChannelTest int
+
+const (
+	RPSNoChannelInTest RPSChannelTest = iota
+	RPSSteamlineChannelInTest
+	RPSSGLevelChannelInTest
+	RPSTcoldChannelInTest
+	RPSContainmentChannelInTest
+)
+
+// name returns the bridge enum string for the selection.
+func (t RPSChannelTest) name() string {
+	switch t {
+	case RPSSteamlineChannelInTest:
+		return "Steamline"
+	case RPSSGLevelChannelInTest:
+		return "SGLevel"
+	case RPSTcoldChannelInTest:
+		return "Tcold"
+	case RPSContainmentChannelInTest:
+		return "Containment"
+	default:
+		return "None"
+	}
+}
 
 // PlantElectricalSystems models the plant electrical power
 // distribution, including offsite power, diesel generators,

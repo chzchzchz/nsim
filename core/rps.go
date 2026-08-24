@@ -73,6 +73,31 @@ func (r *ReactorProtectionSystem) Step(
 	// specs/westinghouse_plant_operations/chapter_19/page_018.txt:3-7
 	atPowerTripsEnabled := powerFrac >= RPSAtPowerPermissiveFraction
 
+	// Channel-under-test isolation: the monitored input being
+	// calibrated is forced away from its trip setpoints before
+	// any voting or ESFAS trigger evaluates, so a stimulus
+	// injected into that one channel cannot actuate protections
+	// while the crew verifies the instrumentation. Forcing the
+	// value at this single point covers every downstream consumer
+	// at once.
+	// "The protection system normally uses 2/4 logic but reverts
+	// to a safe 2/3 logic when part of the system is being tested
+	// or is involved in maintenance."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:114-118
+	switch ret.ChannelTest {
+	case RPSSteamlineChannelInTest:
+		steamlinePressure = max(steamlinePressure,
+			RPSLowSteamlinePressureTrip+1)
+	case RPSSGLevelChannelInTest:
+		sgLevelPct = (RPSLowSteamGeneratorLevelTrip +
+			RPSHighSteamGeneratorLevelTrip) / 2
+	case RPSTcoldChannelInTest:
+		tcoldF = max(tcoldF, RPSLowTcoldTrip+1)
+	case RPSContainmentChannelInTest:
+		containmentPressureGauge = min(containmentPressureGauge,
+			RPSHighContainmentPressureTrip-1)
+	}
+
 	var trips int
 	if sgLevelPct < RPSLowSteamGeneratorLevelTrip {
 		trips++

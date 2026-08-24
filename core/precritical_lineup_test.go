@@ -2,6 +2,7 @@ package core
 
 import (
 	"testing"
+	"time"
 
 	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
@@ -138,4 +139,134 @@ func TestPrecriticalLineup_DutyCycleBalancesChargingLetdown(t *testing.T) {
 		"want boron concentration unchanged during checks")
 	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
 		"want no spurious reactor trip during lineup")
+}
+
+// With automatic makeup engaged, a VCT low-level signal initiates
+// full makeup flow and the tank recovers into its design band, at
+// which point the initiation clears; the manual twin never
+// initiates and keeps draining.
+//
+// "Low-level signals from the volume control tank initiate reactor
+// makeup control or flow from the refueling water storage tank as a
+// backup."
+// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:1-4
+func TestMakeup_AutoInitiatesOnVCTLowLevel(t *testing.T) {
+	run := func(auto string) (initiated, cleared bool, minVCT, maxVCT, endVCT float64) {
+		p := MakePlant()
+		cm := GetControlMap(&p)
+		require.NoError(t,
+			cm["AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning"].Set("1"))
+		require.NoError(t,
+			cm["AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen"].Set("0"))
+		require.NoError(t,
+			cm["ReactorBuilding/ReactorMakeupControlValve/Auto"].Set(auto))
+		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel =
+			Volume{Val: VCTLowLevel + 10, Unit: u.Gallon}
+		for range int(30 * time.Second / TimeStep) {
+			stepN(&p, 1)
+			mv := p.ReactorBuilding.ReactorMakeupControlValve
+			if mv.Initiated {
+				initiated = true
+				assert.Greater(t, mv.Flow.Float(), 0.0,
+					"an initiated makeup signal must deliver flow")
+			} else if initiated {
+				cleared = true
+			}
+			vct := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
+			minVCT = min(minVCT, vct)
+			maxVCT = max(maxVCT, vct)
+			endVCT = vct
+		}
+		return initiated, cleared, minVCT, maxVCT, endVCT
+	}
+
+	autoInitiated, autoCleared, autoMin, autoMax, autoEnd := run("1")
+	assert.True(t, autoInitiated,
+		"the low-level signal must initiate automatic makeup")
+	assert.LessOrEqual(t, autoMin, VCTLowLevel+1.0,
+		"fixture must cross the low-level trigger")
+	assert.True(t, autoCleared,
+		"initiation must clear once the tank is restored")
+	assert.GreaterOrEqual(t, autoMax, VCTDesignLevel-1.0,
+		"automatic makeup must restore the design band: got %v", autoMax)
+	assert.GreaterOrEqual(t, autoEnd, VCTLowLevel-1.0,
+		"under a sustained charging draw the tank holds inside its "+
+			"band instead of emptying: got %v", autoEnd)
+
+	manualInitiated, _, _, _, manualEnd := run("0")
+	assert.False(t, manualInitiated,
+		"manual makeup never latches initiation")
+	assert.Less(t, manualEnd, VCTLowLevel,
+		"without makeup the manual twin keeps draining below the trigger")
+}
+
+// Taking a protection channel to test removes its measurement from
+// trip voting and ESFAS triggering, so an injected stimulus on that
+// channel alone cannot actuate protections; with all channels in
+// service the same state actuates.
+//
+// "The protection system normally uses 2/4 logic but reverts to a
+// safe 2/3 logic when part of the system is being tested or is
+// involved in maintenance."
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:114-118
+func TestRPS_ChannelTestSuppressesTestedChannel(t *testing.T) {
+	lowSteamline := RPSLowSteamlinePressureTrip - 10
+
+	tested := ReactorProtectionSystem{ChannelTest: RPSSteamlineChannelInTest}
+	tested = tested.Step(lowSteamline, 50, CoreReferenceInletF, 0, 0)
+	assert.Equal(t, 0, tested.TripSignalCount,
+		"the isolated channel contributes no trip vote")
+	assert.False(t, tested.SafetyInjectionActuated,
+		"no SI actuation while the steamline channel is under test")
+	assert.False(t, tested.SteamlineIsolationActuated,
+		"steamline isolation stays clear during its own channel test")
+
+	inService := ReactorProtectionSystem{}
+	inService = inService.Step(lowSteamline, 50, CoreReferenceInletF, 0, 0)
+	assert.True(t, inService.SafetyInjectionActuated,
+		"with channels in service the same state actuates SI")
+
+	highContainment := RPSHighContainmentPressureTrip + 10
+	sprayTested := ReactorProtectionSystem{
+		ChannelTest: RPSContainmentChannelInTest}
+	sprayTested = sprayTested.Step(SteamGeneratorShellPressure, 50,
+		CoreReferenceInletF, highContainment, 0)
+	assert.False(t, sprayTested.ContainmentSprayActuated,
+		"containment spray stays clear during its channel test")
+	assert.False(t, sprayTested.ContainmentIsolationPhaseBActuated,
+		"Phase B isolation stays clear during the containment test")
+}
+
+// The scenario-1 gap-closure controls round-trip through the bridge.
+func TestBridge_Scenario1GapControlsRoundTrip(t *testing.T) {
+	p := MakePlant()
+	cm := GetControlMap(&p)
+
+	auto := cm["ReactorBuilding/ReactorMakeupControlValve/Auto"]
+	require.NotNil(t, auto, "want Auto control registered")
+	require.NoError(t, auto.Set("1"))
+	assert.Equal(t, "1", auto.Get())
+
+	channel := cm["ReactorBuilding/ReactorProtectionSystem/ChannelTest"]
+	require.NotNil(t, channel, "want ChannelTest control registered")
+	require.NoError(t, channel.Set("Tcold"))
+	assert.Equal(t, "Tcold", channel.Get())
+	require.Error(t, channel.Set("Bogus"),
+		"unknown enum values must be rejected")
+	assert.Equal(t, "Tcold", channel.Get(),
+		"a rejected set leaves the selection untouched")
+	require.NoError(t, channel.Set("None"))
+	assert.Equal(t, "None", channel.Get())
+
+	sm := GetSensorMap(&p)
+	for _, id := range []string{
+		"ReactorBuilding/ReactorMakeupControlValve/Initiated",
+		"ReactorBuilding/ReactorProtectionSystem/ChannelUnderTest",
+	} {
+		s, ok := sm[id]
+		require.Truef(t, ok, "want sensor %q registered", id)
+		out, err := s.Get()
+		require.NoErrorf(t, err, "Get %q", id)
+		assert.NotEmptyf(t, out, "want non-empty value from sensor %q", id)
+	}
 }

@@ -262,6 +262,31 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Automatic makeup engage switch: a VCT low-level signal
+	// initiates full makeup until the tank is restored to its
+	// design band.
+	// "Low-level signals from the volume control tank initiate
+	// reactor makeup control or flow from the refueling water
+	// storage tank as a backup."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:1-4
+	m["ReactorBuilding/ReactorMakeupControlValve/Auto"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorMakeupControlValve",
+		Label: "Auto",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.ReactorMakeupControlValve.Auto)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorMakeupControlValve.Auto = v
+			return nil
+		},
+	}
+
 	// Dispatcher load demand on the unit, as a fraction of rated
 	// electrical output. The DEHM latches it as the turbine's load
 	// reference each step.
@@ -532,6 +557,44 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 				return err
 			}
 			p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionBlocked = v
+			return nil
+		},
+	}
+
+	// Channel-under-test selector: isolates one monitored input
+	// for calibration/testing so an injected stimulus on that
+	// channel cannot actuate protections while the crew verifies
+	// the instrumentation.
+	// "The protection system normally uses 2/4 logic but reverts
+	// to a safe 2/3 logic when part of the system is being tested
+	// or is involved in maintenance."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:114-118
+	m["ReactorBuilding/ReactorProtectionSystem/ChannelTest"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorProtectionSystem",
+		Label: "ChannelTest",
+		Kind:  "enum",
+		Get: func() string {
+			return p.ReactorBuilding.ReactorProtectionSystem.ChannelTest.name()
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("enum", s)
+			if err != nil {
+				return err
+			}
+			switch validated {
+			case "Steamline":
+				p.ReactorBuilding.ReactorProtectionSystem.ChannelTest = RPSSteamlineChannelInTest
+			case "SGLevel":
+				p.ReactorBuilding.ReactorProtectionSystem.ChannelTest = RPSSGLevelChannelInTest
+			case "Tcold":
+				p.ReactorBuilding.ReactorProtectionSystem.ChannelTest = RPSTcoldChannelInTest
+			case "Containment":
+				p.ReactorBuilding.ReactorProtectionSystem.ChannelTest = RPSContainmentChannelInTest
+			case "None":
+				p.ReactorBuilding.ReactorProtectionSystem.ChannelTest = RPSNoChannelInTest
+			default:
+				return fmt.Errorf("invalid channel test %q", validated)
+			}
 			return nil
 		},
 	}
@@ -954,6 +1017,33 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("gpm",
 				p.ReactorBuilding.ReactorMakeupControlValve.Flow.Float())
+		},
+	}
+
+	// Makeup initiation status while the automatic mode is
+	// engaged: true from the VCT low-level signal until the tank
+	// is back inside its design band.
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:1-4
+	m["ReactorBuilding/ReactorMakeupControlValve/Initiated"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorMakeupControlValve",
+		Label: "Initiated",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.ReactorMakeupControlValve.Initiated)
+		},
+	}
+
+	// Channel-under-test status: which monitored input is
+	// currently isolated for calibration/testing.
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:114-118
+	m["ReactorBuilding/ReactorProtectionSystem/ChannelUnderTest"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorProtectionSystem",
+		Label: "ChannelUnderTest",
+		Kind:  "enum",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("enum",
+				p.ReactorBuilding.ReactorProtectionSystem.ChannelTest.name())
 		},
 	}
 

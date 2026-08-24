@@ -90,15 +90,22 @@ func (r *ReactorBuilding) Step(
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:32-38
 
 	// Reactor makeup control valve: the operator sets Open
-	// (0..1); Flow is the effective makeup rate actually delivered,
-	// clamped against the RWST inventory that sources it. Derived
-	// once per step so downstream consumers see a stable value.
+	// (0..1), or engages Auto to let a VCT low-level signal
+	// initiate makeup; Flow is the effective rate actually
+	// delivered, clamped against the RWST inventory that sources
+	// it. Derived once per step so downstream consumers see a
+	// stable value.
 	//
 	// Spec: "Low-level signals from the volume control tank initiate
 	// reactor makeup control or flow from the refueling water
 	// storage tank as a backup."
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:1-4
-	makeupDemand := ret.ReactorMakeupControlValve.Open *
+	// The initiation latch reads last step's VCT level (the CVCS
+	// steps later this timestep); the one-step lag matches the
+	// telemetry convention used elsewhere in this step.
+	mv := &ret.ReactorMakeupControlValve
+	mv.applyAutoMakeup(ret.Aux.ChemicalVolumeControlSystem.VCTLevel.Float())
+	makeupDemand := mv.effectiveOpen() *
 		ReactorMakeupDesignFlow.Float()
 	rwstLevel := ret.SafetyInjectionSystem.RWSTLevel.Float()
 	makeupRate := min(makeupDemand, rwstLevel/dt.Seconds())
