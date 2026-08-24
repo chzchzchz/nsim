@@ -168,6 +168,21 @@ const (
 	tintRed   = "#e02020"
 )
 
+// Themeable palette: surfaces and strokes route through --pid-*
+// custom properties so dark-mode theming lives entirely in the
+// host page; fallbacks preserve the light theme for static
+// exports. Alarm and status colours stay literal so deviation
+// semantics cannot be themed away.
+const (
+	pidBackground   = "var(--pid-bg,#f5f5f5)"
+	pidBuildingEdge = "var(--pid-stroke,#999)"
+	pidText         = "var(--pid-text,#000)"
+	pidDotEdge      = "var(--pid-dot-edge,#333)"
+	focusRing       = "var(--pid-focus,#1e90ff)"
+	statusOn        = "green"
+	statusOff       = "#aaa"
+)
+
 // alarmTints maps an active alarm to affected part ids and a halo
 // colour. Red (trip) outranks amber (warning) when both apply.
 var alarmTints = []struct {
@@ -398,6 +413,16 @@ func valveWedgePath(at Anchor, r, open float64) string {
 		at.X, at.Y, x0, y0, r, r, large, x1, y1)
 }
 
+// partLabel derives a human-readable aria-label from the bridge
+// part path so every diagram group is describable without a
+// second caption table that could drift.
+func partLabel(part string) string {
+	if i := strings.LastIndex(part, "/"); i >= 0 {
+		return part[i+1:]
+	}
+	return part
+}
+
 // WritePlantSVG writes a P&ID-style SVG of the given plant to w
 // using the package-default layout.
 func WritePlantSVG(w io.Writer, p *core.Plant) error {
@@ -438,6 +463,13 @@ const flowStyleCSS = `<style>` +
 	`@keyframes nsimflow{to{stroke-dashoffset:-18;}}` +
 	`</style>` + "\n"
 
+// partFocusCSS gives keyboard operators a visible ring while a
+// part group holds tab focus.
+const partFocusCSS = `<style>` +
+	`g[data-part]{outline:none;}` +
+	`g[data-part]:focus{outline:2px solid ` + focusRing + `;outline-offset:2px;}` +
+	`</style>` + "\n"
+
 func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error {
 	r := newRenderer(l)
 	var b strings.Builder
@@ -446,7 +478,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	fmt.Fprintf(&b,
 		`<svg xmlns="http://www.w3.org/2000/svg" width="%.0fpx" height="%.0fpx" viewBox="0 0 %.0f %.0f" style="--phase:%gms">`+"\n",
 		DocumentWidth, DocumentHeight, DocumentWidth, DocumentHeight, o.PhaseMs)
-	b.WriteString(`<title>PWR plant P\u0026ID</title>` + "\n")
+	b.WriteString(`<title>PWR plant P&amp;ID</title>` + "\n")
 
 	// defs: every symbol referenced by the diagram, loaded from
 	// the embedded asset library under core/svg/assets.
@@ -467,7 +499,12 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	b.WriteString(DieselAsset)
 	b.WriteString(PipeArrowMarkers())
 	b.WriteString(flowStyleCSS)
+	b.WriteString(partFocusCSS)
 	b.WriteString("</defs>\n")
+
+	// Everything visual sits in one viewport group so embedders can
+	// add pan/zoom transforms without touching document markup.
+	b.WriteString(`<g id="viewport">` + "\n")
 
 	useAt := func(sym string, cx, cy, w, h float64) string {
 		return fmt.Sprintf(
@@ -476,12 +513,18 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			sym, cx-w/2, cy-h/2, w, h)
 	}
 	writeLabel := func(x, y float64, text string) {
-		fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="10" `+
-			`text-anchor="middle">%s</text>`+"\n", x, y, html.EscapeString(text))
+		fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="10" fill="%s" `+
+			`text-anchor="middle">%s</text>`+"\n", x, y, pidText, html.EscapeString(text))
 	}
 	writePartEl := func(part, frag string) {
-		fmt.Fprintf(&b, `<g data-part="%s">%s</g>`+"\n", html.EscapeString(part), frag)
+		fmt.Fprintf(&b,
+			`<g data-part="%s" role="img" aria-label="%s" tabindex="0">%s</g>`+"\n",
+			html.EscapeString(part), html.EscapeString(partLabel(part)), frag)
 	}
+
+	// Containment psig drives both the readout and the over-pressure
+	// dome wash below.
+	contPsig := float64(p.ReactorBuilding.ContainmentPressure - core.AtmosphericPressure)
 
 	// Building outlines derive from cluster membership so they
 	// always enclose the symbols graphviz grouped together. The
@@ -502,12 +545,23 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		if name == "cluster_containment" {
 			writePartEl("ReactorBuilding/ContainmentBuilding",
 				useAt("containment-dome", bx+bw/2, by+bh/2, bw, bh))
+			// Over-pressure wash: above the 60 psig containment
+			// design pressure the outline gets a translucent red
+			// fill plus heavy stroke.
+			//   "Transients resulting from the DBA serve as the basis
+			//    for a containment design pressure of 60 psig (4.46 bar)."
+			//   specs/the_westinghouse_pressurized_water_react/chapter_6/page_110.txt:27-30
+			if contPsig > float64(core.ContainmentDesignPressure) {
+				fmt.Fprintf(&b,
+					`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" class="dome-wash" fill="%s" fill-opacity="0.12" stroke="%s" stroke-width="3"/>`+"\n",
+					bx, by, bw, bh, tintRed, tintRed)
+			}
 			writeLabel(bx+bw/2, by-6, buildingLabels[name])
 			continue
 		}
 		fmt.Fprintf(&b, `<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" `+
-			`fill="#f5f5f5" stroke="#999" stroke-width="1.5"/>`+"\n",
-			bx, by, bw, bh)
+			`fill="%s" stroke="%s" stroke-width="1.5"/>`+"\n",
+			bx, by, bw, bh, pidBackground, pidBuildingEdge)
 		writeLabel(bx+bw/2, by+14, buildingLabels[name])
 	}
 
@@ -599,13 +653,13 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			pu := acc(p)
 			dotR := math.Max(3, sw*0.06)
 			dx, dyDot := sw*0.38, -sh*0.42
-			dotColour := "#aaa"
+			dotColour := statusOff
 			if pu.Running {
-				dotColour = "green"
+				dotColour = statusOn
 			}
 			fmt.Fprintf(&b,
-				`<circle cx="%.0f" cy="%.0f" r="%.0f" fill="%s" stroke="#333" stroke-width="1"/>`+"\n",
-				a.X+dx, a.Y+dyDot, dotR, dotColour)
+				`<circle cx="%.0f" cy="%.0f" r="%.0f" fill="%s" stroke="%s" stroke-width="1"/>`+"\n",
+				a.X+dx, a.Y+dyDot, dotR, dotColour, pidDotEdge)
 			if pu.Velocity > 0 {
 				writeLabel(a.X+dx, a.Y+dyDot+dotR+9,
 					fmt.Sprintf("%d rpm", int(pu.Velocity)))
@@ -613,13 +667,16 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		} else if run, okR := runAccessors[dp.id]; okR && run(p) {
 			dotR := math.Max(3, sw*0.06)
 			fmt.Fprintf(&b,
-				`<circle cx="%.0f" cy="%.0f" r="%.0f" fill="green" stroke="#333" stroke-width="1"/>`+"\n",
-				a.X+sw*0.38, a.Y-sh*0.42, dotR)
+				`<circle cx="%.0f" cy="%.0f" r="%.0f" fill="%s" stroke="%s" stroke-width="1"/>`+"\n",
+				a.X+sw*0.38, a.Y-sh*0.42, dotR, statusOn, pidDotEdge)
 		}
 	}
 
 	// Live overlays: readouts and alarm rings track their symbols.
 	r.writeLiveOverlays(&b, p)
+
+	writeLegend(&b)
+	b.WriteString("</g>\n")
 
 	if len(r.missing) > 0 {
 		ids := make([]string, 0, len(r.missing))
@@ -758,8 +815,9 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant) {
 		}
 	}
 
-	// Containment pressure readout above the dome label; the red
-	// dome ring appears above design pressure.
+	// Containment pressure readout above the dome label; the
+	// translucent red dome wash appears above design pressure
+	// (see the containment-outline pass in writePlantSVG).
 	cp := p.ReactorBuilding.ContainmentPressure - core.AtmosphericPressure
 	if cont, ok := r.containmentTop(); ok {
 		text(cont, -8, fmt.Sprintf("Cont %.1f psig", float64(cp)))
@@ -786,6 +844,81 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant) {
 			ring(a, (w+h)/2*rd.frac, rd.colour)
 		}
 	}
+}
+
+// pipeLegendLabels captions each colour in pipeColours so the
+// legend is generated from the same table as the arrow markers
+// and cannot drift from the pipes actually drawn.
+var pipeLegendLabels = map[string]string{
+	"red":   "RCS",
+	"brown": "steam / condensate",
+	"blue":  "feedwater",
+	"black": "other",
+}
+
+// legendEntry is one labelled swatch in the docked legend row.
+type legendEntry struct {
+	colour string
+	text   string
+	swatch string
+}
+
+// writeLegend docks a one-line key under the mimic: pipe colours
+// from pipeColours, then status-dot and alarm-halo semantics
+// reused verbatim from the overlay constants.
+func writeLegend(b *strings.Builder) {
+	entries := make([]legendEntry, 0, len(pipeColours)+4)
+	for _, c := range pipeColours {
+		label, ok := pipeLegendLabels[c]
+		if !ok {
+			label = c
+		}
+		entries = append(entries, legendEntry{colour: c, text: label, swatch: "line"})
+	}
+	entries = append(entries,
+		legendEntry{colour: statusOn, text: "running", swatch: "dot"},
+		legendEntry{colour: statusOff, text: "standby", swatch: "dot"},
+		legendEntry{colour: tintAmber, text: "warning", swatch: "halo"},
+		legendEntry{colour: tintRed, text: "trip", swatch: "halo"},
+	)
+
+	const (
+		baseY     = DocumentHeight - 10
+		fontSize  = 10
+		charW     = 5.5
+		padX      = 14.0
+		gap       = 26.0
+		swatchLen = 16.0
+		dotR      = 3.5
+		haloSide  = 9.0
+	)
+	x := padX
+	b.WriteString(`<g id="legend">` + "\n")
+	for _, e := range entries {
+		switch e.swatch {
+		case "line":
+			fmt.Fprintf(b,
+				`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="2"/>`,
+				x, baseY, x+swatchLen, baseY, e.colour)
+			x += swatchLen + 4
+		case "dot":
+			cy := baseY - 3.0
+			fmt.Fprintf(b,
+				`<circle cx="%.0f" cy="%.0f" r="%.1f" fill="%s" stroke="%s" stroke-width="1"/>`,
+				x+dotR, cy, dotR, e.colour, pidDotEdge)
+			x += dotR*2 + 4
+		case "halo":
+			fmt.Fprintf(b,
+				`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" rx="2" fill="none" stroke="%s" stroke-width="2"/>`,
+				x, baseY-haloSide+3, haloSide, haloSide, e.colour)
+			x += haloSide + 4
+		}
+		fmt.Fprintf(b,
+			`<text x="%.0f" y="%.0f" font-size="%d" fill="%s">%s</text>`+"\n",
+			x, baseY+3, fontSize, pidText, html.EscapeString(e.text))
+		x += float64(len(e.text))*charW + gap
+	}
+	b.WriteString("</g>\n")
 }
 
 // DebugLayout writes an SVG overlay showing the bounding box and

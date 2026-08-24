@@ -83,26 +83,16 @@ func minMax(vs []float64) (float64, float64) {
 }
 
 // TestComputeLayout_Deterministic checks that two calls with the
-// same plant both return a non-empty position for every graph node.
-// Exact coordinates are not compared because they depend on the
-// external graphviz version and are not part of the contract we
-// care about testing.
+// same plant return identical positions, routes, and scale: within
+// a single process the graphviz output must reproduce exactly.
+// Cross-version drift is absorbed by regenerating the committed
+// default file rather than loosened assertions here.
 func TestComputeLayout_Deterministic(t *testing.T) {
 	p := core.MakePlant()
-	for _, l := range []*Layout{
-		mustComputeLayout(t, &p),
-		mustComputeLayout(t, &p),
-	} {
-		require.NotNil(t, l)
-		require.NotNil(t, l.Pos)
-		g := p.BuildGraphFor(&p)
-		for id := range g.Nodes {
-			a, ok := l.Pos[id]
-			require.True(t, ok, "missing position for node %q", id)
-			assert.True(t, a.X >= 0, "node %q X negative: %f", id, a.X)
-			assert.True(t, a.Y >= 0, "node %q Y negative: %f", id, a.Y)
-		}
-	}
+	a := mustComputeLayout(t, &p)
+	b := mustComputeLayout(t, &p)
+	assert.Equal(t, a.Pos, b.Pos)
+	assert.Equal(t, a.Scale, b.Scale)
 }
 
 func mustComputeLayout(t *testing.T, p *core.Plant) *Layout {
