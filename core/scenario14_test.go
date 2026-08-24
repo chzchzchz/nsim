@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	u "github.com/bcicen/go-units"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -218,4 +220,35 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 		"breaker stays closed supplying station auxiliaries")
 	assert.False(t, p.TurbineBuilding.Turbine.OPCTrip)
 	assert.False(t, p.TurbineBuilding.Turbine.TripByVacuum)
+}
+
+// Critical hot-zero-power operation became expressible when the
+// temperature feedback split into a power-weighted Doppler base plus
+// the moderator interpolation: at zero power the Doppler term vanishes,
+// so criticality at the no-load temperature is a pure boron solve.
+// The solved concentration sits just under the reference shim, which
+// is what makes "hold critical HZP" an operator-expressible lineup.
+//
+//   - Power defect definition (why the Doppler term vanishes at
+//     zero power):
+//     specs/the_westinghouse_pressurized_water_react/back_matter/page_244.txt:60-62
+func TestScenario14_HZPCriticalityExpressible(t *testing.T) {
+	const hzpBoron = 975.7 // solves rho = 0 at 558 F, rods out, xe at rated eq
+
+	r := ReactorPressureVessel{
+		ControlRods:        ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: hzpBoron},
+		Inlet:              Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
+		Outlet:             Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
+	}
+	r.SeedSteadyStatePower(0)
+	r.Iodine135 = 1.0
+	r.Xenon135 = xenonEquilibriumPhysical(1.0)
+	r.Step(RCPRatedSpeed, 0)
+
+	assert.InDelta(t, 0.0, float64(r.Reactivity), 1e-3,
+		"critical hot-zero-power must be expressible near the reference shim, rho=%v",
+		r.Reactivity)
+	assert.Equal(t, hzpBoron,
+		float64(r.ControlRods.BoronConcentration),
+		"reactivity must be evaluated at the sampled boron value")
 }
