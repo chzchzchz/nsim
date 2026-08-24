@@ -136,6 +136,8 @@ var diagramParts = []diagramPart{
 	{"SFPHX", "AuxiliaryBuilding/SpentFuelPoolCoolingSystem/HX", "ComponentCoolingWaterSystem", "SFP HX"},
 	{"SCCWPump", "TurbineBuilding/Generator/StatorCooling", "StatorCoolingPump", "SCCW Pump"},
 	{"INVERTER", "ReactorBuilding/PlantElectricalSystems/Inverters", "InverterBus", "Inverter"},
+	{"BTRS", "AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRS", "BTRSDemineralizer", "BTRS"},
+	{"BTRSPUMP", "AuxiliaryBuilding/ChemicalVolumeControlSystem", "BTRSPump", "BTRS Pump"},
 }
 
 // buildingLabels captions the cluster outlines drawn behind symbols.
@@ -257,6 +259,9 @@ var runAccessors = map[string]func(*core.Plant) bool{
 	},
 	"INVERTER": func(p *core.Plant) bool {
 		return p.ReactorBuilding.PlantElectricalSystems.InverterPowerAvailable
+	},
+	"BTRSPUMP": func(p *core.Plant) bool {
+		return p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning
 	},
 }
 
@@ -956,6 +961,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	b.WriteString(DieselAsset)
 	b.WriteString(CoolingTowerAsset)
 	b.WriteString(CircWaterAsset)
+	b.WriteString(CVCSAsset)
 	b.WriteString(PipeArrowMarkers())
 	b.WriteString(flowStyleCSS)
 	b.WriteString(partFocusCSS)

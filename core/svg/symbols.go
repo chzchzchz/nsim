@@ -70,6 +70,8 @@ var symbolTable = map[string]symbolSpec{
 	"BrushlessExciter":             {60.0 / 96.0, 50.0 / 96.0, "exciter.svg"},
 	"StatorCoolingPump":            {60.0 / 96.0, 40.0 / 96.0, "pump-horizontal.svg"},
 	"InverterBus":                  {40.0 / 96.0, 30.0 / 96.0, "inverter-bus.svg"},
+	"BTRSDemineralizer":            {50.0 / 96.0, 80.0 / 96.0, "btrs-demineralizer.svg"},
+	"BTRSPump":                     {60.0 / 96.0, 40.0 / 96.0, "pump-horizontal.svg"},
 	"safety":                       {20.0 / 96.0, 20.0 / 96.0, "valve-safety.svg"},
 	"relief":                       {20.0 / 96.0, 20.0 / 96.0, "valve-relief.svg"},
 	"porv":                         {24.0 / 96.0, 20.0 / 96.0, "valve-porv.svg"},

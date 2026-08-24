@@ -394,6 +394,8 @@ func TestStatorCoolingAndInvertersRender(t *testing.T) {
 	out := renderPlant(t, &p)
 	assert.Contains(t, out, ">SCCW Pump<")
 	assert.Contains(t, out, ">Inverter<")
+	assert.Contains(t, out, ">BTRS<")
+	assert.Contains(t, out, ">BTRS Pump<")
 	assert.NotContains(t, out, "anchors missing")
 
 	// The plant builds with inverters available, so that dot is in
@@ -404,8 +406,14 @@ func TestStatorCoolingAndInvertersRender(t *testing.T) {
 	assert.Equal(t, base+1, withPump,
 		"a running SCCW pump must draw its run dot")
 
+	// BTRS recirculation lights the demineralizer skid's pump dot.
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
+	assert.Equal(t, base+2,
+		strings.Count(renderPlant(t, &p), `fill="green"`),
+		"a running BTRS pump must draw its run dot")
+
 	p.ReactorBuilding.PlantElectricalSystems.InverterPowerAvailable = false
-	assert.Equal(t, base,
+	assert.Equal(t, base+1,
 		strings.Count(renderPlant(t, &p), `fill="green"`),
 		"losing inverter power must extinguish its availability dot")
 }

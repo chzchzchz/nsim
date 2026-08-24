@@ -124,6 +124,12 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	{"SCCWPump", "cluster_turbine", "StatorCoolingPump"},
 	{"INVERTER", "cluster_electrical", "InverterBus"},
 
+	// BTRS recirculation: pump routes VCT flow through the
+	// demineralizer beds during boration and dilution
+	// (specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:37-39).
+	{"BTRS", "cluster_auxiliary", "BTRSDemineralizer"},
+	{"BTRSPUMP", "cluster_auxiliary", "BTRSPump"},
+
 	// Moisture separator reheater between the HP/LP turbine
 	// sections (chapter_15 figure 15.3-1 steam path).
 	{"MSR", "cluster_turbine", "MoistureSeparatorReheater"},
@@ -200,7 +206,7 @@ var clusterFor = map[string]string{
 func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 	var b strings.Builder
 	b.WriteString("digraph plant {\n")
-	b.WriteString(`  graph [splines=true, overlap=false, sep="+8,+8", nodesep=0.22, ranksep=0.38, dpi=96];` + "\n")
+	b.WriteString(`  graph [splines=true, overlap=false, sep="+8,+8", nodesep=0.18, ranksep=0.44, dpi=96];` + "\n")
 	b.WriteString(`  node [shape=none];` + "\n")
 
 	// Cluster definitions, keyed by cluster name.
