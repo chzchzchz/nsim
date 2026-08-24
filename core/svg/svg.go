@@ -183,30 +183,84 @@ const (
 	statusOff       = "#aaa"
 )
 
-// alarmTints maps an active alarm to affected part ids and a halo
-// colour. Red (trip) outranks amber (warning) when both apply.
-var alarmTints = []struct {
-	alarm  core.AlarmID
-	ids    []string
+// alarmParts maps an active alarm to the diagram part ids its
+// condition relates to. Halo colour derives from the alarm's core
+// Severity (trip = red, otherwise amber) and blink state from its
+// acknowledgement, so a new alarm row cannot be mis-coloured.
+var alarmParts = map[core.AlarmID][]string{
+	core.AlarmIDOPCAlarm:              {"Turbine"},
+	core.AlarmIDOPCTrip:               {"Turbine"},
+	core.AlarmIDTurbineTripVacuum:     {"Turbine"},
+	core.AlarmIDTurbineTripBearingOil: {"Turbine"},
+	core.AlarmIDTurbineStepback:       {"Turbine"},
+	core.AlarmIDGeneratorMVALimit:     {"Generator"},
+	core.AlarmIDSCCWLowFlow:           {"Generator"},
+	core.AlarmIDSCCWNoFlow:            {"Generator"},
+	core.AlarmIDReactorTrip:           {"RPV", "RCP", "SG"},
+	core.AlarmIDDieselCoolant:         {"Diesel"},
+	core.AlarmIDDieselLowFuel:         {"Diesel"},
+	core.AlarmIDDieselTripped:         {"Diesel", "FuelTank"},
+	core.AlarmIDSGLowLevel:            {"SG"},
+	core.AlarmIDSGHighLevel:           {"SG"},
+	core.AlarmIDSIActuated:            {"SISAccumulators"},
+	core.AlarmIDAFWStart:              {"DieselAFWPump", "MotorAFWPump", "TurbineAFWPump"},
+	core.AlarmIDFeedwaterIsolation:    {"MainFeedValve"},
+}
+
+// haloTint is the resolved overlay state for one part: halo colour
+// plus whether it should flash (unacknowledged alarms flash until
+// the operator acks them, then hold steady).
+type haloTint struct {
 	colour string
-}{
-	{core.AlarmIDOPCAlarm, []string{"Turbine"}, tintAmber},
-	{core.AlarmIDOPCTrip, []string{"Turbine"}, tintRed},
-	{core.AlarmIDTurbineTripVacuum, []string{"Turbine"}, tintRed},
-	{core.AlarmIDTurbineTripBearingOil, []string{"Turbine"}, tintRed},
-	{core.AlarmIDTurbineStepback, []string{"Turbine"}, tintAmber},
-	{core.AlarmIDGeneratorMVALimit, []string{"Generator"}, tintAmber},
-	{core.AlarmIDSCCWLowFlow, []string{"Generator"}, tintAmber},
-	{core.AlarmIDSCCWNoFlow, []string{"Generator"}, tintRed},
-	{core.AlarmIDReactorTrip, []string{"RPV", "RCP", "SG"}, tintRed},
-	{core.AlarmIDDieselCoolant, []string{"Diesel"}, tintAmber},
-	{core.AlarmIDDieselLowFuel, []string{"Diesel"}, tintAmber},
-	{core.AlarmIDDieselTripped, []string{"Diesel", "FuelTank"}, tintRed},
-	{core.AlarmIDSGLowLevel, []string{"SG"}, tintAmber},
-	{core.AlarmIDSGHighLevel, []string{"SG"}, tintAmber},
-	{core.AlarmIDSIActuated, []string{"SISAccumulators"}, tintRed},
-	{core.AlarmIDAFWStart, []string{"DieselAFWPump", "MotorAFWPump", "TurbineAFWPump"}, tintAmber},
-	{core.AlarmIDFeedwaterIsolation, []string{"MainFeedValve"}, tintRed},
+	blink  bool
+}
+
+// tintRank orders competing halos on one part: trip over warning,
+// then flashing over acknowledged.
+func tintRank(t haloTint) int {
+	rank := 1
+	if t.colour == tintRed {
+		rank = 2
+	}
+	return rank*2 + boolToInt(t.blink)
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// tintFor resolves the worst active alarm touching a diagram part.
+// Alarms() only returns currently-active conditions, already stamped
+// with control-room acknowledgement state.
+func tintFor(p *core.Plant, id string) (haloTint, bool) {
+	active := map[core.AlarmID]haloTint{}
+	for _, a := range p.Alarms() {
+		colour := tintAmber
+		if a.Severity == core.SeverityTrip {
+			colour = tintRed
+		}
+		active[a.ID] = haloTint{colour: colour, blink: !a.Acknowledged}
+	}
+	worst, found := haloTint{}, false
+	for aid, ids := range alarmParts {
+		hint, ok := active[aid]
+		if !ok {
+			continue
+		}
+		for _, pid := range ids {
+			if pid != id {
+				continue
+			}
+			if !found || tintRank(hint) > tintRank(worst) {
+				worst = hint
+				found = true
+			}
+		}
+	}
+	return worst, found
 }
 
 // renderer composes one SVG document against a specific layout,
@@ -470,6 +524,15 @@ const partFocusCSS = `<style>` +
 	`g[data-part]:focus{outline:2px solid ` + focusRing + `;outline-offset:2px;}` +
 	`</style>` + "\n"
 
+// blinkStyleCSS flashes unacknowledged alarm halos until the
+// operator acks them; the phase comes from the root element's
+// --phase so remounts continue mid-cycle like .flow does.
+const blinkStyleCSS = `<style>` +
+	`.blink{animation:nsimblink 1s steps(1,end) infinite;` +
+	`animation-delay:calc(var(--phase,0)*-1ms);}` +
+	`@keyframes nsimblink{0%,49%{opacity:1;}50%,100%{opacity:0;}}` +
+	`</style>` + "\n"
+
 func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error {
 	r := newRenderer(l)
 	var b strings.Builder
@@ -500,6 +563,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	b.WriteString(PipeArrowMarkers())
 	b.WriteString(flowStyleCSS)
 	b.WriteString(partFocusCSS)
+	b.WriteString(blinkStyleCSS)
 	b.WriteString("</defs>\n")
 
 	// Everything visual sits in one viewport group so embedders can
@@ -604,31 +668,6 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		}
 	}
 
-	// Alarm tinting: parts related to an active alarm get a halo
-	// outline (amber = warning, red = trip) so deviation reads at
-	// a glance without consulting the alarm list.
-	active := map[core.AlarmID]bool{}
-	for _, a := range p.Alarms() {
-		active[a.ID] = true
-	}
-	tintFor := func(id string) string {
-		worst := ""
-		for _, t := range alarmTints {
-			if !active[t.alarm] {
-				continue
-			}
-			for _, pid := range t.ids {
-				if pid == id {
-					if t.colour == tintRed {
-						return tintRed
-					}
-					worst = t.colour
-				}
-			}
-		}
-		return worst
-	}
-
 	// Symbols bound to parts for the live web UI. Pump-backed
 	// parts also get a run-status dot and speed readout so static
 	// exports carry state the web UI otherwise injects.
@@ -640,10 +679,14 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		}
 		sw, sh := r.size(dp.kind)
 		writePartEl(dp.part, useAt(symbolID(dp.kind), a.X, a.Y, sw, sh))
-		if col := tintFor(dp.id); col != "" {
+		if tint, ok := tintFor(p, dp.id); ok {
+			class := ""
+			if tint.blink {
+				class = ` class="blink"`
+			}
 			fmt.Fprintf(&b,
-				`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" rx="3" fill="none" stroke="%s" stroke-width="2"/>`+"\n",
-				a.X-sw/2-3, a.Y-sh/2-3, sw+6, sh+6, col)
+				`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" rx="3"%s fill="none" stroke="%s" stroke-width="2"/>`+"\n",
+				a.X-sw/2-3, a.Y-sh/2-3, sw+6, sh+6, class, tint.colour)
 		}
 		if dp.label != "" {
 			writeLabel(a.X, a.Y-sh/2-6, dp.label)

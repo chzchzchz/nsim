@@ -71,6 +71,22 @@ func TestOverlay_Coverage(t *testing.T) {
 			`stroke="#e02020"`))
 	})
 
+	t.Run("halos flash until acknowledged", func(t *testing.T) {
+		p := core.MakePlant()
+		p.TurbineBuilding.Turbine.OPCAlarm = true
+		out := renderPlant(t, &p)
+		assert.Contains(t, out, `stroke="#f0a500"`)
+		assert.Contains(t, out, `class="blink"`)
+
+		p.ReactorBuilding.PlantControlRoom.AlarmSet = map[core.AlarmID]core.Alarm{
+			core.AlarmIDOPCAlarm: {Active: true, Acknowledged: true},
+		}
+		out = renderPlant(t, &p)
+		assert.Contains(t, out, `stroke="#f0a500"`,
+			"acknowledged alarm must hold a steady halo")
+		assert.NotContains(t, out, `class="blink"`)
+	})
+
 	t.Run("sg readout gates on volume", func(t *testing.T) {
 		p := core.MakePlant()
 		sg := &p.ReactorBuilding.SteamGenerator
