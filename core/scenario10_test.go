@@ -115,6 +115,16 @@ func TestScenario10_RodInsertionShutsDownReactor(t *testing.T) {
 	overrideTimeStep(t, 10*time.Millisecond)
 	p := scenario10FullPowerPlant()
 
+	// A planned shutdown blocks the SI initiation signals before the
+	// collapsing header can cross their setpoints, so the shutdown
+	// itself cannot vote a trip through the SI channel.
+	// "Prior to reaching the automatic safety injection setpoints
+	// during cooldown and depressurization, the safety injection
+	// initiation signals are blocked."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:108-110
+	setControl(t, &p,
+		"ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock",
+		"true")
 	setControl(t, &p, "ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion", "1")
 	stepN(&p, int(60*time.Second/TimeStep))
 

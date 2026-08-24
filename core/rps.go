@@ -99,7 +99,14 @@ func (r *ReactorProtectionSystem) Step(
 	if ret.ReactorTripped {
 		// Latched; stays tripped until manually reset.
 	} else if ret.TripSignalCount >= RPSTripVotingThreshold ||
-		ret.ManualTrip {
+		ret.ManualTrip ||
+		ret.SafetyInjectionActuated {
+		// An SI signal votes the trip directly: "Safety injection
+		// signal - Actuation of the Safety Injection System
+		// simultaneously initiates a reactor trip". The latch read
+		// here is the previous step's, so the trip lands within one
+		// timestep of the actuation.
+		// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:38-40
 		ret.ReactorTripped = true
 	}
 

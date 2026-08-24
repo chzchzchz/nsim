@@ -319,6 +319,31 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Automatic pressurizer pressure regulation (chapter 16 trip
+	// response): "Pressurizer pressure will recover as pressurizer
+	// heaters automatically energize." While armed, the heaters cycle
+	// inside PressurizerAutoHeaterBand of the heater target and the
+	// HeatersOn latch becomes a manual override.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:95-98
+	m["ReactorBuilding/Pressurizer/HeaterAutoControl"] = &bridge.Control{
+		Part:  "ReactorBuilding/Pressurizer",
+		Label: "HeaterAutoControl",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.Pressurizer.HeaterAutoControl)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.Pressurizer.HeaterAutoControl = v
+			return nil
+		},
+	}
+
+
 	// Pressurizer power-operated relief valve (chapter 3
 	// pressure-limiting train):
 	// "Reductions in plant electrical load with resultant
@@ -507,6 +532,32 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 				return err
 			}
 			p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionBlocked = v
+			return nil
+		},
+	}
+
+
+	// Manual safety-injection pushbutton. Table 7-1 lists "Manual
+	// safety injection" among the Safety Injection triggers,
+	// separate from the manual reactor trip; it also carries the
+	// manual entries of the Steamline Isolation and Phase A
+	// containment-isolation lists, for which no dedicated
+	// pushbuttons are modeled.
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:8-21
+	m["ReactorBuilding/ReactorProtectionSystem/ManualSI"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorProtectionSystem",
+		Label: "ManualSI",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.ReactorProtectionSystem.ManualSI)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorProtectionSystem.ManualSI = v
 			return nil
 		},
 	}

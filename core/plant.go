@@ -382,28 +382,13 @@ rcsPressurePsig := float64(ret.Pressurizer.Pressure - AtmosphericPressure)
 	}
 	ret.SteamGenerator = ret.SteamGenerator.Step(sgSteamOutflowFraction)
 
-	// Pressurizer surge line. The RCS is a fixed inventory of
-	// water whose density follows the coolant temperature, so the
-	// loop "breathes" into and out of the pressurizer as Tavg
-	// moves: heating expands the loop and lifts pressurizer level,
-	// cooling contracts it and drains the tank. The coefficient is
-	// an assumption (the spec quotes no expansion data): it is
-	// sized so a full core-reference-temperature maneuver
-	// (558→621°F) displaces roughly 40 percent of pressurizer
-	// volume, the level swing operators see across the program.
+	// Surge line: the loop "breathes" into and out of the pressurizer
+	// as coolant temperature moves; the displacement itself lives in
+	// Pressurizer.Step (PZRSurgeGalPerF against the previous hot-leg
+	// temperature), which also owns the bubble bookkeeping.
 	//   "Raise pressurizer level above no-load value in
 	//    anticipation of coolant contraction"
 	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:70-72
-	surge := PressurizerSurgePerDegF * (ret.ReactorPressureVessel.Outlet.Float() - rpvOutletPreStepF)
-	if surge > -1e-6 && surge < 1e-6 {
-		surge = 0
-	}
-	pzrWater := min(max(ret.Pressurizer.Water.Float()+surge, 0),
-		ret.Pressurizer.Volume.Float())
-	ret.Pressurizer.SteamBubble = Volume{
-		Val: ret.Pressurizer.Volume.Float() - pzrWater, Unit: u.Gallon,
-	}
-	ret.Pressurizer.Water = Volume{Val: pzrWater, Unit: u.Gallon}
 
 	// SIS: passive accumulator discharge and HHSI pump
 	// injection. The accumulator discharges into the RCS cold

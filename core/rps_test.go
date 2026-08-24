@@ -200,13 +200,22 @@ func TestRPS_LowTcoldBlockedBelowAtPowerPermissive(t *testing.T) {
 	assert.False(t, r1.SteamlineIsolationActuated)
 
 	// Above the permissive low Tcold counts as one voted signal
-	// (not enough to trip alone) and actuates SI.
+	// (not enough to trip alone) and actuates SI, which then votes
+	// the trip itself: "Actuation of the Safety Injection System
+	// simultaneously initiates a reactor trip." The vote reads the
+	// previous step's SI latch, so the trip lands one step later.
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:38-40
 	r2 := r.Step(SteamGeneratorShellPressure, 50,
 		coldTcold, 0, RPSAtPowerPermissiveFraction*2)
 	assert.Equal(t, 1, r2.TripSignalCount,
 		"want exactly the low-Tcold signal above the permissive")
-	assert.False(t, r2.ReactorTripped)
 	assert.True(t, r2.SafetyInjectionActuated)
+	assert.False(t, r2.ReactorTripped,
+		"the SI latch lands this step")
+	r3 := r2.Step(SteamGeneratorShellPressure, 50,
+		coldTcold, 0, RPSAtPowerPermissiveFraction*2)
+	assert.True(t, r3.ReactorTripped,
+		"SI actuation must initiate the reactor trip")
 }
 
 // When the plant wires RPS into Plant.Step, the

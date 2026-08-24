@@ -69,6 +69,19 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 		"ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion",
 		"0.01178")
 
+	// The descent is a planned, controlled depressurization: the
+	// compressed setpoint chase legitimately sags the header below
+	// the low-steamline SI setpoint late in the glide, so the
+	// initiation signals are blocked first, as an operator would
+	// before a planned cooldown crossing them.
+	// "Prior to reaching the automatic safety injection setpoints
+	// during cooldown and depressurization, the safety injection
+	// initiation signals are blocked."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:108-110
+	setControl(t, &p,
+		"ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock",
+		"true")
+
 	totalMW := func() float64 {
 		return float64(p.ReactorBuilding.ReactorPressureVessel.
 			TotalThermalPower()) / 1e6
@@ -110,10 +123,10 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 			// artificially healthy.
 			if float64(p.ReactorBuilding.SteamGenerator.Pressure) <
 				float64(RPSLowSteamlinePressureTrip) {
-				assert.True(t, p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionActuated,
-					"low steamline pressure must actuate safety injection")
+				assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionActuated,
+					"the armed block must hold SI off across the crossing")
 				assert.True(t, p.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationActuated,
-					"low steamline pressure must isolate the steamlines")
+					"steamline isolation is not covered by the block and must engage")
 			}
 			// The chase can locally undershoot the falling heat
 			// input; the surplus (at most the 8 percent step)

@@ -32,6 +32,26 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
 	dt := TimeStep
 	satFloor := float64(PressurizerSatPressure(rcsTemp.Float()))
 
+	// Automatic pressure regulation. The thermostat latches the
+	// heaters on once the pressure sags below the band around the
+	// heater target and releases them at the target; the sag itself
+	// comes from the idle-condensation and surge paths above. Inside
+	// the band the previous latch state holds, so the pair regulates
+	// without chattering.
+	//   "Pressurizer pressure will recover as pressurizer heaters
+	//    automatically energize."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:97-98
+	heaters := ret.HeatersOn
+	if ret.HeaterAutoControl {
+		switch {
+		case ret.Pressure <= PressurizerHeaterTarget-PressurizerAutoHeaterBand:
+			ret.AutoHeatersOn = true
+		case ret.Pressure >= PressurizerHeaterTarget:
+			ret.AutoHeatersOn = false
+		}
+		heaters = heaters || ret.AutoHeatersOn
+	}
+
 	// Thermal-expansion surge: the loop inventory drains the
 	// pressurizer on cooldown and refills it on heatup, moving the
 	// bubble boundary (page_227.txt:68-72). The clamped bounds are
@@ -52,7 +72,7 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
 	// "All pressurizer heaters are energized to start the heatup of
 	// the pressurizer necessary to form the steam bubble."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:15-17
-	if ret.HeatersOn && ret.Water.Float() > 0 {
+	if heaters && ret.Water.Float() > 0 {
 		psiRise := min(float64(PressurizerHeaterRate)*dt.Seconds(),
 			float64(PressurizerHeaterTarget)-float64(ret.Pressure))
 		if psiRise > 0 {
@@ -118,7 +138,7 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
 	// pressure-temperature limits."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:81-82,
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:94-96
-	if !ret.HeatersOn && ret.SprayOpen == 0 && auxSpray == 0 {
+	if !heaters && ret.SprayOpen == 0 && auxSpray == 0 {
 		base := satFloor
 		psiDrop := float64(PressurizerAmbientDecay) * dt.Seconds()
 		psiDrop = min(psiDrop, float64(ret.Pressure)-base)
@@ -227,6 +247,19 @@ type Pressurizer struct {
 	SprayOpen   float64
 	SteamBubble Volume
 
+	// HeaterAutoControl arms the automatic pressure regulation
+	// described on page_233.txt:97-98: "Pressurizer pressure will
+	// recover as pressurizer heaters automatically energize." While
+	// armed, the operator's HeatersOn latch becomes a manual override
+	// and the heaters cycle inside PressurizerAutoHeaterBand of the
+	// heater target instead.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:95-98
+	HeaterAutoControl bool
+
+	// AutoHeatersOn is the derived thermostat latch of the armed
+	// automatic pressure regulation; it is not an operator input.
+	AutoHeatersOn bool
+
 	// PrevRCSTemp is the hot-leg temperature seen by the previous
 	// step; its finite difference drives thermal-expansion surge.
 	PrevRCSTemp Temperature
@@ -262,6 +295,12 @@ const (
 	PressurizerBasePressure Pressure = 375
 	PressurizerHeaterTarget    Pressure = 2250
 	PressurizerHeaterRate      Pressure = 200 // psi/s while HeatersOn
+	// PressurizerAutoHeaterBand is the sag below the heater target at
+	// which the armed automatic pressure regulation latches the
+	// heaters on; it releases them back at the target. Derived; the
+	// spec describes the automatic energization without a band.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:97-98
+	PressurizerAutoHeaterBand Pressure = 50
 	PressurizerSprayRate       Pressure = 300 // psi/s at SprayOpen == 1
 	// PressurizerAuxSprayRate is the depressurization rate at full
 	// auxiliary spray drive. Sized an order below normal spray:
@@ -371,17 +410,4 @@ const (
 	// signal against spray condensation, slow enough to observe
 	// the transient.
 	ContainmentVentRatePSIGPerS = 10.0
-
-	// PressurizerSurgePerDegF is the pressurizer water volume
-	// displaced per °F of RCS coolant temperature change through
-	// the surge line: heating expands the loop and raises level,
-	// cooling contracts it and drains the tank. Assumption; the
-	// spec quotes no expansion data, so the coefficient is sized
-	// for the model's volumes — a full core-reference-temperature
-	// maneuver (558→621°F) displaces ~40 percent of pressurizer
-	// volume, the level swing operators manage across the program.
-	//   "Raise pressurizer level above no-load value in
-	//    anticipation of coolant contraction"
-	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:70-72
-	PressurizerSurgePerDegF = 0.40 * 1500.0 / (CoreReferenceOutletF - CoreReferenceInletF)
 )

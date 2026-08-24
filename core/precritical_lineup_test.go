@@ -78,6 +78,14 @@ func TestPrecriticalLineup_DutyCycleBalancesChargingLetdown(t *testing.T) {
 		require.NotNil(t, c, "want control registered: %s", key)
 		require.NoError(t, c.Set(val))
 	}
+	// A cold, depressurized lineup sits below the automatic SI
+	// setpoints by construction, so its initiation signals are
+	// blocked for the lineup.
+	// "Prior to reaching the automatic safety injection setpoints
+	// during cooldown and depressurization, the safety injection
+	// initiation signals are blocked."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:108-110
+	set("ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock", "true")
 	set("AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning", "1")
 	set("AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen", "1")
 

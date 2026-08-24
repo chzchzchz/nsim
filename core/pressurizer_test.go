@@ -216,3 +216,62 @@ func TestPressurizer_IdleCooldownCondensesBubble(t *testing.T) {
 	assert.LessOrEqual(t, pz.Water.Float(), 1202.0,
 		"one second of convention-rate condensation should stay small")
 }
+
+// With the automatic pressure regulation armed, a sagged pressurizer
+// latches the heaters on, recovers to the heater target, and releases
+// them there: "Pressurizer pressure will recover as pressurizer heaters
+// automatically energize."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:97-98
+func TestPressurizer_HeaterAutoControlRecoversSag(t *testing.T) {
+	pzr := Pressurizer{
+		Pressure:          Pressure(PressurizerHeaterTarget - 150),
+		Volume:            Volume{Val: 1500, Unit: u.Gallon},
+		Water:             Volume{Val: 900, Unit: u.Gallon},
+		HeaterAutoControl: true,
+	}
+	rcsTemp := Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
+
+	maxPressure := 0.0
+	for i := 0; i < int(3*time.Second/TimeStep); i++ {
+		pzr, _ = pzr.Step(rcsTemp, nil, nil, nil, 0, 0)
+		maxPressure = max(maxPressure, float64(pzr.Pressure))
+	}
+	assert.GreaterOrEqual(t, maxPressure, float64(PressurizerHeaterTarget),
+		"the automatic heaters must recover the pressure to the target")
+	assert.GreaterOrEqual(t, float64(pzr.Pressure),
+		float64(PressurizerHeaterTarget-PressurizerAutoHeaterBand),
+		"pressure must stay inside the regulation band afterwards")
+	assert.LessOrEqual(t, float64(pzr.Pressure), float64(PressurizerHeaterTarget),
+		"the heaters must not overshoot the target")
+}
+
+// Armed regulation holds pressure inside the band while the coolant —
+// and with it the saturation floor — cools down; without it the same
+// cooldown depressurizes freely.
+func TestPressurizer_HeaterAutoControlHoldsThroughCooldown(t *testing.T) {
+	newPzr := func(auto bool) Pressurizer {
+		return Pressurizer{
+			Pressure:          PressurizerHeaterTarget,
+			Volume:            Volume{Val: 1500, Unit: u.Gallon},
+			Water:             Volume{Val: 1100, Unit: u.Gallon},
+			HeaterAutoControl: auto,
+		}
+	}
+	armed := newPzr(true)
+	manual := newPzr(false)
+	rcsTemp := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
+
+	minArmed := float64(PressurizerHeaterTarget)
+	for i := 0; i < int(20*time.Second/TimeStep); i++ {
+		rcsTemp.Val -= 0.0025 // 50 F/hr program cooldown
+		armed, _ = armed.Step(rcsTemp, nil, nil, nil, 0, 0)
+		manual, _ = manual.Step(rcsTemp, nil, nil, nil, 0, 0)
+		minArmed = min(minArmed, float64(armed.Pressure))
+	}
+	assert.GreaterOrEqual(t, minArmed,
+		float64(PressurizerHeaterTarget-PressurizerAutoHeaterBand)-1e-6,
+		"armed regulation must hold pressure inside its band")
+	assert.Less(t, float64(manual.Pressure),
+		float64(PressurizerHeaterTarget-PressurizerAutoHeaterBand),
+		"without regulation the same cooldown sags past the band")
+}

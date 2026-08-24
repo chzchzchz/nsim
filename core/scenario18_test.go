@@ -133,3 +133,33 @@ func TestTurbineBuilding_TripDumpModulatesOnTavgError(t *testing.T) {
 	assert.Zero(t, restored.Turbine.DumpValve.Open,
 		"Tavg back at no load recloses the dump")
 }
+
+// The manual safety-injection pushbutton actuates the Table 7-1 SI
+// outputs and votes the reactor trip ("Actuation of the Safety
+// Injection System simultaneously initiates a reactor trip"), without
+// needing any process condition; RPS reset clears it.
+//
+//	specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:8-14
+//	specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:38-40
+func TestBridge_ManualSIActuatesSIAndVotesTrip(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	cm := GetControlMap(&p)
+	require.NoError(t,
+		cm["ReactorBuilding/ReactorProtectionSystem/ManualSI"].Set("true"))
+	stepN(&p, int(100*time.Millisecond/TimeStep))
+
+	rps := p.ReactorBuilding.ReactorProtectionSystem
+	assert.True(t, rps.ManualSI)
+	assert.True(t, rps.SafetyInjectionActuated)
+	assert.True(t, rps.SteamlineIsolationActuated)
+	assert.True(t, rps.ContainmentIsolationPhaseAActuated)
+	assert.True(t, rps.ReactorTripped,
+		"SI actuation must initiate the reactor trip")
+	assert.InDelta(t, 1.0,
+		p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion, 1e-9)
+
+	p.ReactorBuilding.ReactorProtectionSystem.Reset()
+	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ManualSI,
+		"reset must release the pushbutton latch")
+}
