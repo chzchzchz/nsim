@@ -242,7 +242,14 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 // reference day); multi-hour xenon evolution is covered by the
 // reserve-point and iodine/xenon tests.
 func TestRodAutoControlDailyLoadFollowArc(t *testing.T) {
-	t.Parallel()
+	// Width note: every channel here is width-safe after the
+	// anchoring. The program walk rides the fission update verified
+	// by TestReactorFissionPower_WidthInvariance; the automatic boron
+	// trim selects a fixed-rate BTRS mode on rod position alone
+	// (applyAutoBoronControl) whose ppm integration is linear in dt;
+	// and xenon advances by dt directly. Must not run in parallel:
+	// overrideTimeStep mutates global simulation state.
+	overrideTimeStep(t, 25*time.Millisecond)
 	p := MakePlant()
 	for _, boron := range []*float64{
 		&p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration,

@@ -79,6 +79,15 @@ func TestCVCSAutoBoronManualOverride(t *testing.T) {
 // the reactor power [...]"
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_129.txt:112-115
 func TestCVCSAutoBoronUnlocksDeepPlateau(t *testing.T) {
+	// Width note: the descent is a program walk over the anchored
+	// fission update (verified by
+	// TestReactorFissionPower_WidthInvariance) plus fixed-rate boron
+	// dilution selected by applyAutoBoronControl on rod position and
+	// integrated linearly in dt; the assertions are wide bands around
+	// the walked plateau, so the widened tick reproduces the
+	// trajectory at one tenth the step count. Must not run in
+	// parallel: overrideTimeStep mutates global simulation state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.AutoControl = true
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoBoronControl = true
