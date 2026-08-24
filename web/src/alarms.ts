@@ -126,9 +126,13 @@ function updateAlarmRow(tr: HTMLElement, a: AlarmEntry): void {
     // Acknowledged alarms stay visible but dimmed.
     tr.classList.toggle("alarm-acked", a.acknowledged);
 
-    // The row rebuilds on every refresh tick; carry an open help
-    // popup across so a description does not vanish mid-read.
+    // The row rebuilds on every refresh tick; carry the help button
+    // and an open popup across so they survive into the new cells.
+    // Recreating the button each tick would leave clicks landing on
+    // a detached node whenever a rebuild fires mid-press.
     const openTip = tr.querySelector<HTMLElement>(".help-text");
+    const prevHelpBtn =
+        tr.querySelector<HTMLButtonElement>("button.ctl-help");
 
     while (tr.firstChild) tr.removeChild(tr.firstChild);
 
@@ -143,12 +147,14 @@ function updateAlarmRow(tr: HTMLElement, a: AlarmEntry): void {
     tdId.className = "mono";
     tdId.textContent = a.id;
     const help = helpFor(a.id);
+    let helpBtn: HTMLButtonElement | null = null;
     if (help) {
         // Anchor for description cross-references and the (?)
         // toggle; stopPropagation inside the button keeps a help
         // click from acknowledging the alarm.
         tr.dataset.bridgeId = a.id;
-        tdId.appendChild(makeHelpButton(help));
+        helpBtn = prevHelpBtn ?? makeHelpButton(help);
+        tdId.appendChild(helpBtn);
     }
     tr.appendChild(tdId);
 
@@ -161,11 +167,8 @@ function updateAlarmRow(tr: HTMLElement, a: AlarmEntry): void {
     tdTime.className = "nowrap";
     tr.appendChild(tdTime);
 
-    if (openTip) {
-        tr.querySelector("button.ctl-help")?.insertAdjacentElement(
-            "afterend",
-            openTip,
-        );
+    if (openTip && helpBtn) {
+        helpBtn.insertAdjacentElement("afterend", openTip);
     }
 }
 
