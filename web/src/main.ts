@@ -19,6 +19,15 @@ import {
 import { Sim } from "./sim";
 
 const COPY_FEEDBACK_MS = 1500;
+// Throughput accounting: the desired rate assumes the nominal
+// requestAnimationFrame cadence; the measured side counts real
+// plant steps over a one-second window.
+const NOMINAL_FRAME_RATE = 60;
+const SPS_WINDOW_MS = 1000;
+// Panel refreshes (sensors, console, alarms) are decoupled from
+// the simulation rate: at high tick rates stepping many times per
+// frame must not force a full DOM pass every frame.
+const UI_REFRESH_INTERVAL_MS = 100;
 
 async function main(): Promise<void> {
     // Copy wasm_exec.js polyfill into the same origin. We
@@ -37,6 +46,7 @@ async function main(): Promise<void> {
     const tickRateSel = document.getElementById("tick-rate") as HTMLSelectElement;
     const copyBtn = document.getElementById("btn-copy") as HTMLButtonElement;
     const statusEl = document.getElementById("sim-status") as HTMLElement;
+    const spsEl = document.getElementById("sps-indicator") as HTMLElement;
 
     const sim = new Sim(newPlant);
 
@@ -136,6 +146,10 @@ async function main(): Promise<void> {
     });
 
     let lastSvg = performance.now();
+    let lastUiRefreshMs = 0;
+    // Throughput window state; updated by updateStepRate below.
+    let windowStartMs = performance.now();
+    let spsWindowSteps = 0;
     // Sim time at the last read-out refresh; plant state only
     // changes when the clock advances, so paused idle frames skip
     // the refresh path entirely.
@@ -148,9 +162,17 @@ async function main(): Promise<void> {
         try {
             if (sim.running) {
                 sim.plant.step(sim.ticksPerFrame);
+                spsWindowSteps += sim.ticksPerFrame;
             }
             const simMs = sim.plant.simTimeMs();
-            if (simMs !== lastRefreshedMs) {
+            // Paused single-steps bypass the throttle so the
+            // read-out reacts immediately; while running the
+            // panels update at most once per UI_REFRESH_INTERVAL_MS
+            // regardless of how many ticks each frame steps.
+            const uiDue = performance.now() - lastUiRefreshMs >=
+                UI_REFRESH_INTERVAL_MS;
+            if (simMs !== lastRefreshedMs && (uiDue || !sim.running)) {
+                lastUiRefreshMs = performance.now();
                 lastRefreshedMs = simMs;
                 refreshSensors(sensorRows, sim.plant);
                 // Refresh the command console list from the wasm queue.
@@ -173,6 +195,7 @@ async function main(): Promise<void> {
                 lastTickError = "";
             }
             sim.refreshStatus();
+            updateStepRate(performance.now());
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             if (msg !== lastTickError) {
@@ -182,6 +205,29 @@ async function main(): Promise<void> {
         }
     }
     requestAnimationFrame(tick);
+
+    // updateStepRate reports actual plant steps per wall-clock
+    // second against the requested rate (ticks per frame at the
+    // nominal frame cadence), refreshed once per second. A large
+    // gap means the browser cannot finish the requested ticks in
+    // a frame budget and the simulation falls behind real time.
+    function updateStepRate(nowMs: number): void {
+        if (!sim.running) {
+            spsEl.textContent = "steps/s: —";
+            spsWindowSteps = 0;
+            windowStartMs = nowMs;
+            return;
+        }
+        const elapsedMs = nowMs - windowStartMs;
+        if (elapsedMs < SPS_WINDOW_MS) {
+            return;
+        }
+        const actualSps = Math.round(spsWindowSteps / (elapsedMs / 1000));
+        const desiredSps = sim.ticksPerFrame * NOMINAL_FRAME_RATE;
+        spsEl.textContent = `steps/s: ${actualSps} / ${desiredSps}`;
+        spsWindowSteps = 0;
+        windowStartMs = nowMs;
+    }
 }
 
 main().catch((err) => {

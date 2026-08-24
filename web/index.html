@@ -17,8 +17,11 @@
                 <option value="16" selected>16× (16 ms / frame)</option>
                 <option value="100">100× (100 ms / frame)</option>
                 <option value="1000">1000× (1 s / frame)</option>
+                <option value="5000">5000× (5 s / frame)</option>
+                <option value="10000">10000× (10 s / frame)</option>
             </select>
         </label>
+        <span id="sps-indicator" title="Actual plant steps per wall-clock second versus the requested rate at 60 frames/s">steps/s: —</span>
         <button id="btn-copy" aria-label="Copy plant state JSON to clipboard">📋</button>
         <span id="sim-status">loading…</span>
     </header>

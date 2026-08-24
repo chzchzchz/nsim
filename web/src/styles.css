@@ -34,13 +34,15 @@
             padding: 4px 6px;
             font-size: 14px;
         }
-        header#sim-bar #sim-status {
+        header#sim-bar #sim-status,
+        header#sim-bar #sps-indicator {
             margin-left: auto;
             font-family: monospace;
             background: rgba(0,0,0,0.2);
             padding: 4px 12px;
             border-radius: 4px;
         }
+        header#sim-bar #sps-indicator { margin-left: 0; }
         main {
             display: flex;
             flex-direction: column;

@@ -115,7 +115,14 @@ The dashboard has these regions:
    * **Start / Pause** — toggle the tick loop
    * **Step** — advance one tick rate while paused
    * **Reset** — fresh plant, re-rendered SVG and panels
-   * **Tick rate** — 1× / 16× / 100× / 1000× `core.TimeStep` per frame
+   * **Tick rate** — 1× / 16× / 100× / 1000× / 5000× / 10000×
+     `core.TimeStep` per frame
+   * **steps/s** — actual plant steps per wall-clock second versus
+     the requested rate (ticks × 60 frames/s), refreshed every
+     second; a large gap means the browser cannot keep up with
+     the selected speed. Panel read-outs refresh at most 10× per
+     second regardless of the simulation rate; paused single
+     steps always update immediately
    * **📋** — copy plant state JSON to the clipboard
    * **Status** — `running @ N s simulated` / `paused @ N s simulated`
 
