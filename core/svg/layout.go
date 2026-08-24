@@ -108,6 +108,14 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:23-24).
 	{"EXCITER", "cluster_turbine", "BrushlessExciter"},
 
+	// Second ESF-train diesel and its day tank; the model gives
+	// each train its own EDG (core/alarm.go annunciator loop).
+	{"DieselB", "cluster_auxiliary", "DieselGenerator"},
+	{"FuelTankB", "cluster_auxiliary", "FuelTank"},
+
+	// Spent-fuel pool heat exchanger between the pool pumps.
+	{"SFPHX", "cluster_containment", "ComponentCoolingWaterSystem"},
+
 	// Moisture separator reheater between the HP/LP turbine
 	// sections (chapter_15 figure 15.3-1 steam path).
 	{"MSR", "cluster_turbine", "MoistureSeparatorReheater"},

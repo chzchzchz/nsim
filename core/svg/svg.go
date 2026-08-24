@@ -131,6 +131,9 @@ var diagramParts = []diagramPart{
 	{"CIS", "ReactorBuilding/ContainmentIsolationSystem", "ContainmentIsolation", "CIS"},
 	{"HDS", "ReactorBuilding/HydrogenDetectionSuppression", "HydrogenRecombiner", "HDS"},
 	{"EXCITER", "TurbineBuilding/Generator/ExcitationSystem", "BrushlessExciter", "Exciter"},
+	{"DieselB", "AuxiliaryBuilding/DieselGeneratorB", "DieselGenerator", "EDG B"},
+	{"FuelTankB", "AuxiliaryBuilding/DieselGeneratorB", "FuelTank", "EDG B Fuel"},
+	{"SFPHX", "AuxiliaryBuilding/SpentFuelPoolCoolingSystem/HX", "ComponentCoolingWaterSystem", "SFP HX"},
 }
 
 // buildingLabels captions the cluster outlines drawn behind symbols.
@@ -299,6 +302,10 @@ var levelAccessors = map[string]func(*core.Plant) (core.Volume, core.Volume){
 		return p.AuxiliaryBuilding.ContainmentSpraySystem.SATLevel,
 			core.SATCapacity
 	},
+	"FuelTankB": func(p *core.Plant) (core.Volume, core.Volume) {
+		t := p.AuxiliaryBuilding.DieselGeneratorB.Fuel
+		return t.Level, t.Capacity
+	},
 }
 
 // tintAmber/tintRed are halo colours for warning vs trip severity.
@@ -336,9 +343,12 @@ var alarmParts = map[core.AlarmID][]string{
 	core.AlarmIDSCCWLowFlow:           {"Generator"},
 	core.AlarmIDSCCWNoFlow:            {"Generator"},
 	core.AlarmIDReactorTrip:           {"RPV", "RCP", "SG"},
-	core.AlarmIDDieselCoolant:         {"Diesel"},
-	core.AlarmIDDieselLowFuel:         {"Diesel"},
-	core.AlarmIDDieselTripped:         {"Diesel", "FuelTank"},
+	// Diesel alarms are per-model annunciators shared by both
+	// trains (core/alarm.go collapses A and B into the same IDs),
+	// so halos cover both EDG symbols and both day tanks.
+	core.AlarmIDDieselCoolant:         {"Diesel", "DieselB"},
+	core.AlarmIDDieselLowFuel:         {"FuelTank", "FuelTankB"},
+	core.AlarmIDDieselTripped:         {"Diesel", "DieselB", "FuelTank", "FuelTankB"},
 	core.AlarmIDSGLowLevel:            {"SG"},
 	core.AlarmIDSGHighLevel:           {"SG"},
 	core.AlarmIDSIActuated:            {"SISAccumulators"},
@@ -1321,8 +1331,9 @@ var readouts = []readoutDef{
 }
 
 // ringDef highlights a laid-out part when its condition holds;
-// frac sizes the ring relative to the symbol's footprint. The
-// diesel-running entry keys off pump state instead of an alarm.
+// frac sizes the ring relative to the symbol's footprint. Running
+// entries key off a live state accessor instead of an alarm; the
+// diesel pair each carry their own so train B lights independently.
 type ringDef struct {
 	alarm   core.AlarmID
 	id      string
@@ -1330,6 +1341,7 @@ type ringDef struct {
 	frac    float64
 	colour  string
 	running bool
+	state   func(*core.Plant) core.DieselState
 }
 
 var rings = []ringDef{
@@ -1339,7 +1351,11 @@ var rings = []ringDef{
 	// loss of fuel, and loss of lube oil; the simplified model
 	// collapses them into one latch in core/diesel.go:62-71,121,147.
 	{alarm: core.AlarmIDDieselTripped, id: "Diesel", kind: "DieselGenerator", frac: 0.6, colour: "red"},
-	{id: "Diesel", kind: "DieselGenerator", frac: 0.55, colour: "green", running: true},
+	{id: "Diesel", kind: "DieselGenerator", frac: 0.55, colour: "green", running: true,
+		state: func(p *core.Plant) core.DieselState { return p.AuxiliaryBuilding.DieselGenerator.State }},
+	{alarm: core.AlarmIDDieselTripped, id: "DieselB", kind: "DieselGenerator", frac: 0.6, colour: "red"},
+	{id: "DieselB", kind: "DieselGenerator", frac: 0.55, colour: "green", running: true,
+		state: func(p *core.Plant) core.DieselState { return p.AuxiliaryBuilding.DieselGeneratorB.State }},
 }
 
 // writeLiveOverlays emits per-part live state as <text> elements
@@ -1390,8 +1406,8 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms [
 	}
 	for _, rd := range rings {
 		active := activeAlarms[rd.alarm]
-		if rd.running {
-			active = p.AuxiliaryBuilding.DieselGenerator.State == core.DieselRunning
+		if rd.running && rd.state != nil {
+			active = rd.state(p) == core.DieselRunning
 		}
 		if !active {
 			continue

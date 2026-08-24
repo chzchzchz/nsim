@@ -361,3 +361,27 @@ func TestSafeguardSystemsRender(t *testing.T) {
 	assert.Positive(t, strings.Count(renderPlant(t, &p), `stroke="#e02020"`),
 		"a Phase A isolation (trip severity) must halo the CIS block")
 }
+
+// TestSecondDieselTrainRenders checks train B's EDG and day tank
+// resolve against the layout, gauge, and ring independently of A.
+func TestSecondDieselTrainRenders(t *testing.T) {
+	p := core.MakePlant()
+	out := renderPlant(t, &p)
+	assert.Contains(t, out, ">EDG B<")
+	assert.Contains(t, out, ">EDG B Fuel<")
+	assert.NotContains(t, out, "anchors missing")
+	require.Equal(t, len(levelAccessors),
+		strings.Count(out, `class="level-gauge"`))
+
+	// Train B lights its own running ring without A.
+	base := strings.Count(renderPlant(t, &p), `fill="none" stroke="green"`)
+	p.AuxiliaryBuilding.DieselGeneratorB.State = core.DieselRunning
+	assert.Equal(t, base+1,
+		strings.Count(renderPlant(t, &p), `fill="none" stroke="green"`))
+
+	// Shared annunciators: low fuel on either tank halos both.
+	p.AuxiliaryBuilding.DieselGeneratorB.Fuel.Level = core.Volume{
+		Val: 1, Unit: u.Gallon}
+	assert.Greater(t,
+		strings.Count(renderPlant(t, &p), `stroke="#f0a500"`), 0)
+}
