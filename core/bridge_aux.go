@@ -10,6 +10,30 @@ import (
 // addAuxiliaryBuildingControls adds Control entries keyed by the namespace managed by this file to m.
 func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 
+	// Recirculation switchover: sump isolation valves "C" open,
+	// spray-pump suction isolation valves "D" close so the pumps
+	// draw from the containment sump; spray additive stops.
+	// "The recirculation mode of the CSS will be initiated
+	// manually by the operator."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:63-70
+	m["AuxiliaryBuilding/ContainmentSpraySystem/SuctionSump"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ContainmentSpraySystem",
+		Label: "SuctionSump",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.ContainmentSpraySystem.SuctionSump)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ContainmentSpraySystem.SuctionSump = v
+			return nil
+		},
+	}
+
 	// RHR train-A pump manual stop / start. The operator stops
 	// the RHR pumps when plant startup begins; during cooldown
 	// one train runs on miniflow until RCS is below 350°F.
