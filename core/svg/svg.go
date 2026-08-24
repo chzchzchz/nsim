@@ -182,6 +182,10 @@ var levelAccessors = map[string]func(*core.Plant) (core.Volume, core.Volume){
 		t := p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.Tank
 		return t.Level, t.Capacity
 	},
+	"FuelTank": func(p *core.Plant) (core.Volume, core.Volume) {
+		t := p.AuxiliaryBuilding.DieselGenerator.Fuel
+		return t.Level, t.Capacity
+	},
 }
 
 // tintAmber/tintRed are halo colours for warning vs trip severity.
@@ -430,11 +434,14 @@ func (r *renderer) pipe(p *core.Plant, e core.GraphEdge) string {
 	}
 
 	colour := ColourForEdge(e.From, e.To)
-	// Flow animation: only edges with a running pump animate, with
-	// a period inversely proportional to speed. The document root's
-	// --phase keeps remounts mid-cycle (see RenderOptions).
+	// Flow animation: only edges whose pump is running and whose
+	// inline valve, if any, passes water animate, so a closed
+	// discharge valve cannot show streaming flow. Period stays
+	// inversely proportional to pump speed; the root --phase keeps
+	// remounts mid-cycle (see RenderOptions).
 	var pathFrag string
-	if e.Pump != nil && e.Pump.Running && e.Pump.Velocity > 0 {
+	if e.Pump != nil && e.Pump.Running && e.Pump.Velocity > 0 &&
+		(e.Valve == nil || e.Valve.Open > 0) {
 		dur := clampRange(900/float64(e.Pump.Velocity), 0.6, 10)
 		pathFrag = DrawPipePathAnimated(pts, colour, dur)
 	} else {
