@@ -65,7 +65,16 @@ func TestPlant_RCPDriveReadyFollowsESFBreaker(t *testing.T) {
 //     flow during pump trips."
 //     specs/the_westinghouse_pressurized_water_react/chapter_1/page_020.txt:83-84
 func TestRCP_Coastdown(t *testing.T) {
-	t.Parallel()
+	// The pump lag integrates v -= v*dt/tau with tau = 10 s
+	// (RCPCoastdownTimeConstant, sized from the flywheel's "long
+	// coastdown" description,
+	// specs/the_westinghouse_pressurized_water_react/chapter_1/page_020.txt:83-84).
+	// At this tick width dt/tau is 1e-3 per step, shifting the
+	// discrete decay's effective tau by about 0.05 percent, orders
+	// of magnitude inside the 1-percent-of-rated crossing the test
+	// reads. Must not run in parallel: overrideTimeStep mutates
+	// global simulation state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPump.Running = true
 	// Poll to rated speed with a cap; the ramp is monotone so the

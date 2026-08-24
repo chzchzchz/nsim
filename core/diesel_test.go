@@ -89,7 +89,18 @@ func TestDiesel_TripsOnFuelExhaustion(t *testing.T) {
 }
 
 func TestDiesel_TripsOnCoolantOverTemp(t *testing.T) {
-	t.Parallel()
+	// Every channel here is width-exact or negligibly approximated
+	// at the widened tick: loss-of-cooling heatup is the constant
+	// dieselAmbientRate ramp scaled by dt, the ready deadline
+	// ("10 seconds after receipt of a start signal",
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:50)
+	// accumulates dt into timers exactly, and the cooling trip the
+	// spec implies on loss of service water
+	// (specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:8-9)
+	// is a threshold crossing whose detection shifts by at most one
+	// tick against a 600 s cap. Must not run in parallel:
+	// overrideTimeStep mutates global simulation state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = false // no cooling
 	p.AuxiliaryBuilding.DieselGenerator = newDiesel(500)

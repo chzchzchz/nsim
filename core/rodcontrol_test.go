@@ -78,10 +78,12 @@ func TestRPC_RateClampOnOperatorEntry(t *testing.T) {
 // rods near their critical position (xenon compensation emerges from
 // the closed loop).
 func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
-	// The descent ramps at the entered 0.02 %/s over ten minutes and
-	// the integrator scales linearly with dt, so the widened step
-	// still lands exactly on target while cutting step count 10x.
-	// Must not run in parallel: overrideTimeStep mutates global
+	// The descent ramps at the entered 0.02 %/s over ten minutes
+	// under the demanded-setpoint rate limit
+	// (specs/pwr_sim/chapter_2/page_024.txt:3-12), and the
+	// integrator scales linearly with dt, so the widened step still
+	// lands exactly on target while cutting step count 10x. Must
+	// not run in parallel: overrideTimeStep mutates global
 	// simulation state.
 	overrideTimeStep(t, 10*time.Millisecond)
 	p := rpcReactorLeadPlant()

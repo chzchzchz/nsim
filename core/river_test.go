@@ -171,7 +171,13 @@ func TestContainment_SprayCondensationCoolsAtmosphere(t *testing.T) {
 //   - "Diesel generator coolers"
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89
 func TestSWS_HeatLoadIncludesDieselJacketDuty(t *testing.T) {
-	t.Parallel()
+	// The asserted SWS outlet rise is assigned algebraically from
+	// the current duty list every step (sws.go), and the 15 s
+	// windows exist only to pass the timer-based ready deadline,
+	// which accumulates dt exactly, so the widened tick reproduces
+	// both legs. Must not run in parallel: overrideTimeStep mutates
+	// global simulation state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal =

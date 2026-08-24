@@ -24,7 +24,16 @@ import (
 //     turbine."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:32-33
 func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
-	t.Parallel()
+	// Rejection latching is snapshot-based (one operator write past
+	// LoadRejectDetectFraction = 0.10), the valves stroke fully in
+	// 0.5 s at SteamDumpValveTravelRate = 2.0/s against the 5 s
+	// checkpoint, and SteamDumpHoldTime = 60 s counts down linearly
+	// in dt; the header rides the SG design clamp through the
+	// transient. So the widened tick reproduces the sequence.
+	// Checkpoints below sample by simulated time, not step index,
+	// so they keep their meaning at any width. Must not run in
+	// parallel: overrideTimeStep mutates global simulation state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	p := MakePlant()
 	// Maneuvering chemistry: diluted shim puts the net temperature
 	// coefficient negative so the fold below full power is
@@ -42,7 +51,7 @@ func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
 	cm := p.GetControlMap()
 
 	require.NoError(t, cm["TurbineBuilding/Turbine/Setpoint"].Set("1"))
-	for i := 0; i < 15000; i++ {
+	for i := 0; i < int(15*time.Second/TimeStep); i++ {
 		p.Step()
 		p.Update()
 	}
@@ -62,13 +71,17 @@ func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
 	dumpAt5s := 0.0
 	dumpAt60s := 1.0
 	maxPressure := 0.0
-	for i := 0; i < 73000; i++ {
+	// Sample checkpoints one step before each sim-time mark, matching
+	// what the original fixed-index samples read at the default tick.
+	fiveS := int(5*time.Second/TimeStep) - 1
+	sixtyS := int(60*time.Second/TimeStep) - 1
+	for i := 0; i < int(73*time.Second/TimeStep); i++ {
 		p.Step()
 		p.Update()
 		switch i {
-		case 4999:
+		case fiveS:
 			dumpAt5s = p.TurbineBuilding.Turbine.DumpValve.Open
-		case 59999:
+		case sixtyS:
 			dumpAt60s = p.TurbineBuilding.Turbine.DumpValve.Open
 		}
 		pp := float64(p.ReactorBuilding.SteamGenerator.Pressure)

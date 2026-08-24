@@ -112,9 +112,10 @@ func TestCCWS_PumpsRunningOutletAboveInletByApproachTemp(t *testing.T) {
 func TestCCWS_InletRecoversWithinFourHours(t *testing.T) {
 	// The recovery tau is one hour, orders of magnitude wider than
 	// the step, and Step folds the closed-form lag on every call,
-	// so a coarse step cannot distort the relaxation trajectory.
-	// Must not run in parallel: overrideTimeStep mutates global
-	// simulation state.
+	// so a coarse step cannot distort the relaxation toward the
+	// spec's four-hour recovery point (chapter_5/page_105.txt:108-112,
+	// quoted above). Must not run in parallel: overrideTimeStep
+	// mutates global simulation state.
 	overrideTimeStep(t, time.Minute)
 	c := CCWS{
 		PumpRunning: true,

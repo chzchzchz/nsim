@@ -63,7 +63,14 @@ func TestScenario10_ModeControlDrivesHotStandbyGating(t *testing.T) {
 // load (in excess of 10%)"
 // specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:9-11
 func TestScenario10_GradualUnloadReachesHouseLoadWithoutRejection(t *testing.T) {
-	t.Parallel()
+	// Rejection detection is snapshot-based (it fires when one
+	// operator write drops the setpoint past
+	// LoadRejectDetectFraction = 0.10, not when an accumulated rate
+	// crosses it), so the 0.08-step unload ladder cannot false-latch
+	// it at any tick width. Turbine setpoint ramps and power
+	// response are linear in dt. Must not run in parallel: overrideTimeStep mutates global simulation
+	// state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	p := scenario10FullPowerPlant()
 
 	for _, sp := range []string{"0.92", "0.84", "0.76", "0.68", "0.60",
@@ -97,7 +104,15 @@ func TestScenario10_GradualUnloadReachesHouseLoadWithoutRejection(t *testing.T) 
 // "the control rods are inserted to reduce power level"
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:20-23
 func TestScenario10_RodInsertionShutsDownReactor(t *testing.T) {
-	t.Parallel()
+	// The collapse rides the per-step compounding channel, whose
+	// pace slows with the tick, but folding to the source floor
+	// needs only on the order of two thousand compounds even at a
+	// one-percent net negative worth: ten times slower that is
+	// still ~20 s, well inside the 60 s window, and the assertions
+	// are absolute floors and signs, not trajectory shapes. Must
+	// not run in parallel: overrideTimeStep mutates global
+	// simulation state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	p := scenario10FullPowerPlant()
 
 	setControl(t, &p, "ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion", "1")
@@ -121,7 +136,13 @@ func TestScenario10_RodInsertionShutsDownReactor(t *testing.T) {
 // (level management, page_226.txt:146-153) and "Primary plant heatup
 // rate is limited to 50°F per hour" (page_224.txt:140-141).
 func TestScenario10_LevelAndRateHoldThroughCooldown(t *testing.T) {
-	t.Parallel()
+	// Level bands are wide (the no-load band spans most of the
+	// pressurizer), the level loop and Tavg program run on dt-scaled
+	// rate clamps, and the cooldown-rate assertion reads the average
+	// pace across a 100 s window rather than any per-step shape.
+	// Must not run in parallel: overrideTimeStep mutates global
+	// simulation state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	p := scenario10FullPowerPlant()
 	// The evolution runs on the automatic level loop: level follows
 	// the Tavg-referenced program (60 pct at full load toward 25 pct

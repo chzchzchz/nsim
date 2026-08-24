@@ -238,7 +238,13 @@ func TestThermal_RodWithdrawalRaisesReactivity(t *testing.T) {
 //     depletion and removal of shim boron"
 //     (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:119-121).
 func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
-	t.Parallel()
+	// Both legs run at the same tick width, so the per-step fission
+	// tail channel scales identically under them; boron integrates
+	// linearly in dt and every assertion compares the legs against
+	// each other rather than against absolute horizons. Must not
+	// run in parallel: overrideTimeStep mutates global simulation
+	// state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	// Both legs share the same scrammed seed, so decay-heat
 	// trajectories diverge (if at all) from the first step; a
 	// short window is as probative as a long one.
