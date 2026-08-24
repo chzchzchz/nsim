@@ -117,7 +117,7 @@ func alarmDescription(id AlarmID) string {
 	case AlarmIDTurbineTripBearingOil:
 		return "Turbine trip: bearing oil pressure low"
 	case AlarmIDTurbineStepback:
-		return "Turbine-trip reactor stepback active"
+		return "Reactor power stepback active"
 	case AlarmIDTurbineLowTavg:
 		return "Tavg below program: turbine loading held"
 	case AlarmIDGeneratorMVALimit:
@@ -272,7 +272,9 @@ func (p *Plant) Alarms() []Alarm {
 		}
 	}
 
-	// Automatic turbine-trip stepback in progress.
+	// Automatic reactor-power stepback in progress (tripped turbine
+	// or degraded established forced flow,
+	// specs/pwr_sim/chapter_4/page_051.txt:44-46).
 	//   "The reactor neutron power will be reduced quickly to 60 % by
 	//    rapid insertion of control rods"
 	//   specs/pwr_sim/chapter_3/page_041.txt:28-29

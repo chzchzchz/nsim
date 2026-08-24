@@ -226,6 +226,7 @@ func (r *ReactorBuilding) Step(
 		containmentGauge,
 		float64(ret.ReactorPressureVessel.TotalThermalPower()) /
 			float64(CoreRatedThermalPower),
+		float64(ret.ReactorCoolantPumps.Velocity())/float64(RCPRatedSpeed),
 	)
 	// Propagate the reactor trip to the reactor pressure
 	// vessel so the RPV step drops rods and follows the
@@ -1133,14 +1134,38 @@ func (p *Plant) Step() {
 	p.nextPlant.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.DriveReady =
 		p.nextPlant.Electrical.ESFBusB.StageReady(1)
 
-	// Automatic turbine-trip stepback. The control system latches
-	// on the trip and owns the rod demand while it holds neutron
-	// power at the runback level; the ReactorBuilding step below
-	// applies that demand ahead of its rod-drive rate limit.
+	// Automatic reactor-power stepback. The control system latches on
+	// a tripped turbine or degraded forced flow (the pump-trip runback
+	// of "The loss of one RC pump will immediately initiate reactor
+	// power stepback", specs/pwr_sim/chapter_4/page_051.txt:44-46)
+	// and owns the rod demand while it holds neutron power at the
+	// runback level; the ReactorBuilding step below applies that
+	// demand ahead of its rod-drive rate limit.
 	p.nextPlant.PlantOperation = p.PlantOperation.Stepback(
 		p.TurbineBuilding.Turbine.State,
+		float64(p.ReactorBuilding.ReactorCoolantPumps.Velocity())/
+			float64(RCPRatedSpeed),
 		p.ReactorBuilding.ReactorPressureVessel,
 	)
+	// Coordinated turbine runback riding the stepback: while the runback
+	// holds and the machine is still on the line, steam demand descends
+	// toward the park level at the same rate the rods fold power. Without
+	// it, production outpaces a fixed demand only in the downward
+	// direction and the sagging SG header crosses the shared
+	// low-steamline setpoint - "automatic turbine runbacks which can
+	// prevent a trip condition"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:137-139
+	// The walk floors at StepbackPowerFraction so demand lands where the
+	// reactor parks; handing back to the operator afterwards mirrors the
+	// rod-demand handback on release.
+	if op := p.nextPlant.PlantOperation; op.StepbackActive &&
+		p.TurbineBuilding.Turbine.State == TurbineRunning {
+		tb := &p.TurbineBuilding.Turbine
+		if tb.Setpoint > StepbackPowerFraction {
+			tb.Setpoint = max(tb.Setpoint-RodInsertionSpeed*TimeStep.Seconds(),
+				StepbackPowerFraction)
+		}
+	}
 	p.nextPlant.ReactorBuilding = p.ReactorBuilding.Step(
 		p.TurbineBuilding.SteamOfftakeFraction,
 		p.TurbineBuilding.Turbine.Setpoint,

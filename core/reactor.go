@@ -94,7 +94,26 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 	powerFrac := float64(ret.TotalThermalPower()) / float64(CoreRatedThermalPower)
 	powerFrac = max(powerFrac, 0)
 	refDeltaF := CoreReferenceOutletF - CoreReferenceInletF
-	targetOutlet := CoreReferenceInletF + powerFrac*refDeltaF
+	// Flow-degraded per-pass temperature rise: at fixed power the
+	// coolant temperature rise across the core scales inversely with
+	// pumped flow (delta-T proportional to power over flow), so a
+	// lost or coasting machine raises the hot-leg temperature the
+	// loop must reject. Applied only above the at-power permissive,
+	// where reduced forced flow is an off-normal condition rather
+	// than the normal sequential-start / hot-standby lineup; at full
+	// flow the divisor is one and nothing changes. The loss-of-flow
+	// margin challenge this represents: "the cold leg temperature in
+	// loop #1 will increase rapidly"
+	// (specs/pwr_sim/chapter_4/page_052.txt:26-27). Like the low-flow
+	// trip, the stretch is scoped to the degraded-forced-flow regime:
+	// flow exactly zero is natural circulation, whose equilibrium the
+	// existing no-load anchors already represent.
+	flowDivisor := 1.0
+	if flow := float64(rcpSpeed) / float64(RCPRatedSpeed); flow > 0 &&
+		powerFrac >= RPSAtPowerPermissiveFraction {
+		flowDivisor = min(max(flow, CoreFlowDegradedFloorFrac), 1.0)
+	}
+	targetOutlet := CoreReferenceInletF + powerFrac*refDeltaF/flowDivisor
 
 	coreCapabilityW := powerFrac * float64(CoreRatedThermalPower)
 	retained := 1.0
@@ -804,6 +823,14 @@ const (
 	// PrimaryPressureTimeConstant is the rate at which the RPV
 	// pressure tracks its design pressure in this simplified model.
 	PrimaryPressureTimeConstant float64 = 300
+
+	// CoreFlowDegradedFloorFrac bounds the flow-degradation stretch
+	// of the outlet target: below this forced-flow fraction the
+	// per-pass delta-T stops growing, keeping the worst-case target
+	// at four times the full-flow rise. Assumption; the lumped band
+	// has no natural-circulation flow model to carry the ratio
+	// further.
+	CoreFlowDegradedFloorFrac float64 = 0.25
 
 	// CoreDopplerPcmPerDegF is the PWR net temperature coefficient
 	// of reactivity (combined Doppler + moderator temperature

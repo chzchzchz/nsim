@@ -816,6 +816,8 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 				p.ReactorBuilding.ReactorProtectionSystem.ChannelTest = RPSTcoldChannelInTest
 			case "Containment":
 				p.ReactorBuilding.ReactorProtectionSystem.ChannelTest = RPSContainmentChannelInTest
+			case "Flow":
+				p.ReactorBuilding.ReactorProtectionSystem.ChannelTest = RPSFlowChannelInTest
 			case "None":
 				p.ReactorBuilding.ReactorProtectionSystem.ChannelTest = RPSNoChannelInTest
 			default:

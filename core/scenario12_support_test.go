@@ -130,14 +130,14 @@ func TestRPS_SafetyInjectionBlockGatesActuation(t *testing.T) {
 	lowSteamline := RPSLowSteamlinePressureTrip - 10
 
 	blocked := ReactorProtectionSystem{SafetyInjectionBlocked: true}
-	blocked = blocked.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0)
+	blocked = blocked.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1)
 	assert.False(t, blocked.SafetyInjectionActuated,
 		"a blocked SI signal must not actuate below the setpoint")
 	assert.False(t, blocked.ReactorTripped,
 		"one channel below voting threshold must not trip the reactor")
 
 	open := ReactorProtectionSystem{}
-	open = open.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0)
+	open = open.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1)
 	assert.True(t, open.SafetyInjectionActuated,
 		"without the block the same state must actuate SI")
 }

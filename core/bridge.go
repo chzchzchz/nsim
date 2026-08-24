@@ -108,6 +108,31 @@ func addPlantOperationControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Stepback-failure malfunction insert: models the training
+	// malfunction that impairs the plant control system's power
+	// reduction, leaving the reactor shutdown system as the only
+	// remaining protection.
+	//   "This malfunction event impairs the first line of protective
+	//    action initiated by the reactor control system ... However,
+	//    the reactor shutdown system (SDS) is always poised to act"
+	//   specs/pwr_sim/chapter_4/page_051.txt:5-9
+	m["PlantOperation/StepbackFailed"] = &bridge.Control{
+		Part:  "PlantOperation",
+		Label: "StepbackFailed",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(p.PlantOperation.StepbackFailed)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.PlantOperation.StepbackFailed = v
+			return nil
+		},
+	}
+
 	// Reactor power setpoint target (chapter 3 pop-up):
 	//   "Enter 'reactor power SP target' = 90 %"
 	//   specs/pwr_sim/chapter_3/page_036.txt:37-38

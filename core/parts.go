@@ -4732,6 +4732,16 @@ type ReactorProtectionSystem struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:114-118
 	ChannelTest RPSChannelTest
 
+	// FlowEstablished is the low-flow trip's process memory: it sets
+	// once measured forced flow has reached the trip setpoint and
+	// stays set, so the trip function answers a DEGRADED flow - a loss
+	// from an established lineup, not the startup ramp of pumps that
+	// were never up. Modeling convention; the spec documents the trip
+	// function but not its interlock memory ("low flow ... provide
+	// trips",
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:80-87).
+	FlowEstablished bool
+
 	// TripSignalCount tracks how many of the redundant trip
 	// channels are demanding a trip. The simplified model
 	// collapses the four channels into a single integer and
@@ -4831,6 +4841,19 @@ const (
 	// RPSLowTcoldTrip is the reactor coolant cold-leg
 	// temperature (°F) below which a trip signal is generated.
 	RPSLowTcoldTrip float64 = 530.0
+
+	// RPSLowFlowTripFraction is the forced-coolant-flow fraction of
+	// rated below which a reactor-trip signal is generated while the
+	// at-power permissive is satisfied. The spec lists the function
+	// but not its numeric setpoint:
+	// "Primary coolant trip signals - Departure from nucleate boiling
+	// ratio, kw/ft, low flow, and reactor coolant pump under-speed
+	// trip signals provide trips."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:80-87
+	// 0.85 of rated flow is an assumption typical of Westinghouse
+	// low-flow trips; with one of four machines lost the flywheel
+	// coastdown crosses it about 9 s after the trip.
+	RPSLowFlowTripFraction float64 = 0.85
 
 	// RPSAtPowerPermissiveFraction is the reactor power fraction
 	// below which the "at-power" reactor trips are not enabled
@@ -5101,6 +5124,7 @@ const (
 	RPSTcoldChannelInTest
 	RPSContainmentChannelInTest
 	RPSPressurizerChannelInTest
+	RPSFlowChannelInTest
 )
 
 // name returns the bridge enum string for the selection.
@@ -5116,6 +5140,8 @@ func (t RPSChannelTest) name() string {
 		return "Containment"
 	case RPSPressurizerChannelInTest:
 		return "Pressurizer"
+	case RPSFlowChannelInTest:
+		return "Flow"
 	default:
 		return "None"
 	}
@@ -5778,6 +5804,20 @@ const (
 	// Assumption.
 	StepbackMaxHold = 180 * time.Second
 
+	// StepbackInitiationFlowFrac is the forced-flow fraction below
+	// which a degraded-coolant-flow condition arms the stepback in
+	// addition to the turbine-trip trigger: "The loss of one RC pump
+	// will immediately initiate reactor power stepback. As the
+	// coolant flow for one loop is decreasing rapidly, the low
+	// coolant flow in that loop will exceed the trip setpoint and
+	// will scram the reactor."
+	//   specs/pwr_sim/chapter_4/page_051.txt:44-47
+	// Assumption; the source sequences the runback ahead of the trip
+	// but gives no initiation threshold, so the value sits above the
+	// low-flow trip setpoint (RPSLowFlowTripFraction) to preserve
+	// that ordering.
+	StepbackInitiationFlowFrac = 0.93
+
 	// StepbackXenonBoronGain is the soluble-boron dilution (ppm)
 	// that offsets one unit of xenon-135 growth above its rated-power
 	// equilibrium: xenon worth -2.7 pct per unit Xe (core/reactor.go
@@ -5996,6 +6036,25 @@ type PlantOperation struct {
 	// stepback controller holds (normalised 0..1).
 	StepbackDemand float64
 
+	// StepbackFailed models the inserted malfunction that impairs
+	// the plant control system's power-reduction response: while set,
+	// no new stepback can be initiated and the shutdown system alone
+	// answers the process conditions.
+	//   "This malfunction event impairs the first line of protective
+	//    action initiated by the reactor control system ... However,
+	//    the reactor shutdown system (SDS) is always poised to act,
+	//    should those alarm limits reach the trip setpoint."
+		//   specs/pwr_sim/chapter_4/page_051.txt:5-9
+	StepbackFailed bool
+
+	// StepbackFlowArmed is the runback's flow latch: it sets once
+	// forced flow has reached StepbackInitiationFlowFrac and stays
+	// set, so degraded-flow arming answers a loss of established flow
+	// rather than a pump startup ramp passing through the band on its
+	// way up. Modeling convention paired with the RPS flow latch
+	// (same page_051.txt:44-47 sequence).
+	StepbackFlowArmed bool
+
 	// StepbackCVCSDilute requests the CVCS dilution mode while the
 	// stepback is latched, so soluble-boron dilution carries the
 	// post-stepback xenon buildup instead of rod margin.
@@ -6019,23 +6078,55 @@ type PlantOperation struct {
 // Xenon growth after the power cut is carried by soluble-boron dilution
 // (the load-follow compensation duty) so rod margin is never the
 // binding limit during the hold.
-func (po PlantOperation) Stepback(tstate TurbineState, rpv ReactorPressureVessel) PlantOperation {
+// Stepback latches and drives the automatic reactor-power runback.
+// Arming requires a degraded first-line control trigger - a tripped
+// turbine or forced flow fallen below the initiation band - with the
+// core still critical above the target level; a reactor trip supersedes
+// the runback, and the latch releases once both triggers clear so
+// operator demand regains the rods. While active the controller drives
+// measured reactivity toward a shrinking subcritical bias: rod motion
+// answers immediately while neutron power lags on the point-kinetics
+// multiplier, so reactivity tracking folds the core onto the park
+// without the stored-worth overshoot a power-error integral produces.
+// Xenon growth after the power cut is carried by soluble-boron dilution
+// (the load-follow compensation duty) so rod margin is never the
+// binding limit during the hold. The inserted stepback-failure
+// malfunction blocks new arming, leaving the shutdown system as the
+// remaining protection ("the reactor shutdown system (SDS) is always
+// poised to act", specs/pwr_sim/chapter_4/page_051.txt:8-9); the flow
+// trigger models the pump-trip response "The loss of one RC pump will
+// immediately initiate reactor power stepback"
+// (specs/pwr_sim/chapter_4/page_051.txt:44-46).
+func (po PlantOperation) Stepback(tstate TurbineState, flowFrac float64, rpv ReactorPressureVessel) PlantOperation {
 	ret := po
 	if rpv.Trip {
 		ret.StepbackActive = false
 		return ret
 	}
+	// Degraded established flow only: the latch sets once forced flow
+	// has reached the initiation band (so a pump startup ramp passing
+	// through the band on its way up cannot arm the runback) and stays
+	// set - a loss of established flow then arms and HOLDS the runback
+	// for the episode. Zero flow is natural circulation (never armed),
+	// mirroring the low-flow trip's latch in rps.go.
+	flowDegraded := ret.StepbackFlowArmed &&
+		flowFrac < StepbackInitiationFlowFrac
+	if flowFrac >= StepbackInitiationFlowFrac {
+		ret.StepbackFlowArmed = true
+	}
+	turbineTripped := tstate == TurbineTripped
 	if !ret.StepbackActive {
-		if tstate != TurbineTripped || float64(rpv.FissionPower) <=
-			StepbackPowerFraction*float64(CoreFissionPowerAtRated) {
+		if ret.StepbackFailed || (!turbineTripped && !flowDegraded) ||
+			float64(rpv.FissionPower) <=
+				StepbackPowerFraction*float64(CoreFissionPowerAtRated) {
 			return ret
 		}
 		ret.StepbackActive = true
 		ret.StepbackDemand = rpv.ControlRods.Insertion + RodInsertionSpeed
-	} else if tstate != TurbineTripped {
-		// Reset consumed: the trip latch is cleared (State Off) or
-		// the machine is back in service (Running) - either way the
-		// operator regains rod demand for the recovery.
+	} else if !turbineTripped && !flowDegraded {
+		// Both triggers consumed: the trip latch is cleared (State
+		// Off) or the machine is back in service (Running) and flow
+		// has recovered - the operator regains rod demand.
 		ret.StepbackActive = false
 		return ret
 	}

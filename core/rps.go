@@ -41,6 +41,7 @@ func (r *ReactorProtectionSystem) Step(
 	tcoldF float64,
 	containmentPressureGauge Pressure,
 	powerFrac float64,
+	flowFrac float64,
 ) ReactorProtectionSystem {
 	ret := *r
 
@@ -96,6 +97,8 @@ func (r *ReactorProtectionSystem) Step(
 	case RPSPressurizerChannelInTest:
 		pzrPressure = max(pzrPressure,
 			RPSLowPressurizerPressureTrip+1)
+	case RPSFlowChannelInTest:
+		flowFrac = max(flowFrac, RPSLowFlowTripFraction+0.01)
 	}
 
 	var trips int
@@ -119,6 +122,38 @@ func (r *ReactorProtectionSystem) Step(
 	}
 	ret.TripSignalCount = trips
 
+	// Low forced-coolant-flow reactor trip. The signal votes the trip
+	// directly rather than through the collapsed vote count: the
+	// simplified model collapses each monitored variable's redundant
+	// channels into a single integer, so no lone variable could ever
+	// reach the 2/4 threshold by itself, while the loss-of-flow
+	// evolution requires exactly that single-signal response ("the low
+	// coolant flow in that loop will exceed the trip setpoint and will
+	// scram the reactor", specs/pwr_sim/chapter_4/page_051.txt:46-47).
+	// It is one of the independent primary-coolant trip functions
+	// ("low flow, and reactor coolant pump under-speed trip signals
+	// provide trips", specs/the_westinghouse_pressurized_water_react/
+	// chapter_7/page_138.txt:80-87) and carries no ESFAS output:
+	// Table 7-1 lists no flow-driven safeguard
+	// (chapter_7/page_140.txt:6-81). Arming follows the same at-power
+	// permissive as the other at-power trips: reduced-flow lineups are
+	// normal below it (sequential pump starts, hot standby).
+	// specs/westinghouse_plant_operations/chapter_19/page_018.txt:3-5
+	// The FlowEstablished latch scopes the signal to a DEGRADED
+	// flow: it sets once measured flow has reached the setpoint and
+	// stays set, so the trip answers a loss from an established
+	// lineup, never a pump startup ramp passing through the band on
+	// its way up. The latch reads the previous step's state,
+	// matching the one-step telemetry lag used elsewhere in this
+	// step. A fully secured lineup (flow exactly zero) is natural
+	// circulation - the same boundary at which the RPV inlet blend
+	// switches off.
+	lowFlowTrip := ret.FlowEstablished &&
+		flowFrac < RPSLowFlowTripFraction && atPowerTripsEnabled
+	if flowFrac >= RPSLowFlowTripFraction {
+		ret.FlowEstablished = true
+	}
+
 	// Declare reactor trip when 2/4 voting threshold is met
 	// OR when the operator has pressed manual trip.
 	// "The RPS provides for manual initiation of reactor trip
@@ -128,6 +163,7 @@ func (r *ReactorProtectionSystem) Step(
 		// Latched; stays tripped until manually reset.
 	} else if ret.TripSignalCount >= RPSTripVotingThreshold ||
 		ret.ManualTrip ||
+		lowFlowTrip ||
 		ret.SafetyInjectionActuated {
 		// An SI signal votes the trip directly: "Safety injection
 		// signal - Actuation of the Safety Injection System
