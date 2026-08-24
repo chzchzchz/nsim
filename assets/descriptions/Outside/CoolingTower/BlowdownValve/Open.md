@@ -1,6 +1,8 @@
-Continuous blowdown valve position for the circulating water system. Blowdown removes a slice of circulating water specifically to control impurity concentration that evaporation would otherwise steadily increase.
+Continuous blowdown valve position for the circulating water system. Evaporation leaves dissolved solids behind - pure water leaves, minerals stay - so without removal, concentration would climb toward scale and corrosion chemistry nobody wants in condenser tubes.
 
-Chemistry is the driver: cycles of concentration climb until blowdown plus drift equals makeup minus evaporation. Set it and leave it - chasing conductivity manually invites scale or corrosion excursions.
+Blowdown removes a controlled slice of circulating water specifically to cap concentration cycles. The steady-state balance is simple: makeup equals evaporation plus drift plus blowdown. Set it from chemistry targets and leave it; chasing conductivity manually invites excursions in both directions.
+
+Source: specs/westinghouse_tech_manual/chapter_14/page_1044.txt:12-17
 
 Related controls: [MakeupValve](Outside/CoolingTower/MakeupValve/Open)
 Related sensors: [EvaporationFlow](Outside/CoolingTower/EvaporationFlow)

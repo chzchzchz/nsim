@@ -1,6 +1,8 @@
-Containment spray pump running indicator. Spray is the active response to containment pressure or temperature exceeding design targets after a mass and energy release.
+Containment spray pump running indicator. Spray is the active response to containment pressure or temperature exceeding design targets after mass and energy releases - passive condensation on structures gets you partway, spray finishes the job.
 
-With headers open and pumps running, containment pressure falls as steam condenses on droplets - watch [containment pressure](ReactorBuilding/ContainmentPressure) respond within seconds to validate real flow.
+A minimum of two fan cooler units also work post-accident alongside spray; together they return the atmosphere to acceptable bands. Verify response in the effect, not the indication: [containment pressure](ReactorBuilding/ContainmentPressure) and [temperature](ReactorBuilding/ContainmentBuilding/Temperature) falling is the proof.
+
+Source: specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:12-18
 
 Related sensors: [SprayHeaderOpen](AuxiliaryBuilding/ContainmentSpraySystem/SprayHeaderOpen), [Temperature](ReactorBuilding/ContainmentBuilding/Temperature)
 

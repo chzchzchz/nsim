@@ -1,6 +1,8 @@
 Standby spent fuel pool cooling pump auto-started at low header pressure of about 50 psig - the third pump covering loss of a running one without operator action.
 
-Auto-start on pressure rather than pump breaker status means it covers any cause of flow loss, not just electrical trips.
+Starting on pressure rather than breaker status means it covers any cause of flow loss: electrical trips, couplings, impellers. After it starts, someone still owns finding out why the original pump stopped.
+
+Source: /chapter_12/page_171.txt:47-48
 
 Related sensors: [PumpRunning](AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PumpRunning)
 

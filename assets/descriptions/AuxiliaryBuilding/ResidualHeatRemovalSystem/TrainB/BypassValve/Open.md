@@ -1,6 +1,6 @@
-RHR train TrainB bypass valve position. Modulating flow around the RHR heat exchanger controls how much heat each pass removes - this is the cooldown-rate handle, since primary heatup rate is limited to about 50F/hr by spec and cooldown rates are similarly bounded.
+RHR train B bypass valve position - the redundant twin of train A's exchanger bypass. With both trains running, balancing their bypass positions splits total cooldown rate evenly; with one train out, the survivor's bypass carries the whole job.
 
-Full bypass sends minimal flow through the exchanger (slow cooldown); closing bypass maximizes heat transfer. Watch component cooling water supply temperature, which caps exchanger performance.
+Watch [CCW outlet temperature](AuxiliaryBuilding/ComponentCoolingWaterSystem/OutletTemp) as the performance ceiling: the RHR exchanger cannot cool the primary below what component cooling water will absorb.
 
 Related controls: [PumpRunning](AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/PumpRunning)
 Related sensors: [OutletTemp](AuxiliaryBuilding/ComponentCoolingWaterSystem/OutletTemp), [PumpRunning](AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/PumpRunning)

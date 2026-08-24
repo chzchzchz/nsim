@@ -1,6 +1,8 @@
-ESF bus A voltage. The engineered safety system loads are fed from 6600-volt buses, with smaller loads stepping down through 480-volt transformation.
+ESF bus A voltage. The engineered safety system loads feed from 6600-volt buses, stepping down to 480 volts for smaller loads.
 
-Voltage magnitude matters for motor-driven safeguards: pumps like HHSI and containment spray will not accelerate properly on depressed voltage, so bus voltage is checked before crediting a train.
+Voltage magnitude decides whether motor-driven safeguards actually develop torque: HHSI, containment spray, and service water pumps all hum instead of pump on depressed voltage. Operators check bus voltage before crediting a train as functional, particularly after transfers between supply transformers.
+
+Source: /chapter_11/page_165.txt:72-74
 
 Related controls: [BreakerClosed](Electrical/ESFBusA/BreakerClosed)
 Related sensors: [Energized](Electrical/ESFBusA/Energized)

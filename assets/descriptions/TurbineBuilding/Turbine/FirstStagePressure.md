@@ -1,6 +1,8 @@
-Steam pressure immediately downstream of the governing valves in psig - effectively an instantaneous, fast load meter since it scales with steam flow.
+Steam pressure downstream of the governing valves in psig - effectively an instantaneous, fast load meter, since pressure there scales almost linearly with steam mass flow into the machine.
 
-The DEHC uses first-stage pressure alongside speed as feedback for its control computations, and dispatch interfaces use similar signals when computing plant power capability.
+The DEHC uses it alongside speed as feedback in its control computations - the reference describes signals comparing turbine speed AND first-stage pressure with reference values. It reacts faster than generator output to governor movement (no electrical dynamics in the way), making it the right place to watch when diagnosing valve problems versus electrical problems.
+
+Source: specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
 
 Related sensors: [GoverningValve](TurbineBuilding/Turbine/GoverningValve), [RealPower](TurbineBuilding/Turbine/RealPower)
 

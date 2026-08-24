@@ -1,6 +1,8 @@
-Condenser absolute pressure in psig - the turbine backpressure readout. Lower is better: every point of vacuum lost is load capability and efficiency gone.
+Condenser absolute pressure in psig - the turbine backpressure readout, and the number that decides how much of the steam's energy the machine can convert. Lower is better: rising backpressure costs measurable output even before it threatens vibration limits.
 
-The condenser condenses LP turbine exhaust plus feedwater pump turbine exhaust, and must also swallow steam dump flow with acceptable pressure rise; circulating water supply from the [CW system](Outside/CirculatingWaterSystem/Flow) is what keeps it cold enough to do that.
+The condenser condenses LP turbine exhaust plus both main feedwater pump turbine exhausts, and must additionally swallow full steam dump flow with only acceptable backpressure increase - that sizing assumption is what makes trip transients survivable without atmospheric release. Its cold side is entirely dependent on [circulating water flow](Outside/CirculatingWaterSystem/Flow); its air side on the [vacuum pumps](TurbineBuilding/Condenser/VacuumPump).
+
+Source: specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:20-27
 
 Related controls: [VacuumPump](TurbineBuilding/Condenser/VacuumPump), [DumpValve](TurbineBuilding/Turbine/DumpValve)
 Related sensors: [Flow](Outside/CirculatingWaterSystem/Flow)

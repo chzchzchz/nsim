@@ -1,6 +1,11 @@
-Engages automatic rod control. While latched, controller algorithms vary rod speed with the size of the Tavg error - large deviations move rods briskly, small errors creep - and own the demand path instead of the manual input.
+Engages automatic rod control. While latched, the controller owns the insertion demand: it integrates the error between measured Tavg and the programmed reference, moving rods briskly for large deviations and creeping as the error closes. The manual demand path is ignored while automatic is engaged.
 
-Eight trip breakers sit in series/parallel with the rod drive power supply, actuated by the RPS, so automatic control always operates under protection-system shadow. Manual mode remains available at preset fixed rate if automation must be relinquished.
+This is one of the last steps in a startup sequence - the reference checklist places rod control in automatic alongside steam generator level control and the Tavg mode of steam dump once the plant is stable at low power, because from there the coordinated system handles load changes better than a hand on the rods.
+
+Automatic control always operates under protection-system shadow: eight trip breakers sit in series/parallel with rod drive power and the RPS opens them on any trip, dropping rods regardless of what the controller wants.
+
+Source: specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:24-27
+Source: specs/westinghouse_plant_operations/chapter_19/page_003.txt:15-18
 
 Related controls: [RodControlAuto](PlantOperation/RodControlAuto), [Insertion](ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion)
 Related sensors: [Insertion](ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion), [ProgrammedTavg](ReactorBuilding/ReactorPressureVessel/ControlRods/ProgrammedTavg)
