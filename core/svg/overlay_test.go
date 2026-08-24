@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	u "github.com/bcicen/go-units"
 	"github.com/chzchzchz/nsim/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -126,6 +127,22 @@ func TestOverlay_Coverage(t *testing.T) {
 		require.Positive(t, tripIdx)
 		require.Positive(t, infoIdx)
 		assert.Less(t, tripIdx, infoIdx)
+	})
+
+	t.Run("tank level gauges track inventory", func(t *testing.T) {
+		p := core.MakePlant()
+		out := renderPlant(t, &p)
+		require.Equal(t, len(levelAccessors),
+			strings.Count(out, `class="level-gauge"`),
+			"every tank-backed part renders exactly one gauge")
+
+		// Clamping: an overfilled tank renders identically to an
+		// exactly-full one.
+		cst := &p.Outside.CondensateStorageTank
+		cst.Level = cst.Capacity
+		full := renderPlant(t, &p)
+		cst.Level = core.Volume{Val: 1e9, Unit: u.Gallon}
+		assert.Equal(t, full, renderPlant(t, &p))
 	})
 }
 

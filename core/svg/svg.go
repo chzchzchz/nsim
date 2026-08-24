@@ -162,6 +162,28 @@ var runAccessors = map[string]func(*core.Plant) bool{
 	"RCFC_D": func(p *core.Plant) bool { return p.AuxiliaryBuilding.RCFCUnits[3].Running },
 }
 
+// levelAccessors maps tank-backed diagram parts to their live
+// inventory (level, capacity) so the side-mounted level gauges
+// track real state.
+var levelAccessors = map[string]func(*core.Plant) (core.Volume, core.Volume){
+	"CST": func(p *core.Plant) (core.Volume, core.Volume) {
+		t := p.Outside.CondensateStorageTank
+		return t.Level, t.Capacity
+	},
+	"HDT": func(p *core.Plant) (core.Volume, core.Volume) {
+		t := p.TurbineBuilding.HeaterDrainTank
+		return t.Level, t.Capacity
+	},
+	"PRT": func(p *core.Plant) (core.Volume, core.Volume) {
+		t := p.ReactorBuilding.PressurizedReliefTank
+		return t.Level, t.Capacity
+	},
+	"EFWSTank": func(p *core.Plant) (core.Volume, core.Volume) {
+		t := p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.Tank
+		return t.Level, t.Capacity
+	},
+}
+
 // tintAmber/tintRed are halo colours for warning vs trip severity.
 const (
 	tintAmber = "#f0a500"
@@ -714,6 +736,9 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			fmt.Fprintf(&b,
 				`<circle cx="%.0f" cy="%.0f" r="%.0f" fill="%s" stroke="%s" stroke-width="1"/>`+"\n",
 				a.X+sw*0.38, a.Y-sh*0.42, dotR, statusOn, pidDotEdge)
+		} else if lv, okL := levelAccessors[dp.id]; okL {
+			level, capacity := lv(p)
+			writeLevelGauge(&b, a, sw, sh, volumeFraction(level, capacity))
 		}
 	}
 
@@ -920,6 +945,42 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms [
 			ring(a, (w+h)/2*rd.frac, rd.colour)
 		}
 	}
+}
+
+// gauge geometry: a slim vertical inventory bar docked beside the
+// tank symbol. One bar rule fits every tank silhouette in the asset
+// library; an in-vessel fill would need per-symbol art knowledge.
+const (
+	gaugeWidth   = 5.0
+	gaugeGap     = 4.0
+	gaugeFrac    = 0.8
+	gaugeFill    = "#aad4ff"
+	gaugePadding = 1.0
+)
+
+// volumeFraction converts a level/capacity pair into a clamped 0..1
+// fraction; unknown capacities read as empty rather than overflowing.
+func volumeFraction(level, capacity core.Volume) float64 {
+	if capacity.Float() <= 0 {
+		return 0
+	}
+	return clampRange(level.Float()/capacity.Float(), 0, 1)
+}
+
+// writeLevelGauge draws the outline bar plus a fill anchored at the
+// bottom edge so partial inventory reads at a glance.
+func writeLevelGauge(b *strings.Builder, a Anchor, sw, sh, frac float64) {
+	h := sh * gaugeFrac
+	x := a.X + sw/2 + gaugeGap
+	y := a.Y - h/2
+	fillH := (h - 2*gaugePadding) * frac
+	fmt.Fprintf(b,
+		`<g class="level-gauge">`+
+			`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" fill="none" stroke="%s" stroke-width="1"/>`+
+			`<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s"/>`+
+			`</g>`+"\n",
+		x, y, gaugeWidth, h, pidBuildingEdge,
+		x+gaugePadding, y+h-gaugePadding-fillH, gaugeWidth-2*gaugePadding, fillH, gaugeFill)
 }
 
 // writeAlarmPanel docks the live alarm list above the legend so
