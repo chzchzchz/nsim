@@ -117,6 +117,32 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Manual transfer of SG level control: while latched, the
+	// regulator holds the operator's ValveDemand instead of the
+	// three-element law's. The unload evolution transfers at
+	// house-load level.
+	// "reactor control and steam generator water level control are
+	//  transferred to manual operation"
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:156-159
+	m["TurbineBuilding/FeedwaterRegulator/ManualControl"] = &bridge.Control{
+		Part:  "TurbineBuilding/FeedwaterRegulator",
+		Label: "ManualControl",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.TurbineBuilding.FeedwaterRegulator.ManualControl)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.FeedwaterRegulator.ManualControl = v
+			return nil
+		},
+	}
+
+
 	// Turbine load setpoint (chapter 15):
 	// "After generator breaker closure, the ability to increase or decrease
 	// electrical load at a controlled selectable rate."

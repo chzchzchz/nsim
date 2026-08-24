@@ -1835,6 +1835,17 @@ type FeedwaterRegulator struct {
 	// controlling the feedwater valve. False when the pump is
 	// stopped or the operator has taken manual control.
 	Running bool
+
+	// ManualControl transfers SG level control from the three-
+	// element law to operator positioning of the control valve:
+	// ValveDemand then holds the operator's write instead of the
+	// computed demand, and the integral freezes so retransfer to
+	// automatic does not bump the valve. The unload evolution
+	// makes this transfer at house-load level.
+	// "reactor control and steam generator water level control are
+	// transferred to manual operation"
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:156-159
+	ManualControl bool
 }
 
 // MSR and extraction steam design constants (plans/p11_1.txt).

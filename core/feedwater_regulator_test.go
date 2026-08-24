@@ -6,6 +6,7 @@ import (
 
 	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // At construction the feedwater control valve is closed and the
@@ -204,4 +205,61 @@ func TestPlant_FeedwaterRegulatorDrivesControlValve(t *testing.T) {
 			"got %v vs %v",
 		p.TurbineBuilding.MainFeedwaterControlValve.Open,
 		reg.ValveDemand)
+}
+
+// Transferring to manual freezes both the computed demand and the
+// integral: ValveDemand holds the operator's written position while
+// the level error persists, and retransfer to automatic resumes from
+// the frozen integral without bumping the valve.
+// "reactor control and steam generator water level control are
+//  transferred to manual operation"
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:156-159
+func TestFeedwaterRegulator_ManualHoldsOperatorDemand(t *testing.T) {
+	// Small error so the anti-windup does not pin the integrator
+	// after retransfer (kp*e would exceed the output clamp).
+	r := FeedwaterRegulator{
+		LevelSetpoint: FeedwaterLevelSetpoint,
+		Level:         49,
+		Running:       true,
+		ManualControl: true,
+		ValveDemand:   0.42,
+	}
+	r2 := r.Step()
+	assert.InDelta(t, 0.42, r2.ValveDemand, 1e-12,
+		"manual mode must hold the operator's demand, got %v",
+		r2.ValveDemand)
+	assert.Zero(t, r2.IntegralError,
+		"the integral must freeze in manual mode")
+
+	r3 := r2
+	r3.ManualControl = false
+	r4 := r3.Step()
+	assert.Greater(t, r4.IntegralError, r2.IntegralError,
+		"retransfer to automatic must resume integrating")
+}
+
+// The manual transfer is operator-reachable on the bridge and the
+// control valve follows the written demand instead of the PI law.
+func TestPlant_FeedwaterManualTransferHoldsValve(t *testing.T) {
+	p := MakePlant()
+	p.TurbineBuilding.MainFeedwaterPump.Running = true
+
+	m := GetControlMap(&p)
+	mc, ok := m["TurbineBuilding/FeedwaterRegulator/ManualControl"]
+	require.Truef(t, ok, "want feedwater manual-transfer control registered")
+	require.NoErrorf(t, mc.Set("1"), "Set ManualControl")
+	vd, ok := m["TurbineBuilding/FeedwaterRegulator/ValveDemand"]
+	require.Truef(t, ok, "want regulator demand control registered")
+	require.NoErrorf(t, vd.Set("0.3"), "Set ValveDemand")
+
+	stepN(&p, 10)
+
+	reg := p.TurbineBuilding.FeedwaterRegulator
+	assert.True(t, reg.ManualControl)
+	assert.InDelta(t, 0.3, reg.ValveDemand, 1e-9,
+		"manual demand must survive plant steps, got %v", reg.ValveDemand)
+	assert.InDelta(t, 0.3,
+		p.TurbineBuilding.MainFeedwaterControlValve.Open, 1e-9,
+		"the control valve must follow the manual demand, got %v",
+		p.TurbineBuilding.MainFeedwaterControlValve.Open)
 }

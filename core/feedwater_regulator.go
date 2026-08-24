@@ -58,6 +58,17 @@ func (r *FeedwaterRegulator) Step() FeedwaterRegulator {
 		ffInput = kff * ret.SteamFlow / FeedwaterDesignFlow.Float()
 	}
 
+	if ret.ManualControl {
+		// The operator positions the valve: ValveDemand holds the
+		// written value instead of the computed demand, and the
+		// integral freezes so retransfer to automatic does not bump
+		// the valve. Delivery still gates on the pump and Running.
+		// "reactor control and steam generator water level control
+		//  are transferred to manual operation"
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:156-159
+		return ret
+	}
+
 	if !ret.Running {
 		// When the regulator is stopped the integral freezes
 		// and ValveDemand decays toward zero (the control
