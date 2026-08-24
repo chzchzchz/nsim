@@ -277,3 +277,82 @@ func TestPressurizer_HeaterAutoControlHoldsThroughCooldown(t *testing.T) {
 		float64(PressurizerHeaterTarget-PressurizerAutoHeaterBand),
 		"without regulation the same cooldown sags past the band")
 }
+
+// A selected setpoint re-targets the regulation: armed control holds
+// an intermediate pressure on its own band, which is how staged writes
+// track the heatup's temperature-pressure program instead of jumping
+// between the model floor and the no-load target.
+// "operation of pressurizer heaters and spray maintains the system
+// pressure in accordance with the applicable temperature-pressure
+// curves."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:142-145
+func TestPressurizer_PressureSetpointRegulatesBand(t *testing.T) {
+	pzr := Pressurizer{
+		Pressure:          415,
+		Volume:            Volume{Val: 1500, Unit: u.Gallon},
+		Water:             Volume{Val: 1100, Unit: u.Gallon},
+		HeaterAutoControl: true,
+		PressureSetpoint:  415,
+	}
+	rcsTemp := Temperature{Val: 138, Unit: u.Fahrenheit}
+
+	minPressure, maxPressure := 415.0, 415.0
+	for i := 0; i < int(60*time.Second/TimeStep); i++ {
+		pzr, _ = pzr.Step(rcsTemp, nil, nil, nil, 0, 0)
+		minPressure = min(minPressure, float64(pzr.Pressure))
+		maxPressure = max(maxPressure, float64(pzr.Pressure))
+	}
+	assert.GreaterOrEqual(t, minPressure,
+		415.0-float64(PressurizerAutoHeaterBand)-0.01,
+		"regulation must catch the sag inside its band")
+	assert.LessOrEqual(t, maxPressure, 415.0+1e-6,
+		"the heaters must not overshoot the selected pressure")
+}
+
+// With a setpoint below the no-load target, even the manual heater
+// latch stops there instead of running to PressurizerHeaterTarget.
+func TestPressurizer_ManualHeatersHoldAtSetpoint(t *testing.T) {
+	pzr := Pressurizer{
+		Pressure:         300,
+		Volume:           Volume{Val: 1500, Unit: u.Gallon},
+		Water:            Volume{Val: 1200, Unit: u.Gallon},
+		HeatersOn:        true,
+		PressureSetpoint: 415,
+	}
+	rcsTemp := Temperature{Val: 138, Unit: u.Fahrenheit}
+
+	for i := 0; i < int(30*time.Second/TimeStep); i++ {
+		pzr, _ = pzr.Step(rcsTemp, nil, nil, nil, 0, 0)
+	}
+	assert.InDelta(t, 415.0, float64(pzr.Pressure), 0.5,
+		"manual heaters must stop at the selected pressure: got %v",
+		pzr.Pressure)
+}
+
+// The vessel reports the pressurizer state as THE RCS pressure; a
+// diverging independent relaxation would contradict every
+// operator-maintained program (chapter_7/page_136.txt:5-12).
+func TestPlant_RPVPressureTracksPressurizer(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.Pressurizer.Pressure = 2100
+
+	stepN(&p, 1)
+
+	assert.Equal(t,
+		float64(p.ReactorBuilding.Pressurizer.Pressure),
+		float64(p.ReactorBuilding.ReactorPressureVessel.Pressure),
+		"RPV pressure must track the pressurizer through the surge line")
+}
+
+// The setpoint is operator-reachable on the bridge with the psia kind.
+func TestPressurizer_SetpointControlRoundTrip(t *testing.T) {
+	p := MakePlant()
+	m := GetControlMap(&p)
+	c, ok := m["ReactorBuilding/Pressurizer/PressureSetpoint"]
+	require.Truef(t, ok, "want pressurizer setpoint control registered")
+	require.NoErrorf(t, c.Set("415"), "Set PressureSetpoint")
+
+	assert.Equal(t, Pressure(415),
+		p.ReactorBuilding.Pressurizer.PressureSetpoint)
+	assert.Equal(t, "415", c.Get())
+}

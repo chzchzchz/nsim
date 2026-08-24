@@ -43,10 +43,11 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
 	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:97-98
 	heaters := ret.HeatersOn
 	if ret.HeaterAutoControl {
+		target := ret.heaterTarget()
 		switch {
-		case ret.Pressure <= PressurizerHeaterTarget-PressurizerAutoHeaterBand:
+		case ret.Pressure <= target-PressurizerAutoHeaterBand:
 			ret.AutoHeatersOn = true
-		case ret.Pressure >= PressurizerHeaterTarget:
+		case ret.Pressure >= target:
 			ret.AutoHeatersOn = false
 		}
 		heaters = heaters || ret.AutoHeatersOn
@@ -65,7 +66,7 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
 	ret.PrevRCSTemp = rcsTemp
 
 	// 1) Heater effect. Energized heaters boil liquid into the steam
-	// space, raising pressure toward PressurizerHeaterTarget at
+	// space, raising pressure toward the regulation target at
 	// PressurizerHeaterRate and converting the corresponding liquid
 	// volume to steam.
 	//
@@ -73,8 +74,9 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
 	// the pressurizer necessary to form the steam bubble."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:15-17
 	if heaters && ret.Water.Float() > 0 {
+		target := ret.heaterTarget()
 		psiRise := min(float64(PressurizerHeaterRate)*dt.Seconds(),
-			float64(PressurizerHeaterTarget)-float64(ret.Pressure))
+			float64(target)-float64(ret.Pressure))
 		if psiRise > 0 {
 			ret.Pressure = Pressure(float64(ret.Pressure) + psiRise)
 			bubbleRise := psiRise / PressurizerBubbleStiffness
@@ -260,9 +262,29 @@ type Pressurizer struct {
 	// automatic pressure regulation; it is not an operator input.
 	AutoHeatersOn bool
 
+	// PressureSetpoint selects the pressure the heater regulation
+	// holds. Staged setpoint writes walk heaters and spray along the
+	// applicable temperature-pressure program instead of leaving only
+	// the model floor and the no-load target reachable.
+	// "operation of pressurizer heaters and spray maintains the
+	// system pressure in accordance with the applicable
+	// temperature-pressure curves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:142-145
+	PressureSetpoint Pressure
+
 	// PrevRCSTemp is the hot-leg temperature seen by the previous
 	// step; its finite difference drives thermal-expansion surge.
 	PrevRCSTemp Temperature
+}
+
+// heaterTarget is the pressure the heater paths regulate toward: the
+// operator-selected setpoint when one is written, else the no-load
+// target, so a zero-valued field preserves the historical behaviour.
+func (p *Pressurizer) heaterTarget() Pressure {
+	if p.PressureSetpoint > 0 {
+		return p.PressureSetpoint
+	}
+	return PressurizerHeaterTarget
 }
 
 // Pressurizer control tunables. The numbers below are sized to give

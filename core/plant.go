@@ -271,6 +271,14 @@ func (r *ReactorBuilding) Step(
 	rpv := ret.ReactorPressureVessel.Step(ret.ReactorCoolantPump.Velocity,
 		ret.secondaryExcessDrawW(sgSteamOutflowFraction, turbineAdmitting, op, dt))
 	ret.ReactorPressureVessel = rpv
+	// Surge-line coupling: the pressurizer is hydraulically common
+	// with the loop, so its state is THE RCS pressure the vessel
+	// reports. Carrying an independent relaxation here let the two
+	// readings diverge from every operator-maintained program.
+	// "First, it must keep the pressure of the Reactor Coolant
+	// System (RCS) within the desired limits"
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:5-12
+	ret.ReactorPressureVessel.Pressure = ret.Pressurizer.Pressure
 
 	// RCP velocity dynamics (plans/p33_1.txt). Each loop's pump
 	// ramps exponentially toward RCPRatedSpeed when its operator

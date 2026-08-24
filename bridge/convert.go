@@ -63,7 +63,7 @@ func ConvertControlValue(kind, raw string) (string, error) {
 			return "", fmt.Errorf("percent %v out of range [0,100]", f)
 		}
 		return fmt.Sprintf("%v", f), nil
-	case "rpm", "psig", "fahrenheit", "gallon", "watt", "ppm", "volt", "hz", "gpm", "mw":
+	case "rpm", "psig", "psia", "fahrenheit", "gallon", "watt", "ppm", "volt", "hz", "gpm", "mw":
 		f, err := strconv.ParseFloat(raw, 64)
 		if err != nil {
 			return "", err

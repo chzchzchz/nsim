@@ -27,6 +27,7 @@ export const UNITS: Record<string, UnitInfo> = {
     signedpercent: { unit: "%",  range: null,    numeric: true },
     rpm:         { unit: "rpm",  range: null,    numeric: true },
     psig:        { unit: "psig", range: null,    numeric: true },
+    psia:        { unit: "psia", range: null,    numeric: true },
     fahrenheit:  { unit: "°F",   range: null,    numeric: true },
     gallon:      { unit: "gal",  range: null,    numeric: true },
     gpm:         { unit: "gpm",  range: null,    numeric: true },

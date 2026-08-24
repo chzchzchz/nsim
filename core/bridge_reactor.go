@@ -428,6 +428,37 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Operator-selected pressurizer pressure for the heater
+	// regulation to hold: staged writes walk heaters and spray along
+	// the temperature-pressure program instead of leaving only the
+	// model floor and the no-load target reachable.
+	// "operation of pressurizer heaters and spray maintains the
+	// system pressure in accordance with the applicable
+	// temperature-pressure curves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:142-145
+	m["ReactorBuilding/Pressurizer/PressureSetpoint"] = &bridge.Control{
+		Part:  "ReactorBuilding/Pressurizer",
+		Label: "PressureSetpoint",
+		Kind:  "psia",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.Pressurizer.PressureSetpoint)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("psia", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.Pressurizer.PressureSetpoint = Pressure(v)
+			return nil
+		},
+	}
+
+
 	// Pressurizer power-operated relief valve (chapter 3
 	// pressure-limiting train):
 	// "Reductions in plant electrical load with resultant
