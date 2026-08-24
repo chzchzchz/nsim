@@ -234,6 +234,43 @@ func addOutsideControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Auxiliary feedwater pumps lift CST inventory into the steam
+	// generators when the main feedwater system cannot hold level.
+	//   - Diverse drives: "The use of both motor driven and turbine
+	//     driven pumps satisfies the requirement that the pumps be
+	//     powered by diverse power sources."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:1-5
+	//   - Manual operation: "Auxiliary feedwater flow is manually
+	//     increased to maintain a steady value of steam generator
+	//     water level."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:8-10
+	for _, afw := range []struct {
+		id   string
+		pump *AFWPump
+	}{
+		{"Outside/DieselAFWPump", &p.Outside.DieselAFWPump},
+		{"Outside/MotorAFWPump", &p.Outside.MotorAFWPump},
+		{"Outside/TurbineAFWPump", &p.Outside.TurbineAFWPump},
+	} {
+		pump := afw.pump
+		m[afw.id+"/Running"] = &bridge.Control{
+			Part:  afw.id,
+			Label: "Running",
+			Kind:  "bool",
+			Get: func() string {
+				return bridge.BoolToStr(pump.Running)
+			},
+			Set: func(s string) error {
+				v, err := bridge.StrToBool(s)
+				if err != nil {
+					return err
+				}
+				pump.Running = v
+				return nil
+			},
+		}
+	}
+
 }
 
 // addOutsideSensors adds Sensor entries keyed by the namespace managed by this file to m.
@@ -268,6 +305,29 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 			return bridge.FormatSensorValue("bool",
 				p.Outside.CirculatingWaterPump.DriveReady)
 		},
+	}
+
+	// Auxiliary feedwater pumps only deliver against their latched
+	// drive: diesel-fed bus for the diesel pump, ESF bus A for the
+	// motor pump, and an SG steam header for the turbine pump (see
+	// addOutsideControls for the spec citations).
+	for _, afw := range []struct {
+		id   string
+		pump *AFWPump
+	}{
+		{"Outside/DieselAFWPump", &p.Outside.DieselAFWPump},
+		{"Outside/MotorAFWPump", &p.Outside.MotorAFWPump},
+		{"Outside/TurbineAFWPump", &p.Outside.TurbineAFWPump},
+	} {
+		pump := afw.pump
+		m[afw.id+"/DriveReady"] = &bridge.Sensor{
+			Part:  afw.id,
+			Label: "DriveReady",
+			Kind:  "bool",
+			Get: func() (string, error) {
+				return bridge.FormatSensorValue("bool", pump.DriveReady)
+			},
+		}
 	}
 
 	// Cooling-tower basin level. The CW pumps draw suction from

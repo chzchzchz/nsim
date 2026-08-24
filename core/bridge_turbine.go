@@ -343,6 +343,29 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Heater drain pump returns the heater-drain tank inventory
+	// toward the steam generators through the feedwater stream.
+	// "a drain tank from where it is returned to the
+	//  steam generators through the feedwater stream."
+	// specs/the_westinghouse_pressurized_water_react/chapter_1/page_024.txt:17-18
+	m["TurbineBuilding/HeaterDrainPump/Running"] = &bridge.Control{
+		Part:  "TurbineBuilding/HeaterDrainPump",
+		Label: "Running",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.TurbineBuilding.HeaterDrainPump.Running)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.HeaterDrainPump.Running = v
+			return nil
+		},
+	}
+
 	// Main feedwater pump (chapter 16 startup): the SG feedwater
 	// supply is switched from the auxiliary feedwater system to
 	// this system before AFW flow capacity (~3.5-percent steam
