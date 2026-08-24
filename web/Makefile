@@ -16,6 +16,10 @@
 #                  sourcemaps, wasm keeps full debug info)
 #   make clean   — remove public/nsim.wasm, dist/, src/wasm_exec.js,
 #                  web.tgz, web-debug.tgz
+#
+# Node dependencies install automatically: targets that need them
+# depend on a stamp inside node_modules keyed on the manifests, so
+# npm runs only when package.json or package-lock.json changes.
 
 GO ?= go
 GOROOT := $(shell $(GO) env GOROOT)
@@ -31,6 +35,11 @@ BUNDLE_DEPS := $(shell find src index.html vite.config.ts package.json 2>/dev/nu
 DESC_JSON := public/descriptions.json
 DESC_SRCS := scripts/gen-descriptions.mjs \
 	$(shell find ../assets/descriptions -name '*.md' 2>/dev/null)
+
+# Sentinel marking node_modules as in sync with the manifests.
+# It lives inside node_modules so wiping the directory also wipes
+# the stamp and forces a fresh install.
+NODE_STAMP := node_modules/.install-stamp
 
 .PHONY: all build wasm wasm-exec typecheck test dev descriptions bundle bundle-release bundle-debug clean
 
@@ -57,7 +66,11 @@ descriptions: $(DESC_JSON)
 $(DESC_JSON): $(DESC_SRCS)
 	node scripts/gen-descriptions.mjs
 
-typecheck:
+$(NODE_STAMP): package.json package-lock.json
+	npm install --no-audit --no-fund
+	touch $@
+
+typecheck: $(if $(wildcard node_modules),$(NODE_STAMP))
 	@echo "running tsc --noEmit"
 	@if command -v npx >/dev/null 2>&1 && [ -d node_modules ]; then \
 		npx tsc --noEmit; \
@@ -67,15 +80,11 @@ typecheck:
 
 # Unlike typecheck, a missing toolchain fails loudly: the unit
 # tests assert correctness and must not be skipped silently.
-test:
+test: $(NODE_STAMP)
 	@echo "running vitest"
-	@if [ ! -d node_modules ]; then \
-		echo "node_modules not installed; run 'npm install' first" >&2; \
-		exit 1; \
-	fi
 	npx vitest run
 
-dev: descriptions
+dev: $(NODE_STAMP) descriptions
 	@echo "starting vite dev server on http://localhost:5173"
 	@if command -v npx >/dev/null 2>&1; then \
 		npx vite; \
@@ -89,11 +98,7 @@ dev: descriptions
 # Target-specific variables drive both variants through one recipe:
 # vite build is not file-trackable per output, so the tarballs just
 # depend directly on every front-end source and the wasm blob.
-web.tgz web-debug.tgz: $(WASM_EXEC_DST_PUBLIC) $(WASM_OUT) $(DESC_JSON) $(BUNDLE_DEPS)
-	@if [ ! -d node_modules ]; then \
-		echo "node_modules not installed; run 'npm install' first" >&2; \
-		exit 1; \
-	fi
+web.tgz web-debug.tgz: $(NODE_STAMP) $(WASM_EXEC_DST_PUBLIC) $(WASM_OUT) $(DESC_JSON) $(BUNDLE_DEPS)
 	npx vite build $(VITE_FLAGS) --outDir $(DIST_DIR)
 	rm -rf .bundle && mkdir -p .bundle/$(BUNDLE_DIR)
 	cp -r $(DIST_DIR)/. .bundle/$(BUNDLE_DIR)/
