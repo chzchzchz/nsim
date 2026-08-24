@@ -68,12 +68,37 @@
             background: white;
             border: 1px solid #ccc;
             border-radius: 4px;
-            overflow: auto;
+            /* Pan and zoom drive the viewpoint; native scrolling
+               would fight the transform. */
+            overflow: hidden;
+            position: relative;
             display: flex;
             justify-content: center;
             max-height: 50vh;
+            touch-action: none;
         }
         #pid svg { max-height: 50vh; max-width: 100%; width: auto; height: auto; display: block; }
+        .pid-canvas { transform-origin: 0 0; will-change: transform; }
+        .pid-zoom {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            display: flex;
+            gap: 4px;
+        }
+        .pid-zoom button {
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            border: 1px solid #bbb;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            font-size: 14px;
+            line-height: 1;
+            cursor: pointer;
+        }
+        .pid-zoom button:hover { background: #eee; }
         #tiles {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));

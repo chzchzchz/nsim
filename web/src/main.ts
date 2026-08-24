@@ -203,7 +203,7 @@ async function main(): Promise<void> {
                     // Swap only when the diagram actually changed so
                     // idle periods do not re-parse an identical DOM.
                     if (typeof svg === "string" && svg !== lastSvgHtml) {
-                        pidEl.innerHTML = svg;
+                        mountPlant(pidEl, svg);
                         lastSvgHtml = svg;
                     }
                     lastSvg = performance.now();
