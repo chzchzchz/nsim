@@ -84,6 +84,21 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 		steamFlow *= max(float64(ret.Velocity)/float64(TurbineRatedSpeed),
 			TurbineRollMinSteamFraction)
 	}
+	// After synchronization the load reference throttles the demand
+	// directly: admitted steam may not exceed the Setpoint fraction
+	// of design flow even while the governing-valve trim is still
+	// converging (or parked wide open from the roll), so raising load
+	// never over-draws the header ahead of the demand ladder.
+	// Setpoint == 0 keeps the "no demand selected" uncapped draw.
+	//
+	// Spec: "After generator breaker closure, the ability to
+	//    increase or decrease electrical load at a controlled
+	//    selectable rate."
+	//    specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:80-82
+	if ret.Synchronized && ret.Setpoint > 0 {
+		steamFlow = min(steamFlow, CondenserDesignSteamLoadGalPer*
+			ret.Setpoint*float64(sgPressure)/float64(SteamGeneratorShellPressure))
+	}
 	steamFlow = max(steamFlow, 0)
 	ret.steamDemandGalPerStep = steamFlow
 

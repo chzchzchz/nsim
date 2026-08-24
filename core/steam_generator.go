@@ -130,11 +130,25 @@ const (
 // drives the boil-rate integration only.
 var SteamGeneratorFullLoadSteamFlow = Volume{Val: 480*2.2046*3600*0.47/7.4805, Unit: u.Gallon}
 
-// SteamGeneratorFullLoadHeatInput is the primary-to-secondary heat
-// flux that vaporises 480 kg/s of water at LatentHeatOfSteamization.
-// Sized to match the spec's 480 kg/s full-load steam flow
-// (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56).
-var SteamGeneratorFullLoadHeatInput Watts = Watts(480 * float64(LatentHeatOfSteamization))
+// SteamGeneratorFullLoadHeatInput is the per-SG primary-to-secondary
+// vaporisation duty at rated load. The lumped single SG carries one
+// loop's share of core thermal power, so the rating anchors to
+// CoreRatedThermalPower / SteamGeneratorLoopCount: full-admission
+// design steam flow then balances rated production and the header
+// holds the full-load shell pressure instead of sagging onto a
+// supply-limited arc. (The spec's per-SG 3,813,000 lb/hr (480 kg/s)
+// full-load steam flow, which sizes SteamGeneratorFullLoadSteamFlow
+// for the inventory debits, corresponds to this duty at an effective
+// evaporation enthalpy below the 1-atm latent heat used for the
+// boil-rate integration.)
+//
+// Spec justification:
+//   - "Full load pressure, shell side: 920 psia (63 bar)" (Table 3.4-1):
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_066.txt:36,80-82
+//   - "Steam flow per steam generator: 3,813,000 lb/hr (480 kg/sec)":
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
+var SteamGeneratorFullLoadHeatInput = Watts(float64(CoreRatedThermalPower) /
+	float64(SteamGeneratorLoopCount))
 
 // Step advances the steam generator by TimeStep. It implements the
 // shell-side heat-transfer / boil-off step described in plans/p6_1.txt,

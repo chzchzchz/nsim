@@ -555,6 +555,33 @@ func TestTurbine_SynchronizedSpeedHeldUnderThrottledAdmission(t *testing.T) {
 		"want bus-held rotor to stay at rated speed under 5 percent admission")
 }
 
+// A synchronized machine's steam demand follows the load reference
+// even with the governing valves parked wide open: the draw is
+// throttled to the Setpoint fraction directly instead of waiting for
+// the DEHM first-stage trim to converge.
+//
+// Spec justification:
+//   - "After generator breaker closure, the ability to increase or
+//      decrease electrical load at a controlled selectable rate."
+//      specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:80-82
+func TestTurbine_SynchronizedDrawFollowsLoadReference(t *testing.T) {
+	tr := steamingTurbine()
+	tr.State = TurbineRunning
+	tr.Velocity = TurbineRatedSpeed
+	tr.Synchronized = true
+	tr.Setpoint = 0.6
+	for i := 0; i < int(10*time.Second/TimeStep); i++ {
+		tr = tr.Step(SteamGeneratorShellPressure, CondenserDesignVacuum, false,
+			openValve())
+	}
+	want := CondenserDesignSteamLoadGalPer * 0.6
+	assert.InDelta(t, want, tr.steamDemandGalPerStep, want*0.02,
+		"synchronized draw should cap at the load reference fraction")
+	assert.InDelta(t, 0.6*float64(TurbineRatedkW), float64(tr.RealPower),
+		0.1*float64(TurbineRatedkW),
+		"want RealPower at the load reference ceiling, got %v", tr.RealPower)
+}
+
 // The main generator breaker is operator-reachable through the
 // control map: closing it parallels the unit once the synchronizer
 // tolerance is met. Wiring check — the sync/pop physics are covered

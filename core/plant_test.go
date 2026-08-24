@@ -885,3 +885,93 @@ func TestPlant_SGSafetyValvePopsAndReseats(t *testing.T) {
 	assert.Equal(t, 0.0, reseat.SafetyValve.Open,
 		"valves should reseat once pressure decays below blowdown")
 }
+
+// At nameplate the secondary energy balance closes: rated heat input
+// meets full-admission design steam flow, so the header holds its
+// full-load shell pressure and the generator delivers rated output
+// instead of settling on a supply-limited arc.
+//
+// Spec justification:
+//   - "Full load pressure, shell side: 920 psia (63 bar)" (Table
+//     3.4-1): specs/the_westinghouse_pressurized_water_react/
+//     chapter_3/page_066.txt:36,80-82
+//   - "plant loading is continued to full power at a rate not to
+//     exceed 5 percent of full power per minute":
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:63-67
+func TestPlant_FullLoadHoldsShellPressureAndRatedOutput(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
+	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	synchronizeAndCloseBreaker(&p)
+	stepN(&p, int(60*time.Second/TimeStep))
+
+	sgP := float64(p.ReactorBuilding.SteamGenerator.Pressure)
+	assert.InDelta(t, float64(SteamGeneratorShellPressure), sgP, 40,
+		"full-load header should hold the shell pressure, got %v", sgP)
+	rp := float64(p.TurbineBuilding.Generator.RealPower)
+	assert.Greater(t, rp, 0.95*float64(TurbineRatedkW),
+		"full load should deliver at least 95 percent of rated MW, got %v", rp)
+	assert.Zero(t, p.TurbineBuilding.Turbine.DumpValve.Open,
+		"condenser dump stays shut at balanced full load")
+	assert.Zero(t, p.ReactorBuilding.SteamGenerator.SafetyValve.Open,
+		"SG safety valves stay seated at balanced full load")
+	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+		"no spurious reactor trip at sustained full load")
+}
+
+// A turbine-trip bypass opens on the trip itself and then modulates
+// around the full-load shell pressure while the stepback folds power:
+// the header never crashes toward the low-steamline protection channel
+// the way a wide-open over-draw would, and the safety valves stay out
+// of the event entirely.
+//
+// Spec justification:
+//   - "turbine bypass valves open automatically on turbine trip,
+//      then modulate to pass steam to the condenser and hold boiler
+//      pressure at the constant setpoint"
+//     specs/pwr_sim/chapter_3/page_041.txt:37-45
+//   - SG pressure must stay far above the low-steamline trip:
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt
+func TestPlant_TripBypassModulatesAndHoldsHeaderPressure(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
+	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	synchronizeAndCloseBreaker(&p)
+	stepN(&p, int(5*time.Second/TimeStep))
+
+	p.TurbineBuilding.Turbine.StopValve.Open = 0
+	p.TurbineBuilding.Generator.BreakerClosed = false
+	stepN(&p, int(3*time.Second/TimeStep))
+	require.Equal(t, TurbineTripped, p.TurbineBuilding.Turbine.State,
+		"precondition: want the trip latched")
+	require.True(t, p.PlantOperation.StepbackActive,
+		"precondition: want the automatic stepback folding power")
+
+	minP, maxP := 1e9, 0.0
+	modulated := false
+	for i := 0; i < int(60*time.Second/TimeStep); i++ {
+		p.Step()
+		p.Update()
+		sgP := float64(p.ReactorBuilding.SteamGenerator.Pressure)
+		minP = min(minP, sgP)
+		maxP = max(maxP, sgP)
+		open := p.TurbineBuilding.Turbine.DumpValve.Open
+		if open > 0.05 && open < 0.95 {
+			modulated = true
+		}
+	}
+	assert.GreaterOrEqual(t, minP, 880.0,
+		"bypass modulation should keep the header near its setpoint, min %v", minP)
+	assert.LessOrEqual(t, maxP, float64(SteamGeneratorSafetyValveSetpointPsia),
+		"transient lift should stay below the SG safety-valve setpoint, max %v", maxP)
+	assert.True(t, modulated,
+		"bypass should throttle between wide open and shut during the hold")
+	assert.Zero(t, p.ReactorBuilding.SteamGenerator.SafetyValve.Open,
+		"SG safety valves stay seated through the trip and hold")
+	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionActuated,
+		"no low-steamline protection actuation")
+}

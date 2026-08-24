@@ -535,8 +535,9 @@ type ReactorPressureVessel struct {
 // (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56,
 // specs/the_westinghouse_pressurized_water_react/chapter_3/page_066.txt:80-82)
 // but does not state a plant-wide rated thermal power. The number
-// below is sized so that four SGs at SteamGeneratorFullLoadHeatInput
-// match the standard 4-loop plant scale (~3.4 GWt).
+// below is sized to the standard 4-loop plant scale, with the per-SG
+// duty SteamGeneratorFullLoadHeatInput anchored to one loop's share
+// of it so the secondary ratings close against this constant.
 //
 // SteamGeneratorLoopCount is the number of primary loops the
 // lumped single-SG model represents. SteamGeneratorFullLoadHeatInput

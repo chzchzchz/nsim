@@ -336,8 +336,8 @@ rcsPressurePsig := float64(ret.Pressurizer.Pressure - AtmosphericPressure)
 		// thermal output. Without this division the single
 		// SG would see the full CoreRatedThermalPower (~3.8
 		// GW), roughly 3.5× the per-SG design rating of
-		// SteamGeneratorFullLoadHeatInput (~1.08 GW at 480 kg/s
-		// steam flow).
+		// SteamGeneratorFullLoadHeatInput (~0.95 GW, one
+		// loop's share of rated core power).
 		// Spec: "Number and type: 1 vertical, U-tube steam
 		// generator with integral steam-drum per loop"
 		// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:31-32
@@ -673,14 +673,42 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 	} else if ret.Turbine.DumpHoldTimer > 0 {
 		ret.Turbine.DumpHoldTimer -= dt
 	}
-	// A turbine trip holds the valves open by state alone, so they
-	// close automatically as soon as steam is readmitted to the
-	// restarted turbine; a load rejection holds them for a fixed
-	// ride-through window instead.
-	wantDump := tripped || pressureMode || ret.Turbine.DumpHoldTimer > 0
-	target := 0.0
-	if wantDump {
+	// A turbine trip holds the bypass in service by state alone, so
+	// it closes automatically as soon as steam is readmitted to the
+	// restarted turbine; a load rejection holds it for a fixed
+	// ride-through window instead. While the trip latch holds, the
+	// bypass "temporarily replace[s] the turbine as the steam load":
+	// rather than slamming wide and over-drawing the header while
+	// the stepback folds power, it opens on the initial pressure
+	// rise and then modulates around the full-load shell pressure,
+	// passing what production needs.
+	//   "turbine bypass valves open automatically on turbine trip,
+	//    then modulate to pass steam to the condenser and hold
+	//    boiler pressure at the constant setpoint"
+	//   specs/pwr_sim/chapter_3/page_041.txt:37-45
+	var target float64
+	switch {
+	case tripped:
+		if !ret.Turbine.DumpBypassKicked {
+			// One-shot opening on the trip itself; the pressure
+			// loop below throttles from there.
+			ret.Turbine.DumpBypassKicked = true
+			ret.Turbine.DumpPressureIntegral = 1
+		}
+		errFrac := (float64(sgPressure) - float64(SteamGeneratorShellPressure)) /
+			float64(SteamGeneratorShellPressure)
+		integral := ret.Turbine.DumpPressureIntegral +
+			SteamDumpModulationIntegralGain*errFrac*dt.Seconds()
+		integral = min(max(integral, 0), 1)
+		ret.Turbine.DumpPressureIntegral = integral
+		target = min(max(SteamDumpModulationProportionalGain*errFrac+integral, 0), 1)
+	case pressureMode || ret.Turbine.DumpHoldTimer > 0:
+		ret.Turbine.DumpPressureIntegral = 0
+		ret.Turbine.DumpBypassKicked = false
 		target = 1.0
+	default:
+		ret.Turbine.DumpPressureIntegral = 0
+		ret.Turbine.DumpBypassKicked = false
 	}
 	travel := SteamDumpValveTravelRate * dt.Seconds()
 	switch {

@@ -239,6 +239,19 @@ type Turbine struct {
 	// automatic-reclose logic may shut them.
 	DumpHoldTimer time.Duration
 
+	// DumpPressureIntegral is the integral trim of the trip-bypass
+	// pressure controller. It accumulates header-pressure error only
+	// while the trip latch modulates the bypass and is reset
+	// whenever another dump path owns the valves.
+	DumpPressureIntegral float64
+
+	// DumpBypassKicked marks the current trip episode as having had
+	// its one-shot bypass opening: the valves "open automatically on
+	// turbine trip", then the pressure controller throttles them
+	// from that starting point.
+	// specs/pwr_sim/chapter_3/page_041.txt:37-45
+	DumpBypassKicked bool
+
 	// LastSetpoint is the Setpoint observed at the end of the most
 	// recent Step. The dump controller compares it against the
 	// current Setpoint to detect a between-step sudden load
@@ -599,6 +612,20 @@ const (
 	// fully-open condenser dump valves pass, at design header
 	// conditions.
 	SteamDumpCapacityGalPerStep = CondenserDesignSteamLoadGalPer * SteamDumpDesignFraction
+
+	// Trip-bypass modulation gains. On a turbine trip the bypass
+	// valves open on the initial pressure rise and then modulate to
+	// hold boiler pressure at its setpoint, so the demand is a
+	// proportional term on the header-pressure error plus an
+	// integral trim that absorbs the residual offset. Tuning
+	// assumptions: full opening at a 5 percent pressure error,
+	// integral catching up over a few seconds.
+	//   "turbine bypass valves open automatically on turbine trip,
+	//    then modulate to pass steam to the condenser and hold
+	//    boiler pressure at the constant setpoint"
+	//   specs/pwr_sim/chapter_3/page_041.txt:37-45
+	SteamDumpModulationProportionalGain = 20.0
+	SteamDumpModulationIntegralGain     = 2.0
 
 	// LoadRejectDetectFraction is the setpoint drop over one step
 	// window that qualifies as a sudden load rejection.
@@ -5246,11 +5273,20 @@ const (
 	// hysteresis band.
 	StepbackHoldBand = 0.02
 
-	// StepbackControlGain scales the stepback controller's integral
-	// action: rod demand moves at the full mechanical drive speed at
-	// a 10-percent power error, proportionally slower nearer the
-	// target. Assumption; the source gives no controller tuning.
-	StepbackControlGain = 32.0
+	// StepbackControlGain scales the stepback controller's
+	// reactivity tracking: rod demand moves at the full mechanical
+	// drive speed at a 0.1 percent delta-k/k error between measured
+	// reactivity and the approach bias. Assumption; the source gives
+	// no controller tuning.
+	StepbackControlGain = 0.5
+
+	// StepbackApproachBias is the subcritical offset (percent
+	// delta-k/k) the controller commands per unit of remaining power
+	// descent: it kicks the fold off at full drive speed and shrinks
+	// toward zero as neutron power nears the park, so no stored rod
+	// worth can carry the core past the target. Assumption; sized to
+	// the pinned-full-power reactivity excess.
+	StepbackApproachBias = 0.12
 
 	// StepbackMaxHold caps how long the automatic stepback holds the
 	// park before handing back to the operator: xenon growth on the
@@ -5492,11 +5528,12 @@ type PlantOperation struct {
 // Arming requires a tripped turbine with the core still critical
 // above the target level; a reactor trip supersedes the runback, and
 // the latch releases once the turbine returns to service so operator
-// demand regains the rods. While active the controller integrates the
-// power error into rod demand at up to the mechanical drive speed:
-// pure integral action through the rate-limited drive cannot chase
-// itself into limit cycles the way proportional terms can. Xenon
-// growth after the power cut is carried by soluble-boron dilution
+// demand regains the rods. While active the controller drives measured
+// reactivity toward a shrinking subcritical bias: rod motion answers
+// immediately while neutron power lags on the point-kinetics
+// multiplier, so reactivity tracking folds the core onto the park
+// without the stored-worth overshoot a power-error integral produces.
+// Xenon growth after the power cut is carried by soluble-boron dilution
 // (the load-follow compensation duty) so rod margin is never the
 // binding limit during the hold.
 func (po PlantOperation) Stepback(tstate TurbineState, rpv ReactorPressureVessel) PlantOperation {
@@ -5522,8 +5559,19 @@ func (po PlantOperation) Stepback(tstate TurbineState, rpv ReactorPressureVessel
 	errFrac := (float64(rpv.FissionPower) -
 		StepbackPowerFraction*float64(CoreFissionPowerAtRated)) /
 		float64(CoreFissionPowerAtRated)
-	rate := max(min(StepbackControlGain*errFrac, RodInsertionSpeed),
-		-RodInsertionSpeed)
+	// Track measured reactivity toward a shrinking subcritical bias
+	// instead of raw power: the point-kinetics multiplier answers
+	// sustained subcriticality within about a second, so driving rod
+	// demand from the power error itself dives far past the park
+	// before the neutron population responds. Rod motion moves
+	// reactivity immediately, giving the loop an honest signal, and
+	// the bias vanishing at the target leaves no stored worth to
+	// overshoot with.
+	//   "Insertion demand re-zeroing MEASURED reactivity"
+	//   specs/pwr_sim/chapter_3/page_041.txt:27-35
+	rhoTarget := -StepbackApproachBias * errFrac
+	rate := max(min(StepbackControlGain*(float64(rpv.Reactivity)-rhoTarget),
+		RodInsertionSpeed), -RodInsertionSpeed)
 	demand := ret.StepbackDemand + rate*TimeStep.Seconds()
 	ret.StepbackDemand = min(max(demand, 0), 1)
 	// Dilute for the whole hold: at fresh-fuel chemistry a part-load
