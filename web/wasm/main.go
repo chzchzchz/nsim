@@ -29,6 +29,7 @@ type plantHandle struct {
 	scenarioID string
 	simTimeNs  int64
 	createdAt  time.Time
+	script     []core.ScriptCommand
 	queue      *cmdfile.Queue
 	journal    *cmdfile.Journal
 	controls   bridge.ControlMap
@@ -37,38 +38,66 @@ type plantHandle struct {
 
 func newPlantHandle(scenarioID string) (*plantHandle, error) {
 	p := core.MakePlant()
+	var script []core.ScriptCommand
 	if scenarioID != "" {
 		sc, ok := core.ScenarioByID(scenarioID)
 		if !ok {
 			return nil, fmt.Errorf("unknown scenario %q", scenarioID)
 		}
 		sc.Apply(&p)
+		script = append(script, sc.Script...)
 	}
 	return &plantHandle{
 		p:          &p,
 		scenarioID: scenarioID,
 		createdAt:  time.Now(),
-		queue:     &cmdfile.Queue{},
-		journal:   &cmdfile.Journal{},
-		controls:  p.GetControlMap(),
-		sensors:   p.GetSensorMap(),
+		script:     script,
+		queue:      &cmdfile.Queue{},
+		journal:    &cmdfile.Journal{},
+		controls:   p.GetControlMap(),
+		sensors:    p.GetSensorMap(),
 	}, nil
 }
 
 // step advances the plant by ticks `Step()`/`Update()` cycles.
 // Each cycle is one `core.TimeStep` (1 ms) of simulated time.
-// Queued console commands whose due time is reached fire at the
-// exact simulated millisecond, independent of ticks per call.
+// Queued console commands and the active scenario's opening script
+// fire at their exact simulated millisecond, independent of ticks
+// per call; scripted actions journal like operator input so exported
+// sessions replay faithfully.
 func (h *plantHandle) step(ticks int) {
 	if ticks <= 0 {
 		return
 	}
 	for range ticks {
 		next := h.simTimeNs + int64(core.TimeStep)
+		h.fireDueScript(next)
 		h.queue.FireDue(next, h.controls)
 		h.p.Step()
 		h.p.Update()
 		h.simTimeNs = next
+	}
+}
+
+// fireDueScript applies the script prefix that has come due at nowNs,
+// journaling each fired command at its fire time.
+func (h *plantHandle) fireDueScript(nowNs int64) {
+	due := 0
+	for due < len(h.script) &&
+		h.script[due].AtMs*int64(time.Millisecond) <= nowNs {
+		due++
+	}
+	if due == 0 {
+		return
+	}
+	fired := make([]core.ScriptCommand, due)
+	copy(fired, h.script[:due])
+	core.ApplyScript(&h.script, nowNs, h.controls)
+	for _, cmd := range fired {
+		h.journal.Add(cmdfile.Command{
+			ControlKey: cmd.ControlKey,
+			Value:      cmd.Value,
+		}, nowNs)
 	}
 }
 

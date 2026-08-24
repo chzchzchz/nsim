@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chzchzchz/nsim/cmdfile"
 	"github.com/chzchzchz/nsim/core"
@@ -119,4 +120,38 @@ func TestNSimRunCommandIntegration(t *testing.T) {
 	})
 
 	require.Empty(t, logs, "expected no log errors, got: %v", logs)
+}
+
+// buildInitialPlant must land the catalog lineup and hand back its
+// opening script; -plant stays exclusive with -scenario.
+func TestBuildInitialPlant(t *testing.T) {
+	t.Run("default plant without flags", func(t *testing.T) {
+		p, script, err := buildInitialPlant("", "")
+		require.NoError(t, err)
+		assert.Equal(t, core.MakePlant().ReactorBuilding.ReactorPressureVessel.Inlet,
+			p.ReactorBuilding.ReactorPressureVessel.Inlet)
+		assert.Empty(t, script)
+	})
+
+	t.Run("scenario applies its lineup and script", func(t *testing.T) {
+		p, script, err := buildInitialPlant("rcp-trip", "")
+		require.NoError(t, err)
+		// The at-power lineup opens synchronized; the loop-A trip
+		// rides the script instead of the initial state.
+		assert.True(t,
+			p.ReactorBuilding.ReactorCoolantPumps.LoopA.Running)
+		require.Len(t, script, 1)
+		assert.Equal(t,
+			"ReactorBuilding/ReactorCoolantPumps/A/Running", script[0].ControlKey)
+
+		cm := p.GetControlMap()
+		core.ApplyScript(&script, 30_000*int64(time.Millisecond), cm)
+		assert.False(t, p.ReactorBuilding.ReactorCoolantPumps.LoopA.Running,
+			"the scripted trip fires once due")
+	})
+
+	t.Run("mutually exclusive flags are rejected", func(t *testing.T) {
+		_, _, err := buildInitialPlant("rcp-trip", "whatever.json")
+		require.ErrorContains(t, err, "mutually exclusive")
+	})
 }

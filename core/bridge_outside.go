@@ -85,6 +85,42 @@ func addOutsideControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Offsite source output breakers (chapter 16): each safeguards
+	// train normally feeds from its own offsite source, and opening
+	// both strips the grid supply so the diesels auto-start.
+	//   "If conditions occur which result in a loss of normal
+	//    electrical power to a safeguards electrical bus, backup
+	//    emergency diesel generators are automatically started"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:103-106
+	for _, src := range []struct {
+		key  string
+		part string
+		ref  **PowerGenerator
+	}{
+		{"Electrical/OffsiteSourceA/BreakerClosed",
+			"Electrical/OffsiteSourceA", &p.Electrical.OffsiteA},
+		{"Electrical/OffsiteSourceB/BreakerClosed",
+			"Electrical/OffsiteSourceB", &p.Electrical.OffsiteB},
+	} {
+		src := src
+		m[src.key] = &bridge.Control{
+			Part:  src.part,
+			Label: "BreakerClosed",
+			Kind:  "bool",
+			Get: func() string {
+				return bridge.BoolToStr((*src.ref).BreakerClosed)
+			},
+			Set: func(s string) error {
+				v, err := bridge.StrToBool(s)
+				if err != nil {
+					return err
+				}
+				(*src.ref).BreakerClosed = v
+				return nil
+			},
+		}
+	}
+
 
 	// Service Water pump run command (chapter 12):
 	// "The Service Water System supplies all the cooling water

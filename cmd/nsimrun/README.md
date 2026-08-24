@@ -11,6 +11,7 @@ go run ./cmd/nsimrun/ [flags]
 Flags:
 
 - `-plant <file.json>` — Plant state JSON file. Optional; if omitted the plant is initialized with design defaults via `MakePlant`.
+- `-scenario <id>` — Starting scenario id from the catalog (`core.Scenarios`; see plans/x/scenarios.txt items 1–29, e.g. `rcp-trip`, `dilution-to-criticality`). Applies the scenario's minimal starting-state override and merges its opening script (scheduled trigger commands) with any `-cmd` commands. Mutually exclusive with `-plant`. This is how a web-console export captured during a scenario replays faithfully: pass the same `-scenario` alongside `-cmd`.
 - `-seconds <number>` — Number of seconds to simulate. Plain number (e.g. `5`, `1.5`), not a duration string like `1s`.
 - `-cmd <file>` — Command file. Each line is `TimeOffset Part.Label Value`. The control is set once elapsed time reaches the offset (in milliseconds). Supports dot or slash paths. Blank lines and lines starting with `#` are ignored. Logs errors and continues on parse/set failures. Files ending in `.json` (case insensitive) are loaded as web-console exports: `{"commands":[{"offsetMs":...,"control":...,"value":...}]}`, with offsets measured from simulation start.
 
@@ -22,7 +23,7 @@ Command-file notes:
 
 ## Behavior
 
-1. Initializes a plant from `-plant` if provided, otherwise from built-in defaults.
+1. Initializes a plant from `-scenario` (catalog starting state plus opening script), or from `-plant` merged over defaults, otherwise from built-in defaults.
 2. Merges the JSON over the defaults per top-level key: a top-level object present in the file (e.g. `TurbineBuilding`) replaces that entire default subtree, so fields absent from the file become zero values rather than design defaults. Top-level buildings not named in the file keep their defaults.
 3. If `-cmd` is provided, reads time-stamped control commands and applies them as the simulation advances.
 4. Steps the simulation forward by the requested duration (1 ms per internal step).

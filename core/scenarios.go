@@ -3,8 +3,10 @@ package core
 import (
 	"math"
 	"strings"
+	"time"
 
 	u "github.com/bcicen/go-units"
+	"github.com/chzchzchz/nsim/bridge"
 )
 
 // Scenario describes one operator evolution from the simulator
@@ -28,6 +30,20 @@ type Scenario struct {
 	Objective string
 
 	Apply func(*Plant)
+
+	// Script schedules control commands relative to simulation start
+	// so an evolution can open on its healthy lineup and deliver the
+	// trigger transient seconds in, instead of pre-inserting the
+	// fault at time zero. Keys must be registered control paths.
+	Script []ScriptCommand
+}
+
+// ScriptCommand is one scheduled operator action: the named control
+// takes Value once AtMs of simulated time have elapsed.
+type ScriptCommand struct {
+	AtMs       int64
+	ControlKey string
+	Value      string
 }
 
 // Cold-condition reference points shared by the shutdown-state
@@ -515,12 +531,17 @@ var scenarioCatalog = []Scenario{
 		Category: "Emergency response",
 		Title:    "Full load rejection without trip",
 		StartState: "At-power lineup: generator synchronized at full " +
-			"load.",
-		Objective: "Drop external load suddenly down to house loads " +
-			"and hold the plant there without a reactor trip: steam " +
-			"dump absorbs 70-85 percent as an artificial load while " +
-			"rod control cuts back the core and feedwater holds levels.",
+			"load; the external load drops 30 seconds in.",
+		Objective: "Hold the plant at house loads without a reactor " +
+			"trip after the rejection: steam dump absorbs 70-85 percent " +
+			"as an artificial load while rod control cuts back the core " +
+			"and feedwater holds levels.",
 		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		Script: []ScriptCommand{
+			{AtMs: scenarioTriggerDelayMs,
+				ControlKey: "TurbineBuilding/Generator/BreakerClosed",
+				Value:      "0"},
+		},
 	},
 	{
 		ID:       "trip-response-supervision",
@@ -541,16 +562,18 @@ var scenarioCatalog = []Scenario{
 		Category: "Emergency response",
 		Title:    "Loss of offsite power",
 		StartState: "At-power lineup drawing both offsite sources; " +
-			"opening their breakers starts the event.",
-		Objective: "Open both offsite source breakers to strip the " +
-			"grid supply, then verify the emergency diesels auto-start " +
-			"and the safety buses sequence so the plant can safely " +
+			"both source breakers open 30 seconds in.",
+		Objective: "Verify the emergency diesels auto-start and the " +
+			"safety buses sequence onto them so the plant can safely " +
 			"cool down.",
-		Apply: func(p *Plant) {
-			q := fullPowerLineup()
-			q.Electrical.OffsiteSourceA.BreakerClosed = false
-			q.Electrical.OffsiteSourceB.BreakerClosed = false
-			*p = q
+		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		Script: []ScriptCommand{
+			{AtMs: scenarioTriggerDelayMs,
+				ControlKey: "Electrical/OffsiteSourceA/BreakerClosed",
+				Value:      "0"},
+			{AtMs: scenarioTriggerDelayMs,
+				ControlKey: "Electrical/OffsiteSourceB/BreakerClosed",
+				Value:      "0"},
 		},
 	},
 	{
@@ -615,17 +638,18 @@ var scenarioCatalog = []Scenario{
 		Number:   23,
 		Category: "Malfunction transients",
 		Title:    "Loss of normal feedwater",
-		StartState: "At-power lineup with the main feedwater pump " +
-			"already tripped.",
+		StartState: "At-power lineup; the main feedwater pump " +
+			"trips 30 seconds in.",
 		Objective: "Watch steam generator levels fall driving a " +
 			"reactor setback then trip; verify emergency feedwater " +
 			"delivers within one minute with no operator action, then " +
 			"modulate the EFW valves to restore narrow-range levels " +
 			"and either resume power or cool down.",
-		Apply: func(p *Plant) {
-			q := fullPowerLineup()
-			q.TurbineBuilding.MainFeedwaterPump.Running = false
-			*p = q
+		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		Script: []ScriptCommand{
+			{AtMs: scenarioTriggerDelayMs,
+				ControlKey: "TurbineBuilding/MainFeedwaterPump/Running",
+				Value:      "0"},
 		},
 	},
 	{
@@ -633,16 +657,17 @@ var scenarioCatalog = []Scenario{
 		Number:   24,
 		Category: "Malfunction transients",
 		Title:    "Reactor coolant pump trip",
-		StartState: "At-power lineup with loop A pump tripped at " +
-			"time zero.",
+		StartState: "At-power lineup; loop A's pump trips 30 seconds " +
+			"in.",
 		Objective: "Observe the immediate power stepback and the " +
 			"decaying loop flow against the low-flow trip; try the " +
 			"both-pumps-in-one-loop case to challenge the cold-leg " +
 			"temperature margin.",
-		Apply: func(p *Plant) {
-			q := fullPowerLineup()
-			q.ReactorBuilding.ReactorCoolantPumps.LoopA.Running = false
-			*p = q
+		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		Script: []ScriptCommand{
+			{AtMs: scenarioTriggerDelayMs,
+				ControlKey: "ReactorBuilding/ReactorCoolantPumps/A/Running",
+				Value:      "0"},
 		},
 	},
 	{
@@ -650,16 +675,17 @@ var scenarioCatalog = []Scenario{
 		Number:   25,
 		Category: "Malfunction transients",
 		Title:    "Main steam line break",
-		StartState: "At-power lineup with a full break upstream of " +
-			"the main steam stop valve opened at time zero.",
+		StartState: "At-power lineup; a full break opens upstream of " +
+			"the main steam stop valve 30 seconds in.",
 		Objective: "Manage the excessive-cooldown transient: steam " +
 			"demand overcools the RCS while the turbine runs back, " +
 			"verify low compensated steamline pressure actuates safety " +
 			"injection, and stabilize the plant afterward.",
-		Apply: func(p *Plant) {
-			q := fullPowerLineup()
-			q.ReactorBuilding.SteamGenerator.MainSteamLineBreak.Open = 1
-			*p = q
+		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		Script: []ScriptCommand{
+			{AtMs: scenarioTriggerDelayMs,
+				ControlKey: "ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open",
+				Value:      "1"},
 		},
 	},
 	{
@@ -667,16 +693,17 @@ var scenarioCatalog = []Scenario{
 		Number:   26,
 		Category: "Malfunction transients",
 		Title:    "PORV fails open",
-		StartState: "At-power lineup with the pressurizer relief " +
-			"valve latched open at time zero.",
+		StartState: "At-power lineup; the pressurizer relief valve " +
+			"latches open 30 seconds in.",
 		Objective: "Diagnose the stuck-open PORV venting to the " +
 			"relief tank: heaters cannot hold pressure while level " +
 			"rises. Isolate with the block valve before low pressure " +
 			"trips the reactor, then clear the failure latch.",
-		Apply: func(p *Plant) {
-			q := fullPowerLineup()
-			q.ReactorBuilding.Pressurizer.PORVStuckOpen = true
-			*p = q
+		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		Script: []ScriptCommand{
+			{AtMs: scenarioTriggerDelayMs,
+				ControlKey: "ReactorBuilding/Pressurizer/PORVStuckOpen",
+				Value:      "1"},
 		},
 	},
 	{
@@ -684,16 +711,17 @@ var scenarioCatalog = []Scenario{
 		Number:   27,
 		Category: "Malfunction transients",
 		Title:    "Dropped rod bank",
-		StartState: "At-power lineup with one dark bank dropped into " +
-			"the core at time zero.",
+		StartState: "At-power lineup; one dark bank drops into the " +
+			"core 30 seconds in.",
 		Objective: "Compensate the dropped bank: watch the control " +
 			"system exhaust gray and dark rod worth against the tilt, " +
 			"ride the turbine runback and trip, and manage the xenon " +
 			"buildup that walks power to zero.",
-		Apply: func(p *Plant) {
-			q := fullPowerLineup()
-			q.ReactorBuilding.ReactorPressureVessel.ControlRods.DroppedBank = true
-			*p = q
+		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		Script: []ScriptCommand{
+			{AtMs: scenarioTriggerDelayMs,
+				ControlKey: "ReactorBuilding/ReactorPressureVessel/ControlRods/DroppedBank",
+				Value:      "1"},
 		},
 	},
 	{
@@ -701,16 +729,17 @@ var scenarioCatalog = []Scenario{
 		Number:   28,
 		Category: "Engineered safeguards",
 		Title:    "Safety injection and recirculation",
-		StartState: "At-power lineup with manual safety injection " +
-			"latched at time zero.",
+		StartState: "At-power lineup; manual safety injection " +
+			"latches 30 seconds in.",
 		Objective: "Supervise the injection phase: diesels, HHSI, " +
 			"accumulators discharging as pressure falls, then switch " +
 			"over to cold-leg recirculation at RWST low level and later " +
 			"balance hot-leg injection for long-term cooling.",
-		Apply: func(p *Plant) {
-			q := fullPowerLineup()
-			q.ReactorBuilding.ReactorProtectionSystem.ManualSI = true
-			*p = q
+		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		Script: []ScriptCommand{
+			{AtMs: scenarioTriggerDelayMs,
+				ControlKey: "ReactorBuilding/ReactorProtectionSystem/ManualSI",
+				Value:      "1"},
 		},
 	},
 	{
@@ -776,6 +805,10 @@ const (
 	scenarioVCTNormalFloorFrac  = 0.75
 	scenarioLevelNormalFraction = 0.20 // spec band floor, page_224.txt:22
 	scenarioLevelMaxFraction    = 0.80 // spec band ceiling, page_224.txt:22
+
+	// Invented pacing: scripted triggers fire after this much
+	// simulated time so the operator sees the healthy lineup first.
+	scenarioTriggerDelayMs = 30000
 )
 
 // scenarioPowerFraction expresses fission power against rated fission
@@ -789,6 +822,28 @@ func scenarioPowerFraction(p *Plant) float64 {
 // auxiliary transformer after a trip or rejection transfers them off
 // the unit transformer (core/station.go writes this string).
 const houseLoadSATSource = "SAT"
+
+// ApplyScript fires every scripted command whose offset has been
+// reached by nowNs, consuming the pending prefix. Commands target
+// registered controls; unmatched names and failed sets are dropped so
+// a broken script degrades the exercise without stopping the plant.
+func ApplyScript(
+	script *[]ScriptCommand,
+	nowNs int64,
+	controls bridge.ControlMap,
+) {
+	i := 0
+	for ; i < len(*script); i++ {
+		cmd := (*script)[i]
+		if cmd.AtMs*int64(time.Millisecond) > nowNs {
+			break
+		}
+		if c, ok := controls[cmd.ControlKey]; ok && c.Set != nil {
+			_ = c.Set(cmd.Value)
+		}
+	}
+	*script = (*script)[i:]
+}
 
 // scenarioChecks pairs every catalog entry with its end-state bounds;
 // scenarios_test.go asserts the key sets match the catalog exactly.
@@ -1006,6 +1061,11 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 			"steam dump carrying the rejected load")
 		c.require(!p.TurbineBuilding.Generator.BreakerClosed,
 			"external load dropped")
+		// With the dump carrying the offtake, rod control settles the
+		// core below its pre-rejection power (cutback direction is
+		// physics-forced; the source quotes no magnitude).
+		c.require(scenarioPowerFraction(p) < 1,
+			"core cut back below rated")
 		c.require(p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom ==
 			houseLoadSATSource, "house loads on the station transformer")
 		return c.result()
@@ -1091,14 +1151,16 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 	},
 	"rcp-trip": func(p *Plant) CheckResult {
 		var c checkBounds
-		// Either flow is restored or the plant settled tripped and
-		// stabilized; the trip path mirrors the malfunction writeup:
-		// specs/pwr_sim/chapter_4/page_051.txt:40-48
-		pumps := &p.ReactorBuilding.ReactorCoolantPumps
+		// Loss of one pump immediately initiates the power stepback
+		// and may then reach the low-flow scram, so the evolution
+		// resolves either folded into the stepback park band or
+		// stabilized tripped (malfunction writeup:
+		// specs/pwr_sim/chapter_4/page_051.txt:40-48).
 		tripped := p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped
-		c.require(pumps.LoopA.Running ||
-			(tripped && p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion >= 1),
-			"flow restored or plant stabilized post-trip")
+		c.require(
+			(tripped && p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion >= 1) ||
+				scenarioPowerFraction(p) <= StepbackPowerFraction,
+			"reactor stepped back to the park band or stabilized tripped")
 		return c.result()
 	},
 	"steam-line-break": func(p *Plant) CheckResult {
@@ -1130,8 +1192,12 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 	"dropped-rod-bank": func(p *Plant) CheckResult {
 		var c checkBounds
 		// Combined worth cannot recover: power folds into the runback
-		// park band (initiator list:
+		// park band while the turbine sheds (initiator list:
 		// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:26-29).
+		turb := &p.TurbineBuilding.Turbine
+		c.require(turb.LoadRunback || turb.State == TurbineTripped ||
+			!p.TurbineBuilding.Generator.BreakerClosed,
+			"turbine shedding the dropped-bank runback")
 		c.require(scenarioPowerFraction(p) <= StepbackPowerFraction,
 			"power folded to the runback band")
 		return c.result()

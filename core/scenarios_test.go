@@ -2,6 +2,7 @@ package core
 
 import (
 	"testing"
+	"time"
 
 	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
@@ -86,39 +87,22 @@ func TestPostTripScenarioLineupHoldsTripState(t *testing.T) {
 	assert.False(t, p.TurbineBuilding.Generator.BreakerClosed)
 }
 
-// Wiring checks: each malfunction catalog entry preinserts its fault
-// so the transient starts at time zero.
-func TestMalfunctionScenariosPreinsertTheirFaults(t *testing.T) {
+// Wiring checks: each malfunction catalog entry schedules its trigger
+// through a registered control at the shared pacing delay, so the
+// transient starts from the healthy lineup instead of time zero.
+func TestMalfunctionScenariosScheduleTheirTrigger(t *testing.T) {
 	cases := []struct {
-		id   string
-		want func(*Plant) bool
+		id    string
+		key   string
+		value string
 	}{
-		{"loss-of-offsite-power", func(p *Plant) bool {
-			return !p.Electrical.OffsiteSourceA.BreakerClosed &&
-				!p.Electrical.OffsiteSourceB.BreakerClosed
-		}},
-		{"loss-of-feedwater", func(p *Plant) bool {
-			return !p.TurbineBuilding.MainFeedwaterPump.Running
-		}},
-		{"rcp-trip", func(p *Plant) bool {
-			return !p.ReactorBuilding.ReactorCoolantPumps.LoopA.Running &&
-				p.ReactorBuilding.ReactorCoolantPumps.LoopB.Running
-		}},
-		{"steam-line-break", func(p *Plant) bool {
-			return p.ReactorBuilding.SteamGenerator.MainSteamLineBreak.Open == 1
-		}},
-		{"porv-stuck-open", func(p *Plant) bool {
-			return p.ReactorBuilding.Pressurizer.PORVStuckOpen
-		}},
-		{"dropped-rod-bank", func(p *Plant) bool {
-			return p.ReactorBuilding.ReactorPressureVessel.ControlRods.DroppedBank
-		}},
-		{"si-recirculation", func(p *Plant) bool {
-			return p.ReactorBuilding.ReactorProtectionSystem.ManualSI
-		}},
-		{"containment-spray", func(p *Plant) bool {
-			return p.ReactorBuilding.ReactorProtectionSystem.ContainmentSprayActuated
-		}},
+		{"loss-of-offsite-power", "Electrical/OffsiteSourceA/BreakerClosed", "0"},
+		{"loss-of-feedwater", "TurbineBuilding/MainFeedwaterPump/Running", "0"},
+		{"rcp-trip", "ReactorBuilding/ReactorCoolantPumps/A/Running", "0"},
+		{"steam-line-break", "ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open", "1"},
+		{"porv-stuck-open", "ReactorBuilding/Pressurizer/PORVStuckOpen", "1"},
+		{"dropped-rod-bank", "ReactorBuilding/ReactorPressureVessel/ControlRods/DroppedBank", "1"},
+		{"si-recirculation", "ReactorBuilding/ReactorProtectionSystem/ManualSI", "1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.id, func(t *testing.T) {
@@ -126,9 +110,44 @@ func TestMalfunctionScenariosPreinsertTheirFaults(t *testing.T) {
 			require.True(t, ok)
 			p := MakePlant()
 			s.Apply(&p)
-			assert.True(t, tc.want(&p), "fault not preinserted")
+			cm := GetControlMap(&p)
+
+			require.NotEmpty(t, s.Script, "no trigger scripted")
+			found := false
+			for _, cmd := range s.Script {
+				if cmd.ControlKey == tc.key {
+					found = true
+					assert.Equal(t, tc.value, cmd.Value)
+					assert.Equal(t, int64(scenarioTriggerDelayMs), cmd.AtMs)
+					require.Contains(t, cm, cmd.ControlKey,
+						"scripted control must be registered")
+				}
+			}
+			assert.True(t, found, "trigger %q not scripted", tc.key)
 		})
 	}
+}
+
+// ApplyScript consumes exactly the commands whose offset has been
+// reached and leaves the rest pending.
+func TestApplyScriptFiresOnlyDueCommands(t *testing.T) {
+	script := []ScriptCommand{
+		{AtMs: 1000, ControlKey: "PlantOperation/RodControlAuto", Value: "true"},
+		{AtMs: 5000, ControlKey: "PlantOperation/RodControlAuto", Value: "false"},
+	}
+	p := MakePlant()
+	cm := GetControlMap(&p)
+
+	ApplyScript(&script, 999*int64(time.Millisecond), cm)
+	assert.Len(t, script, 2, "nothing due yet")
+
+	ApplyScript(&script, 1000*int64(time.Millisecond), cm)
+	assert.Len(t, script, 1, "only the due command fires")
+	assert.True(t, p.PlantOperation.RodControlAuto)
+
+	ApplyScript(&script, 5000*int64(time.Millisecond), cm)
+	assert.Empty(t, script)
+	assert.False(t, p.PlantOperation.RodControlAuto)
 }
 
 func TestRefuelingScenarioStartsCavityFlood(t *testing.T) {

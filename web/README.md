@@ -158,6 +158,30 @@ The dashboard has these regions:
    struck through, failures show their error. **⬇ Export log (.json)**
    downloads every control change of the run for headless replay via
    `nsimrun -cmd nsim-commands.json` (see cmd/nsimrun/README.md).
+
+6. **Scenario banner** (below the header, only when a scenario is
+   active) — names the active evolution and its objective, and lists
+   which end-state bounds are still unmet. It turns green once
+   `Scenario.Check` reports every bound satisfied.
+
+## Scenarios
+
+On load (and anytime via the 🧭 **Scenario** button) a selection
+screen lists all operator evolutions from the catalog
+(`core/scenarios.go`, mirroring plans/x/scenarios.txt items 1–29),
+grouped by catalog section. Picking an entry opens an
+acknowledgement dialog stating the starting condition and what the
+operator is supposed to do; **Begin scenario** rebuilds the plant
+with that evolution's minimal starting-state override through the
+same reset path as **Reset**, so panels, alarms, console, and P&ID
+all remount. **Reset** re-applies the chosen scenario; **Free play**
+runs the default full-power plant.
+
+Malfunction evolutions open on their healthy lineup and schedule the
+trigger 30 simulated seconds in (`Scenario.Script`), so the operator
+watches the steady plant first; scripted actions are journaled like
+operator input, keeping exported command logs replayable via
+`nsimrun -cmd` with `-scenario` (see cmd/nsimrun/README.md).
    Reset clears the queue and journal together with the old plant.
 
 ## Wiring new controls / sensors

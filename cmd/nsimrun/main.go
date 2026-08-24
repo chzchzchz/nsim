@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/chzchzchz/nsim/cmdfile"
@@ -28,39 +29,65 @@ func loadCommands(path string) ([]cmdfile.Command, error) {
 	return cmdfile.Parse(f)
 }
 
-func main() {
-	plantPath := flag.String("plant", "", "plant JSON file (defaults to MakePlant)")
-	seconds := flag.Float64("seconds", 0, "number of seconds to step")
-	cmdPath := flag.String("cmd", "", "command file: TimeOffset Part.Label Value lines, or web-exported *.json")
-	flag.Parse()
-
+// buildInitialPlant resolves the starting lineup: a catalog scenario
+// when named, otherwise a -plant JSON merged over design defaults,
+// otherwise plain MakePlant. The returned script holds the
+// scenario's opening commands for the run loop to fire.
+func buildInitialPlant(scenarioID, plantPath string) (core.Plant, []core.ScriptCommand, error) {
+	if scenarioID != "" && plantPath != "" {
+		return core.Plant{}, nil,
+			fmt.Errorf("-scenario and -plant are mutually exclusive")
+	}
 	p := core.MakePlant()
-	if *plantPath != "" {
-		data, err := os.ReadFile(*plantPath)
+	var script []core.ScriptCommand
+	switch {
+	case scenarioID != "":
+		sc, ok := core.ScenarioByID(scenarioID)
+		if !ok {
+			return core.Plant{}, nil, fmt.Errorf("unknown scenario %q", scenarioID)
+		}
+		sc.Apply(&p)
+		script = sc.Script
+	case plantPath != "":
+		data, err := os.ReadFile(plantPath)
 		if err != nil {
-			log.Fatalf("failed to read plant file: %v", err)
+			return core.Plant{}, nil, fmt.Errorf("read plant file: %w", err)
 		}
 		defaults, err := json.Marshal(p)
 		if err != nil {
-			log.Fatalf("failed to marshal defaults: %v", err)
+			return core.Plant{}, nil, fmt.Errorf("marshal defaults: %w", err)
 		}
 		var defMap, usrMap map[string]json.RawMessage
 		if err := json.Unmarshal(defaults, &defMap); err != nil {
-			log.Fatalf("failed to parse defaults: %v", err)
+			return core.Plant{}, nil, fmt.Errorf("parse defaults: %w", err)
 		}
 		if err := json.Unmarshal(data, &usrMap); err != nil {
-			log.Fatalf("failed to parse plant JSON: %v", err)
+			return core.Plant{}, nil, fmt.Errorf("parse plant JSON: %w", err)
 		}
 		for k, v := range usrMap {
 			defMap[k] = v
 		}
 		merged, err := json.Marshal(defMap)
 		if err != nil {
-			log.Fatalf("failed to merge defaults: %v", err)
+			return core.Plant{}, nil, fmt.Errorf("merge defaults: %w", err)
 		}
 		if err := json.Unmarshal(merged, &p); err != nil {
-			log.Fatalf("failed to apply merged defaults: %v", err)
+			return core.Plant{}, nil, fmt.Errorf("apply merged defaults: %w", err)
 		}
+	}
+	return p, script, nil
+}
+
+func main() {
+	plantPath := flag.String("plant", "", "plant JSON file (defaults to MakePlant)")
+	seconds := flag.Float64("seconds", 0, "number of seconds to step")
+	cmdPath := flag.String("cmd", "", "command file: TimeOffset Part.Label Value lines, or web-exported *.json")
+	scenarioID := flag.String("scenario", "", "starting scenario id from the catalog (see core.Scenarios); cannot be combined with -plant")
+	flag.Parse()
+
+	p, script, err := buildInitialPlant(*scenarioID, *plantPath)
+	if err != nil {
+		log.Fatalf("failed to build initial plant: %v", err)
 	}
 
 	controlMap := p.GetControlMap()
@@ -73,6 +100,18 @@ func main() {
 			log.Fatalf("failed to load command file: %v", err)
 		}
 	}
+	// The scenario's opening script rides ahead of any -cmd file at
+	// equal offsets; both lists are consumed by the same sorted walk.
+	for _, c := range script {
+		cmds = append(cmds, cmdfile.Command{
+			TimeOffsetMs: c.AtMs,
+			ControlKey:   c.ControlKey,
+			Value:        c.Value,
+		})
+	}
+	sort.SliceStable(cmds, func(i, j int) bool {
+		return cmds[i].TimeOffsetMs < cmds[j].TimeOffsetMs
+	})
 
 	steps := int(*seconds / core.TimeStep.Seconds())
 	cmdIndex := 0
