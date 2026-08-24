@@ -60,12 +60,15 @@ var pipeColours = []string{"red", "blue", "brown", "black"}
 // PipeArrowMarkers emits one arrowhead <marker> per pipe colour.
 // Polylines attach them with marker-mid so arrowheads appear on
 // every interior vertex, oriented along the local segment.
+// markerWidth/Height 3.2 on the shared 10-unit viewBox draws each
+// head about 6 px long at the standard 2 px stroke - small enough
+// to read as direction cues rather than landmarks.
 func PipeArrowMarkers() string {
 	var b strings.Builder
 	for _, c := range pipeColours {
 		fmt.Fprintf(&b,
 			`<marker id="arrow-%s" viewBox="0 0 10 10" refX="9" refY="5" `+
-				`markerWidth="5" markerHeight="5" orient="auto-start-reverse">`+
+				`markerWidth="3.2" markerHeight="3.2" orient="auto-start-reverse">`+
 				`<path d="M 0 0 L 10 5 L 0 10 z" fill="%s"/></marker>`+"\n",
 			c, c)
 	}
