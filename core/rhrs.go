@@ -147,3 +147,53 @@ func (r *RHRS) Step(
 
 	return ret
 }
+
+// SolidPlantRelieve trims a water-solid primary back toward the selected
+// pressure through the pressure control valve between the RHR and CVC
+// systems, mutating pzr in place and returning the liquid volume bled
+// this step for the caller to route into the CVC letdown path. It has
+// authority only while an RHR train provides forced flow between the two
+// systems and pressure stands above the setpoint; at or below the
+// setpoint it stands down, leaving further control to the heaters and
+// spray paths.
+//
+// Each gallon bled drops pressure by PressurizerBubbleStiffness, the
+// same liquid-equivalent currency the relief-discharge path uses; the
+// drop is capped at the overshoot so the bleed settles on the selected
+// pressure instead of undershooting it.
+//
+// "If the pressurizer is filled solid, rapid rises in primary system
+// pressure can occur due to small inputs of water mass or heat. Solid
+// plant primary pressure control utilizes a pressure control valve
+// between the RHR and CVC systems which is set to maintain a selected
+// pressure while charging makes up for any coolant contraction and
+// losses."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:115-122,
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_228.txt:25-32
+func (r *RHRS) SolidPlantRelieve(pzr *Pressurizer) Volume {
+	r.SolidPlantReliefFlow = Volume{Val: 0, Unit: u.Gallon}
+	if r.SolidPlantPressureValve.Open <= 0 || !r.Running {
+		return r.SolidPlantReliefFlow
+	}
+	overshoot := float64(pzr.Pressure - r.SolidPlantPressureSetpoint)
+	if overshoot <= 0 {
+		return Volume{}
+	}
+
+	gal := min(RHRSSolidPlantBleedGalPerSec*r.SolidPlantPressureValve.Open*
+		TimeStep.Seconds(), pzr.Water.Float())
+	psiDrop := min(gal*PressurizerBubbleStiffness, overshoot)
+	removed := psiDrop / PressurizerBubbleStiffness
+	if removed <= 0 {
+		return Volume{}
+	}
+	newWater := max(pzr.Water.Float()-removed, 0)
+	pzr.Water = vol(pzr.Water, newWater)
+	pzr.SteamBubble = Volume{
+		Val: pzr.Volume.Float() - pzr.Water.Float(), Unit: u.Gallon}
+	pzr.Pressure -= Pressure(psiDrop)
+
+	r.SolidPlantReliefFlow = Volume{
+		Val: removed / TimeStep.Seconds(), Unit: u.Gallon}
+	return Volume{Val: removed, Unit: u.Gallon}
+}

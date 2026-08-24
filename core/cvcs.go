@@ -1,6 +1,8 @@
 package core
 
 import (
+	"math"
+
 	u "github.com/bcicen/go-units"
 )
 
@@ -91,6 +93,7 @@ func (c *CVCS) Step(
 	makeupFlow Volume,
 	tavg Temperature,
 	pzrLevelFraction float64,
+	pzrPressure Pressure,
 ) CVCS {
 	ret := *c
 	dt := TimeStep
@@ -124,13 +127,33 @@ func (c *CVCS) Step(
 		ret.ChargingFlow = Volume{Val: 0, Unit: u.Gallon}
 	}
 	if !ret.AutoLevelControl {
-		// Letdown flow depends on valve state only; where the flow
-		// lands (VCT return vs BRS diversion) is decided below.
+		// Letdown flow depends on valve state and the available
+		// differential pressure across the letdown orifices; where
+		// the flow lands (VCT return vs BRS diversion) is decided
+		// below.
 		if ret.LetdownValveOpen {
-			ret.LetdownFlow = CVCSDesignLetdownFlow
+			ret.LetdownFlow = letdownAtPressure(pzrPressure)
 		} else {
 			ret.LetdownFlow = Volume{Val: 0, Unit: u.Gallon}
 		}
+	} else if ret.LetdownFlow.Float() > 0 {
+		// The orifice dP limit is a property of the flow path, not
+		// the controller, so the auto controller's letdown demand
+		// passes through the same scaling.
+		ret.LetdownFlow = letdownAtPressure(pzrPressure)
+	}
+
+	// Auxiliary spray drive: the valve position gated by the
+	// charging pump that supplies it. With the pump secured the
+	// valve has no flow behind it and delivers no drive.
+	// "Charging flow is throttled to control pressurizer cooldown
+	// rate and raise pressurizer level using auxiliary spray since
+	// normal spray is not available when reactor coolant pumps have
+	// been secured."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:100-104
+	ret.AuxSprayDrive = 0
+	if ret.AuxSprayValveOpen > 0 && ret.ChargingPumpRunning {
+		ret.AuxSprayDrive = min(ret.AuxSprayValveOpen, 1)
 	}
 
 	// VCT level accumulation: makeup enters, charging-pump
@@ -204,6 +227,24 @@ func (c *CVCS) Step(
 	}
 
 	return ret
+}
+
+// letdownAtPressure scales design letdown by the square root of the
+// available primary-system differential (orifice flow follows sqrt(dP)):
+// at low RCS pressure very little letdown is possible through the normal
+// path. A non-positive pressure reads as design so fixtures without a
+// pressurizer keep historical behavior (the same zero-value convention
+// ChargingFlowDemand uses).
+// "Very little letdown flow is possible through the normal letdown flow
+// path at low primary system pressures due to the low differential
+// pressure across the CVCS letdown orifices."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:135-139
+func letdownAtPressure(pzrPressure Pressure) Volume {
+	if pzrPressure <= 0 {
+		return CVCSDesignLetdownFlow
+	}
+	frac := math.Sqrt(min(float64(pzrPressure)/CVCSLetdownDesignPsia, 1))
+	return Volume{Val: CVCSDesignLetdownFlow.Float() * frac, Unit: u.Gallon}
 }
 
 // applyLevelControl balances charging against letdown from the

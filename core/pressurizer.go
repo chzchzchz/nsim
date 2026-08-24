@@ -19,8 +19,15 @@ import (
 // and relief paths can depressurize toward, so manual pressure control
 // tracks the applicable pressure-temperature limits during cooldown.
 //
+// sprayDrive is the reactor coolant pump flow fraction (0..1): normal
+// spray needs an operating RCP in a loop with spray flow connections.
+// auxSpray is the effective auxiliary spray drive (0..1) from throttled
+// charging flow, available with the pumps secured.
+//
 // Spec justification for each block is inline below.
-func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve) (Pressurizer, Volume) {
+func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
+	sprayDrive, auxSpray float64,
+) (Pressurizer, Volume) {
 	ret := *p
 	dt := TimeStep
 	satFloor := float64(PressurizerSatPressure(rcsTemp.Float()))
@@ -56,17 +63,23 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve) (Pre
 		}
 	}
 
-	// 2) Spray effect. The spray valve draws cold RCS water through
-	// the spray line, condensing steam into the liquid inventory and
-	// pulling pressure toward the coolant's saturation floor until the steam
-	// space is exhausted.
+	// 2) Spray effect. Normal spray draws cold RCS water through the
+	// spray line, condensing steam into the liquid inventory and
+	// pulling pressure toward the coolant's saturation floor until
+	// the steam space is exhausted; its authority scales with RCP
+	// flow because "To provide spray flow a RCP must be operating in
+	// one of the two loops with spray flow connections"
+	// (page_227.txt:96-98). Auxiliary spray delivers the same
+	// condensation from throttled charging flow when the pumps are
+	// secured (page_227.txt:100-106).
 	//
 	// "RCS pressure is maintained by adjustment of the pressurizer
 	// heaters and/or pressurizer spray."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:28-29
-	if ret.SprayOpen > 0 {
+	if ret.SprayOpen > 0 || auxSpray > 0 {
 		bubble := ret.Volume.Float() - ret.Water.Float()
-		psiDrop := ret.SprayOpen * float64(PressurizerSprayRate) * dt.Seconds()
+		psiDrop := (ret.SprayOpen*sprayDrive*float64(PressurizerSprayRate) +
+			auxSpray*float64(PressurizerAuxSprayRate)) * dt.Seconds()
 		psiDrop = min(psiDrop, float64(ret.Pressure)-satFloor)
 		psiDrop = min(psiDrop, bubble*PressurizerBubbleStiffness)
 		if psiDrop > 0 {
@@ -105,7 +118,7 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve) (Pre
 	// pressure-temperature limits."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:81-82,
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:94-96
-	if !ret.HeatersOn && ret.SprayOpen == 0 {
+	if !ret.HeatersOn && ret.SprayOpen == 0 && auxSpray == 0 {
 		base := satFloor
 		psiDrop := float64(PressurizerAmbientDecay) * dt.Seconds()
 		psiDrop = min(psiDrop, float64(ret.Pressure)-base)
@@ -250,6 +263,13 @@ const (
 	PressurizerHeaterTarget    Pressure = 2250
 	PressurizerHeaterRate      Pressure = 200 // psi/s while HeatersOn
 	PressurizerSprayRate       Pressure = 300 // psi/s at SprayOpen == 1
+	// PressurizerAuxSprayRate is the depressurization rate at full
+	// auxiliary spray drive. Sized an order below normal spray:
+	// charging flow is a small fraction of an RCP's spray injection,
+	// so auxiliary control is deliberately slow per the manual P-T
+	// limit discipline it serves; the spec states no rate figure.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:100-106
+	PressurizerAuxSprayRate    Pressure = 30 // psi/s at aux drive == 1
 	PressurizerAmbientDecay    Pressure = 5   // psi/s cooldown when idle
 	// PressurizerBubbleStiffness converts heater and spray pressure
 	// changes into displaced liquid volume during boiloff and

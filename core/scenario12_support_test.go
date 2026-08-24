@@ -49,7 +49,7 @@ func TestPressurizer_DepressurizeTracksSaturationToRHRSGate(t *testing.T) {
 	for tempF := CoreReferenceInletF - 1; tempF >= 349; tempF-- {
 		hotLeg := Temperature{Val: float64(tempF), Unit: u.Fahrenheit}
 		for range int(200 * time.Millisecond / TimeStep) {
-			pz, _ = pz.Step(hotLeg, nil, nil, nil)
+			pz, _ = pz.Step(hotLeg, nil, nil, nil, 1, 0)
 		}
 	}
 	floor := PressurizerSatPressure(349)
@@ -222,18 +222,223 @@ func TestSteamGenerator_WetLayupFillTopsToVents(t *testing.T) {
 func TestCVCS_ChargingFlowDemandThrottlesManualFlow(t *testing.T) {
 	hotTavg := Temperature{Val: 571, Unit: u.Fahrenheit}
 	c := CVCS{ChargingPumpRunning: true}
-	c = c.Step(Volume{}, hotTavg, 0.6)
+	c = c.Step(Volume{}, hotTavg, 0.6, PressurizerHeaterTarget)
 	require.Equal(t, CVCSDesignChargingFlow.Float(), c.ChargingFlow.Float(),
 		"default demand keeps full design flow")
 
 	half := CVCS{ChargingPumpRunning: true, ChargingFlowDemand: 0.5}
-	half = half.Step(Volume{}, hotTavg, 0.6)
+	half = half.Step(Volume{}, hotTavg, 0.6, PressurizerHeaterTarget)
 	assert.InDelta(t, CVCSDesignChargingFlow.Float()*0.5,
 		half.ChargingFlow.Float(), 1e-9)
 
 	full := CVCS{ChargingPumpRunning: true, ChargingFlowDemand: 2}
-	full = full.Step(Volume{}, hotTavg, 0.6)
+	full = full.Step(Volume{}, hotTavg, 0.6, PressurizerHeaterTarget)
 	assert.InDelta(t, CVCSDesignChargingFlow.Float(),
 		full.ChargingFlow.Float(), 1e-9,
 		"demand clamps at design flow")
+}
+
+// Auxiliary spray is throttled charging flow, so the valve delivers
+// nothing with the charging pump secured and its drive follows the
+// valve otherwise.
+//
+// "Charging flow is throttled to control pressurizer cooldown rate and
+// raise pressurizer level using auxiliary spray since normal spray is
+// not available when reactor coolant pumps have been secured."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:100-104
+func TestCVCS_AuxSprayDriveRequiresChargingPump(t *testing.T) {
+	secured := CVCS{AuxSprayValveOpen: 1}
+	secured = secured.Step(Volume{}, Temperature{}, 0.5, PressurizerHeaterTarget)
+	assert.Zero(t, secured.AuxSprayDrive,
+		"no charging pump means no auxiliary spray flow")
+
+	supplying := CVCS{AuxSprayValveOpen: 1, ChargingPumpRunning: true}
+	supplying = supplying.Step(Volume{}, Temperature{}, 0.5,
+		PressurizerHeaterTarget)
+	assert.InDelta(t, 1.0, supplying.AuxSprayDrive, 1e-9,
+		"open valve on a running pump delivers full drive")
+}
+
+// With the reactor coolant pumps secured (sprayDrive == 0) normal spray
+// must do nothing; RCP-driven spray depressurizes only with flow behind
+// it.
+//
+// "To provide spray flow a RCP must be operating in one of the two loops
+// with spray flow connections."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:96-98
+func TestPressurizer_NormalSprayNeedsRCPFlow(t *testing.T) {
+	hotLeg := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
+	steps := int(time.Second / TimeStep)
+
+	secured := Pressurizer{
+		Volume: Volume{Val: 1500, Unit: u.Gallon}, SprayOpen: 1,
+		Pressure: PressurizerHeaterTarget,
+	}
+	for range steps {
+		secured, _ = secured.Step(hotLeg, nil, nil, nil, 0, 0)
+	}
+	assert.Equal(t, float64(PressurizerHeaterTarget),
+		float64(secured.Pressure),
+		"normal spray without an operating RCP must not move pressure")
+
+	running := secured
+	for range steps {
+		running, _ = running.Step(hotLeg, nil, nil, nil, 1, 0)
+	}
+	assert.Less(t, float64(running.Pressure),
+		float64(PressurizerHeaterTarget),
+		"the same spray tap with RCP flow must depressurize")
+}
+
+// Auxiliary spray holds pressure control with the pumps fully secured:
+// it walks a steam-bubble pressurizer down to the coolant saturation
+// floor at the slow auxiliary rate while the idle path stays out of the
+// way.
+//
+// "Pressurizer pressure is also controlled by auxiliary spray while a
+// steam bubble exists in the pressurizer."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:104-106
+func TestPressurizer_AuxSprayControlsPressureWithRCPsSecured(t *testing.T) {
+	hotLeg := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
+	pz := Pressurizer{
+		Volume: Volume{Val: 1500, Unit: u.Gallon},
+		Water:  Volume{Val: 900, Unit: u.Gallon},
+		Pressure: PressurizerHeaterTarget,
+	}
+	window := int(10 * time.Second / TimeStep)
+	for range window {
+		pz, _ = pz.Step(hotLeg, nil, nil, nil, 0, 1)
+	}
+	floor := float64(PressurizerSatPressure(CoreReferenceOutletF))
+	want := float64(PressurizerHeaterTarget) -
+		float64(PressurizerAuxSprayRate)*float64(window)*TimeStep.Seconds()
+	got := float64(pz.Pressure)
+	assert.InDelta(t, max(want, floor), got, max(want, floor)*0.02,
+		"auxiliary spray should track its own rate toward the saturation "+
+			"floor: want ~%v got %v", max(want, floor), got)
+}
+
+// Letdown orifice flow collapses as the primary is depressurized:
+// full design flow at design pressure, half at a quarter of it, and
+// nearly nothing near atmospheric.
+//
+// "Very little letdown flow is possible through the normal letdown flow
+// path at low primary system pressures due to the low differential
+// pressure across the CVCS letdown orifices."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:135-139
+func TestCVCS_LetdownFallsWithLowRcsPressure(t *testing.T) {
+	open := func(pzrPressure Pressure) CVCS {
+		c := CVCS{LetdownValveOpen: true}
+		return c.Step(Volume{}, Temperature{}, 0.5, pzrPressure)
+	}
+	design := open(Pressure(CVCSLetdownDesignPsia))
+	assert.InDelta(t, CVCSDesignLetdownFlow.Float(),
+		design.LetdownFlow.Float(), 1e-9, "design pressure passes design flow")
+
+	half := open(Pressure(CVCSLetdownDesignPsia / 4))
+	assert.InDelta(t, CVCSDesignLetdownFlow.Float()*0.5,
+		half.LetdownFlow.Float(), 1e-9,
+		"sqrt(dP) scaling halves flow at a quarter pressure")
+
+	cold := open(30)
+	assert.Less(t, cold.LetdownFlow.Float(), CVCSDesignLetdownFlow.Float()*0.15,
+		"near-atmospheric letdown is nearly starved: got %v",
+		cold.LetdownFlow.Float())
+}
+
+// The solid-plant pressure control valve bleeds a water-solid primary
+// back to the selected pressure through the RHR/CVC interface, then
+// stands down once the selected pressure is reached.
+//
+// "Solid plant primary pressure control utilizes a pressure control
+// valve between the RHR and CVC systems which is set to maintain a
+// selected pressure while charging makes up for any coolant contraction
+// and losses."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:115-122
+func TestRHRS_SolidPlantPressureValveHoldsSelectedPressure(t *testing.T) {
+	rhrs := RHRS{Running: true,
+		SolidPlantPressureSetpoint: Pressure(400)}
+	rhrs.SolidPlantPressureValve.Open = 1
+	solid := Pressurizer{
+		Volume: Volume{Val: 1500, Unit: u.Gallon},
+		Water:  Volume{Val: 1500, Unit: u.Gallon},
+		Pressure: PressurizerHeaterTarget,
+	}
+
+	bledGal := 0.0
+	for range int(60 * time.Second / TimeStep) {
+		bledGal += rhrs.SolidPlantRelieve(&solid).Float()
+		if rhrs.SolidPlantReliefFlow.Float() == 0 {
+			break
+		}
+	}
+	assert.GreaterOrEqual(t, float64(solid.Pressure), 400.0,
+		"the bleed must never undershoot the selected pressure")
+	assert.InDelta(t, 400.0, float64(solid.Pressure), 5.0,
+		"the bleed should settle on the selected pressure: got %v",
+		solid.Pressure)
+	assert.InDelta(t, (float64(PressurizerHeaterTarget)-400.0)/
+		PressurizerBubbleStiffness, bledGal, 1.0,
+		"settling 2250 -> 400 psia takes the stiffness-equivalent volume")
+
+	idle := rhrs.SolidPlantRelieve(&solid)
+	assert.Zero(t, idle.Float(),
+		"at the setpoint the valve stands down")
+}
+
+// The valve has no authority without a running RHR train to force flow
+// between the two systems.
+func TestRHRS_SolidPlantValveNeedsRHRRunning(t *testing.T) {
+	rhrs := RHRS{SolidPlantPressureSetpoint: Pressure(400)}
+	rhrs.SolidPlantPressureValve.Open = 1
+	solid := Pressurizer{
+		Volume: Volume{Val: 1500, Unit: u.Gallon},
+		Water:  Volume{Val: 1500, Unit: u.Gallon},
+		Pressure: PressurizerHeaterTarget,
+	}
+	bled := rhrs.SolidPlantRelieve(&solid)
+	assert.Zero(t, bled.Float(),
+		"without forced RHR flow the CVC interface carries nothing")
+	assert.Equal(t, float64(PressurizerHeaterTarget),
+		float64(solid.Pressure), "pressure must be untouched")
+}
+
+// The gap-closure controls are operator-facing: they must round-trip
+// through the bridge and the auxiliary spray must actually move plant
+// pressure with the reactor coolant pumps secured.
+func TestBridge_GapClosureControlsRoundTrip(t *testing.T) {
+	p := MakePlant()
+	m := GetControlMap(&p)
+
+	aux := m["AuxiliaryBuilding/ChemicalVolumeControlSystem/AuxSprayValve/Open"]
+	require.NotNil(t, aux, "want aux spray control registered")
+	require.NoError(t, aux.Set("0.5"))
+	assert.Equal(t, "0.5", aux.Get())
+
+	valve := m["AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantPressureValve/Open"]
+	require.NotNil(t, valve, "want solid-plant valve control registered")
+	require.NoError(t, valve.Set("1"))
+	assert.Equal(t, "1", valve.Get())
+
+	setpoint := m["AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantPressureSetpoint"]
+	require.NotNil(t, setpoint, "want solid-plant setpoint control registered")
+	require.NoError(t, setpoint.Set("400"))
+	assert.Equal(t, "400", setpoint.Get())
+}
+
+func TestPlant_AuxSprayMovesPressureWithRCPsSecured(t *testing.T) {
+	run := func(auxOpen string) float64 {
+		p := MakePlant()
+		cm := GetControlMap(&p)
+		require.NoError(t, cm["AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning"].Set("1"))
+		require.NoError(t, cm["AuxiliaryBuilding/ChemicalVolumeControlSystem/AuxSprayValve/Open"].Set(auxOpen))
+		before := p.ReactorBuilding.Pressurizer.Pressure
+		stepN(&p, int(5*time.Second/TimeStep))
+		return float64(before) - float64(p.ReactorBuilding.Pressurizer.Pressure)
+	}
+	idleOnly := run("0")
+	withAux := run("1")
+	assert.Greater(t, withAux, idleOnly+float64(PressurizerAuxSprayRate)*2.5,
+		"auxiliary spray must depressurize well beyond the idle drift: "+
+			"idle %v aux %v", idleOnly, withAux)
 }

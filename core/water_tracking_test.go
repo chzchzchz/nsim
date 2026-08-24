@@ -166,6 +166,11 @@ func TestCVCS_LetdownDivertsToHoldupWhenVCTFull(t *testing.T) {
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = true
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel =
 		Volume{Val: VCTHighLevel + 10, Unit: u.Gallon}
+	// Hold the pressurizer at its heater target so the letdown
+	// orifices see full design differential and pass design flow;
+	// this exercise is about divert accounting, not the
+	// low-pressure letdown scaling.
+	p.ReactorBuilding.Pressurizer.HeatersOn = true
 
 	stepN(&p, int(time.Second/TimeStep))
 	cv := p.AuxiliaryBuilding.ChemicalVolumeControlSystem
@@ -274,7 +279,7 @@ func TestCVCS_BedSaturationHaltsBoration(t *testing.T) {
 		BoronConcentration:           CVCSInitialBoron,
 		BTRSRecirculationPumpRunning: true,
 		BTRSBedSaturation:            1.0,
-	}).Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0)
+	}).Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
 	assert.Zero(t, spent.BorationRate,
 		"want BorationRate=0 on a saturated bed")
 	assert.InDelta(t, CVCSInitialBoron, spent.BoronConcentration, 1e-9,
@@ -285,7 +290,7 @@ func TestCVCS_BedSaturationHaltsBoration(t *testing.T) {
 		BoronConcentration:           CVCSInitialBoron,
 		BTRSRecirculationPumpRunning: true,
 	}
-	after := fresh.Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0)
+	after := fresh.Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
 	assert.Positive(t, after.BTRSBedSaturation,
 		"want bed saturation to advance while borating")
 	assert.Greater(t, after.BoronConcentration, CVCSInitialBoron,

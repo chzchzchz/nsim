@@ -67,8 +67,19 @@ func (r *ReactorBuilding) Step(
 	ret := *r
 	dt := TimeStep
 	var reliefDischarge Volume
+	// Normal spray authority scales with reactor coolant pump flow:
+	// "To provide spray flow a RCP must be operating in one of the
+	// two loops with spray flow connections." Auxiliary spray
+	// arrives from the throttled CVCS charging path, which is how
+	// pressure control survives securing the pumps
+	// (page_227.txt:96-106). The drive reads last step's CVCS
+	// outputs; the one-step lag matches the telemetry convention
+	// used for the secondary imbalance.
+	sprayDrive := float64(ret.ReactorCoolantPump.Velocity) /
+		float64(RCPRatedSpeed)
 	ret.Pressurizer, reliefDischarge = ret.Pressurizer.Step(
-		ret.ReactorPressureVessel.Outlet, &ret.PORV, &ret.SafetyValve, &ret.BlockValve)
+		ret.ReactorPressureVessel.Outlet, &ret.PORV, &ret.SafetyValve, &ret.BlockValve,
+		sprayDrive, ret.Aux.ChemicalVolumeControlSystem.AuxSprayDrive)
 	// Route the relieved steam-equivalent volume into the PRT
 	// until it fills; a full tank latches the rupture-disc burst
 	// and further relief vents to containment instead.
@@ -128,6 +139,7 @@ func (r *ReactorBuilding) Step(
 		ret.ReactorMakeupControlValve.Flow,
 		tavg,
 		pzrFraction,
+		ret.Pressurizer.Pressure,
 	)
 	// Propagate the CVCS boron concentration into the
 	// reactivity model. The RPV step reads
@@ -313,6 +325,26 @@ rcsPressurePsig := float64(ret.Pressurizer.Pressure - AtmosphericPressure)
 		rcsPressurePsig,
 		ret.Aux.ComponentCoolingWaterSystem.OutletTemp,
 	)
+	// Solid-plant pressure control: bleed the water-solid primary
+	// toward the selected pressure through the RHR/CVC valve and
+	// land the bled volume wherever letdown would land (VCT, or the
+	// BRS holdup tanks while diverting) so mass is conserved.
+	// "Solid plant primary pressure control utilizes a pressure
+	// control valve between the RHR and CVC systems which is set to
+	// maintain a selected pressure while charging makes up for any
+	// coolant contraction and losses."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:115-122
+	if bled := ret.Aux.ResidualHeatRemovalSystem.SolidPlantRelieve(
+		&ret.Pressurizer); bled.Float() > 0 {
+		cvcsOut := &ret.Aux.ChemicalVolumeControlSystem
+		if cvcsOut.Diverting {
+			cvcsOut.BRSHoldupLevel = vol(cvcsOut.BRSHoldupLevel,
+				cvcsOut.BRSHoldupLevel.Float()+bled.Float())
+		} else {
+			cvcsOut.VCTLevel = vol(cvcsOut.VCTLevel,
+				cvcsOut.VCTLevel.Float()+bled.Float())
+		}
+	}
 	if ret.Aux.ResidualHeatRemovalSystem.HasTakenOver {
 	// While RHRS owns primary cooling the takeover integration
 	// evolves the outlet from its pre-step value (net decay+pump heat

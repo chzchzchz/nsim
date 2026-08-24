@@ -916,6 +916,17 @@ var CVCSDesignChargingFlow Volume = Volume{Val: 30, Unit: u.Gallon}
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115
 var CVCSDesignLetdownFlow Volume = Volume{Val: 75, Unit: u.Gallon}
 
+// CVCSLetdownDesignPsia is the primary-system pressure at which the
+// letdown orifices pass full design flow. Below it the achievable flow
+// falls with the square root of the gauge differential because the
+// driving head across the orifice station collapses as the RCS is
+// depressurized.
+// "Very little letdown flow is possible through the normal letdown
+// flow path at low primary system pressures due to the low
+// differential pressure across the CVCS letdown orifices."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:135-139
+const CVCSLetdownDesignPsia = 2250.0
+
 const (
 	// PzrLevelNoLoadPct is the programmed pressurizer level at
 	// no-load Tavg, percent of pressurizer volume. The hot-startup
@@ -1996,6 +2007,23 @@ type CVCS struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115-116
 	ChargingFlowDemand float64
 
+	// AuxSprayValveOpen is the auxiliary spray valve position
+	// (0..1). The valve routes throttled charging flow into the
+	// pressurizer steam space for pressure control when normal
+	// spray is unavailable with the reactor coolant pumps secured;
+	// it requires the charging pump running.
+	// "Charging flow is throttled to control pressurizer cooldown
+	// rate and raise pressurizer level using auxiliary spray since
+	// normal spray is not available when reactor coolant pumps have
+	// been secured."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:100-104
+	AuxSprayValveOpen float64
+
+	// AuxSprayDrive is the effective auxiliary spray drive (0..1)
+	// delivered last step: the valve position gated by the charging
+	// pump latch. Plant.Step forwards it to the pressurizer.
+	AuxSprayDrive float64
+
 	// LetdownValveOpen is the operator latch on the letdown
 	// isolation valve. The CVCS Step sets LetdownFlow from this
 	// field; when the VCT high-level condition diverts letdown,
@@ -2255,6 +2283,29 @@ type RHRS struct {
 	// cooling function from the steam dump system. This gates
 	// steam-dump shutdown in Plant.Step.
 	HasTakenOver bool
+
+	// SolidPlantPressureSetpoint is the selected pressure (psia)
+	// the solid-plant pressure control valve maintains while the
+	// pressurizer is water-solid; zero disables the path until the
+	// operator sets it.
+	// "Solid plant primary pressure control utilizes a pressure
+	// control valve between the RHR and CVC systems which is set
+	// to maintain a selected pressure while charging makes up for
+	// any coolant contraction and losses."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:117-122
+	SolidPlantPressureSetpoint Pressure
+
+	// SolidPlantPressureValve modulates RHR pump discharge into the
+	// CVCS letdown header to hold SolidPlantPressureSetpoint on a
+	// water-solid pressurizer. It has authority only while an RHR
+	// train provides the forced flow between the two systems.
+	SolidPlantPressureValve Valve
+
+	// SolidPlantReliefFlow is the per-second bleed delivered to the
+	// CVC letdown path last step (gal/s). Zero unless the valve is
+	// open, an RHR train is running, the pressurizer is water-solid,
+	// and pressure stands above the setpoint.
+	SolidPlantReliefFlow Volume
 }
 
 // RHRS design constants.
@@ -2307,6 +2358,15 @@ const (
 	// RHRSHXApproachTemp is the temperature approach of the RHR
 	// heat exchanger (RCS outlet temp - CCW inlet temp, °F).
 	RHRSHXApproachTemp = 20.0
+
+	// RHRSSolidPlantBleedGalPerSec is the full-open bleed capacity
+	// of the solid-plant pressure control valve path (gal/s). Sized
+	// so small mass/heat inputs on a water-solid plant are trimmed
+	// at operator timescales against PressurizerBubbleStiffness
+	// (~50 psi/s), well inside the rapid-rise regime the valve
+	// exists to prevent; the spec states no capacity figure.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_228.txt:25-32
+	RHRSSolidPlantBleedGalPerSec = 20.0
 )
 
 // Accumulator models one (or, in the simplified model, the combined

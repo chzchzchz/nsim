@@ -43,7 +43,7 @@ func TestPzrLevelProgramAnchors(t *testing.T) {
 		{"above band clamps", Temperature{Val: 700, Unit: u.Fahrenheit}, PzrLevelFullLoadPct},
 	}
 	for _, tc := range cases {
-		c := autoCVCS().Step(Volume{}, tc.tavg, 0)
+		c := autoCVCS().Step(Volume{}, tc.tavg, 0, 0)
 		assert.InDelta(t, tc.want, c.ProgrammedLevel, 1e-9,
 			"%s: want ProgrammedLevel=%v", tc.name, tc.want)
 	}
@@ -60,18 +60,18 @@ func TestPzrLevelProgramAnchors(t *testing.T) {
 func TestPzrLevelControllerBalancesFlows(t *testing.T) {
 	noLoad := Temperature{Val: RCSNoLoadTavgF, Unit: u.Fahrenheit}
 
-	low := autoCVCS().Step(Volume{}, noLoad, 0.05)
+	low := autoCVCS().Step(Volume{}, noLoad, 0.05, 0)
 	assert.InDelta(t, CVCSDesignChargingFlow.Float(),
 		low.ChargingFlow.Float(), 1e-9, "low level saturates charging")
 	assert.Zero(t, low.LetdownFlow.Float(), "low level closes letdown")
 
-	high := autoCVCS().Step(Volume{}, noLoad, 0.95)
+	high := autoCVCS().Step(Volume{}, noLoad, 0.95, 0)
 	assert.InDelta(t, CVCSDesignLetdownFlow.Float(),
 		high.LetdownFlow.Float(), 1e-9, "high level saturates letdown")
 	assert.Zero(t, high.ChargingFlow.Float(), "high level closes charging")
 
 	smallErrPct := 2.0
-	mid := autoCVCS().Step(Volume{}, noLoad, (PzrLevelNoLoadPct-smallErrPct)/100)
+	mid := autoCVCS().Step(Volume{}, noLoad, (PzrLevelNoLoadPct-smallErrPct)/100, 0)
 	// Wiring check: the expected demand recomputes from the same
 	// derived gain constant as production, so this pins the
 	// proportional law, not the constant's magnitude.
@@ -79,7 +79,7 @@ func TestPzrLevelControllerBalancesFlows(t *testing.T) {
 		mid.ChargingFlow.Float(), 1e-9, "proportional demand in linear band")
 	assert.Zero(t, mid.LetdownFlow.Float())
 
-	balanced := autoCVCS().Step(Volume{}, noLoad, PzrLevelNoLoadPct/100)
+	balanced := autoCVCS().Step(Volume{}, noLoad, PzrLevelNoLoadPct/100, 0)
 	assert.Zero(t, balanced.ChargingFlow.Float(), "zero error gives no flow")
 	assert.Zero(t, balanced.LetdownFlow.Float(), "zero error gives no flow")
 }
@@ -92,13 +92,13 @@ func TestPzrLevelControllerRespectsLatches(t *testing.T) {
 
 	c := autoCVCS()
 	c.ChargingPumpRunning = false
-	out := c.Step(Volume{}, noLoad, 0.05)
+	out := c.Step(Volume{}, noLoad, 0.05, 0)
 	assert.Zero(t, out.ChargingFlow.Float(),
 		"no charging without the pump even below program")
 
 	c = autoCVCS()
 	c.LetdownValveOpen = false
-	out = c.Step(Volume{}, noLoad, 0.95)
+	out = c.Step(Volume{}, noLoad, 0.95, 0)
 	assert.Zero(t, out.LetdownFlow.Float(),
 		"no letdown with the valve shut even above program")
 }
@@ -112,7 +112,7 @@ func TestCVCSManualLineupUnchangedByLevelControl(t *testing.T) {
 		ChargingPumpRunning: true,
 		LetdownValveOpen:    true,
 	}
-	out := c.Step(Volume{}, hot, 0.99)
+	out := c.Step(Volume{}, hot, 0.99, 0)
 	assert.InDelta(t, CVCSDesignChargingFlow.Float(),
 		out.ChargingFlow.Float(), 1e-9)
 	assert.InDelta(t, CVCSDesignLetdownFlow.Float(),
@@ -159,8 +159,11 @@ func TestPzrAutoControlHoldsPlantLevel(t *testing.T) {
 	// Volume ledger: with charging parked at zero above program,
 	// everything let down out of the pressurizer must land in the
 	// VCT or, past the high-level divert, the BRS holdup tanks.
+	// The zero is a crossover bound: at the program crossing the
+	// proportional demand passes through float-dust positives.
 	cvcs := p.AuxiliaryBuilding.ChemicalVolumeControlSystem
-	assert.Zero(t, cvcs.ChargingFlow.Float(), "ledger assumes no charging")
+	assert.InDelta(t, 0, cvcs.ChargingFlow.Float(), 1e-6,
+		"ledger assumes no charging")
 	pzrLoss := startWater - water
 	vctGain := cvcs.VCTLevel.Float() - startVCT
 	holdupGain := cvcs.BRSHoldupLevel.Float() - startHoldup

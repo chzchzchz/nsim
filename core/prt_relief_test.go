@@ -66,7 +66,7 @@ func TestPressurizer_ReliefLowersPressure(t *testing.T) {
 	block := Valve{Open: 1}
 	var safety Valve
 	for range int(5 * time.Second / TimeStep) {
-		prz, _ = prz.Step(hotLeg, &porv, &safety, &block)
+		prz, _ = prz.Step(hotLeg, &porv, &safety, &block, 1, 0)
 	}
 	assert.Less(t, float64(prz.Pressure), start,
 		"relief must depressurize the pressurizer")

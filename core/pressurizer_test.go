@@ -49,6 +49,13 @@ func TestPressurizer_SprayDrivesPressureDown(t *testing.T) {
 	p.ReactorBuilding.Pressurizer.Water = Volume{Val: 960, Unit: u.Gallon}
 	p.ReactorBuilding.Pressurizer.Pressure = 2500
 	p.ReactorBuilding.Pressurizer.SprayOpen = 1.0
+	// Normal spray draws from an operating reactor coolant pump; spin
+	// the lumped pump up so the spray line has flow behind it.
+	// "To provide spray flow a RCP must be operating in one of the
+	// two loops with spray flow connections."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:96-98
+	p.ReactorBuilding.ReactorCoolantPump.Running = true
+	p.ReactorBuilding.ReactorCoolantPump.Velocity = RCPRatedSpeed
 	floor := PressurizerSatPressure(
 		p.ReactorBuilding.ReactorPressureVessel.Outlet.Float())
 
@@ -132,7 +139,7 @@ func TestPressurizer_BubbleFormationFromWaterSolid(t *testing.T) {
 	}
 	// The window must cover (target-seed)/rate seconds of drive.
 	for range int(6 * time.Second / TimeStep) {
-		pz, _ = pz.Step(hotLeg, nil, nil, nil)
+		pz, _ = pz.Step(hotLeg, nil, nil, nil, 1, 0)
 	}
 
 	assert.InDelta(t, float64(PressurizerHeaterTarget), float64(pz.Pressure), 10,
@@ -167,7 +174,7 @@ func TestPressurizer_LetdownDrainHoldsPressure(t *testing.T) {
 	hotLeg := Temperature{Val: CoreReferenceInletF + 3, Unit: u.Fahrenheit}
 
 	for pz.Water.Float() > 375 {
-		pz, _ = pz.Step(hotLeg, nil, nil, nil)
+		pz, _ = pz.Step(hotLeg, nil, nil, nil, 1, 0)
 		pz.Water = vol(pz.Water, pz.Water.Float()-netLetdown)
 
 		require.Less(t, float64(pz.Pressure), float64(PressurizerPORVTrip),
@@ -196,7 +203,7 @@ func TestPressurizer_IdleCooldownCondensesBubble(t *testing.T) {
 		Pressure: PressurizerHeaterTarget,
 	}
 	for range int(time.Second / TimeStep) {
-		pz, _ = pz.Step(hotLeg, nil, nil, nil)
+		pz, _ = pz.Step(hotLeg, nil, nil, nil, 1, 0)
 	}
 
 	assert.Less(t, float64(pz.Pressure), float64(PressurizerHeaterTarget),

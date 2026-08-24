@@ -210,6 +210,60 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Solid-plant primary pressure control valve between the RHR
+	// and CVC systems, with its selected-pressure setpoint. It
+	// trims a water-solid primary back to the setpoint while the
+	// RHRS provides the forced flow between the two systems.
+	// "Solid plant primary pressure control utilizes a pressure
+	// control valve between the RHR and CVC systems which is set
+	// to maintain a selected pressure while charging makes up for
+	// any coolant contraction and losses."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:117-122
+	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantPressureValve/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem",
+		Label: "SolidPlantPressureValve",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantPressureValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantPressureValve.Open = v
+			return nil
+		},
+	}
+
+	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantPressureSetpoint"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem",
+		Label: "SolidPlantPressureSetpoint",
+		Kind:  "psig",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantPressureSetpoint)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("psig", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantPressureSetpoint = Pressure(v)
+			return nil
+		},
+	}
+
+
 	// EFWS motor-driven pump manual control. Auto-starts on
 	// SI / low-low SG level; the operator manually stops it
 	// when main feedwater is restored and manually starts it
@@ -419,6 +473,37 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 				return err
 			}
 			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingFlowDemand = v
+			return nil
+		},
+	}
+
+
+	// CVCS auxiliary spray valve: throttled charging flow routed
+	// into the pressurizer for pressure control while the reactor
+	// coolant pumps are secured.
+	// "Charging flow is throttled to control pressurizer cooldown
+	// rate and raise pressurizer level using auxiliary spray since
+	// normal spray is not available when reactor coolant pumps have
+	// been secured."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:100-104
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/AuxSprayValve/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "AuxSprayValve",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AuxSprayValveOpen)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AuxSprayValveOpen = v
 			return nil
 		},
 	}
@@ -655,6 +740,19 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 	// Pressurizer level program output: the Tavg-referenced
 	// programmed value the automatic level controller holds.
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
+	// Auxiliary spray drive actually delivered last step: the
+	// valve position gated by the charging pump.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:100-104
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/AuxSprayDrive"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "AuxSprayDrive",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AuxSprayDrive)
+		},
+	}
+
 	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/ProgrammedLevel"] = &bridge.Sensor{
 		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
 		Label: "ProgrammedLevel",
@@ -812,6 +910,19 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
 				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.Running)
+		},
+	}
+
+	// Solid-plant bleed flow delivered to the CVC letdown path
+	// last step through the RHR/CVC pressure control valve.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:117-122
+	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantReliefFlow"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem",
+		Label: "SolidPlantReliefFlow",
+		Kind:  "gpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gpm",
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantReliefFlow.Float())
 		},
 	}
 
