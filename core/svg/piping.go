@@ -89,6 +89,18 @@ func DrawPipePath(pts []Anchor, colour string) string {
 	return b.String()
 }
 
+// DrawPipePathAnimated renders a routed polyline whose dash pattern
+// streams along the flow direction. durSec sets the animation
+// period; the document root supplies --phase so remounts continue
+// mid-cycle instead of restarting (see RenderOptions.PhaseMs).
+func DrawPipePathAnimated(pts []Anchor, colour string, durSec float64) string {
+	base := DrawPipePath(pts, colour)
+	return strings.Replace(base,
+		`/>`,
+		fmt.Sprintf(` class="flow" style="--dur:%.2fs"/>`, durSec),
+		1)
+}
+
 // DrawPipePathWithValve renders a routed pipe plus a valve symbol
 // anchored at `at`: the hop node's laid-out position when known,
 // otherwise the path midpoint. vw/vh give the drawn valve size so

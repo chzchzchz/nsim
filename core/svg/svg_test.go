@@ -104,6 +104,38 @@ func TestSymbolManifest(t *testing.T) {
 	}
 }
 
+// TestRenderOptions_PhaseAndFlow checks that the animation phase
+// reaches the root element and the flow stylesheet is emitted.
+func TestRenderOptions_PhaseAndFlow(t *testing.T) {
+	p := core.MakePlant()
+	var b strings.Builder
+	require.NoError(t, WritePlantSVGWithOptions(&b, &p, CurrentLayout(), RenderOptions{PhaseMs: 1234}))
+	out := b.String()
+	assert.Contains(t, out, `style="--phase:1234ms"`)
+	assert.Contains(t, out, "@keyframes nsimflow")
+}
+
+// TestValveWedgeRendersWhenOpen checks that a half-open valve emits
+// its pie wedge and exact-percentage tooltip.
+func TestValveWedgeRendersWhenOpen(t *testing.T) {
+	p := core.MakePlant()
+	p.TurbineBuilding.MakeupValve.Open = 0.5
+	var b strings.Builder
+	require.NoError(t, WritePlantSVG(&b, &p))
+	assert.Contains(t, b.String(), "<title>50%</title>")
+}
+
+// TestRCFCPartsRender checks the four fan-cooler units resolve
+// against the embedded layout with their run-status dots.
+func TestRCFCPartsRender(t *testing.T) {
+	p := core.MakePlant()
+	var b strings.Builder
+	require.NoError(t, WritePlantSVG(&b, &p))
+	out := b.String()
+	assert.Contains(t, out, ">RCFC A<")
+	assert.NotContains(t, out, "anchors missing")
+}
+
 // TestSymbolForKind_Defaults checks that unknown kinds fall back
 // to the gate valve symbol.
 func TestSymbolForKind_Defaults(t *testing.T) {

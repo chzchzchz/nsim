@@ -48,6 +48,7 @@ var symbolTable = map[string]symbolSpec{
 	"ESFBus":                       {120.0 / 96.0, 20.0 / 96.0, "esf-bus.svg"},
 	"OffsiteGrid":                  {30.0 / 96.0, 50.0 / 96.0, "grid-bus.svg"},
 	"PressurizerReliefTank":        {60.0 / 96.0, 80.0 / 96.0, "tank-vertical.svg"},
+	"RCFCUnit":                     {40.0 / 96.0, 40.0 / 96.0, "rcfc-unit.svg"},
 	"safety":                       {20.0 / 96.0, 20.0 / 96.0, "valve-safety.svg"},
 	"relief":                       {20.0 / 96.0, 20.0 / 96.0, "valve-relief.svg"},
 	"porv":                         {24.0 / 96.0, 20.0 / 96.0, "valve-porv.svg"},

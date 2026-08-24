@@ -112,6 +112,26 @@ func mustComputeLayout(t *testing.T, p *core.Plant) *Layout {
 	return l
 }
 
+// TestComputeLayout_RoutesDeterministic checks that routed edge
+// polylines and the fit scale reproduce exactly across calls; the
+// generated default file depends on it for stable diffs.
+func TestComputeLayout_RoutesDeterministic(t *testing.T) {
+	p := core.MakePlant()
+	a := mustComputeLayout(t, &p)
+	b := mustComputeLayout(t, &p)
+
+	require.Equal(t, len(a.Routes), len(b.Routes))
+	for key, ra := range a.Routes {
+		rb, ok := b.Routes[key]
+		require.True(t, ok, "route %q missing in second layout", key)
+		require.Len(t, rb, len(ra))
+		for i := range ra {
+			assert.Equal(t, ra[i], rb[i], "route %q point %d", key, i)
+		}
+	}
+	assert.Equal(t, a.Scale, b.Scale)
+}
+
 // TestEmptyLayout returns a Layout whose Pos map is unset; callers
 // fall back to the hardcoded constants when ComputeLayout is
 // not available.

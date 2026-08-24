@@ -104,6 +104,10 @@ var diagramParts = []diagramPart{
 	{"ESF_A", "Outside/ESFBus", "ESFBus", "ESF Bus A"},
 	{"ESF_B", "Outside/ESFBus", "ESFBus", "ESF Bus B"},
 	{"Grid", "Outside/Grid", "OffsiteGrid", "Grid"},
+	{"RCFC_A", "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem", "RCFCUnit", "RCFC A"},
+	{"RCFC_B", "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem", "RCFCUnit", "RCFC B"},
+	{"RCFC_C", "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem", "RCFCUnit", "RCFC C"},
+	{"RCFC_D", "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem", "RCFCUnit", "RCFC D"},
 }
 
 // buildingLabels captions the cluster outlines drawn behind symbols.
@@ -126,8 +130,7 @@ var diagramKindByID = func() map[string]string {
 
 // pumpAccessors maps diagram parts backed by a core.Pump to its
 // live state, letting static exports show run status.
-var pumpAccessors = map[string]func(*core.Plant) *core.Pump{
-	"RCP": func(p *core.Plant) *core.Pump {
+var pumpAccessors = map[string]func(*core.Plant) *core.Pump{	"RCP": func(p *core.Plant) *core.Pump {
 		return &p.ReactorBuilding.ReactorCoolantPump
 	},
 	"CondensatePump": func(p *core.Plant) *core.Pump {
@@ -148,6 +151,47 @@ var pumpAccessors = map[string]func(*core.Plant) *core.Pump{
 	"TurbineAFWPump": func(p *core.Plant) *core.Pump {
 		return &p.Outside.TurbineAFWPump.Pump
 	},
+}
+
+// runAccessors covers parts whose live state is a plain running
+// bool rather than a core.Pump (fan units, fans-only drives).
+var runAccessors = map[string]func(*core.Plant) bool{
+	"RCFC_A": func(p *core.Plant) bool { return p.AuxiliaryBuilding.RCFCUnits[0].Running },
+	"RCFC_B": func(p *core.Plant) bool { return p.AuxiliaryBuilding.RCFCUnits[1].Running },
+	"RCFC_C": func(p *core.Plant) bool { return p.AuxiliaryBuilding.RCFCUnits[2].Running },
+	"RCFC_D": func(p *core.Plant) bool { return p.AuxiliaryBuilding.RCFCUnits[3].Running },
+}
+
+// tintAmber/tintRed are halo colours for warning vs trip severity.
+const (
+	tintAmber = "#f0a500"
+	tintRed   = "#e02020"
+)
+
+// alarmTints maps an active alarm to affected part ids and a halo
+// colour. Red (trip) outranks amber (warning) when both apply.
+var alarmTints = []struct {
+	alarm  core.AlarmID
+	ids    []string
+	colour string
+}{
+	{core.AlarmIDOPCAlarm, []string{"Turbine"}, tintAmber},
+	{core.AlarmIDOPCTrip, []string{"Turbine"}, tintRed},
+	{core.AlarmIDTurbineTripVacuum, []string{"Turbine"}, tintRed},
+	{core.AlarmIDTurbineTripBearingOil, []string{"Turbine"}, tintRed},
+	{core.AlarmIDTurbineStepback, []string{"Turbine"}, tintAmber},
+	{core.AlarmIDGeneratorMVALimit, []string{"Generator"}, tintAmber},
+	{core.AlarmIDSCCWLowFlow, []string{"Generator"}, tintAmber},
+	{core.AlarmIDSCCWNoFlow, []string{"Generator"}, tintRed},
+	{core.AlarmIDReactorTrip, []string{"RPV", "RCP", "SG"}, tintRed},
+	{core.AlarmIDDieselCoolant, []string{"Diesel"}, tintAmber},
+	{core.AlarmIDDieselLowFuel, []string{"Diesel"}, tintAmber},
+	{core.AlarmIDDieselTripped, []string{"Diesel", "FuelTank"}, tintRed},
+	{core.AlarmIDSGLowLevel, []string{"SG"}, tintAmber},
+	{core.AlarmIDSGHighLevel, []string{"SG"}, tintAmber},
+	{core.AlarmIDSIActuated, []string{"SISAccumulators"}, tintRed},
+	{core.AlarmIDAFWStart, []string{"DieselAFWPump", "MotorAFWPump", "TurbineAFWPump"}, tintAmber},
+	{core.AlarmIDFeedwaterIsolation, []string{"MainFeedValve"}, tintRed},
 }
 
 // renderer composes one SVG document against a specific layout,
@@ -298,8 +342,18 @@ func (r *renderer) pipe(p *core.Plant, e core.GraphEdge) string {
 	}
 
 	colour := ColourForEdge(e.From, e.To)
+	// Flow animation: only edges with a running pump animate, with
+	// a period inversely proportional to speed. The document root's
+	// --phase keeps remounts mid-cycle (see RenderOptions).
+	var pathFrag string
+	if e.Pump != nil && e.Pump.Running && e.Pump.Velocity > 0 {
+		dur := clampRange(900/float64(e.Pump.Velocity), 0.6, 10)
+		pathFrag = DrawPipePathAnimated(pts, colour, dur)
+	} else {
+		pathFrag = DrawPipePath(pts, colour)
+	}
 	if e.Valve == nil {
-		return DrawPipePath(pts, colour)
+		return pathFrag
 	}
 	ref, _ := valveHopFor(e)
 	vw, vh := r.size(ref.kind)
@@ -308,35 +362,90 @@ func (r *renderer) pipe(p *core.Plant, e core.GraphEdge) string {
 		r.missing[ref.id] = true
 		at = pts[len(pts)/2]
 	}
-	frag := DrawPipePathWithValve(pts, colour, ValveKindForEdge(p, e), at, vw, vh)
-	// Static exports encode live position: the valve's open
-	// percentage rides above its symbol.
-	frag += fmt.Sprintf(
-		`<text x="%.0f" y="%.0f" font-size="8" text-anchor="middle" fill="#555">%s</text>`,
-		at.X, at.Y-vh/2-3, html.EscapeString(fmt.Sprintf("%.0f%%", e.Valve.Open*100)))
-	return frag
+	// Live position is encoded twice: a pie wedge fills the valve
+	// body proportional to open fraction, and a native <title>
+	// tooltip carries the exact percentage for hover inspection.
+	pct := int(math.Round(e.Valve.Open * 100))
+	wedge := valveWedgePath(at, math.Min(vw, vh)*0.45, e.Valve.Open)
+	use := fmt.Sprintf(
+		`<use href="#%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>`,
+		SymbolForKind(ValveKindForEdge(p, e)), at.X-vw/2, at.Y-vh/2, vw, vh)
+	return pathFrag + fmt.Sprintf(
+		`<g><title>%d%%</title>%s%s</g>`, pct, use, wedge)
+}
+
+// valveWedgePath returns a pie-slice subpath centred on `at` whose
+// sweep encodes the open fraction (clockwise from 12 o'clock), or
+// "" when closed. Full-open renders as a complete disc.
+func valveWedgePath(at Anchor, r, open float64) string {
+	open = clampRange(open, 0, 1)
+	if open <= 0 || r <= 0 {
+		return ""
+	}
+	a0 := -math.Pi / 2
+	a1 := a0 + open*2*math.Pi
+	x0, y0 := at.X+r*math.Cos(a0), at.Y+r*math.Sin(a0)
+	x1, y1 := at.X+r*math.Cos(a1), at.Y+r*math.Sin(a1)
+	large := 0
+	if open > 0.5 {
+		large = 1
+	}
+	if open >= 1 {
+		return fmt.Sprintf(`M %.1f,%.1f A %.1f,%.1f 0 1 1 %.1f,%.1f A %.1f,%.1f 0 1 1 %.1f,%.1f Z`,
+			at.X-r, at.Y, r, r, at.X+r, at.Y, r, r, at.X-r, at.Y)
+	}
+	return fmt.Sprintf(`M %.1f,%.1f L %.1f,%.1f A %.1f,%.1f 0 %d 1 %.1f,%.1f Z`,
+		at.X, at.Y, x0, y0, r, r, large, x1, y1)
 }
 
 // WritePlantSVG writes a P&ID-style SVG of the given plant to w
 // using the package-default layout.
 func WritePlantSVG(w io.Writer, p *core.Plant) error {
-	return writePlantSVG(w, p, loadedLayout)
+	return writePlantSVG(w, p, loadedLayout, RenderOptions{})
+}
+
+// CurrentLayout returns the package-default layout (the embedded
+// generated positions), for embedders that pass layouts explicitly.
+func CurrentLayout() *Layout {
+	return loadedLayout
+}
+
+// RenderOptions tunes optional rendering behaviour.
+type RenderOptions struct {
+	// PhaseMs offsets CSS animation phase by simulation time so
+	// document remounts continue mid-cycle instead of restarting.
+	PhaseMs float64
 }
 
 // WritePlantSVGWith writes a P&ID-style SVG of the given plant to w
 // using an explicit layout, bypassing the package default.
 func WritePlantSVGWith(w io.Writer, p *core.Plant, l *Layout) error {
-	return writePlantSVG(w, p, l)
+	return writePlantSVG(w, p, l, RenderOptions{})
 }
 
-func writePlantSVG(w io.Writer, p *core.Plant, l *Layout) error {
+// WritePlantSVGWithOptions writes a P&ID-style SVG with an explicit
+// layout and render options.
+func WritePlantSVGWithOptions(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error {
+	return writePlantSVG(w, p, l, o)
+}
+
+// flowStyleCSS drives dash streaming on .flow polylines. The phase
+// comes from the root element's --phase so a remount at simulation
+// time T renders the same frame a continuous document would.
+const flowStyleCSS = `<style>` +
+	`.flow{stroke-dasharray:7 11;animation:nsimflow var(--dur,3s) linear infinite;` +
+	`animation-delay:calc(var(--phase,0)*-1ms);}` +
+	`@keyframes nsimflow{to{stroke-dashoffset:-18;}}` +
+	`</style>` + "\n"
+
+func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error {
 	r := newRenderer(l)
 	var b strings.Builder
 
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	fmt.Fprintf(&b,
-		`<svg xmlns="http://www.w3.org/2000/svg" width="%.0fpx" height="%.0fpx" viewBox="0 0 %.0f %.0f">`+"\n",
-		DocumentWidth, DocumentHeight, DocumentWidth, DocumentHeight)
+		`<svg xmlns="http://www.w3.org/2000/svg" width="%.0fpx" height="%.0fpx" viewBox="0 0 %.0f %.0f" style="--phase:%gms">`+"\n",
+		DocumentWidth, DocumentHeight, DocumentWidth, DocumentHeight, o.PhaseMs)
 	b.WriteString(`<title>PWR plant P\u0026ID</title>` + "\n")
 
 	// defs: every symbol referenced by the diagram, loaded from
@@ -357,6 +466,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout) error {
 	b.WriteString(TransformerAsset)
 	b.WriteString(DieselAsset)
 	b.WriteString(PipeArrowMarkers())
+	b.WriteString(flowStyleCSS)
 	b.WriteString("</defs>\n")
 
 	useAt := func(sym string, cx, cy, w, h float64) string {
@@ -384,6 +494,11 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout) error {
 		if !ok {
 			continue
 		}
+		// Building outlines are backgrounds: intersect with the
+		// viewport so padded extents never spill off-canvas.
+		bx, by = math.Max(bx, 0), math.Max(by, 0)
+		bw = math.Min(bw, DocumentWidth-bx)
+		bh = math.Min(bh, DocumentHeight-by)
 		if name == "cluster_containment" {
 			writePartEl("ReactorBuilding/ContainmentBuilding",
 				useAt("containment-dome", bx+bw/2, by+bh/2, bw, bh))
@@ -396,27 +511,14 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout) error {
 		writeLabel(bx+bw/2, by+14, buildingLabels[name])
 	}
 
-	// Containment internals: spray headers and RCFC units sized
-	// relative to the dome footprint, skipped where they would
-	// collide with a real part.
+	// Containment internals: spray headers sized relative to the
+	// dome footprint, skipped where they would collide with a real
+	// part. RCFC units are real diagramParts placed by dot.
 	if cx, cy, cw, ch, ok := r.clusterBox("cluster_containment"); ok {
 		sx, sy, sw2, sh2 := cx+cw*0.62, cy+ch*0.20, cw*0.35, ch*0.16
 		if !r.overlapsPart(sx-sw2/2, sy-sh2/2, sw2, sh2) {
 			writePartEl("ReactorBuilding/ContainmentBuilding",
 				useAt("css-spray-headers", sx, sy, sw2, sh2))
-		}
-		gridW, gridH := cw*0.3, ch*0.22
-		unitW, unitH := cw*0.07, ch*0.08
-		for row := 0; row < 2; row++ {
-			for col := 0; col < 2; col++ {
-				fx := cx + cw/2 + (float64(col)-0.5)*gridW
-				fy := cy + ch*0.62 + (float64(row)-0.5)*gridH
-				if r.overlapsPart(fx-unitW/2, fy-unitH/2, unitW, unitH) {
-					continue
-				}
-				writePartEl("ReactorBuilding/ContainmentBuilding",
-					useAt("rcfc-unit", fx, fy, unitW, unitH))
-			}
 		}
 	}
 
@@ -448,6 +550,31 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout) error {
 		}
 	}
 
+	// Alarm tinting: parts related to an active alarm get a halo
+	// outline (amber = warning, red = trip) so deviation reads at
+	// a glance without consulting the alarm list.
+	active := map[core.AlarmID]bool{}
+	for _, a := range p.Alarms() {
+		active[a.ID] = true
+	}
+	tintFor := func(id string) string {
+		worst := ""
+		for _, t := range alarmTints {
+			if !active[t.alarm] {
+				continue
+			}
+			for _, pid := range t.ids {
+				if pid == id {
+					if t.colour == tintRed {
+						return tintRed
+					}
+					worst = t.colour
+				}
+			}
+		}
+		return worst
+	}
+
 	// Symbols bound to parts for the live web UI. Pump-backed
 	// parts also get a run-status dot and speed readout so static
 	// exports carry state the web UI otherwise injects.
@@ -459,26 +586,35 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout) error {
 		}
 		sw, sh := r.size(dp.kind)
 		writePartEl(dp.part, useAt(symbolID(dp.kind), a.X, a.Y, sw, sh))
+		if col := tintFor(dp.id); col != "" {
+			fmt.Fprintf(&b,
+				`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" rx="3" fill="none" stroke="%s" stroke-width="2"/>`+"\n",
+				a.X-sw/2-3, a.Y-sh/2-3, sw+6, sh+6, col)
+		}
 		if dp.label != "" {
 			writeLabel(a.X, a.Y-sh/2-6, dp.label)
 		}
 		acc, okP := pumpAccessors[dp.id]
-		if !okP {
-			continue
-		}
-		pu := acc(p)
-		dotR := math.Max(3, sw*0.06)
-		dx, dyDot := sw*0.38, -sh*0.42
-		dotColour := "#aaa"
-		if pu.Running {
-			dotColour = "green"
-		}
-		fmt.Fprintf(&b,
-			`<circle cx="%.0f" cy="%.0f" r="%.0f" fill="%s" stroke="#333" stroke-width="1"/>`+"\n",
-			a.X+dx, a.Y+dyDot, dotR, dotColour)
-		if pu.Velocity > 0 {
-			writeLabel(a.X+dx, a.Y+dyDot+dotR+9,
-				fmt.Sprintf("%d rpm", int(pu.Velocity)))
+		if okP {
+			pu := acc(p)
+			dotR := math.Max(3, sw*0.06)
+			dx, dyDot := sw*0.38, -sh*0.42
+			dotColour := "#aaa"
+			if pu.Running {
+				dotColour = "green"
+			}
+			fmt.Fprintf(&b,
+				`<circle cx="%.0f" cy="%.0f" r="%.0f" fill="%s" stroke="#333" stroke-width="1"/>`+"\n",
+				a.X+dx, a.Y+dyDot, dotR, dotColour)
+			if pu.Velocity > 0 {
+				writeLabel(a.X+dx, a.Y+dyDot+dotR+9,
+					fmt.Sprintf("%d rpm", int(pu.Velocity)))
+			}
+		} else if run, okR := runAccessors[dp.id]; okR && run(p) {
+			dotR := math.Max(3, sw*0.06)
+			fmt.Fprintf(&b,
+				`<circle cx="%.0f" cy="%.0f" r="%.0f" fill="green" stroke="#333" stroke-width="1"/>`+"\n",
+				a.X+sw*0.38, a.Y-sh*0.42, dotR)
 		}
 	}
 

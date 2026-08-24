@@ -48,6 +48,10 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	{"Generator", "cluster_turbine", "Generator"},
 	{"PRT", "cluster_containment", "PressurizerReliefTank"},
 	{"MainFeedValve", "cluster_turbine", "modulating"},
+	{"RCFC_A", "cluster_containment", "RCFCUnit"},
+	{"RCFC_B", "cluster_containment", "RCFCUnit"},
+	{"RCFC_C", "cluster_containment", "RCFCUnit"},
+	{"RCFC_D", "cluster_containment", "RCFCUnit"},
 }
 
 // clusterFor groups PlantGraph node IDs into DOT subgraphs that
@@ -163,7 +167,15 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 		"cluster_electrical":  "Electrical / ESF",
 	}
 
-	for name, body := range clusters {
+	// Deterministic cluster order: map iteration would shuffle the
+	// emitted DOT between runs, and dot's layout jitters with it.
+	names := make([]string, 0, len(clusters))
+	for name := range clusters {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		body := clusters[name]
 		if body.Len() == 0 {
 			continue
 		}

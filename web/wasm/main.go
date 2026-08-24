@@ -228,7 +228,8 @@ func (h *plantHandle) commandLogJSON() (string, error) {
 
 func (h *plantHandle) getSvg() (string, error) {
 	var buf bytes.Buffer
-	if err := svg.WritePlantSVG(&buf, h.p); err != nil {
+	opts := svg.RenderOptions{PhaseMs: float64(h.simTimeNs) / 1e6}
+	if err := svg.WritePlantSVGWithOptions(&buf, h.p, svg.CurrentLayout(), opts); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
