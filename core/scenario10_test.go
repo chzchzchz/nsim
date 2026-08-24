@@ -63,6 +63,7 @@ func TestScenario10_ModeControlDrivesHotStandbyGating(t *testing.T) {
 // load (in excess of 10%)"
 // specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:9-11
 func TestScenario10_GradualUnloadReachesHouseLoadWithoutRejection(t *testing.T) {
+	t.Parallel()
 	p := scenario10FullPowerPlant()
 
 	for _, sp := range []string{"0.92", "0.84", "0.76", "0.68", "0.60",
@@ -96,6 +97,7 @@ func TestScenario10_GradualUnloadReachesHouseLoadWithoutRejection(t *testing.T) 
 // "the control rods are inserted to reduce power level"
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:20-23
 func TestScenario10_RodInsertionShutsDownReactor(t *testing.T) {
+	t.Parallel()
 	p := scenario10FullPowerPlant()
 
 	setControl(t, &p, "ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion", "1")
@@ -119,6 +121,7 @@ func TestScenario10_RodInsertionShutsDownReactor(t *testing.T) {
 // (level management, page_226.txt:146-153) and "Primary plant heatup
 // rate is limited to 50°F per hour" (page_224.txt:140-141).
 func TestScenario10_LevelAndRateHoldThroughCooldown(t *testing.T) {
+	t.Parallel()
 	p := scenario10FullPowerPlant()
 	// The evolution runs on the automatic level loop: level follows
 	// the Tavg-referenced program (60 pct at full load toward 25 pct

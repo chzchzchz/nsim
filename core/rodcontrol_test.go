@@ -77,6 +77,7 @@ func TestRPC_RateClampOnOperatorEntry(t *testing.T) {
 // rods near their critical position (xenon compensation emerges from
 // the closed loop).
 func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
+	t.Parallel()
 	p := rpcReactorLeadPlant()
 
 	setControl(t, &p, "PlantOperation/LeadLagMode", "1")

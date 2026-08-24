@@ -124,6 +124,7 @@ func TestRefueling_PhaseAdvancesOnTimer(t *testing.T) {
 // transfer of FuelAssembliesPerRefuelingOutage (64) assemblies
 // moves from core to pit; the core count is unchanged.
 func TestRefueling_FuelTransfersAtMidPhaseHandling(t *testing.T) {
+	t.Parallel()
 	r := RefuelingOperations{
 		Phase:               RefuelingPhaseFuelHandling,
 		FuelAssembliesInCore: FuelAssembliesPerReactor,

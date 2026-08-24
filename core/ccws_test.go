@@ -110,6 +110,7 @@ func TestCCWS_PumpsRunningOutletAboveInletByApproachTemp(t *testing.T) {
 //     after four hours."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112
 func TestCCWS_InletRecoversWithinFourHours(t *testing.T) {
+	t.Parallel()
 	c := CCWS{
 		PumpRunning: true,
 		DriveReady:  true,
@@ -189,6 +190,7 @@ func TestCCWS_LossOfServiceWaterSoaksLoopAndZeroesDuty(t *testing.T) {
 //     cooling water to safeguards equipment."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_103.txt:135-138
 func TestCCWS_EndToEndSafetyInjectionStartsPumps(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection

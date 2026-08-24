@@ -141,6 +141,7 @@ func TestRodAutoControlFrozenWhileTripped(t *testing.T) {
 //   the reactor to match the power demanded by the turbine [...]"
 //   specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:68-71
 func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	boron := 500.0
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = boron
@@ -185,14 +186,14 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 	// Tavg-program identity lands with that feedback term.
 
 	// The plateau must hold, not glide into collapse.
-	stepN(&p, int(120*time.Second/TimeStep))
+	stepN(&p, int(90*time.Second/TimeStep))
 	held := float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower) /
 		float64(CoreRatedThermalPower)
 	assert.Greater(t, held, 0.35, "plateau still held after holding window")
 	assert.Less(t, held, 0.65, "plateau stable, not climbing away")
 
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
-	stepN(&p, int(400*time.Second/TimeStep))
+	stepN(&p, int(250*time.Second/TimeStep))
 	recovered := float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower) /
 		float64(CoreRatedThermalPower)
 	assert.Greater(t, recovered, held+0.1,

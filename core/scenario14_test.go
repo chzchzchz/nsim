@@ -39,6 +39,7 @@ func scenario14FullPowerPlant() Plant {
 }
 
 func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
+	t.Parallel()
 	p := scenario14FullPowerPlant()
 
 	// Rods lead: one insertion drive starts the power fold.

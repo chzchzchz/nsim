@@ -65,6 +65,7 @@ func TestPlant_RCPDriveReadyFollowsESFBreaker(t *testing.T) {
 //     flow during pump trips."
 //     specs/the_westinghouse_pressurized_water_react/chapter_1/page_020.txt:83-84
 func TestRCP_Coastdown(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPump.Running = true
 	// Poll to rated speed with a cap; the ramp is monotone so the

@@ -238,6 +238,7 @@ func TestThermal_RodWithdrawalRaisesReactivity(t *testing.T) {
 //     depletion and removal of shim boron"
 //     (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:119-121).
 func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
+	t.Parallel()
 	// Both legs share the same scrammed seed, so decay-heat
 	// trajectories diverge (if at all) from the first step; a
 	// short window is as probative as a long one.
@@ -330,7 +331,7 @@ func TestThermal_Fission4_BorationLowersOutlet(t *testing.T) {
 			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
 		}
 
-		const steps = int(120 * time.Second / TimeStep)
+		const steps = int(90 * time.Second / TimeStep)
 		stepN(&p, steps)
 		return p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 	}

@@ -89,6 +89,7 @@ func TestDiesel_TripsOnFuelExhaustion(t *testing.T) {
 }
 
 func TestDiesel_TripsOnCoolantOverTemp(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = false // no cooling
 	p.AuxiliaryBuilding.DieselGenerator = newDiesel(500)

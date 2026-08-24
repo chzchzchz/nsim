@@ -24,6 +24,7 @@ import (
 //     turbine."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:32-33
 func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	// Maneuvering chemistry: diluted shim puts the net temperature
 	// coefficient negative so the fold below full power is

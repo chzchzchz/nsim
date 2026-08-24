@@ -171,6 +171,7 @@ func TestContainment_SprayCondensationCoolsAtmosphere(t *testing.T) {
 //   - "Diesel generator coolers"
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89
 func TestSWS_HeatLoadIncludesDieselJacketDuty(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal =
