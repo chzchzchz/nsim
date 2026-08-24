@@ -899,7 +899,13 @@ func TestPlant_SGSafetyValvePopsAndReseats(t *testing.T) {
 //     exceed 5 percent of full power per minute":
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:63-67
 func TestPlant_FullLoadHoldsShellPressureAndRatedOutput(t *testing.T) {
-	t.Parallel()
+	// Steady-state balance: fission rides the rated cap (a pinned
+	// state, insensitive to tick width), the SG header relaxes toward
+	// its anchor through dt-scaled lags, and every assertion is a
+	// wide band around that settled point (+/-40 psia against a
+	// 920 psia anchor). Must not run in parallel: overrideTimeStep
+	// mutates global simulation state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -935,6 +941,21 @@ func TestPlant_FullLoadHoldsShellPressureAndRatedOutput(t *testing.T) {
 //   - SG pressure must stay far above the low-steamline trip:
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt
 func TestPlant_TripBypassModulatesAndHoldsHeaderPressure(t *testing.T) {
+	// Stepback demand ramps linearly in dt and bypass valve travel is
+	// linear too; the header envelope is asserted against wide bounds
+	// (880 psia floor, safety-valve ceiling) rather than per-step
+	// shape.
+	//
+	// Fidelity note: this hold cannot ride a widened TimeStep. The
+	// stepback fold follows the reactor's per-step reactivity
+	// compounding, so a coarser tick folds power more slowly against
+	// the tripped turbine's fixed offtake, and the surplus steam
+	// pushes the header peak past the 985 psia safety-valve ceiling:
+	// measured 985.12 psia at a uniform 10 ms tick and 985.04 psia at
+	// 5 ms against an assertion that exists to prove the valve stays
+	// seated. It keeps the default step throughout rather than
+	// overrideTimeStep, and stays parallel because nothing global is
+	// mutated.
 	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
