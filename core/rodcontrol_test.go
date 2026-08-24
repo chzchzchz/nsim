@@ -30,6 +30,15 @@ import (
 func rpcReactorLeadPlant() Plant {
 	p := scenario10FullPowerPlant()
 	p.ReactorBuilding.Pressurizer.HeatersOn = true
+	// Main feedwater is in service during power operation: with the
+	// corrected secondary mass balance the boiling stock really
+	// depletes at the rated evaporation rate, so a multi-minute hold
+	// needs the regulator feeding ("Feedwater flow to each steam
+	// generator is controlled by a feedwater regulator [...]
+	// controlled by steam generator level, steam flow and feedwater
+	// flow", specs/the_westinghouse_pressurized_water_react/
+	// chapter_15/page_219.txt:68-76).
+	p.TurbineBuilding.MainFeedwaterPump.Running = true
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = true
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 600
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = 600

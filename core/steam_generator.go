@@ -160,6 +160,12 @@ const (
 	SGWetLayupMaxHeaderPsia = 20.0
 	LatentHeatOfSteamization          Watts    = 2.26e6
 
+	// GallonsPerCubicMeter converts the liquid-equivalent evaporation
+	// rate into the gallon-denominated shell inventory.
+	// Derived: 1 m^3 = 1000 kg water at ~1 kg/L; KilogramsPerGallon
+	// = 3.785 kg/gal (core/parts.go). 1000 / 3.785 = 264.2.
+	GallonsPerCubicMeter = 1000.0 / KilogramsPerGallon
+
 	// SteamGeneratorSafetyValveSetpointPsia pops the spring-loaded
 	// SG safety valves. Assumption; the spec names the valves
 	// ("self-actuating ASME-code safety valves") but quotes no
@@ -274,30 +280,28 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 	ret := *s
 	dt := TimeStep
 
-	// Rated boil-off capacity in liquid-equivalent m^3/s, the design
-	// reference the offtake fraction is measured against. At rated
-	// heat input this vaporises 480 kg/s of water.
-	ratedBoilM3PerSec := float64(SteamGeneratorFullLoadHeatInput) /
-		float64(LatentHeatOfSteamization) / 1000.0
+	// Rated boil-off capacity in liquid-equivalent gal/s, the design
+	// reference the offtake fraction is measured against.
+	ratedBoilGalPerSec := float64(SteamGeneratorFullLoadHeatInput) /
+		float64(LatentHeatOfSteamization) / 1000.0 * GallonsPerCubicMeter
 
-	boilRateM3PerSec := 0.0
+	boilRateGalPerSec := 0.0
 	if ret.HeatInput > 0 {
-		boilRateGPerSec := float64(ret.HeatInput) / float64(LatentHeatOfSteamization)
-		boilRateM3PerSec = boilRateGPerSec / 1000.0 // kg/s -> m^3/s at ~1 kg/L
+		boilRateGalPerSec = float64(ret.HeatInput) /
+			float64(LatentHeatOfSteamization) / 1000.0 *
+			GallonsPerCubicMeter
 	}
 
-	// Steam offtake drawn from the shell side this step (turbine
-	// admission + condenser dump), referenced to rated full-load
-	// steam flow and converted to the same liquid-equivalent volume
-	// convention as the boil-off. The atmospheric valves are read
-	// below because they live on this struct.
-	offtakeM3 := steamOutflowFraction * ratedBoilM3PerSec * dt.Seconds()
-
-	// Mass balance: boil-off production minus steam offtake.
-	newWater := ret.Water.Float() - offtakeM3
-	if ret.HeatInput > 0 {
-		newWater -= boilRateM3PerSec * dt.Seconds()
-	}
+	// Mass balance: evaporation is the only standing debit from the
+	// boiling stock here. Condenser-directed steam offtake is internal
+	// recirculation ("During plant cooldown, steam is dumped to the
+	// condensers [...] rather than to atmosphere through the atmospheric
+	// dump valves. This conserves condensate in the system.",
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:33-37);
+	// its draw acts on the header-pressure target below, not on shell
+	// inventory. True secondary losses (atmospheric relief, breaks,
+	// vents, drains) are debited further down.
+	newWater := ret.Water.Float() - boilRateGalPerSec*dt.Seconds()
 	newWater = min(max(newWater, 0), ret.Volume.Float())
 	ret.Water = vol(ret.Water, newWater)
 
@@ -434,7 +438,7 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 	if ret.HeatInput > 0 && ret.Water.Float() > 0 {
 		outflow := steamOutflowFraction + advFraction + svFraction +
 			ventFraction + breakFraction
-		supply := boilRateM3PerSec / ratedBoilM3PerSec
+		supply := boilRateGalPerSec / ratedBoilGalPerSec
 		target := float64(SteamGeneratorShellPressure)
 		switch {
 		case outflow > supply && outflow > 0:

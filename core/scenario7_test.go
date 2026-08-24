@@ -42,6 +42,13 @@ func newScenario7Plant(t *testing.T) *Plant {
 	p.TurbineBuilding.Condenser.VacuumPumpRunning = true
 	p.TurbineBuilding.Condenser.Pressure = 2
 	p.Outside.CirculatingWaterPump.Running = true
+	// Main feedwater lines up before power operation: the corrected
+	// secondary mass balance debits shell inventory at the real
+	// evaporation rate, so the loading walk cannot ride on an
+	// infinite stock ("Feedwater flow to each steam generator is
+	// controlled by a feedwater regulator [...]", specs/
+	// the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:68-76).
+	p.TurbineBuilding.MainFeedwaterPump.Running = true
 	p.TurbineBuilding.Turbine.StopValve.Open = 0
 	p.TurbineBuilding.Turbine.SpeedDemand = 0
 	return &p

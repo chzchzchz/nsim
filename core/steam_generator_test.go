@@ -78,8 +78,11 @@ func TestSteamGenerator_PressureClampedAtDesign(t *testing.T) {
 func TestSteamGenerator_BalancedDemandHoldsShellPressure(t *testing.T) {
 	for _, supply := range []float64{1.0, 0.5} {
 		sg := SteamGenerator{
-			Volume:    Volume{Val: 1000, Unit: u.Gallon},
-			Water:     Volume{Val: 1000, Unit: u.Gallon},
+			// Design-scale inventory: the matched-demand window
+			// must not end in boil-dry now that evaporation
+			// really debits the stock at the rated rate.
+			Volume:    Volume{Val: 100000, Unit: u.Gallon},
+			Water:     Volume{Val: 100000, Unit: u.Gallon},
 			Pressure:  SteamGeneratorShellPressure,
 			HeatInput: Watts(supply * float64(SteamGeneratorFullLoadHeatInput)),
 		}

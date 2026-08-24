@@ -279,6 +279,11 @@ func TestRodAutoControlDailyLoadFollowArc(t *testing.T) {
 	// overrideTimeStep mutates global simulation state.
 	overrideTimeStep(t, 25*time.Millisecond)
 	p := MakePlant()
+	// Main feedwater carries the arc's whole-day hold: the corrected
+	// secondary balance drains the boiling stock at the rated
+	// evaporation rate whenever the core is making power
+	// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:68-76).
+	p.TurbineBuilding.MainFeedwaterPump.Running = true
 	for _, boron := range []*float64{
 		&p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration,
 		&p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration,

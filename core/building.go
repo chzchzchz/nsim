@@ -280,8 +280,10 @@ type TurbineBuilding struct {
 	// main-steam headers during the most recent StepWithSteam,
 	// expressed as a fraction of rated full-load steam flow:
 	// turbine admission plus condenser steam dump. Plant.Step passes
-	// it into SteamGenerator.Step so the draw debits shell inventory
-	// and header pressure. One-step lag, same style as CondensingRate.
+	// it into SteamGenerator.Step so the draw shapes header pressure;
+	// condenser-directed offtake is internal recirculation and does
+	// not debit shell inventory. One-step lag, same style as
+	// CondensingRate.
 	SteamOfftakeFraction float64
 
 	Condenser `json:"Condenser"`
