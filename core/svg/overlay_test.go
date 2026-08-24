@@ -102,6 +102,23 @@ func TestOverlay_Coverage(t *testing.T) {
 		assert.Regexp(t, `\d+(\.\d+)? MW<`, renderPlant(t, &p))
 	})
 
+	t.Run("standalone valves render live position", func(t *testing.T) {
+		p := core.MakePlant()
+		p.TurbineBuilding.Turbine.GoverningValve.Open = 0.5
+		out := renderPlant(t, &p)
+		assert.Contains(t, out,
+			`data-part="TurbineBuilding/Turbine/GoverningValve"`)
+		assert.Contains(t, out, "<title>50%</title>")
+	})
+
+	t.Run("off-graph pumps render with labels", func(t *testing.T) {
+		p := core.MakePlant()
+		out := renderPlant(t, &p)
+		for _, label := range []string{"CW Pump", "CCW Pump", "SFP PA", "SFP PB"} {
+			assert.Contains(t, out, ">"+label+"<")
+		}
+	})
+
 	t.Run("flow indication follows the valves", func(t *testing.T) {
 		p := core.MakePlant()
 		base := renderPlant(t, &p)

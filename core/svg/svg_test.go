@@ -96,7 +96,7 @@ func TestSymbolManifest(t *testing.T) {
 	for _, dp := range diagramParts {
 		refs[symbolID(dp.kind)] = true
 	}
-	for _, kind := range []string{"gate", "swing_check", "relief", "porv"} {
+	for _, kind := range []string{"gate", "swing_check", "relief", "porv", "stop", "modulating", "safety"} {
 		refs[SymbolForKind(kind)] = true
 	}
 	for sym := range refs {

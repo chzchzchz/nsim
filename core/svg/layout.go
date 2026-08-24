@@ -52,6 +52,39 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	{"RCFC_B", "cluster_containment", "RCFCUnit"},
 	{"RCFC_C", "cluster_containment", "RCFCUnit"},
 	{"RCFC_D", "cluster_containment", "RCFCUnit"},
+
+	// Pumps outside the fluid graph.
+	{"CWP", "cluster_turbine", "CirculatingWaterPump"},
+	{"CCWSPump", "cluster_auxiliary", "ComponentCoolingWaterPump"},
+	{"SFPPA", "cluster_containment", "SpentFuelPoolPump"},
+	{"SFPPB", "cluster_containment", "SpentFuelPoolPump"},
+
+	// Live valves that carry no fluid edge; positions come from
+	// standaloneValves rendering.
+	{"SGMSIV", "cluster_containment", "modulating"},
+	{"SGADV", "cluster_containment", "relief"},
+	{"SGSSV", "cluster_containment", "safety"},
+	{"PZRBLK", "cluster_containment", "stop"},
+	{"PZRPORV", "cluster_containment", "porv"},
+	{"TSTOP", "cluster_turbine", "stop"},
+	{"TGOV", "cluster_turbine", "modulating"},
+	{"TDUMP", "cluster_turbine", "relief"},
+	{"CREJ", "cluster_turbine", "gate"},
+	{"LPDV", "cluster_turbine", "gate"},
+	{"HPDV", "cluster_turbine", "gate"},
+	{"EAMFV", "cluster_auxiliary", "modulating"},
+	{"EATSA", "cluster_auxiliary", "stop"},
+	{"EAREC", "cluster_auxiliary", "gate"},
+	{"EBMFV", "cluster_auxiliary", "modulating"},
+	{"EBTSA", "cluster_auxiliary", "stop"},
+	{"EBREC", "cluster_auxiliary", "gate"},
+	{"RABYP", "cluster_auxiliary", "modulating"},
+	{"RBBYP", "cluster_auxiliary", "modulating"},
+	{"RAS1", "cluster_auxiliary", "gate"},
+	{"RAS2", "cluster_auxiliary", "gate"},
+	{"RBS1", "cluster_auxiliary", "gate"},
+	{"RBS2", "cluster_auxiliary", "gate"},
+	{"SOLIDPP", "cluster_auxiliary", "modulating"},
 }
 
 // clusterFor groups PlantGraph node IDs into DOT subgraphs that

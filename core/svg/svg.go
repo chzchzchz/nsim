@@ -108,6 +108,10 @@ var diagramParts = []diagramPart{
 	{"RCFC_B", "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem", "RCFCUnit", "RCFC B"},
 	{"RCFC_C", "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem", "RCFCUnit", "RCFC C"},
 	{"RCFC_D", "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem", "RCFCUnit", "RCFC D"},
+	{"CWP", "Outside/CirculatingWaterPump", "CirculatingWaterPump", "CW Pump"},
+	{"CCWSPump", "AuxiliaryBuilding/ComponentCoolingWaterSystem", "ComponentCoolingWaterPump", "CCW Pump"},
+	{"SFPPA", "AuxiliaryBuilding/SpentFuelPoolCoolingSystem", "SpentFuelPoolPump", "SFP PA"},
+	{"SFPPB", "AuxiliaryBuilding/SpentFuelPoolCoolingSystem", "SpentFuelPoolPump", "SFP PB"},
 }
 
 // buildingLabels captions the cluster outlines drawn behind symbols.
@@ -151,6 +155,15 @@ var pumpAccessors = map[string]func(*core.Plant) *core.Pump{	"RCP": func(p *core
 	"TurbineAFWPump": func(p *core.Plant) *core.Pump {
 		return &p.Outside.TurbineAFWPump.Pump
 	},
+	"RHRS_A": func(p *core.Plant) *core.Pump {
+		return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Pump
+	},
+	"RHRS_B": func(p *core.Plant) *core.Pump {
+		return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.Pump
+	},
+	"CWP": func(p *core.Plant) *core.Pump {
+		return &p.Outside.CirculatingWaterPump
+	},
 }
 
 // runAccessors covers parts whose live state is a plain running
@@ -160,6 +173,15 @@ var runAccessors = map[string]func(*core.Plant) bool{
 	"RCFC_B": func(p *core.Plant) bool { return p.AuxiliaryBuilding.RCFCUnits[1].Running },
 	"RCFC_C": func(p *core.Plant) bool { return p.AuxiliaryBuilding.RCFCUnits[2].Running },
 	"RCFC_D": func(p *core.Plant) bool { return p.AuxiliaryBuilding.RCFCUnits[3].Running },
+	"CCWSPump": func(p *core.Plant) bool {
+		return p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning
+	},
+	"SFPPA": func(p *core.Plant) bool {
+		return p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PumpRunning
+	},
+	"SFPPB": func(p *core.Plant) bool {
+		return p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.StandbyRunning
+	},
 }
 
 // levelAccessors maps tank-backed diagram parts to their live
@@ -292,6 +314,92 @@ func tintsByPart(alarms []core.Alarm) map[string]haloTint {
 		}
 	}
 	return tints
+}
+
+// standaloneValves binds live Valve objects that carry no fluid
+// edge to diagram positions of their own: dot places each id via
+// extraNodes, and the render pass draws the symbol plus the same
+// wedge/tooltip encoding the edge valves use.
+var standaloneValves = []struct {
+	id    string
+	part  string
+	kind  string
+	valve func(*core.Plant) *core.Valve
+}{
+	{"SGMSIV", "ReactorBuilding/SteamGenerator/MainSteamIsolationValve", "modulating",
+		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve }},
+	{"SGADV", "ReactorBuilding/SteamGenerator/AtmosphericDumpValve", "relief",
+		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve }},
+	{"SGSSV", "ReactorBuilding/SteamGenerator/SafetyValve", "safety",
+		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.SafetyValve }},
+	{"PZRBLK", "ReactorBuilding/Pressurizer/BlockValve", "stop",
+		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.BlockValve }},
+	{"PZRPORV", "ReactorBuilding/Pressurizer/PORV", "porv",
+		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.PORV }},
+	{"TSTOP", "TurbineBuilding/Turbine/StopValve", "stop",
+		func(p *core.Plant) *core.Valve { return &p.TurbineBuilding.Turbine.StopValve }},
+	{"TGOV", "TurbineBuilding/Turbine/GoverningValve", "modulating",
+		func(p *core.Plant) *core.Valve { return &p.TurbineBuilding.Turbine.GoverningValve }},
+	{"TDUMP", "TurbineBuilding/Turbine/DumpValve", "relief",
+		func(p *core.Plant) *core.Valve { return &p.TurbineBuilding.Turbine.DumpValve }},
+	{"CREJ", "TurbineBuilding/Condenser/RejectValve", "gate",
+		func(p *core.Plant) *core.Valve { return &p.TurbineBuilding.RejectValve }},
+	{"LPDV", "TurbineBuilding/LowPressureHeater/DrainValve", "gate",
+		func(p *core.Plant) *core.Valve { return &p.TurbineBuilding.LowPressureHeater.DrainValve }},
+	{"HPDV", "TurbineBuilding/HighPressureHeater/DrainValve", "gate",
+		func(p *core.Plant) *core.Valve { return &p.TurbineBuilding.HighPressureHeater.DrainValve }},
+	{"EAMFV", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPump/FlowModulatingValve", "modulating",
+		func(p *core.Plant) *core.Valve {
+			return &p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.FlowModulatingValve
+		}},
+	{"EATSA", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/SteamAdmissionValve", "stop",
+		func(p *core.Plant) *core.Valve {
+			return &p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.SteamAdmissionValve
+		}},
+	{"EAREC", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/RecirculationValve", "gate",
+		func(p *core.Plant) *core.Valve {
+			return &p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.RecirculationValve
+		}},
+	{"EBMFV", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/MotorPump/FlowModulatingValve", "modulating",
+		func(p *core.Plant) *core.Valve {
+			return &p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPump.FlowModulatingValve
+		}},
+	{"EBTSA", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump/SteamAdmissionValve", "stop",
+		func(p *core.Plant) *core.Valve {
+			return &p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.SteamAdmissionValve
+		}},
+	{"EBREC", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump/RecirculationValve", "gate",
+		func(p *core.Plant) *core.Valve {
+			return &p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.RecirculationValve
+		}},
+	{"RABYP", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/BypassValve", "modulating",
+		func(p *core.Plant) *core.Valve {
+			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.BypassValve
+		}},
+	{"RBBYP", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/BypassValve", "modulating",
+		func(p *core.Plant) *core.Valve {
+			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.BypassValve
+		}},
+	{"RAS1", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve0", "gate",
+		func(p *core.Plant) *core.Valve {
+			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.SuctionValves[0]
+		}},
+	{"RAS2", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve1", "gate",
+		func(p *core.Plant) *core.Valve {
+			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.SuctionValves[1]
+		}},
+	{"RBS1", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve0", "gate",
+		func(p *core.Plant) *core.Valve {
+			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.SuctionValves[0]
+		}},
+	{"RBS2", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve1", "gate",
+		func(p *core.Plant) *core.Valve {
+			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.SuctionValves[1]
+		}},
+	{"SOLIDPP", "AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantPressureValve", "modulating",
+		func(p *core.Plant) *core.Valve {
+			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantPressureValve
+		}},
 }
 
 // renderer composes one SVG document against a specific layout,
@@ -686,25 +794,6 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// One alarm-list aggregation per render; shared by halos,
 	// rings, and the docked panel below.
 	alarms := p.Alarms()
-	
-	// Pressurizer safety and POR valves sit just above the
-	// pressurizer, per the figure 3-1 schematic.
-	if pzr, ok := r.anchor("Pressurizer"); ok {
-		_, ph := r.size("Pressurizer")
-		svw, svh := r.size("safety")
-		rowY := pzr.Y - ph/2 - svh
-		for i := 0; i < 3; i++ {
-			x := pzr.X + (float64(i)-1)*svw*1.5
-			writePartEl("ReactorBuilding/Pressurizer",
-				useAt("valve-safety", x, rowY, svw, svh))
-		}
-		pvw, pvh := r.size("porv")
-		for i := 0; i < 2; i++ {
-			x := pzr.X + (float64(i)-0.5)*pvw*1.6
-			writePartEl("ReactorBuilding/Pressurizer",
-				useAt("valve-porv", x, rowY-pvh, pvw, pvh))
-		}
-	}
 
 	// Symbols bound to parts for the live web UI. Pump-backed
 	// parts also get a run-status dot and speed readout so static
@@ -755,6 +844,25 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			level, capacity := lv(p)
 			writeLevelGauge(&b, a, sw, sh, volumeFraction(level, capacity))
 		}
+	}
+
+	// Standalone valves: same wedge/tooltip encoding as the edge
+	// valves, anchored where dot placed each extra node.
+	for _, sv := range standaloneValves {
+		a, ok := r.anchor(sv.id)
+		if !ok {
+			r.missing[sv.id] = true
+			continue
+		}
+		vw, vh := r.size(sv.kind)
+		v := sv.valve(p)
+		pct := int(math.Round(v.Open * 100))
+		wedge := valveWedgePath(a, math.Min(vw, vh)*0.45, v.Open)
+		use := fmt.Sprintf(
+			`<use href="#%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>`,
+			SymbolForKind(sv.kind), a.X-vw/2, a.Y-vh/2, vw, vh)
+		writePartEl(sv.part,
+			fmt.Sprintf(`<g><title>%d%%</title>%s%s</g>`, pct, use, wedge))
 	}
 
 	// Live overlays: readouts and alarm rings track their symbols.
