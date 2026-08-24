@@ -94,9 +94,26 @@ func main() {
 		cmdIndex++
 	}
 
-	out, err := json.Marshal(p)
+	// Output stays a single top-level plant document so -plant
+	// chaining keeps working; the alarm list rides alongside as one
+	// extra key (unknown keys are ignored on re-ingest). Mechanical
+	// Phase-4 checks read it instead of scraping stderr.
+	plantJSON, err := json.Marshal(p)
 	if err != nil {
 		log.Fatalf("failed to marshal plant JSON: %v", err)
+	}
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(plantJSON, &doc); err != nil {
+		log.Fatalf("failed to reparse plant JSON: %v", err)
+	}
+	alarmsJSON, err := json.Marshal(p.Alarms())
+	if err != nil {
+		log.Fatalf("failed to marshal alarms: %v", err)
+	}
+	doc["Alarms"] = alarmsJSON
+	out, err := json.Marshal(doc)
+	if err != nil {
+		log.Fatalf("failed to marshal output document: %v", err)
 	}
 	fmt.Println(string(out))
 

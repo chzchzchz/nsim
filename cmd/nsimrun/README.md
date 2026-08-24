@@ -67,3 +67,5 @@ go run ./cmd/nsimrun/ -seconds 2 -cmd commands.txt > result.json
 ## Output
 
 The stdout JSON uses the same schema as the internal `core.Plant` struct. Use `core.MakePlant()` or the `plant_json_test.go` reference to inspect the full set of fields.
+
+One extra top-level key, `Alarms`, carries the active alarm list at end of run (same shape as `Plant.Alarms()`); `-plant` re-ingest ignores it.
