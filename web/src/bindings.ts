@@ -142,12 +142,39 @@ function openTip(btn: HTMLButtonElement, text: string): void {
     btn.insertAdjacentElement("afterend", tip);
 }
 
+// SCROLL_SETTLE_FALLBACK_MS bounds how long to wait for the smooth
+// jump to finish when the browser never fires scrollend (no scroll
+// needed, or unsupported).
+const SCROLL_SETTLE_FALLBACK_MS = 1200;
+
 // flashRow scrolls a rendered row into view and highlights it
-// briefly; both reveal helpers share it.
+// briefly; both reveal helpers share it. For off-screen targets the
+// highlight starts only after the scroll settles: starting it early
+// means a long jump from the diagram arrives after the flash
+// already expired.
 function flashRow(row: HTMLElement): void {
+    const start = (): void => {
+        row.classList.add("ref-flash");
+        window.setTimeout(() => row.classList.remove("ref-flash"), REF_FLASH_MS);
+    };
+    const rect = row.getBoundingClientRect();
+    if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
+        start();
+        return;
+    }
     row.scrollIntoView({ behavior: "smooth", block: "center" });
-    row.classList.add("ref-flash");
-    window.setTimeout(() => row.classList.remove("ref-flash"), REF_FLASH_MS);
+    // scrollend fires when the smooth jump settles; browsers
+    // without it (or jumps that scroll nowhere) fall back to the
+    // bounded timer.
+    let settled = false;
+    const once = (): void => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener("scrollend", once);
+        start();
+    };
+    window.addEventListener("scrollend", once);
+    window.setTimeout(once, SCROLL_SETTLE_FALLBACK_MS);
 }
 
 // revealElement jumps the viewport to the rendered row for a bridge
