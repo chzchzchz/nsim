@@ -32,6 +32,9 @@ export interface PlantHandle {
     getSvg(): string | Error;
     simTimeMs(): number;
     toJSON(): string;
+    // objectiveJSON snapshots the active scenario's end-state bounds:
+    // {active,id,title,done,detail}.
+    objectiveJSON(): string;
 }
 
 declare global {

@@ -20,7 +20,9 @@ import {
 import { Sim } from "./sim";
 import {
     loadScenarios,
+    objectiveStatusText,
     renderScenarioPicker,
+    type ObjectiveStatus,
     type ScenarioInfo,
 } from "./scenarios";
 
@@ -189,6 +191,34 @@ async function main(): Promise<void> {
         openScenarioPicker();
     }
 
+    // Live objective banner: polls the wasm-side end-state bounds so
+    // the operator sees which bounds are still unmet.
+    const objectiveEl = document.getElementById("objective") as HTMLElement;
+    function refreshObjective(): void {
+        const raw = sim.plant.objectiveJSON();
+        if (typeof raw !== "string") {
+            return;
+        }
+        const status = JSON.parse(raw) as ObjectiveStatus;
+        if (!status.active) {
+            objectiveEl.hidden = true;
+            return;
+        }
+        const objectiveText = scenarios.find(
+            (s) => s.id === status.id,
+        )?.objective ?? "";
+        objectiveEl.hidden = false;
+        objectiveEl.classList.toggle("met", status.done);
+        const titleEl = objectiveEl.querySelector(".objective-title");
+        const statusEl2 = objectiveEl.querySelector(".objective-status");
+        if (titleEl) {
+            titleEl.textContent = `${status.title}: ${objectiveText}`;
+        }
+        if (statusEl2) {
+            statusEl2.textContent = objectiveStatusText(status.done, status.detail);
+        }
+    }
+
     let lastSvg = performance.now();
     let lastUiRefreshMs = 0;
     // Wall-clock stepping accumulator: elapsed real time converts
@@ -239,6 +269,7 @@ async function main(): Promise<void> {
                 if (typeof alarmJson === "string") {
                     alarmPanel?.refresh(alarmJson);
                 }
+                refreshObjective();
                 if (performance.now() - lastSvg > 1000) {
                     const svg = sim.plant.getSvg();
                     // Swap only when the diagram actually changed so

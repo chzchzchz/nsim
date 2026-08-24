@@ -1,6 +1,9 @@
 package core
 
 import (
+	"math"
+	"strings"
+
 	u "github.com/bcicen/go-units"
 )
 
@@ -473,13 +476,25 @@ var scenarioCatalog = []Scenario{
 		Number:   15,
 		Category: "Transient recovery",
 		Title:    "Turbine trip and recovery",
-		StartState: "At-power lineup: turbine rolling at rated, " +
-			"generator synchronized at full load.",
-		Objective: "Trip the turbine, watch the automatic stepback " +
-			"park the core near 60 percent while bypass valves hold " +
-			"boiler pressure, then recover: reset, restore rods, " +
-			"reparallel, and reload.",
-		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		StartState: "Post-trip park: turbine tripped and breaker " +
+			"open, core folded to the stepback level with the steam " +
+			"dump carrying the header.",
+		Objective: "Recover from the turbine trip: reset the trip, " +
+			"restore rods and reparallel at synchronous speed, then " +
+			"reload toward full power.",
+		Apply: func(p *Plant) {
+			q := fullPowerLineup()
+			q.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(
+				Watts(StepbackPowerFraction * float64(CoreRatedThermalPower)))
+			turb := &q.TurbineBuilding.Turbine
+			turb.State = TurbineTripped
+			turb.StopValve.Open = 0
+			turb.SpeedDemand = 0
+			turb.Setpoint = 0
+			q.TurbineBuilding.Generator.BreakerClosed = false
+			q.PlantOperation.StepbackActive = true
+			*p = q
+		},
 	},
 	{
 		ID:       "reactor-trip-recovery",
@@ -715,4 +730,445 @@ var scenarioCatalog = []Scenario{
 			*p = q
 		},
 	},
+}
+
+// CheckResult reports whether an evolution's end-state bounds hold on
+// the live plant. Detail names the bounds still unmet so the web UI
+// can show progress instead of a bare pass/fail.
+type CheckResult struct {
+	Done   bool   `json:"done"`
+	Detail string `json:"detail"`
+}
+
+// checkBounds accumulates the bound descriptions that fail; the
+// evolution is complete when nothing is left unmet.
+type checkBounds struct {
+	unmet []string
+}
+
+func (c *checkBounds) require(ok bool, what string) {
+	if !ok {
+		c.unmet = append(c.unmet, what)
+	}
+}
+
+func (c *checkBounds) result() CheckResult {
+	if len(c.unmet) == 0 {
+		return CheckResult{Done: true, Detail: "objective met"}
+	}
+	return CheckResult{Detail: strings.Join(c.unmet, "; ")}
+}
+
+const (
+	// No-load coolant temperature anchor quoted by the heatup and
+	// hot-startup procedures ("approximately 547°F",
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:178-179).
+	scenarioNoLoadTavgF = 547.0
+
+	// Invented completion bands disclosed per CHECK_SKILL section 8:
+	// the sources state directions ("reduce to 0 percent", "return to
+	// full power") but no numeric completion tolerance, so these set
+	// how close counts.
+	scenarioZeroPowerBandFrac   = 0.05
+	scenarioFullPowerBandFrac   = 0.95
+	scenarioXenonMovedFrac      = 0.02
+	scenarioApproachBandF       = 10.0
+	scenarioVCTNormalFloorFrac  = 0.75
+	scenarioLevelNormalFraction = 0.20 // spec band floor, page_224.txt:22
+	scenarioLevelMaxFraction    = 0.80 // spec band ceiling, page_224.txt:22
+)
+
+// scenarioPowerFraction expresses fission power against rated fission
+// power for bound checks.
+func scenarioPowerFraction(p *Plant) float64 {
+	return float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower) /
+		float64(CoreFissionPowerAtRated)
+}
+
+// houseLoadSATSource marks house loads carried on the station
+// auxiliary transformer after a trip or rejection transfers them off
+// the unit transformer (core/station.go writes this string).
+const houseLoadSATSource = "SAT"
+
+// scenarioChecks pairs every catalog entry with its end-state bounds;
+// scenarios_test.go asserts the key sets match the catalog exactly.
+// Each bound cites its spec line, or marks an invented tolerance as
+// such.
+var scenarioChecks = map[string]func(*Plant) CheckResult{
+	"precritical-lineup": func(p *Plant) CheckResult {
+		var c checkBounds
+		cvcs := &p.AuxiliaryBuilding.ChemicalVolumeControlSystem
+		c.require(p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning,
+			"component cooling water in service")
+		c.require(cvcs.ChargingPumpRunning, "charging pump lined up")
+		vct := cvcs.VCTLevel.Float()
+		c.require(vct >= VCTDesignLevel*scenarioVCTNormalFloorFrac &&
+			vct <= VCTHighLevel, "VCT level inside its normal range")
+		return c.result()
+	},
+	"rcs-pressurization": func(p *Plant) CheckResult {
+		var c checkBounds
+		pzr := &p.ReactorBuilding.Pressurizer
+		c.require(pzr.HeatersOn, "pressurizer heaters energized")
+		c.require(pzr.Pressure > PressurizerBasePressure,
+			"pressure raised off the cold base")
+		bubble := pzr.SteamBubble.Float()
+		c.require(bubble > 0, "steam bubble formed")
+		fraction := pzr.Water.Float() / pzr.Volume.Float()
+		c.require(fraction >= scenarioLevelNormalFraction &&
+			fraction <= scenarioLevelMaxFraction,
+			"level in the 20-80 percent no-load range")
+		return c.result()
+	},
+	"primary-heatup": func(p *Plant) CheckResult {
+		var c checkBounds
+		rhr := &p.AuxiliaryBuilding.ResidualHeatRemovalSystem
+		rpv := &p.ReactorBuilding.ReactorPressureVessel
+		c.require(!rhr.Running && !rhr.HasTakenOver, "RHRS secured")
+		c.require(rpv.Outlet.Float() >= scenarioNoLoadTavgF-scenarioApproachBandF,
+			"heated to the no-load temperature")
+		c.require(rpv.Pressure >= RPSLowPressurizerPressureTrip,
+			"pressurized above the low-pressure trip band")
+		return c.result()
+	},
+	"secondary-spinup": func(p *Plant) CheckResult {
+		var c checkBounds
+		turb := &p.TurbineBuilding.Turbine
+		c.require(p.TurbineBuilding.Condenser.Pressure < AtmosphericPressure,
+			"condenser vacuum established") // chapter_15/page_216.txt:21-22
+		c.require(turb.Velocity > 0 && turb.State == TurbineRunning,
+			"turbine rolling at speed")
+		return c.result()
+	},
+	"dilution-to-criticality": func(p *Plant) CheckResult {
+		var c checkBounds
+		rpv := &p.ReactorBuilding.ReactorPressureVessel
+		// Criticality evidence: positive sustained startup rate with
+		// rising source-range indication and banks off their stops.
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:155-163
+		c.require(rpv.Insertion < 1, "control banks withdrawn")
+		c.require(rpv.FissionPower > CoreNeutronSourcePower,
+			"power lifted off the source floor")
+		c.require(rpv.StartupRateDPM > 0, "sustained positive startup rate")
+		return c.result()
+	},
+	"low-power-ascension": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Point of adding heat is about 1 percent of power:
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:164-167
+		c.require(scenarioPowerFraction(p) >= 0.01,
+			"power through the point of adding heat")
+		// AFW hands over to main feedwater near 3.5 percent steam
+		// flow: specs/the_westinghouse_pressurized_water_react/
+		// chapter_16/page_226.txt:45-48
+		c.require(!p.PlantOperation.AuxFeedwaterInUse,
+			"main feedwater supplying the generators")
+		c.require(p.TurbineBuilding.MainFeedwaterPump.Running,
+			"main feedwater pump running")
+		return c.result()
+	},
+	"grid-synchronization": func(p *Plant) CheckResult {
+		var c checkBounds
+		gen := &p.TurbineBuilding.Generator
+		turb := &p.TurbineBuilding.Turbine
+		// Paralleled and loading: specs/the_westinghouse_
+		// pressurized_water_react/chapter_16/page_226.txt:52-55
+		c.require(gen.BreakerClosed, "generator breaker closed")
+		c.require(turb.State == TurbineRunning && turb.Velocity > 0,
+			"turbine at synchronous speed")
+		c.require(gen.RealPower > 0, "loading commenced")
+		return c.result()
+	},
+	"load-follow": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Boron-and-rod maneuvering holds full reserve capability for
+		// the return to full power:
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:24-27
+		c.require(p.PlantOperation.Mode == PowerOperation &&
+			!p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+			"plant held in power operation without a trip")
+		c.require(p.PlantOperation.RodControlAuto, "rod control in automatic")
+		c.require(scenarioPowerFraction(p) >= scenarioFullPowerBandFrac,
+			"returned to full power")
+		return c.result()
+	},
+	"axial-xenon-management": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Chemistry adjustments reposition rods while holding power:
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:111-116
+		c.require(p.PlantOperation.Mode == PowerOperation,
+			"plant held in power operation")
+		c.require(scenarioPowerFraction(p) >= OpPowerOperationMinFraction,
+			"power kept above the operational band floor")
+		// The maneuver must have moved xenon off its rated equilibrium
+		// (deviation tolerance invented; the source quotes no number).
+		xenon := math.Abs(xenonNormalized(
+			p.ReactorBuilding.ReactorPressureVessel.Xenon135) - 1)
+		c.require(xenon > scenarioXenonMovedFrac,
+			"xenon transient exercised by the maneuver")
+		return c.result()
+	},
+	"turbine-unload-hot-standby": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Subcritical hot standby: rods inserted, machine off the line:
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:20-23
+		c.require(p.PlantOperation.Mode == HotStandby, "mode in hot standby")
+		c.require(p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion >= 1,
+			"rods fully inserted")
+		c.require(!p.TurbineBuilding.Generator.BreakerClosed,
+			"generator off the grid")
+		return c.result()
+	},
+	"boration-shutdown-margin": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Boration toward the cold shutdown concentration:
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:50-52
+		c.require(p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration >
+			CVCSInitialBoron, "boron concentration raised")
+		c.require(p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion >= 1,
+			"rods fully inserted")
+		c.require(p.ReactorBuilding.ReactorPressureVessel.FissionPower <=
+			CoreNeutronSourcePower, "core held subcritical")
+		return c.result()
+	},
+	"coordinated-cooldown": func(p *Plant) CheckResult {
+		var c checkBounds
+		rpv := &p.ReactorBuilding.ReactorPressureVessel
+		// RHRS entry conditions: 350 F and under about 400 psig:
+		// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
+		c.require(rpv.Outlet.Float() <= RHRSTempThreshold,
+			"cooled to the RHRS entry temperature")
+		c.require(rpv.Pressure <= scenarioColdPsia,
+			"depressurized below 400 psig")
+		c.require(p.AuxiliaryBuilding.ResidualHeatRemovalSystem.HasTakenOver,
+			"RHRS in service")
+		return c.result()
+	},
+	"load-maneuver-reactor-lead": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Reactor power setpoint leads and the return leg completes at
+		// full power: specs/pwr_sim/chapter_3/page_036.txt:57-70
+		c.require(p.PlantOperation.LeadLagMode == ReactorLead,
+			"reactor lead mode selected")
+		c.require(p.PlantOperation.RodControlAuto, "rod control in automatic")
+		c.require(!p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+			"no trip through the maneuver")
+		c.require(scenarioPowerFraction(p) >= scenarioFullPowerBandFrac,
+			"returned to full power")
+		return c.result()
+	},
+	"power-reduction-zero": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Orderly ramp toward zero without a trip (completion band is
+		// an invented tolerance; the source states the endpoint only):
+		// specs/pwr_sim/chapter_3/page_039.txt:23-30
+		c.require(!p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+			"reduction completed without a trip")
+		c.require(scenarioPowerFraction(p) <= scenarioZeroPowerBandFrac,
+			"power reduced to the zero-power band")
+		return c.result()
+	},
+	"turbine-trip-recovery": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Recovery ends reparalleled and reloading:
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:65-66
+		turb := &p.TurbineBuilding.Turbine
+		c.require(turb.State == TurbineRunning && turb.Velocity > 0,
+			"turbine reset and rolling")
+		c.require(p.TurbineBuilding.Generator.BreakerClosed,
+			"generator reparalleled")
+		c.require(!p.PlantOperation.StepbackActive, "stepback cleared")
+		c.require(scenarioPowerFraction(p) >= scenarioFullPowerBandFrac,
+			"power restored to full")
+		return c.result()
+	},
+	"reactor-trip-recovery": func(p *Plant) CheckResult {
+		var c checkBounds
+		rpv := &p.ReactorBuilding.ReactorPressureVessel
+		// Hot startup from hot standby withdraws banks back toward
+		// criticality:
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:24-26
+		c.require(!p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+			"trip cleared")
+		c.require(rpv.ControlRods.Insertion < 1, "banks withdrawn")
+		c.require(rpv.FissionPower > CoreNeutronSourcePower,
+			"core critical again")
+		return c.result()
+	},
+	"load-rejection": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Steam dump carries the loss as an artificial load while rod
+		// control cuts back power:
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:27-31
+		c.require(!p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+			"ride-through completed without a trip")
+		c.require(p.TurbineBuilding.Turbine.DumpValve.Open > 0,
+			"steam dump carrying the rejected load")
+		c.require(!p.TurbineBuilding.Generator.BreakerClosed,
+			"external load dropped")
+		c.require(p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom ==
+			houseLoadSATSource, "house loads on the station transformer")
+		return c.result()
+	},
+	"trip-response-supervision": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Post-trip lineup: breakers open, rods fully in, Tavg being
+		// restored below the full-load anchor:
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:62-66
+		c.require(p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+			"trip latched")
+		c.require(p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion >= 1,
+			"rods fully inserted")
+		c.require(p.TurbineBuilding.Turbine.State == TurbineTripped,
+			"turbine tripped")
+		c.require(p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom ==
+			houseLoadSATSource, "house loads transferred")
+		c.require(p.ReactorBuilding.ReactorPressureVessel.Outlet.Float() <=
+			CoreReferenceOutletF, "coolant relaxing toward no-load")
+		return c.result()
+	},
+	"loss-of-offsite-power": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Diesels auto-start and sequence the safety buses back
+		// energized:
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:103-109
+		dg := &p.AuxiliaryBuilding.DieselGenerator
+		dgb := &p.AuxiliaryBuilding.DieselGeneratorB
+		c.require(dg.State == DieselRunning || dgb.State == DieselRunning,
+			"an emergency diesel at rated")
+		c.require(p.Electrical.ESFBusA.Energized && p.Electrical.ESFBusB.Energized,
+			"safety buses energized")
+		return c.result()
+	},
+	"techspec-gating": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Heatup continued past the ECCS gate temperature with the
+		// gated equipment verified available:
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:101-105
+		efws := &p.AuxiliaryBuilding.EmergencyFeedwaterSystem
+		c.require(p.ReactorBuilding.ReactorPressureVessel.Outlet.Float() >
+			RHRSTempThreshold, "heatup progressed above 350 F")
+		c.require(!p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionBlocked,
+			"ECCS available (SI unblocked)")
+		c.require(efws.SubsystemA.Tank.Level.Float() > 0 &&
+			efws.SubsystemB.Tank.Level.Float() > 0, "AFW tanks carrying inventory")
+		return c.result()
+	},
+	"xenon-burnout-return": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Return paced by xenon burnout ends back at full power:
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_232.txt:12-15
+		c.require(!p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+			"ascent completed without a trip")
+		c.require(scenarioPowerFraction(p) >= scenarioFullPowerBandFrac,
+			"full power recovered")
+		return c.result()
+	},
+	"refueling-outage": func(p *Plant) CheckResult {
+		var c checkBounds
+		refuel := &p.ReactorBuilding.RefuelingOperations
+		// Five-phase cycle through fuel handling:
+		// specs/the_westinghouse_pressurized_water_react/chapter_13/page_183.txt:32-34
+		c.require(refuel.CavityFlooded, "refueling cavity flooded")
+		c.require(refuel.Phase >= RefuelingPhaseReassembly,
+			"fuel handling and reassembly complete")
+		c.require(refuel.FuelTransferred, "fuel batch exchanged")
+		return c.result()
+	},
+	"loss-of-feedwater": func(p *Plant) CheckResult {
+		var c checkBounds
+		// EFW delivering within one minute of actuation, then levels
+		// hand-restored to the level program:
+		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:4-9
+		efws := &p.AuxiliaryBuilding.EmergencyFeedwaterSystem
+		sg := &p.ReactorBuilding.SteamGenerator
+		c.require(efws.Active, "EFWS actuated")
+		c.require(efws.SubsystemA.MotorPump.Running ||
+			efws.SubsystemB.MotorPump.Running, "an EFW pump delivering")
+		c.require(sg.Water.Float() >= sg.Volume.Float()*
+			FeedwaterLevelSetpoint/100, "SG level restored to program")
+		return c.result()
+	},
+	"rcp-trip": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Either flow is restored or the plant settled tripped and
+		// stabilized; the trip path mirrors the malfunction writeup:
+		// specs/pwr_sim/chapter_4/page_051.txt:40-48
+		pumps := &p.ReactorBuilding.ReactorCoolantPumps
+		tripped := p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped
+		c.require(pumps.LoopA.Running ||
+			(tripped && p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion >= 1),
+			"flow restored or plant stabilized post-trip")
+		return c.result()
+	},
+	"steam-line-break": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Excessive cooldown protection must have actuated injection:
+		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:65-69
+		rps := &p.ReactorBuilding.ReactorProtectionSystem
+		c.require(rps.SafetyInjectionActuated, "safety injection actuated")
+		c.require(p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning,
+			"HHSI injecting")
+		c.require(rps.ReactorTripped &&
+			p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion >= 1,
+			"reactor tripped and stabilized")
+		return c.result()
+	},
+	"porv-stuck-open": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Operator isolates the relief path with the block valve and
+		// pressure recovers above the low-pressure trip band
+		// (malfunction source: specs/pwr_sim/chapter_4/page_049.txt:28-31).
+		c.require(p.ReactorBuilding.BlockValve.Open == 0,
+			"block valve isolating the PORV")
+		c.require(p.ReactorBuilding.Pressurizer.Pressure >=
+			RPSLowPressurizerPressureTrip, "pressure recovered")
+		c.require(!p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+			"recovered without a reactor trip")
+		return c.result()
+	},
+	"dropped-rod-bank": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Combined worth cannot recover: power folds into the runback
+		// park band (initiator list:
+		// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:26-29).
+		c.require(scenarioPowerFraction(p) <= StepbackPowerFraction,
+			"power folded to the runback band")
+		return c.result()
+	},
+	"si-recirculation": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Suction swaps to the containment sump when RWST level falls
+		// low: specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:150-155
+		sis := &p.ReactorBuilding.SafetyInjectionSystem
+		c.require(sis.HHSISuction == SISSuctionSump,
+			"swapped to sump recirculation")
+		c.require(sis.RWSTLevel.Float() <= SISRWSTLowLevel,
+			"RWST drawn to its low-level switchover point")
+		c.require(sis.HHSIPumpRunning, "injection continuing")
+		return c.result()
+	},
+	"containment-spray": func(p *Plant) CheckResult {
+		var c checkBounds
+		// At the CSST Lo-Lo setpoint the pumps are manually switched
+		// to recirculation:
+		// specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:17-21
+		css := &p.AuxiliaryBuilding.ContainmentSpraySystem
+		c.require(css.CSSTLevel.Float() <= css.CSSTLowLevelSetpoint.Float(),
+			"spray tank drained to Lo-Lo")
+		c.require(css.SuctionSump, "pumps on sump recirculation")
+		c.require(css.Running, "spray still operating")
+		return c.result()
+	},
+}
+
+// Check evaluates the evolution's end-state bounds against the live
+// plant. Scenarios without a registered check report not-done rather
+// than pretending completion.
+func (s Scenario) Check(p *Plant) CheckResult {
+	check, ok := scenarioChecks[s.ID]
+	if !ok {
+		return CheckResult{}
+	}
+	return check(p)
 }

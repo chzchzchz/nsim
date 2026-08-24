@@ -3,7 +3,11 @@
 // both the first-seen category order and each group's item order.
 
 import { describe, expect, it } from "vitest";
-import { groupByCategory, type ScenarioInfo } from "./scenarios";
+import {
+    groupByCategory,
+    objectiveStatusText,
+    type ScenarioInfo,
+} from "./scenarios";
 
 const entry = (
     id: string,
@@ -47,5 +51,17 @@ describe("groupByCategory", () => {
 
     it("returns no groups for an empty catalog", () => {
         expect(groupByCategory([])).toEqual([]);
+    });
+});
+
+describe("objectiveStatusText", () => {
+    it("names the unmet bounds while pending", () => {
+        expect(objectiveStatusText(false, "rods fully inserted")).toBe(
+            "pending — rods fully inserted",
+        );
+    });
+
+    it("confirms completion without detail noise", () => {
+        expect(objectiveStatusText(true, "ignored")).toBe("✓ objective met");
     });
 });

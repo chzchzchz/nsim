@@ -518,3 +518,29 @@
     color: white;
 }
 .scenario-actions button.primary:hover { background: #3498db; }
+
+#objective {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #fdf6e8;
+    border: 1px solid #e4c88a;
+    border-left: 4px solid #d9a520;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+}
+#objective[hidden] { display: none; }
+#objective .objective-title { flex: 1; color: #222; }
+#objective .objective-status {
+    font-family: monospace;
+    white-space: nowrap;
+    color: #8a6d1a;
+}
+#objective.met {
+    background: #eef8ee;
+    border-color: #9ccf9c;
+    border-left-color: #2e8b57;
+}
+#objective.met .objective-status { color: #2e8b57; font-weight: bold; }

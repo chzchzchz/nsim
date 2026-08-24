@@ -3,6 +3,7 @@ package core
 import (
 	"testing"
 
+	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -137,4 +138,73 @@ func TestRefuelingScenarioStartsCavityFlood(t *testing.T) {
 	refuel := p.ReactorBuilding.RefuelingOperations
 	assert.Equal(t, RefuelingPhasePreparation, refuel.Phase)
 	assert.True(t, refuel.CavityFlooding)
+}
+
+// Every catalog entry must carry end-state bounds, and no evolution
+// may start with its objective already satisfied.
+func TestScenarioChecksCoverCatalogAndStartUnmet(t *testing.T) {
+	catalog := Scenarios()
+	require.Len(t, scenarioChecks, len(catalog),
+		"check table must cover the catalog exactly")
+	for _, s := range catalog {
+		t.Run(s.ID, func(t *testing.T) {
+			_, registered := scenarioChecks[s.ID]
+			require.True(t, registered, "no check registered for %q", s.ID)
+			p := MakePlant()
+			s.Apply(&p)
+			res := s.Check(&p)
+			assert.False(t, res.Done,
+				"%q must not start complete", s.ID)
+			assert.NotEmpty(t, res.Detail,
+				"pending state must name the unmet bounds")
+		})
+	}
+}
+
+// Representative satisfaction cases across the lineup families: each
+// seeds the checked end state directly and expects Done.
+func TestScenarioChecksFlipDoneAtTheirEndStates(t *testing.T) {
+	cases := []struct {
+		id    string
+		reach func(*Plant)
+	}{
+		{"rcs-pressurization", func(p *Plant) {
+			pzr := &p.ReactorBuilding.Pressurizer
+			pzr.Water = Volume{Val: 600, Unit: u.Gallon}
+			pzr.SteamBubble = Volume{Val: 900, Unit: u.Gallon}
+			pzr.Pressure = 440
+			pzr.HeatersOn = true
+		}},
+		{"grid-synchronization", func(p *Plant) {
+			p.TurbineBuilding.Generator.BreakerClosed = true
+			p.TurbineBuilding.Generator.RealPower = 1e6
+			p.TurbineBuilding.Turbine.State = TurbineRunning
+			p.TurbineBuilding.Turbine.Velocity = TurbineRatedSpeed
+		}},
+		{"coordinated-cooldown", func(p *Plant) {
+			p.ReactorBuilding.ReactorPressureVessel.Outlet =
+				Temperature{Val: RHRSTempThreshold - 10, Unit: u.Fahrenheit}
+			p.ReactorBuilding.ReactorPressureVessel.Pressure = 300
+			p.AuxiliaryBuilding.ResidualHeatRemovalSystem.HasTakenOver = true
+		}},
+		{"containment-spray", func(p *Plant) {
+			css := &p.AuxiliaryBuilding.ContainmentSpraySystem
+			css.CSSTLevel = Volume{Val: css.CSSTLowLevelSetpoint.Float() - 1,
+				Unit: u.Gallon}
+			css.SuctionSump = true
+			css.Running = true
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.id, func(t *testing.T) {
+			s, ok := ScenarioByID(tc.id)
+			require.True(t, ok)
+			p := MakePlant()
+			s.Apply(&p)
+			tc.reach(&p)
+			res := s.Check(&p)
+			assert.True(t, res.Done,
+				"end state must satisfy the bounds: %s", res.Detail)
+		})
+	}
 }

@@ -51,6 +51,21 @@ export interface ScenarioPicker {
     close(): void;
 }
 
+// ObjectiveStatus mirrors the wasm objectiveJSON snapshot.
+export interface ObjectiveStatus {
+    active: boolean;
+    id?: string;
+    title?: string;
+    done: boolean;
+    detail: string;
+}
+
+// objectiveStatusText renders the completion line for the live
+// banner: the unmet bounds while pending, a confirmation when done.
+export function objectiveStatusText(done: boolean, detail: string): string {
+    return done ? "✓ objective met" : `pending — ${detail}`;
+}
+
 // renderScenarioPicker mounts a modal overlay listing every catalog
 // entry grouped by category. Clicking an entry swaps the panel to an
 // acknowledgement dialog stating what the operator is supposed to do;

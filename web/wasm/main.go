@@ -26,6 +26,7 @@ import (
 // / GetSensor all delegate through this struct.
 type plantHandle struct {
 	p          *core.Plant
+	scenarioID string
 	simTimeNs  int64
 	createdAt  time.Time
 	queue      *cmdfile.Queue
@@ -44,8 +45,9 @@ func newPlantHandle(scenarioID string) (*plantHandle, error) {
 		sc.Apply(&p)
 	}
 	return &plantHandle{
-		p:         &p,
-		createdAt: time.Now(),
+		p:          &p,
+		scenarioID: scenarioID,
+		createdAt:  time.Now(),
 		queue:     &cmdfile.Queue{},
 		journal:   &cmdfile.Journal{},
 		controls:  p.GetControlMap(),
@@ -254,6 +256,33 @@ func (h *plantHandle) plantJSON() (string, error) {
 	return string(b), nil
 }
 
+// objectiveStatus reports the active scenario's end-state bounds
+// against the live plant so the UI can show completion progress.
+type objectiveStatus struct {
+	Active bool   `json:"active"`
+	ID     string `json:"id,omitempty"`
+	Title  string `json:"title,omitempty"`
+	Done   bool   `json:"done"`
+	Detail string `json:"detail"`
+}
+
+func (h *plantHandle) objectiveJSON() (string, error) {
+	out := objectiveStatus{}
+	if sc, ok := core.ScenarioByID(h.scenarioID); ok {
+		res := sc.Check(h.p)
+		out.Active = true
+		out.ID = sc.ID
+		out.Title = sc.Title
+		out.Done = res.Done
+		out.Detail = res.Detail
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 // scenariosJSON snapshots the operator-evolution catalog as JSON so
 // the front-end can render the selection screen without one JS<->Go
 // crossing per entry.
@@ -410,6 +439,13 @@ func jsHandle(h *plantHandle) js.Value {
 		}
 		return s
 	}))
+	obj.Set("objectiveJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		s, err := h.objectiveJSON()
+		if err != nil {
+			return js.Global().Get("Error").New(err.Error())
+		}
+		return s
+	}))
 	return obj
 }
 
@@ -436,7 +472,6 @@ func main() {
 		if err != nil {
 			return js.Global().Get("Error").New(err.Error())
 		}
-		return s
 		return s
 	}))
 
