@@ -14,10 +14,16 @@ Flags:
 - `-seconds <number>` — Number of seconds to simulate. Plain number (e.g. `5`, `1.5`), not a duration string like `1s`.
 - `-cmd <file>` — Command file. Each line is `TimeOffset Part.Label Value`. The control is set once elapsed time reaches the offset (in milliseconds). Supports dot or slash paths. Blank lines and lines starting with `#` are ignored. Logs errors and continues on parse/set failures. Files ending in `.json` (case insensitive) are loaded as web-console exports: `{"commands":[{"offsetMs":...,"control":...,"value":...}]}`, with offsets measured from simulation start.
 
+Command-file notes:
+
+- Only registered controls can be set. Each command resolves against the plant's control map (`Plant.GetControlMap()`); state fields with no control entry (sensor-only values) cannot be commanded. Unknown controls log an error and simulation continues.
+- Values must match the control's kind: bool controls accept `1`/`0`/`true`/`false`, normalized controls accept fractions in `0..1`. Enum-style momentary controls (e.g. `Reset`) take their enum word as the value.
+- Commands whose offset exceeds the simulated duration are still applied after the final step, so the exported state reflects them.
+
 ## Behavior
 
 1. Initializes a plant from `-plant` if provided, otherwise from built-in defaults.
-2. Partial JSON files are merged over the defaults: only fields present in the JSON are overridden.
+2. Merges the JSON over the defaults per top-level key: a top-level object present in the file (e.g. `TurbineBuilding`) replaces that entire default subtree, so fields absent from the file become zero values rather than design defaults. Top-level buildings not named in the file keep their defaults.
 3. If `-cmd` is provided, reads time-stamped control commands and applies them as the simulation advances.
 4. Steps the simulation forward by the requested duration (1 ms per internal step).
 5. Writes the final plant state as JSON to stdout.
@@ -30,14 +36,16 @@ Run the default plant for 1.5 seconds:
 go run ./cmd/nsimrun/ -seconds 1.5
 ```
 
-Override a few fields and run:
+Override one building's fields (the whole `TurbineBuilding` subtree comes
+from this file; other buildings keep their defaults):
 
 ```bash
 cat > my_plant.json <<'EOF'
 {
-  "Trip": false,
-  "ReactorCoolantPump": {
-    "Running": true
+  "TurbineBuilding": {
+    "CondensatePump": {
+      "Running": true
+    }
   }
 }
 EOF

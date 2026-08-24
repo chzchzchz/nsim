@@ -36,6 +36,40 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Turbine governing valves. The DEHM trims them against the
+	// active reference, but the operator can position the valve
+	// bank manually; cracking them open is also what starts steam
+	// flow from the Off state (the DEHM trim only runs while the
+	// machine is already rolling):
+	//   - "A manual raise-lower backup system to position the
+	//      turbine valves in the case of a system contingency."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:95-97
+	//   - "The operator may position the valves, when necessary,
+	//      through the manual valve controllers."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:114-116
+	m["TurbineBuilding/Turbine/GoverningValve"] = &bridge.Control{
+		Part:  "TurbineBuilding/Turbine",
+		Label: "GoverningValve",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.TurbineBuilding.Turbine.GoverningValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.Turbine.GoverningValve.Open = v
+			return nil
+		},
+	}
+
+
 	// Momentary turbine trip reset. Consumed by the next
 	// Turbine.Step; the machine returns to service only once the
 	// rotor has decayed to rest. Restoring valve control from the
