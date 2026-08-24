@@ -17,15 +17,87 @@ const BUTTON_FACTOR = 1.25;
 // dragging the mimic never triggers navigation.
 const CLICK_SUPPRESS_PX = 5;
 
+// The viewpoint survives reloads through localStorage, versioned so
+// a schema change discards stale blobs instead of misreading them.
+const VIEW_STORAGE_KEY = "nsim-pid-view";
+const VIEW_VERSION = 1;
+
+interface PidView {
+    version: number;
+    scale: number;
+    panX: number;
+    panY: number;
+}
+
+function loadView(): PidView | null {
+    let raw: string | null;
+    try {
+        raw = localStorage.getItem(VIEW_STORAGE_KEY);
+    } catch {
+        return null;
+    }
+    if (raw === null) return null;
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        return null;
+    }
+    const v = parsed as Partial<PidView>;
+    if (
+        v.version !== VIEW_VERSION ||
+        typeof v.scale !== "number" ||
+        typeof v.panX !== "number" ||
+        typeof v.panY !== "number" ||
+        !Number.isFinite(v.scale) ||
+        !Number.isFinite(v.panX) ||
+        !Number.isFinite(v.panY)
+    ) {
+        return null;
+    }
+    return {
+        version: VIEW_VERSION,
+        scale: Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.scale)),
+        panX: v.panX,
+        panY: v.panY,
+    };
+}
+
+function saveView(): void {
+    const view: PidView = {
+        version: VIEW_VERSION,
+        scale,
+        panX,
+        panY,
+    };
+    try {
+        localStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify(view));
+    } catch {
+        // Private-browsing quotas leave the viewpoint session-only.
+    }
+}
+
 let canvas: HTMLDivElement | null = null;
 let scale = 1;
 let panX = 0;
 let panY = 0;
+// Restoration runs once per page load; later mounts re-apply the
+// live module state instead of racing fresh reads.
+let restored = false;
 
 const boundHosts = new WeakSet<HTMLElement>();
 
 export function mountPlant(target: HTMLElement, svgText: string): void {
     if (!boundHosts.has(target)) {
+        if (!restored) {
+            restored = true;
+            const view = loadView();
+            if (view) {
+                scale = view.scale;
+                panX = view.panX;
+                panY = view.panY;
+            }
+        }
         const viewport = document.createElement("div");
         viewport.className = "pid-canvas";
         target.appendChild(viewport);
@@ -67,6 +139,7 @@ function zoomAt(
         panY = 0;
     }
     applyTransform();
+    saveView();
 }
 
 function resetView(): void {
@@ -74,6 +147,7 @@ function resetView(): void {
     panX = 0;
     panY = 0;
     applyTransform();
+    saveView();
 }
 
 function buildZoomOverlay(target: HTMLElement): HTMLElement {
@@ -150,6 +224,7 @@ function bindZoomGestures(target: HTMLElement): void {
         pressed = false;
         if (!dragging) return;
         dragging = false;
+        saveView();
         if (target.hasPointerCapture(ev.pointerId)) {
             target.releasePointerCapture(ev.pointerId);
         }
