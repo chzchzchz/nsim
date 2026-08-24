@@ -386,6 +386,7 @@ type haloTint struct {
 // symbol's bounding box.
 type washDef struct {
 	id             string
+	class          string
 	colour         string
 	fx, fy, fw, fh float64
 	alpha          func(*core.Plant) float64
@@ -394,7 +395,7 @@ type washDef struct {
 var symbolWashes = []washDef{
 	{
 		// Resin beds darken as they load up toward replacement.
-		id: "BTRS", colour: "#7a5c33",
+		id: "BTRS", class: "btrs-wash", colour: "#7a5c33",
 		fx: 0.16, fy: 0.25, fw: 0.68, fh: 0.40,
 		alpha: func(p *core.Plant) float64 {
 			return clampRange(p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSBedSaturation, 0, 1) * 0.55
@@ -403,13 +404,26 @@ var symbolWashes = []washDef{
 	{
 		// Heater latch warms the pressurizer's lower band where the
 		// immersion heaters sit in the asset art.
-		id: "Pressurizer", colour: "#ffb84d",
+		id: "Pressurizer", class: "heater-glow", colour: "#ffb84d",
 		fx: 0.12, fy: 0.70, fw: 0.76, fh: 0.22,
 		alpha: func(p *core.Plant) float64 {
 			if p.ReactorBuilding.Pressurizer.HeatersOn {
 				return 0.3
 			}
 			return 0
+		},
+	},
+	{
+		// Pool water warms toward orange as it approaches boiling,
+		// giving loss-of-cooling scenarios a visible ramp before
+		// any boil-off. The 120-200 F band is simulator-derived;
+		// the reference describes the cooling system without
+		// quoting a temperature band.
+		id: "SFP", class: "sfp-wash", colour: "#ff9a3c",
+		fx: 0.05, fy: 0.10, fw: 0.90, fh: 0.80,
+		alpha: func(p *core.Plant) float64 {
+			t := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PoolTemp.Float()
+			return clampRange((t-120)/(200-120), 0, 1) * 0.45
 		},
 	},
 }
@@ -669,31 +683,49 @@ func (r *renderer) overlapsPart(x, y, w, h float64) bool {
 // electrical nodes, gated by a live contact state. The master plan
 // cuts full one-line diagrams (plans/svg/composition.md), so this
 // stays minimal: straight ties plus a contact glyph per segment,
-// no bus work beyond the four placed nodes.
+// no bus work beyond the placed nodes. A tie is drawn only while
+// its condition holds, so de-energized paths read as absent lines;
+// diesel feed ties therefore appear when a train's EDG output
+// breaker closes onto its bus.
 var electricalTies = []struct {
-	from, to string
-	closed   func(*core.Plant) bool
+	from, to, part, label string
+	closed                func(*core.Plant) bool
 }{
-	{from: "Grid", to: "Transformer", closed: func(p *core.Plant) bool {
-		return p.ReactorBuilding.Grid.Voltage > 0
-	}},
-	{from: "Generator", to: "Transformer", closed: func(p *core.Plant) bool {
-		return p.TurbineBuilding.Generator.BreakerClosed
-	}},
-	{from: "Transformer", to: "ESF_A", closed: func(p *core.Plant) bool {
-		return p.Electrical.ESFBusA.BreakerClosed
-	}},
-	{from: "Transformer", to: "ESF_B", closed: func(p *core.Plant) bool {
-		return p.Electrical.ESFBusB.BreakerClosed
-	}},
+	{from: "Grid", to: "Transformer", part: "ReactorBuilding/PlantElectricalSystems/OffsiteTie",
+		label: "offsite supply tie",
+		closed: func(p *core.Plant) bool { return p.ReactorBuilding.Grid.Voltage > 0 }},
+	{from: "Generator", to: "Transformer", part: "TurbineBuilding/Generator/OutputBreaker",
+		label: "generator output breaker",
+		closed: func(p *core.Plant) bool { return p.TurbineBuilding.Generator.BreakerClosed }},
+	{from: "Transformer", to: "ESF_A", part: "ReactorBuilding/PlantElectricalSystems/TrainABusTie",
+		label: "train A bus breaker",
+		closed: func(p *core.Plant) bool { return p.Electrical.ESFBusA.BreakerClosed }},
+	{from: "Transformer", to: "ESF_B", part: "ReactorBuilding/PlantElectricalSystems/TrainBBusTie",
+		label: "train B bus breaker",
+		closed: func(p *core.Plant) bool { return p.Electrical.ESFBusB.BreakerClosed }},
+	{from: "Diesel", to: "ESF_A", part: "AuxiliaryBuilding/DieselGenerator/FeedTie",
+		label: "train A diesel feed",
+		closed: func(p *core.Plant) bool {
+			return p.AuxiliaryBuilding.DieselGenerator.Generator.BreakerClosed
+		}},
+	{from: "DieselB", to: "ESF_B", part: "AuxiliaryBuilding/DieselGeneratorB/FeedTie",
+		label: "train B diesel feed",
+		closed: func(p *core.Plant) bool {
+			return p.AuxiliaryBuilding.DieselGeneratorB.Generator.BreakerClosed
+		}},
 }
 
-// writeElectricalTies draws each tie as a straight segment clipped
-// at the endpoint symbols' boundaries, with a breaker glyph at the
-// midpoint whose center dot encodes the contact: green closed,
-// grey open (same status encoding as pump run dots).
+// writeElectricalTies draws each energized tie as a straight
+// segment clipped at the endpoint symbols' boundaries. The breaker
+// glyph at the midpoint carries a horizontal contact bar and a
+// green status dot (both always closed here, because open ties are
+// not drawn at all). Each tie is a bound part group so embedders
+// can click the whole electrical path.
 func (r *renderer) writeElectricalTies(b *strings.Builder, p *core.Plant) {
 	for _, t := range electricalTies {
+		if !t.closed(p) {
+			continue
+		}
 		from, okF := r.anchor(t.from)
 		to, okT := r.anchor(t.to)
 		if !okF || !okT {
@@ -703,18 +735,21 @@ func (r *renderer) writeElectricalTies(b *strings.Builder, p *core.Plant) {
 		tw, th := r.size(r.kindOf(t.to))
 		a := clipToward(from, to, fw, fh)
 		bpt := clipToward(to, from, tw, th)
-		fmt.Fprintf(b,
-			`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="2" vector-effect="non-scaling-stroke"/>`+"\n",
-			a.X, a.Y, bpt.X, bpt.Y, pidDotEdge)
 		mid := Anchor{X: (a.X + bpt.X) / 2, Y: (a.Y + bpt.Y) / 2}
 		bw2, bh2 := r.size("breaker")
-		colour := statusOff
-		if t.closed(p) {
-			colour = statusOn
-		}
+		halfW := bw2 * 0.35
 		fmt.Fprintf(b,
-			`<g class="breaker"><use href="#breaker" x="%.0f" y="%.0f" width="%.0f" height="%.0f"/><circle cx="%.0f" cy="%.0f" r="3.5" fill="%s"/></g>`+"\n",
-			mid.X-bw2/2, mid.Y-bh2/2, bw2, bh2, mid.X, mid.Y, colour)
+			`<g data-part="%s" role="img" aria-label="%s" tabindex="0">`+
+				`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="2" vector-effect="non-scaling-stroke"/>`+
+				`<use href="#breaker" x="%.0f" y="%.0f" width="%.0f" height="%.0f"/>`+
+				`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="black" stroke-width="1.5" class="contact-closed"/>`+
+				`<circle cx="%.0f" cy="%.0f" r="3.5" fill="%s"/>`+
+				`</g>`+"\n",
+			html.EscapeString(t.part), html.EscapeString(t.label),
+			a.X, a.Y, bpt.X, bpt.Y, pidDotEdge,
+			mid.X-bw2/2, mid.Y-bh2/2, bw2, bh2,
+			mid.X-halfW, mid.Y, mid.X+halfW, mid.Y,
+			mid.X, mid.Y, statusOn)
 	}
 }
 
@@ -1071,6 +1106,23 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 					`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" class="dome-wash" fill="%s" fill-opacity="0.12" stroke="%s" stroke-width="3" vector-effect="non-scaling-stroke"/>`+"\n",
 					bx, by, bw, bh, tintRed, tintRed)
 			}
+			// Hydrogen wash: the dome warms amber as concentration
+			// climbs toward the 2% alarm setpoint, then holds red
+			// while the alarm is active - same deviation pattern as
+			// the pressure wash, pairing with the recombiner dot.
+			//   "Alarms at proper setpoints are provided."
+			//   specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:14-15
+			hds := p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
+			if hds.HydrogenVolumePercent > 0 || hds.HydrogenAlarm {
+				fill, alpha := tintAmber,
+					clampRange(hds.HydrogenVolumePercent/core.HydrogenAlarmSetpoint, 0, 1)*0.15
+				if hds.HydrogenAlarm {
+					fill, alpha = tintRed, 0.2
+				}
+				fmt.Fprintf(&b,
+					`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" class="h2-wash" fill="%s" fill-opacity="%.2f"/>`+"\n",
+					bx, by, bw, bh, fill, alpha)
+			}
 			writeLabel(bx+bw/2, by-6, buildingLabels[name])
 		} else {
 			fmt.Fprintf(&b, `<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" `+
@@ -1165,9 +1217,9 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			}
 			if alpha := w.alpha(p); alpha > 0 {
 				fmt.Fprintf(&b,
-					`<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" fill-opacity="%.2f"/>`+"\n",
+					`<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" class="%s" fill="%s" fill-opacity="%.2f"/>`+"\n",
 					a.X-sw/2+w.fx*sw, a.Y-sh/2+w.fy*sh,
-					w.fw*sw, w.fh*sh, w.colour, alpha)
+					w.fw*sw, w.fh*sh, w.class, w.colour, alpha)
 			}
 		}
 	}

@@ -330,24 +330,35 @@ func TestScalarValvesRenderWedges(t *testing.T) {
 	assert.Contains(t, out, "<title>50%</title>")
 }
 
-// TestElectricalTiesShowBreakerState checks the four one-line ties
-// carry breaker glyphs whose status dot tracks the contact state.
+// TestElectricalTiesShowBreakerState checks that ties render only
+// while their contact holds, appear as bound part groups, and show
+// the closed-contact bar with a green status dot.
 func TestElectricalTiesShowBreakerState(t *testing.T) {
 	p := core.MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false
 	p.TurbineBuilding.Generator.BreakerClosed = false
 	p.ReactorBuilding.Grid.Voltage = 0
+	p.AuxiliaryBuilding.DieselGenerator.Generator.BreakerClosed = false
+	p.AuxiliaryBuilding.DieselGeneratorB.Generator.BreakerClosed = false
 
 	out := renderPlant(t, &p)
-	require.Equal(t, len(electricalTies),
-		strings.Count(out, `class="breaker"`))
-	allOpen := strings.Count(out, `fill="#aaa"`)
+	assert.Equal(t, 0, strings.Count(out, `class="contact-closed"`),
+		"with every contact open, no tie may be drawn")
 
-	p.Electrical.ESFBusA.BreakerClosed = true
+	p.AuxiliaryBuilding.DieselGeneratorB.Generator.BreakerClosed = true
 	closed := renderPlant(t, &p)
-	assert.Equal(t, allOpen-1, strings.Count(closed, `fill="#aaa"`),
-		"closing a bus breaker must turn exactly one contact green")
+	assert.Equal(t, 1, strings.Count(closed, `class="contact-closed"`),
+		"closing one diesel output breaker draws exactly its feed tie")
+	assert.Contains(t, closed,
+		`data-part="AuxiliaryBuilding/DieselGeneratorB/FeedTie"`)
+	m := regexp.MustCompile(
+		`<use href="#breaker"[^>]*/>` +
+			`<line x1="\d+" y1="(\d+)" x2="\d+" y2="(\d+)" stroke="black"`).
+		FindStringSubmatch(closed)
+	require.NotNil(t, m, "the drawn tie must carry a closed contact bar")
+	assert.Equal(t, m[1], m[2],
+		"the closed contact bar must be horizontal")
 }
 
 // TestSafeguardSystemsRender checks the EFWS subsystem pumps, the
@@ -471,4 +482,35 @@ func TestSymbolWashesTrackState(t *testing.T) {
 		"latched heaters warm the pressurizer band at construction")
 	p.ReactorBuilding.Pressurizer.HeatersOn = false
 	assert.NotContains(t, renderPlant(t, &p), `fill="#ffb84d"`)
+}
+
+
+// TestContainmentHydrogenWash checks the dome wash ramps amber with
+// concentration below the alarm setpoint and turns red once the
+// hydrogen alarm latches.
+func TestContainmentHydrogenWash(t *testing.T) {
+	p := core.MakePlant()
+	base := renderPlant(t, &p)
+	assert.NotContains(t, base, `class="h2-wash"`)
+
+	hds := &p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
+	hds.HydrogenVolumePercent = 1.0
+	assert.Contains(t, renderPlant(t, &p),
+		`class="h2-wash" fill="#f0a500"`)
+
+	hds.HydrogenVolumePercent = 3.0
+	hds.HydrogenAlarm = true
+	assert.Contains(t, renderPlant(t, &p),
+		`class="h2-wash" fill="#e02020"`)
+}
+
+// TestSFPPoolHeatTint checks the pool water warms toward orange as
+// temperature climbs through the derived 120-200 F band.
+func TestSFPPoolHeatTint(t *testing.T) {
+	p := core.MakePlant()
+	assert.NotContains(t, renderPlant(t, &p), `class="sfp-wash"`)
+
+	p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PoolTemp =
+		core.Temperature{Val: 190, Unit: u.Fahrenheit}
+	assert.Contains(t, renderPlant(t, &p), `class="sfp-wash"`)
 }
