@@ -255,6 +255,36 @@
             flex-basis: auto;
             max-width: 40ch;
         }
+        .data-table tr[data-alarm-id]:hover { background: #f2f6fa; }
+        tr.alarm-detail > td {
+            background: #fafafa;
+            border-bottom: 1px solid #ddd;
+            padding: 4px 8px 8px;
+        }
+        .alarm-detail-body {
+            font-size: 11px;
+            opacity: 0.9;
+            max-width: 60ch;
+        }
+        .alarm-detail-body p { margin: 3px 0; }
+        .alarm-detail-body ul { margin: 3px 0; padding-left: 16px; }
+        .alarm-detail-body a { color: #0366d6; cursor: pointer; }
+        .alarm-detail-body .source {
+            font-size: 10px;
+            color: #777;
+            word-break: break-all;
+        }
+        .alarm-eyes {
+            width: 18px;
+            height: 16px;
+            line-height: 1;
+            padding: 0;
+            border: none;
+            background: none;
+            font-size: 11px;
+            cursor: pointer;
+            margin-left: 4px;
+        }
         #console {
             background: white;
             border: 1px solid #ccc;

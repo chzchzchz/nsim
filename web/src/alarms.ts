@@ -2,8 +2,10 @@
 // scalar sensor readout. Sensors of Kind === "alarm" are routed
 // here; everything else continues through sensors.ts.
 
+import { marked } from "marked";
+
 import { makeTile } from "./tile";
-import { makeHelpButton } from "./bindings";
+import { revealElement } from "./bindings";
 import { helpFor } from "./descriptions";
 
 export interface AlarmEntry {
@@ -22,6 +24,18 @@ export interface AlarmPanel {
 }
 
 const ALARM_COLUMNS = ["Severity", "ID", "Description", "Time (s)"];
+
+// Acknowledge control per row. An emoji keeps it visually distinct
+// from the surrounding text so row clicks stay reserved for the
+// detail expansion.
+const ACK_EYES = "👁";
+
+// AlarmRowPair bundles the visible alarm row with its expandable
+// detail sibling; both share the lifecycle of one alarm entry.
+interface AlarmRowPair {
+    row: HTMLTableRowElement;
+    detail: HTMLTableRowElement;
+}
 
 export function renderAlarms(
     container: HTMLElement,
@@ -62,11 +76,11 @@ export function renderAlarms(
     table.appendChild(tbody);
     scrollHost.appendChild(table);
 
-    const rowMap = new Map<string, HTMLElement>();
+    const rowMap = new Map<string, AlarmRowPair>();
     for (const a of initialAlarms) {
-        const el = buildAlarmRow(plant, a);
-        tbody.appendChild(el);
-        rowMap.set(a.id, el);
+        const pair = buildAlarmRow(plant, a);
+        tbody.append(pair.row, pair.detail);
+        rowMap.set(a.id, pair);
     }
 
     container.appendChild(root);
@@ -82,18 +96,19 @@ export function renderAlarms(
         const seen = new Set<string>();
         for (const a of list) {
             seen.add(a.id);
-            const existing = rowMap.get(a.id);
-            if (existing) {
-                updateAlarmRow(existing, a);
+            const pair = rowMap.get(a.id);
+            if (pair) {
+                updateAlarmRow(plant, pair, a);
             } else {
-                const el = buildAlarmRow(plant, a);
-                tbody.appendChild(el);
-                rowMap.set(a.id, el);
+                const built = buildAlarmRow(plant, a);
+                tbody.append(built.row, built.detail);
+                rowMap.set(a.id, built);
             }
         }
-        for (const [id, el] of rowMap) {
+        for (const [id, pair] of rowMap) {
             if (!seen.has(id)) {
-                el.parentElement?.removeChild(el);
+                pair.row.remove();
+                pair.detail.remove();
                 rowMap.delete(id);
             }
         }
@@ -105,71 +120,129 @@ export function renderAlarms(
 function buildAlarmRow(
     plant: { setControl(id: string, value: string): Error | null },
     a: AlarmEntry,
-): HTMLTableRowElement {
-    const tr = document.createElement("tr") as HTMLTableRowElement;
-    updateAlarmRow(tr, a);
-    // The dim state comes from the alarm data itself on every
-    // refresh; clicking writes the acknowledgment back through
-    // the bridge so the visual state and plant state agree.
-    tr.dataset.alarmId = a.id;
-    tr.style.cursor = "pointer";
-    tr.title = "Click to acknowledge (sends Reset)";
-    tr.addEventListener("click", () => {
-        const err = plant.setControl("Alarms/Reset", tr.dataset.alarmId ?? "");
-        if (err instanceof Error) console.error("ack failed:", err.message);
+): AlarmRowPair {
+    const row = document.createElement("tr") as HTMLTableRowElement;
+    const detail = document.createElement("tr");
+    detail.className = "alarm-detail";
+    detail.hidden = true;
+    const detailCell = document.createElement("td");
+    detailCell.colSpan = ALARM_COLUMNS.length;
+    const detailBody = document.createElement("div");
+    detailBody.className = "alarm-detail-body md";
+    detailCell.appendChild(detailBody);
+    detail.appendChild(detailCell);
+
+    // Description cross-references jump to the referenced row
+    // instead of navigating away; ids without a rendered row are
+    // ignored.
+    detailBody.addEventListener("click", (ev) => {
+        const anchor = (ev.target as HTMLElement | null)?.closest("a");
+        const href = anchor?.getAttribute("href") ?? "";
+        if (href === "") return;
+        ev.preventDefault();
+        revealElement(href);
     });
-    return tr;
+
+    updateAlarmRow(plant, { row, detail }, a);
+
+    // The dim state comes from the alarm data itself on every
+    // refresh; the eyes button writes the acknowledgment back
+    // through the bridge so the visual state and plant state agree.
+    row.dataset.bridgeId = a.id;
+    row.style.cursor = "pointer";
+    row.title = "Click for details";
+    row.addEventListener("click", () => {
+        const open = row.classList.toggle("alarm-open");
+        detail.hidden = !open;
+    });
+
+    return { row, detail };
 }
 
-function updateAlarmRow(tr: HTMLElement, a: AlarmEntry): void {
-    tr.dataset.alarmId = a.id;
+function updateAlarmRow(
+    plant: { setControl(id: string, value: string): Error | null },
+    pair: AlarmRowPair,
+    a: AlarmEntry,
+): void {
+    const { row, detail } = pair;
+    row.dataset.alarmId = a.id;
     // Acknowledged alarms stay visible but dimmed.
-    tr.classList.toggle("alarm-acked", a.acknowledged);
+    row.classList.toggle("alarm-acked", a.acknowledged);
 
-    // The row rebuilds on every refresh tick; carry the help button
-    // and an open popup across so they survive into the new cells.
-    // Recreating the button each tick would leave clicks landing on
-    // a detached node whenever a rebuild fires mid-press.
-    const openTip = tr.querySelector<HTMLElement>(".help-text");
-    const prevHelpBtn =
-        tr.querySelector<HTMLButtonElement>("button.ctl-help");
+    // The row rebuilds on every refresh tick; carry the eyes button
+    // across so it survives into the new cells. Recreating it each
+    // tick would leave clicks landing on a detached node whenever a
+    // rebuild fires mid-press.
+    const prevEyes = row.querySelector<HTMLButtonElement>("button.alarm-eyes");
 
-    while (tr.firstChild) tr.removeChild(tr.firstChild);
+    while (row.firstChild) row.removeChild(row.firstChild);
 
     const tdSev = document.createElement("td");
     const badge = document.createElement("span");
     badge.textContent = a.severity.toUpperCase();
     badge.className = `sev-badge sev-${a.severity}`;
     tdSev.appendChild(badge);
-    tr.appendChild(tdSev);
+    row.appendChild(tdSev);
 
     const tdId = document.createElement("td");
     tdId.className = "mono";
     tdId.textContent = a.id;
-    const help = helpFor(a.id);
-    let helpBtn: HTMLButtonElement | null = null;
-    if (help) {
-        // Anchor for description cross-references and the (?)
-        // toggle; stopPropagation inside the button keeps a help
-        // click from acknowledging the alarm.
-        tr.dataset.bridgeId = a.id;
-        helpBtn = prevHelpBtn ?? makeHelpButton(help);
-        tdId.appendChild(helpBtn);
-    }
-    tr.appendChild(tdId);
+    const eyes = prevEyes ?? makeAckButton(plant, a.id);
+    eyes.disabled = a.acknowledged;
+    tdId.appendChild(eyes);
+    row.appendChild(tdId);
 
     const tdDesc = document.createElement("td");
     tdDesc.textContent = a.description;
-    tr.appendChild(tdDesc);
+    row.appendChild(tdDesc);
 
     const tdTime = document.createElement("td");
     tdTime.textContent = a.time_s.toFixed(1) + " s";
     tdTime.className = "nowrap";
-    tr.appendChild(tdTime);
+    row.appendChild(tdTime);
 
-    if (openTip && helpBtn) {
-        helpBtn.insertAdjacentElement("afterend", openTip);
+    fillAlarmDetail(detail, a);
+}
+
+function fillAlarmDetail(detail: HTMLTableRowElement, a: AlarmEntry): void {
+    const body = detail.querySelector<HTMLDivElement>(".alarm-detail-body");
+    if (!body) return;
+    body.innerHTML = "";
+
+    const facts = document.createElement("p");
+    const ackState = a.acknowledged ? "; acknowledged" : "";
+    facts.textContent =
+        `Fired at ${a.time_s.toFixed(1)} s; severity ${a.severity}${ackState}.`;
+    body.appendChild(facts);
+
+    const help = helpFor(a.id);
+    if (help !== undefined) {
+        const md = document.createElement("div");
+        md.innerHTML = marked.parse(help, { async: false });
+        while (md.firstChild) body.appendChild(md.firstChild);
+    } else {
+        const desc = document.createElement("p");
+        desc.textContent = a.description;
+        body.appendChild(desc);
     }
+}
+
+function makeAckButton(
+    plant: { setControl(id: string, value: string): Error | null },
+    id: string,
+): HTMLButtonElement {
+    const btn = document.createElement("button");
+    btn.textContent = ACK_EYES;
+    btn.className = "alarm-eyes";
+    btn.title = "Acknowledge (sends Reset)";
+    // Stop propagation so an acknowledge click does not also toggle
+    // the row's detail expansion.
+    btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const err = plant.setControl("Alarms/Reset", id);
+        if (err instanceof Error) console.error("ack failed:", err.message);
+    });
+    return btn;
 }
 
 export function isAlarmKind(kind: string | undefined): boolean {

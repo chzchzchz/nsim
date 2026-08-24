@@ -33,9 +33,9 @@ export interface PrefixGroup {
 
 // isAlarmControl reports whether a bridge id belongs to the alarm
 // acknowledgment namespace ("Alarms/…"). Those controls are operated
-// from the dedicated alarm panel (alarms.ts): clicking an alarm row
-// sends Reset with that row's ID, and the panel header acknowledges
-// all. Rendering them as generic widgets would duplicate that UI
+// from the dedicated alarm panel (alarms.ts): each row carries an
+// eyes button that sends Reset with that row's ID, and the panel
+// header acknowledges all. Rendering them as generic widgets would duplicate that UI
 // awkwardly - ResetAlarm wants an opaque alarm ID and AcknowledgeAll
 // is a one-option enum.
 export function isAlarmControl(id: string): boolean {
@@ -146,7 +146,7 @@ function openTip(btn: HTMLButtonElement, text: string): void {
 // id and flashes it. Rows tag themselves with data-bridge-id;
 // scanning them all is cheap (a few hundred nodes) and avoids
 // CSS-escaping the ids, which contain slashes.
-function revealElement(id: string): boolean {
+export function revealElement(id: string): boolean {
     const rows = Array.from(
         document.querySelectorAll<HTMLElement>("[data-bridge-id]"),
     );
