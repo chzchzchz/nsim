@@ -32,9 +32,17 @@ export const UNITS: Record<string, UnitInfo> = {
     gallon:      { unit: "gal",  range: null,    numeric: true },
     gpm:         { unit: "gpm",  range: null,    numeric: true },
     watt:        { unit: "W",    range: null,    numeric: true },
+    mw:          { unit: "MW",   range: null,    numeric: true },
     ppm:         { unit: "ppm",  range: null,    numeric: true },
     volt:        { unit: "V",    range: null,    numeric: true },
     hz:          { unit: "Hz",   range: null,    numeric: true },
+    // Source-range neutron detector count rate (counts per
+    // second); huge magnitudes are normal, so the two-decimal
+    // sensor formatting must not fall back to raw pass-through.
+    cps:         { unit: "cps",  range: null,    numeric: true },
+    // Startup rate in decades per minute; signed because a
+    // subcritical core reads a negative rate.
+    dpm:         { unit: "dpm",  range: null,    numeric: true },
     string:      { unit: "",     range: null,    numeric: false },
     enum:        { unit: "",     range: null,    numeric: false },
     alarm:       { unit: "",     range: null,    numeric: false },
