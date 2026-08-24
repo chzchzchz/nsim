@@ -1660,11 +1660,9 @@ const (
 //     feedwater heaters falls below the minimum."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:28-31
 //   - FeedwaterDesignFlow — the design volumetric flow through the
-//     main feed pump at full load. Anchored on the per-SG steam
-//     flow of 3,813,000 lb/hr (480 kg/s):
+//     main feed pump at full load. The per-SG spec steam flow is
+//     3,813,000 lb/hr (480 kg/s):
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
-//     three SGs at full load give 3 × 480 kg/s = 1440 kg/s ≈
-//     9531 gal/s, converted below.
 //
 // FeedwaterMinFlow is the minimum stable flow below which the
 // main feed pump discharge recirculates to the deaerator.
@@ -1678,13 +1676,15 @@ const (
 var FeedwaterMinFlow Volume = Volume{Val: 950, Unit: u.Gallon}
 
 // FeedwaterDesignFlow is the design volumetric flow through the
-// main feed pump at full load. Anchored on the per-SG steam flow
-// of 3,813,000 lb/hr (480 kg/s) for three SGs.
+// main feed pump at full load. Known approximation: the value is
+// anchored on THREE loops (3 × 480 kg/s = 1440 kg/s ≈ 380 gal/s)
+// while SteamGeneratorLoopCount is 4, so the strict four-loop anchor
+// would be ~507 gal/s; the delivered flow never approaches the cap at
+// either scale and the regulator normalizes against it, so it acts as
+// the feedwater-loop tuning scale. Recalibrating to the four-loop
+// figure rescales regulator/heater/MSR extraction sizing together and
+// is recorded out of scope (scenario-8 G4 ledger).
 // specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
-// 3 × 480 kg/s = 1440 kg/s ≈ 1440 / 3.785 ≈ 380 gal/s = ~22,800
-// gal/min. The per-step value below is per-step at 1 ms: 380 gal/s
-// × 0.001 s/step ≈ 0.38 gal/step; the constant is sized in gal/s
-// for the per-step integration in heater.go.
 var FeedwaterDesignFlow Volume = Volume{Val: 380, Unit: u.Gallon} // gal/s
 
 // Feedwater regulator design constants (plans/p22_1.txt).
