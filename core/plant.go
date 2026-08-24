@@ -1645,6 +1645,21 @@ func (p *Plant) Step() {
 		cwFlowing,
 		p.nextPlant.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
 	)
+	// Steamline vent and SG shell drain receipts. Both draws land in
+	// the condenser hotwell: vented steam condenses on the tube
+	// bundle alongside the dump-path steam, and drained shell water
+	// is condensate-grade, so secondary mass stays tracked.
+	// "the steamline vents are closed and the secondary side of
+	//  each steam generator is drained to the normal operating
+	//  range."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:118-122
+	sgDrawn := p.nextPlant.ReactorBuilding.SteamGenerator.VentFlow.Float() +
+		p.nextPlant.ReactorBuilding.SteamGenerator.DrainFlow.Float()
+	if sgDrawn > 0 {
+		p.nextPlant.TurbineBuilding.Condenser.HotwellLevel = vol(
+			p.nextPlant.TurbineBuilding.Condenser.HotwellLevel,
+			p.nextPlant.TurbineBuilding.Condenser.HotwellLevel.Float()+sgDrawn)
+	}
 
 	// Feedwater regulator step. The simplified model collapses
 	// the spec's per-SG regulators into a single shared
@@ -2769,7 +2784,15 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 		&target.TurbineBuilding.HighPressureHeater)
 	edge("SG", "Condenser", &target.TurbineBuilding.MakeupValve, nil)
 	edge("Condenser", "CST", &target.TurbineBuilding.RecirculateValve, nil)
-	edge("CST", "HDT", nil, &target.TurbineBuilding.CondensatePump)
+	// The condensate pumps take suction from the condenser hotwell
+	// (the Condenser graph node carries HotwellLevel) and deliver
+	// through the LP heater train to the deaerator tank; the pump
+	// latch gates the delivery head.
+	// "The condensate pumps take suction from the condenser
+	//  hotwell and pump condensate [...] through four stages of
+	//  low-pressure feedwater heaters to the deaerator."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-46
+	edge("Condenser", "HDT", nil, &target.TurbineBuilding.CondensatePump)
 	// The main-feedwater line is gated by the feedwater control
 	// valve so the regulator's demand throttles delivery; without
 	// the valve the drain tank either siphons the SG dry through

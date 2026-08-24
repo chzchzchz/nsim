@@ -287,8 +287,10 @@ func pumpHopFor(e core.GraphEdge) (edgeHopRef, bool) {
 	switch {
 	case e.From == "RPV" && e.To == "SG":
 		return edgeHopRef{"RCP", clusterFor["RPV"], "ReactorCoolantPump"}, true
-	case e.From == "CST" && e.To == "HDT":
-		return edgeHopRef{"CondensatePump", clusterFor["CST"], "CondensatePump"}, true
+	case e.From == "Condenser" && e.To == "HDT":
+		// Suction is from the condenser hotwell
+		// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-46).
+		return edgeHopRef{"CondensatePump", clusterFor["Condenser"], "CondensatePump"}, true
 	case e.From == "HDT" && e.To == "SG":
 		return edgeHopRef{"MainFeedwaterPump", clusterFor["HDT"], "MainFeedwaterPump"}, true
 	case e.From == "HPHeaterDrain" && e.To == "HDT":

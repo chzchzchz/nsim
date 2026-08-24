@@ -92,10 +92,29 @@ func (p *Pressurizer) capacity() Volume   { return p.Volume }
 //    flow."
 //   specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
 
-func (c *Condenser) pressure() Pressure { return c.Pressure }
-func (c *Condenser) level() Volume      { return zeroVolume }
-func (c *Condenser) setLevel(Volume)    {}
-func (c *Condenser) capacity() Volume   { return zeroVolume }
+// The condenser's transferable inventory is the hotwell: the
+// condensate-pump edge takes suction from it, so level/setLevel read
+// and write HotwellLevel. Shell vacuum is not a meaningful static
+// head for these liquid edges (the shell is at vacuum, not pressure),
+// so pressure() reads zero: with the pump secured the edge sees no
+// differential and moves nothing, and a running pump lifts the full
+// pump head. capacity() reads zero so the simulator's room clamps
+// stay disabled — hotwell growth stays visible as unbounded inflow
+// rather than silently pinning at a fabricated capacity — which also
+// disables the simulator's low-level suction clamp, so setLevel
+// clamps at zero itself: an empty hotwell stops delivering.
+// "The condensate pumps take suction from the condenser hotwell
+//  [...]."
+// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-42
+func (c *Condenser) pressure() Pressure { return 0 }
+func (c *Condenser) level() Volume      { return c.HotwellLevel }
+func (c *Condenser) setLevel(v Volume) {
+	if v.Val < 0 {
+		v = Volume{Val: 0, Unit: v.UnitType()}
+	}
+	c.HotwellLevel = v
+}
+func (c *Condenser) capacity() Volume { return zeroVolume }
 
 // LP and HP heater drains are bookkeeping edges in the plant
 // graph. The heater Steps accumulate drain volume directly into

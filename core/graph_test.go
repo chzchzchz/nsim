@@ -10,6 +10,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Suction must stop at an empty hotwell: the condensate-pump edge
+// runs on pump head alone (zero static differential both sides), so
+// without a floor the transfer drives HotwellLevel negative forever.
+// Physics-forced: stored inventory is non-negative.
+func TestGraph_CondensatePumpStopsAtEmptyHotwell(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.FissionPower =
+		CoreNeutronSourcePower
+	p.ReactorBuilding.ReactorPressureVessel.DecayHeatFast = 0
+	p.ReactorBuilding.ReactorPressureVessel.DecayHeatSlow = 0
+	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
+	p.TurbineBuilding.Turbine.StopValve.Open = 0
+	p.TurbineBuilding.MainFeedwaterPump.Running = false
+	p.TurbineBuilding.Condenser.HotwellLevel =
+		Volume{Val: 500, Unit: u.Gallon}
+	p.TurbineBuilding.CondensatePump.Running = true
+	for i := 0; i < 10000; i++ {
+		p.Step()
+		p.Update()
+		assert.GreaterOrEqual(t,
+			p.TurbineBuilding.Condenser.HotwellLevel.Float(), 0.0,
+			"hotwell level went negative at step %d", i)
+		if p.TurbineBuilding.Condenser.HotwellLevel.Float() == 0 {
+			break
+		}
+	}
+	assert.LessOrEqual(t, p.TurbineBuilding.Condenser.HotwellLevel.Float(),
+		1.0, "pump should have drained the hotwell to the floor")
+}
+
 func TestGraph_BuildsExpectedNodes(t *testing.T) {
 	p := MakePlant()
 	g := p.BuildGraph()
@@ -113,29 +143,44 @@ func TestFluidFlow_ValveClosed_NoMovement(t *testing.T) {
 }
 
 func TestFluidFlow_PumpRunning_DrivesFlowAlongEdge(t *testing.T) {
-	// The CondensatePump sits on the CST -> CondPump edge; equal
-	// pressures and pump off means no flow; pump on means flow out of
-	// CST (level drops) even with zero pressure differential.
+	// The CondensatePump sits on the hotwell -> deaerator edge; the
+	// pump takes suction from the condenser hotwell, not the CST.
+	// Quiescent core so nothing else moves the hotwell during the
+	// assertion window (no turbine exhaust to condense, no
+	// feedwater delivery with the feed pump secured).
 	p := MakePlant()
-	p.Outside.CondensateStorageTank.Pressure = 0
-	// Make any flow out of CST observable by routing through a chain
-	// whose other nodes have pressure equal to CST.
+	p.ReactorBuilding.ReactorPressureVessel.FissionPower =
+		CoreNeutronSourcePower
+	p.ReactorBuilding.ReactorPressureVessel.DecayHeatFast = 0
+	p.ReactorBuilding.ReactorPressureVessel.DecayHeatSlow = 0
+	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
+	p.TurbineBuilding.Turbine.StopValve.Open = 0
+	p.TurbineBuilding.MainFeedwaterPump.Running = false
+	p.TurbineBuilding.Condenser.HotwellLevel =
+		Volume{Val: 50000, Unit: u.Gallon}
+
+	hotwellBefore := p.TurbineBuilding.Condenser.HotwellLevel.Float()
+	cstBefore := p.Outside.CondensateStorageTank.Level.Float()
 	p.TurbineBuilding.CondensatePump.Running = false
-	before := p.Outside.CondensateStorageTank.Level.Float()
 	for i := 0; i < 1000; i++ {
 		p.Step()
 		p.Update()
 	}
-	mid := p.Outside.CondensateStorageTank.Level.Float()
-	assert.Equal(t, before, mid, "pump off but CST level moved: %v -> %v", before, mid)
+	mid := p.TurbineBuilding.Condenser.HotwellLevel.Float()
+	assert.Equal(t, hotwellBefore, mid,
+		"pump off but hotwell level moved: %v -> %v", hotwellBefore, mid)
 
 	p.TurbineBuilding.CondensatePump.Running = true
 	for i := 0; i < 1000; i++ {
 		p.Step()
 		p.Update()
 	}
-	after := p.Outside.CondensateStorageTank.Level.Float()
-	assert.Less(t, after, mid, "pump on but CST level did not drop: %v -> %v", mid, after)
+	after := p.TurbineBuilding.Condenser.HotwellLevel.Float()
+	assert.Less(t, after, mid,
+		"pump on but hotwell level did not drop: %v -> %v", mid, after)
+	assert.Equal(t, cstBefore,
+		p.Outside.CondensateStorageTank.Level.Float(),
+		"pump suction must come from the hotwell, not the CST")
 }
 
 func TestFluidFlow_ValveHalfOpen_HalvesFlow(t *testing.T) {

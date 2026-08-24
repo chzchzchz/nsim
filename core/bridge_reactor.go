@@ -176,6 +176,62 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Steamline vent (chapter 16 startup). The operator holds the
+	// vents open during low-temperature heatup and closes them once
+	// the reactor coolant reaches 210-220°F.
+	// "When the reactor coolant temperature increases to about
+	//  210-220°F (90-105°C), the steamline vents are closed [...]."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:118-122
+	m["ReactorBuilding/SteamGenerator/SteamlineVent/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/SteamGenerator/SteamlineVent",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.SteamGenerator.SteamlineVent.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SteamGenerator.SteamlineVent.Open = v
+			return nil
+		},
+	}
+
+	// SG shell drain valve (chapter 16 startup): pulls SG secondary
+	// inventory down to the normal operating range at the same point
+	// of the sequence.
+	// "...and the secondary side of each steam generator is drained
+	//  to the normal operating range."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:118-122
+	m["ReactorBuilding/SteamGenerator/DrainValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/SteamGenerator/DrainValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.SteamGenerator.DrainValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SteamGenerator.DrainValve.Open = v
+			return nil
+		},
+	}
+
 
 	m["ReactorBuilding/SteamGenerator/MainSteamIsolationValve/Open"] = &bridge.Control{
 		Part:  "ReactorBuilding/SteamGenerator/MainSteamIsolationValve",

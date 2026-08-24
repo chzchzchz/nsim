@@ -203,7 +203,10 @@ func TestAssignEdgeHops(t *testing.T) {
 	}
 
 	assert.Equal(t, []string{"RCP"}, idsFor("RPV", "SG"))
-	assert.Equal(t, []string{"CondensatePump"}, idsFor("CST", "HDT"))
+	// The condensate pump takes suction from the condenser hotwell
+	// (chapter_15/page_220.txt:41-46), so its inline hop sits on the
+	// Condenser -> HDT edge.
+	assert.Equal(t, []string{"CondensatePump"}, idsFor("Condenser", "HDT"))
 	assert.Equal(t, []string{"MainFeedwaterPump", "MainFeedValve"}, idsFor("HDT", "SG"))
 	assert.Equal(t, []string{"CSTValve"}, idsFor("CST", "DieselAFWPump"))
 	assert.Equal(t, []string{"CSTValve_2"}, idsFor("CST", "MotorAFWPump"))

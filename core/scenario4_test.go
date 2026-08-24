@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -111,4 +112,132 @@ func TestScenario4_AdmittingSteamWithoutVacuumTrips(t *testing.T) {
 
 	assert.True(t, p.TurbineBuilding.Turbine.TripByVacuum)
 	assert.Equal(t, TurbineTripped, p.TurbineBuilding.Turbine.State)
+}
+
+// Opening the steamline vent draws steam off the SG header and the
+// drawn volume lands in the condenser hotwell. Tier 3 (invented
+// convention): the capacity fraction is an assumption, so assertions
+// are directional against a wiring-derived floor, not exact values.
+//
+// "When the reactor coolant temperature increases to about 210-220°F
+// (90-105°C), the steamline vents are closed [...]."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:118-122
+func TestScenario4_SteamlineVentDrawsSteamToHotwell(t *testing.T) {
+	p := MakePlant()
+	sgBefore := p.ReactorBuilding.SteamGenerator.Water.Float()
+	hotwellBefore := p.TurbineBuilding.Condenser.HotwellLevel.Float()
+
+	setControl(t, &p, "ReactorBuilding/SteamGenerator/SteamlineVent/Open", "1")
+	stepFor(&p, 20*time.Second)
+
+	ventGalPerSec := SteamlineVentCapacityFraction *
+		SteamGeneratorFullLoadSteamFlow.Float() / SecondsPerHour
+	wantMin := ventGalPerSec * 15 // tolerate header-pressure ramp-in
+	gotHotwell := p.TurbineBuilding.Condenser.HotwellLevel.Float() - hotwellBefore
+	assert.GreaterOrEqual(t, gotHotwell, wantMin,
+		"want >= %v gal of vented steam condensed to the hotwell, got %v",
+		wantMin, gotHotwell)
+	assert.Less(t, p.ReactorBuilding.SteamGenerator.Water.Float(), sgBefore,
+		"vented draw must debit SG shell inventory")
+}
+
+// The shell drain pulls SG inventory toward the normal operating band
+// and the drained water is tracked into the condenser hotwell.
+// Differential against an identical no-drain plant; tier 3 on rate
+// (invented constant), asserted directionally.
+func TestScenario4_DrainValvePullsLevelToNormalBand(t *testing.T) {
+	baseline := MakePlant()
+	setControl(t, &baseline, "TurbineBuilding/MainFeedwaterPump/Running", "0")
+	stepFor(&baseline, 60*time.Second)
+
+	drained := MakePlant()
+	setControl(t, &drained, "TurbineBuilding/MainFeedwaterPump/Running", "0")
+	setControl(t, &drained, "ReactorBuilding/SteamGenerator/DrainValve/Open", "1")
+	hotwellBefore := drained.TurbineBuilding.Condenser.HotwellLevel.Float()
+	stepFor(&drained, 60*time.Second)
+
+	drainDelta := baseline.ReactorBuilding.SteamGenerator.Water.Float() -
+		drained.ReactorBuilding.SteamGenerator.Water.Float()
+	assert.GreaterOrEqual(t, drainDelta, 0.8*SGDrainValveGalPerSec*55,
+		"drained SG should sit ~%v gal below baseline, delta %v",
+		SGDrainValveGalPerSec*55, drainDelta)
+	hotwellGain := drained.TurbineBuilding.Condenser.HotwellLevel.Float() -
+		hotwellBefore
+	assert.GreaterOrEqual(t, hotwellGain, 0.8*SGDrainValveGalPerSec*55,
+		"drained water must land in the hotwell, got %v", hotwellGain)
+}
+
+// The condensate pump moves hotwell inventory through the LP heater
+// train into the deaerator tank; with it secured the hotwell holds.
+//
+// "The condensate pumps take suction from the condenser hotwell and
+// pump condensate [...] through four stages of low-pressure feedwater
+// heaters to the deaerator."
+// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-46
+// Draw magnitude recomputed from production constants (pump head,
+// FeedwaterMinFlow): a wiring check, asserted as a floor plus
+// conservation of the transferred volume.
+func TestScenario4_CondensatePumpMovesHotwellToDeaerator(t *testing.T) {
+	// Quiescent lineup: neutron-source power only, so no turbine
+	// exhaust condenses, no extraction feeds the heaters, and the
+	// only deaerator inflows are the minimum-flow recirculation
+	// (constant while the feed pump is secured) and the condensate
+	// pump suction under test.
+	p := MakePlant()
+	rpv := &p.ReactorBuilding.ReactorPressureVessel
+	rpv.FissionPower = CoreNeutronSourcePower
+	rpv.DecayHeatFast = 0
+	rpv.DecayHeatSlow = 0
+	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
+	p.TurbineBuilding.Turbine.StopValve.Open = 0
+	p.TurbineBuilding.Condenser.HotwellLevel =
+		Volume{Val: 50000, Unit: u.Gallon}
+	hotwellBefore := p.TurbineBuilding.Condenser.HotwellLevel.Float()
+	hdtBefore := p.TurbineBuilding.HeaterDrainTank.Level.Float()
+
+	setControl(t, &p, "TurbineBuilding/CondensatePump/Running", "1")
+	stepFor(&p, 3*time.Second)
+
+	draw := pumpHead * 3
+	recirc := FeedwaterMinFlow.Float() * 3
+	hotwellDrop := hotwellBefore -
+		p.TurbineBuilding.Condenser.HotwellLevel.Float()
+	assert.GreaterOrEqual(t, hotwellDrop, 0.9*draw,
+		"want pump to draw >= %v gal from the hotwell, drew %v",
+		draw, hotwellDrop)
+	hdtRise := p.TurbineBuilding.HeaterDrainTank.Level.Float() - hdtBefore
+	assert.InDelta(t, draw+recirc, hdtRise, 0.1*(draw+recirc),
+		"deaerator gain must be the pump suction plus recirculation")
+}
+
+// CVCS letdown must measurably drain pressurizer level against a
+// letdown-closed reference run: the level represents the balance of
+// charging injection against letdown draw.
+//
+// "pressurizer level represents a balance of injection water flow
+//  into the RCS and water letdown flow into the Chemical and Volume
+//  Control System."
+// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65
+// Direction is physics-forced (letdown net draw must lower level);
+// magnitude recomputed from the CVCS design constants is a wiring
+// check, asserted as a floor.
+func TestScenario4_LetdownMeasurablyDrainsPressurizer(t *testing.T) {
+	closed := MakePlant()
+	setControl(t, &closed,
+		"AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen", "0")
+	stepFor(&closed, 30*time.Second)
+	closedWater := closed.ReactorBuilding.Pressurizer.Water.Float()
+
+	open := MakePlant()
+	setControl(t, &open,
+		"AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen", "1")
+	require.True(t, open.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen)
+	stepFor(&open, 30*time.Second)
+
+	drain := closedWater - open.ReactorBuilding.Pressurizer.Water.Float()
+	netGalPerSec := CVCSDesignLetdownFlow.Float() -
+		CVCSDesignChargingFlow.Float()
+	assert.GreaterOrEqual(t, drain, 0.8*netGalPerSec*25,
+		"letdown-open PZR should sit >= %v gal below baseline, delta %v",
+		0.8*netGalPerSec*25, drain)
 }

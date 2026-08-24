@@ -67,6 +67,35 @@ type SteamGenerator struct {
 	// layup."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:144-145
 	WetLayupFillValve Valve
+
+	// SteamlineVent is the operator-controlled steamline vent on
+	// the SG outlet steam line. During low-temperature operation it
+	// carries RCP-boiled steam off the header so primary
+	// temperature can be raised on pump heat alone; the vents are
+	// closed once the reactor coolant reaches 210-220°F and the
+	// secondary is lined up for steam-dump/turbine service.
+	// "When the reactor coolant temperature increases to about
+	//  210-220°F (90-105°C), the steamline vents are closed and
+	//  the secondary side of each steam generator is drained to
+	//  the normal operating range."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:118-122
+	SteamlineVent Valve
+
+	// DrainValve is the operator-controlled shell drain that pulls
+	// SG secondary inventory down to the normal operating range at
+	// the same point in the startup sequence. The drawn water lands
+	// in the condenser hotwell (assumption; the spec names the
+	// drain without naming its destination).
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:118-122
+	DrainValve Valve
+
+	// VentFlow and DrainFlow are the per-step volumes drawn through
+	// SteamlineVent and DrainValve during the most recent Step, in
+	// the CondensingRate convention (gallons per step). Plant.Step
+	// routes both into the condenser hotwell so vented steam and
+	// drained water stay inside the tracked secondary inventory.
+	VentFlow  Volume
+	DrainFlow Volume
 }
 
 func (s *SteamGenerator) Update() SteamGenerator {
@@ -139,6 +168,22 @@ const (
 	// inventory loses per gallon of steam drawn off, matching the
 	// ~1 kg/L convention used by the boil-rate integration.
 	SteamGallonWaterM3 = 3.785 / 1000.0
+
+	// SteamlineVentCapacityFraction is the fraction of rated
+	// full-load steam flow the vent bank passes at full open.
+	// Assumption; the spec describes the vents' duty during heatup
+	// without a capacity figure, so the bank is sized to carry
+	// several times the hot-standby RCP boil-off while staying a
+	// small trim on any operating power level.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-122
+	SteamlineVentCapacityFraction = 0.05
+
+	// SGDrainValveGalPerSec sizes the shell drain at full open so
+	// draining from the wet-layup fill to the normal operating band
+	// takes on the order of an hour. Assumption; the spec gives no
+	// drain rate.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:118-122
+	SGDrainValveGalPerSec = 25.0
 )
 // SteamGeneratorFullLoadSteamFlow is the per-SG steam flow at rated
 // load, sized for 480 kg/s of saturated steam at 920 psia. The spec
@@ -257,6 +302,41 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 		ret.Water = vol(ret.Water, newWater)
 	}
 
+	// Steamline vent draw. The vent bank passes its capacity
+	// fraction of rated flow at full open and draws from the same
+	// header as the turbine and the dump banks, so an open vent
+	// participates in the header-pressure response below through
+	// its fraction. Delivery scales with available header pressure
+	// like the dump path: an open vent cannot pass design steam
+	// against a depressurised SG. The drawn steam is exported in
+	// VentFlow (gal/step) for Plant.Step to condense into the
+	// condenser hotwell.
+	ret.VentFlow = Volume{Val: 0, Unit: u.Gallon}
+	ventFraction := 0.0
+	if ret.SteamlineVent.Open > 0 && ret.Pressure > 0 {
+		pressureRatio := min(float64(ret.Pressure)/float64(SteamGeneratorShellPressure), 1)
+		ventFraction = ret.SteamlineVent.Open *
+			SteamlineVentCapacityFraction * pressureRatio
+		ret.VentFlow = Volume{Val: ventFraction *
+			SteamGeneratorFullLoadSteamFlow.Float()/SecondsPerHour*
+			dt.Seconds(), Unit: u.Gallon}
+	}
+
+	// Shell drain debit toward the normal operating range. The
+	// drawn water is exported in DrainFlow (gal/step) for Plant.Step
+	// to land in the condenser hotwell, keeping secondary mass
+	// tracked.
+	ret.DrainFlow = Volume{Val: 0, Unit: u.Gallon}
+	if ret.DrainValve.Open > 0 {
+		gal := min(ret.DrainValve.Open*SGDrainValveGalPerSec*dt.Seconds(),
+			ret.Water.Float())
+		if gal > 0 {
+			ret.DrainFlow = Volume{Val: gal, Unit: u.Gallon}
+			ret.Water = vol(ret.Water,
+				min(ret.Water.Float()-gal, ret.Volume.Float()))
+		}
+	}
+
 	// ASME-code safety valves. Spring-loaded: they pop open at the
 	// setpoint and reseat with blowdown below it, relieving to
 	// atmosphere the way the atmospheric bank does.
@@ -290,7 +370,7 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 	// steam generation and Pressure decays toward zero.
 	pressure := float64(ret.Pressure)
 	if ret.HeatInput > 0 && ret.Water.Float() > 0 {
-		outflow := steamOutflowFraction + advFraction + svFraction
+		outflow := steamOutflowFraction + advFraction + svFraction + ventFraction
 		supply := boilRateM3PerSec / ratedBoilM3PerSec
 		target := float64(SteamGeneratorShellPressure)
 		switch {
