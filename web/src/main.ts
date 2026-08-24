@@ -2,6 +2,7 @@
 
 import { loadWasm } from "./wasm";
 import { newPlant } from "./plant";
+import { loadDescriptions } from "./descriptions";
 import { mountPlant } from "./svg";
 import { renderPanel } from "./controls";
 import { renderReadout, refreshSensors, type SensorRow } from "./sensors";
@@ -34,6 +35,7 @@ async function main(): Promise<void> {
     // index.html so it lives on window.Go.
 
     await loadWasm();
+    await loadDescriptions();
 
     const pidEl = document.getElementById("pid") as HTMLElement;
     const tilesEl = document.getElementById("tiles") as HTMLElement;

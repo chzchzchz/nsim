@@ -3,7 +3,10 @@
 // controls.ts and sensors.ts consumes PartBinding[] to render a
 // part-grouped panel instead of a flat list of ambiguous names.
 
+import { marked } from "marked";
+
 import type { BridgeMeta, PlantHandle } from "./plant";
+import { helpFor } from "./descriptions";
 import { knownKind } from "./units";
 
 export interface Entry {
@@ -26,6 +29,17 @@ export interface PartBinding {
 export interface PrefixGroup {
     prefix: string;
     bindings: PartBinding[];
+}
+
+// isAlarmControl reports whether a bridge id belongs to the alarm
+// acknowledgment namespace ("Alarms/…"). Those controls are operated
+// from the dedicated alarm panel (alarms.ts): clicking an alarm row
+// sends Reset with that row's ID, and the panel header acknowledges
+// all. Rendering them as generic widgets would duplicate that UI
+// awkwardly - ResetAlarm wants an opaque alarm ID and AcknowledgeAll
+// is a one-option enum.
+export function isAlarmControl(id: string): boolean {
+    return id.startsWith("Alarms/");
 }
 
 // topLevelPrefix extracts the leading slash-delimited segment of
@@ -72,6 +86,77 @@ export function displayPart(prefix: string): PartDisplay {
 // string is reused for legends, sensor sub-headings, etc.
 export type PartDisplay = (part: string) => string;
 
+// Duration of the jump-target highlight, matching the ctl-error
+// flash cadence used elsewhere.
+const REF_FLASH_MS = 1500;
+
+// makeHelpButton builds the "(?)" toggle that reveals an element's
+// description inline; shared by the controls panel and the sensor
+// readout table. Descriptions are markdown (see
+// assets/descriptions/**.md) rendered with marked.
+export function makeHelpButton(text: string): HTMLButtonElement {
+    const btn = document.createElement("button");
+    btn.textContent = "?";
+    btn.className = "ctl-help";
+    btn.title = "What is this?";
+    btn.addEventListener("click", () => {
+        const prev = btn.nextElementSibling;
+        if (
+            prev instanceof HTMLElement &&
+            prev.classList.contains("help-text")
+        ) {
+            prev.remove();
+            return;
+        }
+        openTip(btn, text);
+    });
+    return btn;
+}
+
+// openTip renders one description next to its button. Markdown
+// links whose href is another bridge id are references: clicking
+// one closes this popup, scrolls that element's row into view, and
+// highlights it briefly. Ids with no rendered row (for example
+// alarm controls, which live only in the alarm panel) fall back to
+// swapping the popup to the referenced description.
+function openTip(btn: HTMLButtonElement, text: string): void {
+    const tip = document.createElement("span");
+    tip.className = "help-text md";
+    tip.innerHTML = marked.parse(text, { async: false });
+    tip.addEventListener("click", (ev) => {
+        const anchor = (ev.target as HTMLElement | null)?.closest("a");
+        const href = anchor?.getAttribute("href") ?? "";
+        if (href === "") return;
+        ev.preventDefault();
+        btn.nextElementSibling?.remove();
+        if (!revealElement(href)) {
+            const target = helpFor(href);
+            if (target !== undefined) {
+                openTip(btn, target);
+            }
+        }
+    });
+    btn.insertAdjacentElement("afterend", tip);
+}
+
+// revealElement jumps the viewport to the rendered row for a bridge
+// id and flashes it. Rows tag themselves with data-bridge-id;
+// scanning them all is cheap (a few hundred nodes) and avoids
+// CSS-escaping the ids, which contain slashes.
+function revealElement(id: string): boolean {
+    const rows = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-bridge-id]"),
+    );
+    for (const row of rows) {
+        if (row.dataset.bridgeId !== id) continue;
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+        row.classList.add("ref-flash");
+        window.setTimeout(() => row.classList.remove("ref-flash"), REF_FLASH_MS);
+        return true;
+    }
+    return false;
+}
+
 function fetchMeta(plant: PlantHandle, ids: string[]): Entry[] {
     const out: Entry[] = [];
     for (const id of ids) {
@@ -85,6 +170,21 @@ function fetchMeta(plant: PlantHandle, ids: string[]): Entry[] {
         out.push({ id, meta });
     }
     return out;
+}
+
+// sortBindings orders parts alphabetically and, within each part,
+// controls and sensors by id. Go map iteration order is randomized,
+// so without this the panel rows shuffle on every rebuild.
+export function sortBindings(bindings: PartBinding[]): PartBinding[] {
+    const byId = (a: Entry, b: Entry): number =>
+        a.id.localeCompare(b.id);
+    return bindings
+        .map((b) => ({
+            part: b.part,
+            controls: [...b.controls].sort(byId),
+            sensors: [...b.sensors].sort(byId),
+        }))
+        .sort((a, b) => a.part.localeCompare(b.part));
 }
 
 export function buildBindings(plant: PlantHandle): PartBinding[] {
@@ -121,7 +221,5 @@ export function buildBindings(plant: PlantHandle): PartBinding[] {
             Array.from(unknownKinds).sort().join(", "),
         );
     }
-    return Array.from(byPart.values()).sort((a, b) =>
-        a.part.localeCompare(b.part),
-    );
+    return sortBindings(Array.from(byPart.values()));
 }

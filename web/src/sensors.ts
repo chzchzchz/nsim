@@ -5,8 +5,9 @@
 // so it is captured once at render time and the per-frame refresh
 // pulls all readings in a single batched call.
 
-import type { Entry, PartBinding, PartDisplay } from "./bindings";
+import { makeHelpButton, type Entry, type PartBinding, type PartDisplay } from "./bindings";
 import type { PlantHandle } from "./plant";
+import { helpFor } from "./descriptions";
 import { formatSensorValue, unitFor } from "./units";
 import { isAlarmKind } from "./alarms";
 
@@ -69,9 +70,15 @@ function renderPartTable(
 function renderSensorRow(e: Entry, rows: SensorRow[]): HTMLElement {
     const { label, kind } = e.meta;
     const tr = document.createElement("tr");
+    // Anchor for description cross-references (see bindings.ts).
+    tr.dataset.bridgeId = e.id;
 
     const td1 = document.createElement("td");
     td1.textContent = label;
+    const desc = helpFor(e.id);
+    if (desc) {
+        td1.appendChild(makeHelpButton(desc));
+    }
     tr.appendChild(td1);
 
     const td2 = document.createElement("td");

@@ -3,8 +3,9 @@
 // by its Kind; controls are grouped under a part-level heading
 // that reads "Part.Label".
 
-import type { Entry, PartBinding, PartDisplay } from "./bindings";
+import { isAlarmControl, makeHelpButton, type Entry, type PartBinding, type PartDisplay } from "./bindings";
 import type { PlantHandle } from "./plant";
+import { helpFor } from "./descriptions";
 import { rangeFor, unitFor } from "./units";
 
 export function renderPanel(
@@ -14,7 +15,13 @@ export function renderPanel(
     display: PartDisplay,
 ): void {
     host.innerHTML = "";
-    const controlParts = bindings.filter((b) => b.controls.length > 0);
+    const controlParts = bindings
+        .map((b) => ({
+            part: b.part,
+            controls: b.controls.filter((e) => !isAlarmControl(e.id)),
+            sensors: b.sensors,
+        }))
+        .filter((b) => b.controls.length > 0);
     if (controlParts.length === 0) {
         host.textContent = "(no controls)";
         return;
@@ -68,10 +75,18 @@ function renderControl(
     const { kind, label } = e.meta;
     const row = document.createElement("div");
     row.className = "ctl-row";
+    // Anchor for description cross-references: clicking a link in
+    // any (?) popup jumps here and flashes the row.
+    row.dataset.bridgeId = e.id;
 
     const text = document.createElement("span");
     text.textContent = label;
     row.appendChild(text);
+
+    const desc = helpFor(e.id);
+    if (desc) {
+        row.appendChild(makeHelpButton(desc));
+    }
 
     // Read the control's current value from the rebuild-time
     // snapshot so the UI reflects live plant state on initial
@@ -98,18 +113,32 @@ function renderControl(
         // free-text input (preserves the legacy behaviour for
         // enum controls that haven't been annotated yet).
         if (e.meta.enum && e.meta.enum.length > 0) {
-            const sel = document.createElement("select");
-            for (let i = 0; i < e.meta.enum.length; i++) {
-                const opt = document.createElement("option");
-                opt.value = String(i);
-                opt.textContent = e.meta.enum[i];
-                sel.appendChild(opt);
+            if (e.meta.enum.length === 1) {
+                // A one-option enum is really a push button; a
+                // <select> with a single entry just looks broken.
+                // The option index (always "0") is the value the
+                // Go Set callback expects.
+                const btn = document.createElement("button");
+                btn.textContent = e.meta.enum[0];
+                btn.className = "btn";
+                btn.addEventListener("click", () => {
+                    writeControl(plant, e.id, "0", btn);
+                });
+                row.appendChild(btn);
+            } else {
+                const sel = document.createElement("select");
+                for (let i = 0; i < e.meta.enum.length; i++) {
+                    const opt = document.createElement("option");
+                    opt.value = String(i);
+                    opt.textContent = e.meta.enum[i];
+                    sel.appendChild(opt);
+                }
+                sel.value = initial;
+                sel.addEventListener("change", () => {
+                    writeControl(plant, e.id, sel.value, sel);
+                });
+                row.appendChild(sel);
             }
-            sel.value = initial;
-            sel.addEventListener("change", () => {
-                writeControl(plant, e.id, sel.value, sel);
-            });
-            row.appendChild(sel);
         } else {
             const inp = document.createElement("input");
             inp.type = "text";

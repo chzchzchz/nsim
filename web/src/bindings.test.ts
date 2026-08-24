@@ -6,13 +6,87 @@ import { describe, expect, it } from "vitest";
 import {
     displayPart,
     groupByPrefix,
+    isAlarmControl,
+    sortBindings,
     topLevelPrefix,
+    type Entry,
     type PartBinding,
 } from "./bindings";
 
 function part(part: string): PartBinding {
     return { part, controls: [], sensors: [] };
 }
+
+describe("isAlarmControl", () => {
+    it("matches the alarm acknowledgment namespace", () => {
+        expect(isAlarmControl("Alarms/Reset")).toBe(true);
+        expect(isAlarmControl("Alarms/AcknowledgeAll")).toBe(true);
+    });
+
+    it("leaves every other id alone", () => {
+        expect(isAlarmControl("Plant/Alarms")).toBe(false);
+        expect(isAlarmControl("Alarms/Active")).toBe(true);
+        expect(
+            isAlarmControl("ReactorBuilding/ReactorProtectionSystem/Reset"),
+        ).toBe(false);
+    });
+});
+
+describe("sortBindings", () => {
+    function entry(id: string): Entry {
+        return { id, meta: { part: "", label: id, kind: "bool" } };
+    }
+
+    it("sorts controls and sensors within each part by id", () => {
+        const sorted = sortBindings([
+            {
+                part: "ReactorBuilding/Pressurizer",
+                controls: [
+                    entry("ReactorBuilding/Pressurizer/SprayOpen"),
+                    entry("ReactorBuilding/Pressurizer/HeatersOn"),
+                ],
+                sensors: [
+                    entry("ReactorBuilding/Pressurizer/Water"),
+                    entry("ReactorBuilding/Pressurizer/Pressure"),
+                ],
+            },
+        ]);
+        expect(sorted[0].controls.map((e) => e.id)).toEqual([
+            "ReactorBuilding/Pressurizer/HeatersOn",
+            "ReactorBuilding/Pressurizer/SprayOpen",
+        ]);
+        expect(sorted[0].sensors.map((e) => e.id)).toEqual([
+            "ReactorBuilding/Pressurizer/Pressure",
+            "ReactorBuilding/Pressurizer/Water",
+        ]);
+    });
+
+    it("orders parts alphabetically and does not mutate inputs", () => {
+        const first: PartBinding = {
+            part: "TurbineBuilding/Turbine",
+            controls: [],
+            sensors: [],
+        };
+        const second: PartBinding = {
+            part: "AuxiliaryBuilding/DieselGenerator",
+            controls: [],
+            sensors: [],
+        };
+        const sorted = sortBindings([first, second]);
+        expect(sorted.map((b) => b.part)).toEqual([
+            "AuxiliaryBuilding/DieselGenerator",
+            "TurbineBuilding/Turbine",
+        ]);
+        expect([first, second]).toEqual([
+            { part: "TurbineBuilding/Turbine", controls: [], sensors: [] },
+            {
+                part: "AuxiliaryBuilding/DieselGenerator",
+                controls: [],
+                sensors: [],
+            },
+        ]);
+    });
+});
 
 describe("topLevelPrefix", () => {
     it("returns the leading slash-delimited segment", () => {
