@@ -69,10 +69,8 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 	// Guards are sampled every checkEvery-th step: the descent takes
 	// tens of simulated seconds while the trip/pressure physics move
 	// on second scales, so a 200 ms sample rate cannot miss a regime.
-	const (
-		stepsPerInterval = int(5 * time.Second / TimeStep)
-		checkEvery       = 200
-	)
+	const checkEvery = 200
+	stepsPerInterval := int(5 * time.Second / TimeStep)
 
 	prevMW := totalMW()
 	for _, sp := range spSteps {

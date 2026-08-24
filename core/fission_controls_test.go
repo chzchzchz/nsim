@@ -172,7 +172,7 @@ func TestBridge_SensorsReflectState(t *testing.T) {
 // or neutron capability is near zero at the top and bottom
 // ends of the core" (specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:124-132).
 func TestThermal_RodWithdrawalRaisesReactivity(t *testing.T) {
-	const steps = int(5 * time.Second / TimeStep)
+	steps := int(5 * time.Second / TimeStep)
 	const seedPower = CoreRatedThermalPower / 2
 
 	// Insertion 0.7 = rods 30% withdrawn (mostly inserted).
@@ -242,7 +242,7 @@ func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 	// Both legs share the same scrammed seed, so decay-heat
 	// trajectories diverge (if at all) from the first step; a
 	// short window is as probative as a long one.
-	const steps = int(15 * time.Second / TimeStep)
+	steps := int(15 * time.Second / TimeStep)
 
 	base := MakePlant()
 	// Scram both units explicitly. The old MakePlant self-scram
@@ -319,7 +319,7 @@ func TestThermal_Fission4_BorationLowersOutlet(t *testing.T) {
 		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = true
 		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = true
 
-		const warmup = int(15 * time.Second / TimeStep)
+		warmup := int(15 * time.Second / TimeStep)
 		stepN(&p, warmup)
 
 		if borate {
@@ -331,7 +331,7 @@ func TestThermal_Fission4_BorationLowersOutlet(t *testing.T) {
 			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
 		}
 
-		const steps = int(90 * time.Second / TimeStep)
+		steps := int(90 * time.Second / TimeStep)
 		stepN(&p, steps)
 		return p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 	}

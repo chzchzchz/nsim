@@ -15,7 +15,18 @@ type Volume UnitVal
 type Watts float64
 type RPM float64
 
-const TimeStep = time.Millisecond
+const DefaultTimeStep = time.Millisecond
+
+// TimeStep is the simulated time consumed by every Step call. It
+// defaults to DefaultTimeStep and is widened only by tests spanning
+// many hours of simulated time (see overrideTimeStep).
+//
+// WARNING: a wider step lowers integration fidelity. Trips, ramp
+// limiters, and valve strokes calibrated for the default 1 ms tick
+// can clip or alias, so results may diverge from production behavior
+// and make assertions wrong. Use an override only when absolutely
+// needed.
+var TimeStep = DefaultTimeStep
 
 // Shared unit-conversion factors and fluid properties for the
 // lumped thermal models. Water is treated as 1 kg/L, so one

@@ -239,7 +239,7 @@ func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
 	// Boron is seeded directly in both legs, so Reactivity reflects
 	// the swing as soon as thermal feedback settles; 30 s covers
 	// the relaxation without a full minute of stepping.
-	const steps = int(30 * time.Second / TimeStep)
+	steps := int(30 * time.Second / TimeStep)
 
 	high := MakePlant()
 	high.ReactorBuilding.ReactorCoolantPump.Running = true

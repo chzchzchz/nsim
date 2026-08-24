@@ -110,14 +110,19 @@ func TestCCWS_PumpsRunningOutletAboveInletByApproachTemp(t *testing.T) {
 //     after four hours."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112
 func TestCCWS_InletRecoversWithinFourHours(t *testing.T) {
-	t.Parallel()
+	// The recovery tau is one hour, orders of magnitude wider than
+	// the step, and Step folds the closed-form lag on every call,
+	// so a coarse step cannot distort the relaxation trajectory.
+	// Must not run in parallel: overrideTimeStep mutates global
+	// simulation state.
+	overrideTimeStep(t, time.Minute)
 	c := CCWS{
 		PumpRunning: true,
 		DriveReady:  true,
 		InletTemp:   Temperature{Val: 120.0, Unit: u.Fahrenheit},
 		OutletTemp:  Temperature{Val: 120.0, Unit: u.Fahrenheit},
 	}
-	// 4 hours of simulated time at 1 ms per step.
+	// 4 hours of simulated time at 1 min per step.
 	swSupply := Temperature{Val: 70, Unit: u.Fahrenheit}
 	steps := int(4 * time.Hour / TimeStep)
 	for i := 0; i < steps; i++ {
