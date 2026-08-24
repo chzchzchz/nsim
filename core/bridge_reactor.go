@@ -119,6 +119,37 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	// atmospheric dump valves are located on each steam
 	// line upstream of the stop valves."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	// Steam generator wet-layup fill valve (chapter 16 shutdown):
+	// tops the shell steam side to the vents once the reactor
+	// coolant reaches layup temperature and the header is at vent
+	// pressure.
+	// "When the reactor coolant reaches 200°F (93°C), the steam
+	// sides of the steam generators are filled to the vents for wet
+	// layup."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:144-145
+	m["ReactorBuilding/SteamGenerator/WetLayupFillValve/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/SteamGenerator/WetLayupFillValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.SteamGenerator.WetLayupFillValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SteamGenerator.WetLayupFillValve.Open = v
+			return nil
+		},
+	}
+
+
 	m["ReactorBuilding/SteamGenerator/MainSteamIsolationValve/Open"] = &bridge.Control{
 		Part:  "ReactorBuilding/SteamGenerator/MainSteamIsolationValve",
 		Label: "Open",
@@ -786,6 +817,20 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 	// atmospheric dump valves are located on each steam line
 	// upstream of the stop valves."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	// Steam generator wet-layup fill valve position:
+	// read-back of the vent-fill path used at the end of cooldown.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:144-145
+	m["ReactorBuilding/SteamGenerator/WetLayupFillValve/Open"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator/WetLayupFillValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.SteamGenerator.WetLayupFillValve.Open)
+		},
+	}
+
+
 	m["ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open"] = &bridge.Sensor{
 		Part:  "ReactorBuilding/SteamGenerator/AtmosphericDumpValve",
 		Label: "Open",

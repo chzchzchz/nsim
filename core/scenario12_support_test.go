@@ -173,3 +173,67 @@ func TestSIS_AccumulatorIsolationShutBlocksDischarge(t *testing.T) {
 	assert.Less(t, open.Accumulator.Level.Float(),
 		SISAccumulatorPerTankCapacity.Float())
 }
+
+// Wet layup fill tops shell inventory toward the vents once the
+// header is at vent pressure, and refuses a live header.
+//
+// "When the reactor coolant reaches 200°F (93°C), the steam sides of
+// the steam generators are filled to the vents for wet layup."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:144-145
+func TestSteamGenerator_WetLayupFillTopsToVents(t *testing.T) {
+	live := SteamGenerator{
+		Volume: Volume{Val: 100000, Unit: u.Gallon},
+		Water:  Volume{Val: 30000, Unit: u.Gallon},
+	}
+	live.Pressure = Pressure(SGWetLayupMaxHeaderPsia + 100)
+	live.WetLayupFillValve = Valve{Open: 1}
+	for range int(60 * time.Second / TimeStep) {
+		live = live.Step(0)
+	}
+	assert.Equal(t, 30000.0, live.Water.Float(),
+		"a live header must not accept layup fill")
+
+	vented := SteamGenerator{
+		Volume: Volume{Val: 100000, Unit: u.Gallon},
+		Water:  Volume{Val: 30000, Unit: u.Gallon},
+	}
+	vented.Pressure = Pressure(5)
+	vented.WetLayupFillValve = Valve{Open: 1}
+	for range int(60 * time.Second / TimeStep) {
+		vented = vented.Step(0)
+	}
+	wantGain := SGWetLayupFillGalPerSec * 60.0
+	assert.InDelta(t, 30000+wantGain, vented.Water.Float(), wantGain*0.01,
+		"fill should add the design rate while below the vents")
+
+	for range int(3500 * time.Second / TimeStep) {
+		vented = vented.Step(0)
+	}
+	assert.Equal(t, 100000.0, vented.Water.Float(),
+		"fill clamps at the vents (shell full)")
+}
+
+// The manual charging throttle scales design flow in non-auto mode;
+// the auto level controller is unaffected by it.
+//
+// "The charging pump flow and low-pressure letdown valve are
+// controlled manually during plant startup and cooldown."
+// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115-116
+func TestCVCS_ChargingFlowDemandThrottlesManualFlow(t *testing.T) {
+	hotTavg := Temperature{Val: 571, Unit: u.Fahrenheit}
+	c := CVCS{ChargingPumpRunning: true}
+	c = c.Step(Volume{}, hotTavg, 0.6)
+	require.Equal(t, CVCSDesignChargingFlow.Float(), c.ChargingFlow.Float(),
+		"default demand keeps full design flow")
+
+	half := CVCS{ChargingPumpRunning: true, ChargingFlowDemand: 0.5}
+	half = half.Step(Volume{}, hotTavg, 0.6)
+	assert.InDelta(t, CVCSDesignChargingFlow.Float()*0.5,
+		half.ChargingFlow.Float(), 1e-9)
+
+	full := CVCS{ChargingPumpRunning: true, ChargingFlowDemand: 2}
+	full = full.Step(Volume{}, hotTavg, 0.6)
+	assert.InDelta(t, CVCSDesignChargingFlow.Float(),
+		full.ChargingFlow.Float(), 1e-9,
+		"demand clamps at design flow")
+}

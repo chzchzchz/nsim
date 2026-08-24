@@ -57,6 +57,16 @@ type SteamGenerator struct {
 	// steam line upstream of the stop valves."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
 	AtmosphericDumpValve Valve
+
+	// WetLayupFillValve tops the shell steam side with water up to
+	// the vents once the reactor coolant is at layup temperature
+	// and the header is de-pressurised. The Step refuses to fill a
+	// live header.
+	// "When the reactor coolant reaches 200°F (93°C), the steam
+	// sides of the steam generators are filled to the vents for wet
+	// layup."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:144-145
+	WetLayupFillValve Valve
 }
 
 func (s *SteamGenerator) Update() SteamGenerator {
@@ -87,6 +97,18 @@ const (
 	// a trapped, non-boiling shell header (seconds). Assumption: the
 	// source describes quenching to zero psig but gives no rate.
 	SGPassiveQuenchTau float64 = 600
+
+	// SGWetLayupFillGalPerSec sizes the vent-fill path at full valve
+	// opening. Assumption: the source gives no duration; compressed
+	// so a lumped shell tops off within a simulated hour.
+	SGWetLayupFillGalPerSec = 20.0
+
+	// SGWetLayupMaxHeaderPsia caps the header pressure at which the
+	// fill path operates ("As the steam generator steam pressure
+	// approaches zero psig" — page_227.txt:141-143). Slightly above
+	// atmospheric to admit a settling header.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:141-143
+	SGWetLayupMaxHeaderPsia = 20.0
 	LatentHeatOfSteamization          Watts    = 2.26e6
 
 	// SteamGeneratorSafetyValveSetpointPsia pops the spring-loaded
@@ -212,6 +234,18 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 	// atmospheric dump valves are located on each steam line
 	// upstream of the stop valves."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	// Wet layup fill: with the header at vent pressure, an open
+	// fill path tops shell inventory toward the vents (page_227.txt:
+	// 141-147). Filling neither re-pressurises nor heats the trapped
+	// header (assumption; quench continues independently).
+	if ret.WetLayupFillValve.Open > 0 &&
+		float64(ret.Pressure) <= SGWetLayupMaxHeaderPsia {
+		add := ret.WetLayupFillValve.Open * SGWetLayupFillGalPerSec *
+			dt.Seconds()
+		ret.Water = vol(ret.Water,
+			min(ret.Water.Float()+add, ret.Volume.Float()))
+	}
+
 	advFraction := 0.0
 	if ret.AtmosphericDumpValve.Open > 0 && ret.Pressure > 0 {
 		advFraction = ret.AtmosphericDumpValve.Open * AtmosphericDumpFraction

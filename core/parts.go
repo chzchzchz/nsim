@@ -1987,6 +1987,15 @@ type CVCS struct {
 	// independently of the reactor coolant pumps.
 	ChargingPumpRunning bool
 
+	// ChargingFlowDemand is the manual throttle on charging flow
+	// while the pump latch runs in non-auto mode: 0 (zero value)
+	// means unthrottled design flow, (0..1] scales it. Shutting
+	// charging stays the pump latch's job.
+	// "The charging pump flow and low-pressure letdown valve are
+	// controlled manually during plant startup and cooldown."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115-116
+	ChargingFlowDemand float64
+
 	// LetdownValveOpen is the operator latch on the letdown
 	// isolation valve. The CVCS Step sets LetdownFlow from this
 	// field; when the VCT high-level condition diverts letdown,

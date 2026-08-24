@@ -395,6 +395,35 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 	// CVCS letdown valve-open latch. The CVCS Step reads
 	// LetdownValveOpen to decide LetdownFlow (in conjunction
 	// with the operating mode — CVCSLetdown forces it closed).
+	// Manual charging-flow throttle (chapter 4): scales the design
+	// charging flow while the pump latch runs outside auto level
+	// control.
+	// "The charging pump flow and low-pressure letdown valve are
+	// controlled manually during plant startup and cooldown."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115-116
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingFlowDemand"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "ChargingFlowDemand",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingFlowDemand)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingFlowDemand = v
+			return nil
+		},
+	}
+
+
 	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen"] = &bridge.Control{
 		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
 		Label: "LetdownValveOpen",

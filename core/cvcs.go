@@ -109,7 +109,17 @@ func (c *CVCS) Step(
 	if ret.AutoLevelControl {
 		ret.applyLevelControl(pzrLevelFraction)
 	} else if ret.ChargingPumpRunning {
-		ret.ChargingFlow = CVCSDesignChargingFlow
+		// Zero demand means unthrottled so the zero value keeps the
+		// historical full-design behavior; shutting charging is the
+		// pump latch's job.
+		demand := ret.ChargingFlowDemand
+		if demand > 0 {
+			demand = min(demand, 1)
+			ret.ChargingFlow = Volume{
+				Val: CVCSDesignChargingFlow.Float() * demand, Unit: u.Gallon}
+		} else {
+			ret.ChargingFlow = CVCSDesignChargingFlow
+		}
 	} else {
 		ret.ChargingFlow = Volume{Val: 0, Unit: u.Gallon}
 	}
