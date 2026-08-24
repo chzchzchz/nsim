@@ -225,6 +225,7 @@ func SymbolFiles() []SymbolFile {
 		add("fuel-tank.svg", symbolBlockForID(dieselAsset, "fuel-tank"), 30, 40),
 		add("esf-bus.svg", symbolBlockForID(transformerAsset, "esf-bus"), 120, 20),
 		add("grid-bus.svg", symbolBlockForID(transformerAsset, "grid-bus"), 30, 50),
+		add("breaker.svg", symbolBlockForID(transformerAsset, "breaker"), 24, 24),
 		add("sis-accumulators.svg", symbolBlockForID(safetySystemsAsset, "sis-accumulators"), 60, 80),
 		add("efws-tank.svg", symbolBlockForID(safetySystemsAsset, "efws-tank"), 80, 100),
 		add("ccws-hx.svg", symbolBlockForID(safetySystemsAsset, "ccws-hx"), 100, 50),

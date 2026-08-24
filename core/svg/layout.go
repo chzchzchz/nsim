@@ -65,6 +65,35 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	{"Intake", "cluster_turbine", "RiverIntake"},
 	{"SWSHeader", "cluster_auxiliary", "ServiceWaterHeader"},
 
+	// Safety injection completion: the refueling water storage
+	// tank and high-head injection pump beside the accumulators
+	// (specs/the_westinghouse_pressurized_water_react/
+	//  chapter_5/page_097.txt:24-25 - HHSI and RHR take suction
+	//  directly from the RWST).
+	{"RWST", "cluster_containment", "RefuelingWaterStorageTank"},
+	{"HHSI", "cluster_containment", "HHSIPump"},
+
+	// Containment spray train: borated-water and NaOH additive
+	// tanks plus the spray pumps (chapter_6/page_114.txt:55-63).
+	{"CSSTank", "cluster_auxiliary", "ContainmentSprayStorageTank"},
+	{"SATTank", "cluster_auxiliary", "SprayAdditiveTank"},
+	{"CSSPump", "cluster_auxiliary", "ContainmentSprayPump"},
+
+	// CVCS skid: volume control tank and charging pump; the aux
+	// spray and letdown valves render via scalarValves.
+	{"VCT", "cluster_auxiliary", "VolumeControlTank"},
+	{"ChgPump", "cluster_auxiliary", "ChargingPump"},
+	{"AUXSPRAY", "cluster_containment", "modulating"},
+	{"LTDVN", "cluster_auxiliary", "stop"},
+
+	// PRT quench spray: meters cold water into the relief tank
+	// (specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt).
+	{"PRTSPRAY", "cluster_containment", "modulating"},
+
+	// Moisture separator reheater between the HP/LP turbine
+	// sections (chapter_15 figure 15.3-1 steam path).
+	{"MSR", "cluster_turbine", "MoistureSeparatorReheater"},
+
 	// Live valves that carry no fluid edge; positions come from
 	// standaloneValves rendering.
 	{"SGMSIV", "cluster_containment", "modulating"},

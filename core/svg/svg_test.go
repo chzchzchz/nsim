@@ -96,7 +96,7 @@ func TestSymbolManifest(t *testing.T) {
 
 	refs := map[string]bool{
 		"containment-dome": true, "css-spray-headers": true, "rcfc-unit": true,
-		"valve-safety": true, "valve-porv": true,
+		"valve-safety": true, "valve-porv": true, "breaker": true,
 	}
 	for _, dp := range diagramParts {
 		refs[symbolID(dp.kind)] = true
@@ -278,4 +278,59 @@ func TestValveKindForEdge(t *testing.T) {
 				c.from, c.to, got, c.want)
 		}
 	}
+}
+
+// TestSafetyAndChemicalTrainsRender checks the SI completion (RWST,
+// HHSI), containment spray train, CVCS skid, and MSR resolve against
+// the embedded layout, and that their pumps draw live run dots.
+func TestSafetyAndChemicalTrainsRender(t *testing.T) {
+	p := core.MakePlant()
+	out := renderPlant(t, &p)
+	for _, label := range []string{
+		"RWST", "HHSI", "CSST", "SAT", "CSS Pump", "VCT", "Chg Pump", "MSR",
+	} {
+		assert.Contains(t, out, ">"+label+"<")
+	}
+	assert.NotContains(t, out, "anchors missing")
+	require.Equal(t, len(levelAccessors),
+		strings.Count(out, `class="level-gauge"`),
+		"every tank-backed part renders exactly one gauge")
+
+	base := strings.Count(out, `fill="green"`)
+	p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = true
+	p.AuxiliaryBuilding.ContainmentSpraySystem.Running = true
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = true
+	assert.Greater(t, strings.Count(renderPlant(t, &p), `fill="green"`),
+		base, "running HHSI/CSS/charging pumps must draw green dots")
+}
+
+// TestScalarValvesRenderWedges checks float-driven valves share the
+// standalone-valve wedge/tooltip encoding.
+func TestScalarValvesRenderWedges(t *testing.T) {
+	p := core.MakePlant()
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AuxSprayValveOpen = 0.5
+	out := renderPlant(t, &p)
+	assert.Contains(t, out,
+		`data-part="AuxiliaryBuilding/ChemicalVolumeControlSystem"`)
+	assert.Contains(t, out, "<title>50%</title>")
+}
+
+// TestElectricalTiesShowBreakerState checks the four one-line ties
+// carry breaker glyphs whose status dot tracks the contact state.
+func TestElectricalTiesShowBreakerState(t *testing.T) {
+	p := core.MakePlant()
+	p.Electrical.ESFBusA.BreakerClosed = false
+	p.Electrical.ESFBusB.BreakerClosed = false
+	p.TurbineBuilding.Generator.BreakerClosed = false
+	p.ReactorBuilding.Grid.Voltage = 0
+
+	out := renderPlant(t, &p)
+	require.Equal(t, len(electricalTies),
+		strings.Count(out, `class="breaker"`))
+	allOpen := strings.Count(out, `fill="#aaa"`)
+
+	p.Electrical.ESFBusA.BreakerClosed = true
+	closed := renderPlant(t, &p)
+	assert.Equal(t, allOpen-1, strings.Count(closed, `fill="#aaa"`),
+		"closing a bus breaker must turn exactly one contact green")
 }

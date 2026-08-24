@@ -33,6 +33,7 @@ import (
 	"sort"
 	"strings"
 
+	u "github.com/bcicen/go-units"
 	"github.com/chzchzchz/nsim/core"
 )
 
@@ -115,6 +116,14 @@ var diagramParts = []diagramPart{
 	{"CoolingTower", "Outside/CoolingTower", "CoolingTower", "Cooling Tower"},
 	{"Intake", "Outside/CirculatingWaterSystem", "RiverIntake", "Intake House"},
 	{"SWSHeader", "Outside/ServiceWaterSystem", "ServiceWaterHeader", "SWS Header"},
+	{"RWST", "ReactorBuilding/SafetyInjectionSystem/RWST", "RefuelingWaterStorageTank", "RWST"},
+	{"HHSI", "ReactorBuilding/SafetyInjectionSystem", "HHSIPump", "HHSI"},
+	{"CSSTank", "AuxiliaryBuilding/ContainmentSpraySystem/CSST", "ContainmentSprayStorageTank", "CSST"},
+	{"SATTank", "AuxiliaryBuilding/ContainmentSpraySystem/SAT", "SprayAdditiveTank", "SAT"},
+	{"CSSPump", "AuxiliaryBuilding/ContainmentSpraySystem", "ContainmentSprayPump", "CSS Pump"},
+	{"VCT", "AuxiliaryBuilding/ChemicalVolumeControlSystem/VCT", "VolumeControlTank", "VCT"},
+	{"ChgPump", "AuxiliaryBuilding/ChemicalVolumeControlSystem", "ChargingPump", "Chg Pump"},
+	{"MSR", "TurbineBuilding/MoistureSeparatorReheater", "MoistureSeparatorReheater", "MSR"},
 }
 
 // buildingLabels captions the cluster outlines drawn behind symbols.
@@ -204,6 +213,15 @@ var runAccessors = map[string]func(*core.Plant) bool{
 		st := p.ReactorBuilding.StationTransformer
 		return st.UATEnergized || st.SATEnergized
 	},
+	"HHSI": func(p *core.Plant) bool {
+		return p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning
+	},
+	"CSSPump": func(p *core.Plant) bool {
+		return p.AuxiliaryBuilding.ContainmentSpraySystem.Running
+	},
+	"ChgPump": func(p *core.Plant) bool {
+		return p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning
+	},
 }
 
 // levelAccessors maps tank-backed diagram parts to their live
@@ -241,6 +259,20 @@ var levelAccessors = map[string]func(*core.Plant) (core.Volume, core.Volume){
 	"CoolingTower": func(p *core.Plant) (core.Volume, core.Volume) {
 		t := p.Outside.CoolingTower.Basin
 		return t.Level, t.Capacity
+	},
+	// RWST borated-water margin gates the recirculation switchover
+	// (specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25).
+	"RWST": func(p *core.Plant) (core.Volume, core.Volume) {
+		return p.ReactorBuilding.SafetyInjectionSystem.RWSTLevel,
+			core.Volume{Val: core.SISRWSTCapacity, Unit: u.Gallon}
+	},
+	"CSSTank": func(p *core.Plant) (core.Volume, core.Volume) {
+		return p.AuxiliaryBuilding.ContainmentSpraySystem.CSSTLevel,
+			core.CSSTCapacity
+	},
+	"SATTank": func(p *core.Plant) (core.Volume, core.Volume) {
+		return p.AuxiliaryBuilding.ContainmentSpraySystem.SATLevel,
+			core.SATCapacity
 	},
 }
 
@@ -426,6 +458,27 @@ var standaloneValves = []struct {
 		func(p *core.Plant) *core.Valve {
 			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantPressureValve
 		}},
+	{"PRTSPRAY", "ReactorBuilding/PRTSprayValve", "modulating",
+		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.PRTSprayValve }},
+}
+
+// scalarValves binds valve-shaped model fields that are plain 0..1
+// floats rather than core.Valve structs (CVCS throttle valves), so
+// they share the wedge/tooltip encoding without wrapper plumbing.
+var scalarValves = []struct {
+	id   string
+	part string
+	kind string
+	open func(*core.Plant) float64
+}{
+	{"AUXSPRAY", "AuxiliaryBuilding/ChemicalVolumeControlSystem", "modulating",
+		func(p *core.Plant) float64 {
+			return p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AuxSprayValveOpen
+		}},
+	{"LTDVN", "AuxiliaryBuilding/ChemicalVolumeControlSystem", "stop",
+		func(p *core.Plant) float64 {
+			return float64(boolToInt(p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen))
+		}},
 }
 
 // renderer composes one SVG document against a specific layout,
@@ -525,6 +578,59 @@ func (r *renderer) overlapsPart(x, y, w, h float64) bool {
 		}
 	}
 	return false
+}
+
+// electricalTie is one single-line segment between two dot-placed
+// electrical nodes, gated by a live contact state. The master plan
+// cuts full one-line diagrams (plans/svg/composition.md), so this
+// stays minimal: straight ties plus a contact glyph per segment,
+// no bus work beyond the four placed nodes.
+var electricalTies = []struct {
+	from, to string
+	closed   func(*core.Plant) bool
+}{
+	{from: "Grid", to: "Transformer", closed: func(p *core.Plant) bool {
+		return p.ReactorBuilding.Grid.Voltage > 0
+	}},
+	{from: "Generator", to: "Transformer", closed: func(p *core.Plant) bool {
+		return p.TurbineBuilding.Generator.BreakerClosed
+	}},
+	{from: "Transformer", to: "ESF_A", closed: func(p *core.Plant) bool {
+		return p.Electrical.ESFBusA.BreakerClosed
+	}},
+	{from: "Transformer", to: "ESF_B", closed: func(p *core.Plant) bool {
+		return p.Electrical.ESFBusB.BreakerClosed
+	}},
+}
+
+// writeElectricalTies draws each tie as a straight segment clipped
+// at the endpoint symbols' boundaries, with a breaker glyph at the
+// midpoint whose center dot encodes the contact: green closed,
+// grey open (same status encoding as pump run dots).
+func (r *renderer) writeElectricalTies(b *strings.Builder, p *core.Plant) {
+	for _, t := range electricalTies {
+		from, okF := r.anchor(t.from)
+		to, okT := r.anchor(t.to)
+		if !okF || !okT {
+			continue
+		}
+		fw, fh := r.size(r.kindOf(t.from))
+		tw, th := r.size(r.kindOf(t.to))
+		a := clipToward(from, to, fw, fh)
+		bpt := clipToward(to, from, tw, th)
+		fmt.Fprintf(b,
+			`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="2" vector-effect="non-scaling-stroke"/>`+"\n",
+			a.X, a.Y, bpt.X, bpt.Y, pidDotEdge)
+		mid := Anchor{X: (a.X + bpt.X) / 2, Y: (a.Y + bpt.Y) / 2}
+		bw2, bh2 := r.size("breaker")
+		colour := statusOff
+		if t.closed(p) {
+			colour = statusOn
+		}
+		fmt.Fprintf(b,
+			`<g class="breaker"><use href="#breaker" x="%.0f" y="%.0f" width="%.0f" height="%.0f"/><circle cx="%.0f" cy="%.0f" r="3.5" fill="%s"/></g>`+"\n",
+			mid.X-bw2/2, mid.Y-bh2/2, bw2, bh2, mid.X, mid.Y, colour)
+	}
 }
 
 // clipToward pushes a point from its symbol center along the ray
@@ -885,6 +991,11 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		}
 	}
 
+	// Electrical one-line ties between the dot-placed grid,
+	// transformer, generator, and ESF buses, with a live contact
+	// glyph on each (see electricalTies).
+	r.writeElectricalTies(&b, p)
+
 	// Pipes first so symbols render on top of their process lines.
 	g := p.BuildGraphFor(p)
 	for _, e := range g.Edges {
@@ -951,22 +1062,32 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 
 	// Standalone valves: same wedge/tooltip encoding as the edge
 	// valves, anchored where dot placed each extra node.
+	writeValveBody := func(part string, a Anchor, kind string, open float64) {
+		vw, vh := r.size(kind)
+		pct := int(math.Round(open * 100))
+		wedge := valveWedgePath(a, math.Min(vw, vh)*0.45, open,
+			valveWedgeFill(kind, open))
+		use := fmt.Sprintf(
+			`<use href="#%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>`,
+			SymbolForKind(kind), a.X-vw/2, a.Y-vh/2, vw, vh)
+		writePartEl(part, "",
+			fmt.Sprintf(`<g><title>%d%%</title>%s%s</g>`, pct, use, wedge))
+	}
 	for _, sv := range standaloneValves {
 		a, ok := r.anchor(sv.id)
 		if !ok {
 			r.missing[sv.id] = true
 			continue
 		}
-		vw, vh := r.size(sv.kind)
-		v := sv.valve(p)
-		pct := int(math.Round(v.Open * 100))
-		wedge := valveWedgePath(a, math.Min(vw, vh)*0.45, v.Open,
-			valveWedgeFill(sv.kind, v.Open))
-		use := fmt.Sprintf(
-			`<use href="#%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>`,
-			SymbolForKind(sv.kind), a.X-vw/2, a.Y-vh/2, vw, vh)
-		writePartEl(sv.part, "",
-			fmt.Sprintf(`<g><title>%d%%</title>%s%s</g>`, pct, use, wedge))
+		writeValveBody(sv.part, a, sv.kind, sv.valve(p).Open)
+	}
+	for _, sv := range scalarValves {
+		a, ok := r.anchor(sv.id)
+		if !ok {
+			r.missing[sv.id] = true
+			continue
+		}
+		writeValveBody(sv.part, a, sv.kind, sv.open(p))
 	}
 
 	// Live overlays: readouts and alarm rings track their symbols.
