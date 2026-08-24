@@ -186,6 +186,14 @@ var levelAccessors = map[string]func(*core.Plant) (core.Volume, core.Volume){
 		t := p.AuxiliaryBuilding.DieselGenerator.Fuel
 		return t.Level, t.Capacity
 	},
+	"SG": func(p *core.Plant) (core.Volume, core.Volume) {
+		s := p.ReactorBuilding.SteamGenerator
+		return s.Water, s.Volume
+	},
+	"Pressurizer": func(p *core.Plant) (core.Volume, core.Volume) {
+		pz := p.ReactorBuilding.Pressurizer
+		return pz.Water, pz.Volume
+	},
 }
 
 // tintAmber/tintRed are halo colours for warning vs trip severity.
@@ -445,7 +453,7 @@ func (r *renderer) pipe(p *core.Plant, e core.GraphEdge) string {
 		dur := clampRange(900/float64(e.Pump.Velocity), 0.6, 10)
 		pathFrag = DrawPipePathAnimated(pts, colour, dur)
 	} else {
-		pathFrag = DrawPipePath(pts, colour)
+		pathFrag = DrawPipePathIdle(pts, colour)
 	}
 	if e.Valve == nil {
 		return pathFrag
@@ -752,8 +760,6 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// Live overlays: readouts and alarm rings track their symbols.
 	r.writeLiveOverlays(&b, p, alarms)
 
-	writeAlarmPanel(&b, alarms)
-	writeLegend(&b)
 	b.WriteString("</g>\n")
 
 	if len(r.missing) > 0 {
@@ -988,122 +994,6 @@ func writeLevelGauge(b *strings.Builder, a Anchor, sw, sh, frac float64) {
 			`</g>`+"\n",
 		x, y, gaugeWidth, h, pidBuildingEdge,
 		x+gaugePadding, y+h-gaugePadding-fillH, gaugeWidth-2*gaugePadding, fillH, gaugeFill)
-}
-
-// writeAlarmPanel docks the live alarm list above the legend so
-// static exports are self-describing: worst severity first, capped
-// with an overflow line so a flood of alarms cannot cover the
-// mimic. Absent entirely when the plant is alarm-free.
-func writeAlarmPanel(b *strings.Builder, alarms []core.Alarm) {
-	const (
-		maxRows = 5
-		lineH   = 13.0
-		baseY   = DocumentHeight - 24
-	)
-	if len(alarms) == 0 {
-		return
-	}
-	sorted := make([]core.Alarm, len(alarms))
-	copy(sorted, alarms)
-	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].Severity != sorted[j].Severity {
-			return sorted[i].Severity > sorted[j].Severity
-		}
-		return sorted[i].ID < sorted[j].ID
-	})
-
-	b.WriteString(`<g id="alarms">` + "\n")
-	for i, a := range sorted {
-		if i == maxRows {
-			fmt.Fprintf(b,
-				`<text x="14" y="%.0f" font-size="10" fill="%s">+%d more</text>`+"\n",
-				baseY-float64(i)*lineH+3, pidText, len(sorted)-maxRows)
-			break
-		}
-		colour := tintAmber
-		if a.Severity == core.SeverityTrip {
-			colour = tintRed
-		}
-		fmt.Fprintf(b,
-			`<text x="14" y="%.0f" font-size="10" fill="%s">%s</text>`+"\n",
-			baseY-float64(i)*lineH+3, colour, html.EscapeString(a.String()))
-	}
-	b.WriteString("</g>\n")
-}
-
-// pipeLegendLabels captions each colour in pipeColours so the
-// legend is generated from the same table as the arrow markers
-// and cannot drift from the pipes actually drawn.
-var pipeLegendLabels = map[string]string{
-	"red":   "RCS",
-	"brown": "steam / condensate",
-	"blue":  "feedwater",
-	"black": "other",
-}
-
-// legendEntry is one labelled swatch in the docked legend row.
-type legendEntry struct {
-	colour string
-	text   string
-	swatch string
-}
-
-// writeLegend docks a one-line key under the mimic: pipe colours
-// from pipeColours, then status-dot and alarm-halo semantics
-// reused verbatim from the overlay constants.
-func writeLegend(b *strings.Builder) {
-	entries := make([]legendEntry, 0, len(pipeColours)+4)
-	for _, c := range pipeColours {
-		label, ok := pipeLegendLabels[c]
-		if !ok {
-			label = c
-		}
-		entries = append(entries, legendEntry{colour: c, text: label, swatch: "line"})
-	}
-	entries = append(entries,
-		legendEntry{colour: statusOn, text: "running", swatch: "dot"},
-		legendEntry{colour: statusOff, text: "standby", swatch: "dot"},
-		legendEntry{colour: tintAmber, text: "warning", swatch: "halo"},
-		legendEntry{colour: tintRed, text: "trip", swatch: "halo"},
-	)
-
-	const (
-		baseY     = DocumentHeight - 10
-		fontSize  = 10
-		charW     = 5.5
-		padX      = 14.0
-		gap       = 26.0
-		swatchLen = 16.0
-		dotR      = 3.5
-		haloSide  = 9.0
-	)
-	x := padX
-	b.WriteString(`<g id="legend">` + "\n")
-	for _, e := range entries {
-		switch e.swatch {
-		case "line":
-			fmt.Fprintf(b,
-				`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="2"/>`,
-				x, baseY, x+swatchLen, baseY, e.colour)
-			x += swatchLen + 4
-		case "dot":
-			cy := baseY - 3.0
-			fmt.Fprintf(b,
-				`<circle cx="%.0f" cy="%.0f" r="%.1f" fill="%s" stroke="%s" stroke-width="1"/>`,
-				x+dotR, cy, dotR, e.colour, pidDotEdge)
-			x += dotR*2 + 4
-		case "halo":
-			fmt.Fprintf(b,
-				`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" rx="2" fill="none" stroke="%s" stroke-width="2"/>`,
-				x, baseY-haloSide+3, haloSide, haloSide, e.colour)
-			x += haloSide + 4
-		}
-		fmt.Fprintf(b,
-			`<text x="%.0f" y="%.0f" font-size="%d" fill="%s">%s</text>`+"\n",
-			x, baseY+3, fontSize, pidText, html.EscapeString(e.text))
-		x += float64(len(e.text))*charW + gap
-	}
-	b.WriteString("</g>\n")
 }
 
 // DebugLayout writes an SVG overlay showing the bounding box and

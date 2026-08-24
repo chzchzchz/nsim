@@ -101,6 +101,14 @@ func DrawPipePathAnimated(pts []Anchor, colour string, durSec float64) string {
 		1)
 }
 
+// DrawPipePathIdle renders a routed polyline for a dead leg: same
+// geometry and arrows as a flowing pipe, dimmed by the .idle rule so
+// live lines pop without losing direction information.
+func DrawPipePathIdle(pts []Anchor, colour string) string {
+	base := DrawPipePath(pts, colour)
+	return strings.Replace(base, `/>`, ` class="idle"/>`, 1)
+}
+
 // DrawPipePathWithValve renders a routed pipe plus a valve symbol
 // anchored at `at`: the hop node's laid-out position when known,
 // otherwise the path midpoint. vw/vh give the drawn valve size so

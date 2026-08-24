@@ -21,16 +21,6 @@ func renderPlant(t *testing.T, p *core.Plant) string {
 	return b.String()
 }
 
-// stripLegend drops the docked legend row so overlay assertions
-// count only mimic fragments, not legend swatches reusing the
-// same colours.
-func stripLegend(out string) string {
-	if before, _, ok := strings.Cut(out, `<g id="legend">`); ok {
-		return before
-	}
-	return out
-}
-
 // TestDomeWash_AppearsAboveDesignPressure checks the containment
 // outline carries the translucent red wash only while pressure
 // exceeds the design value.
@@ -48,7 +38,7 @@ func TestDomeWash_AppearsAboveDesignPressure(t *testing.T) {
 func TestOverlay_Coverage(t *testing.T) {
 	t.Run("diesel running draws green ring", func(t *testing.T) {
 		p := core.MakePlant()
-		assert.NotContains(t, stripLegend(renderPlant(t, &p)),
+		assert.NotContains(t, renderPlant(t, &p),
 			`fill="none" stroke="green"`)
 		p.AuxiliaryBuilding.DieselGenerator.State = core.DieselRunning
 		assert.Contains(t, renderPlant(t, &p),
@@ -57,7 +47,7 @@ func TestOverlay_Coverage(t *testing.T) {
 
 	t.Run("opc alarm ambers turbine", func(t *testing.T) {
 		p := core.MakePlant()
-		assert.Empty(t, strings.Count(stripLegend(renderPlant(t, &p)),
+		assert.Empty(t, strings.Count(renderPlant(t, &p),
 			`stroke="#f0a500"`))
 		p.TurbineBuilding.Turbine.OPCAlarm = true
 		assert.Contains(t, renderPlant(t, &p), `stroke="#f0a500"`)
@@ -65,7 +55,7 @@ func TestOverlay_Coverage(t *testing.T) {
 
 	t.Run("reactor trip reds core parts", func(t *testing.T) {
 		p := core.MakePlant()
-		assert.Empty(t, strings.Count(stripLegend(renderPlant(t, &p)),
+		assert.Empty(t, strings.Count(renderPlant(t, &p),
 			`stroke="#e02020"`))
 		p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
 		assert.Positive(t, strings.Count(renderPlant(t, &p),
@@ -112,21 +102,30 @@ func TestOverlay_Coverage(t *testing.T) {
 		assert.Regexp(t, `\d+(\.\d+)? MW<`, renderPlant(t, &p))
 	})
 
-	t.Run("alarm panel appears only with alarms", func(t *testing.T) {
+	t.Run("flow indication follows the valves", func(t *testing.T) {
 		p := core.MakePlant()
-		assert.NotContains(t, renderPlant(t, &p), `<g id="alarms">`)
+		base := renderPlant(t, &p)
 
-		p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
-		p.TurbineBuilding.Turbine.OPCAlarm = true
-		out := renderPlant(t, &p)
-		require.Contains(t, out, `<g id="alarms">`)
-		assert.Contains(t, out, "rps.reactor_trip")
-		// Trip severity sorts above the OPC info alarm.
-		tripIdx := strings.Index(out, "[TRIP] rps.reactor_trip")
-		infoIdx := strings.Index(out, "[INFO] turbine.opc_alarm")
-		require.Positive(t, tripIdx)
-		require.Positive(t, infoIdx)
-		assert.Less(t, tripIdx, infoIdx)
+		mfp := &p.TurbineBuilding.MainFeedwaterPump
+		mfp.Running, mfp.Velocity = true, 1000
+		fw := &p.TurbineBuilding.MainFeedwaterControlValve
+		fw.Open = 1
+		flowing := renderPlant(t, &p)
+		assert.Greater(t, strings.Count(flowing, `class="flow"`),
+			strings.Count(base, `class="flow"`),
+			"a running pump with an open valve must animate its pipe")
+		assert.Less(t, strings.Count(flowing, `class="idle"`),
+			strings.Count(base, `class="idle"`))
+
+		// Shutting the regulator kills both the dashes and the
+		// full-strength stroke: the leg reads as a dead line again.
+		fw.Open = 0
+		shut := renderPlant(t, &p)
+		assert.Equal(t, strings.Count(base, `class="flow"`),
+			strings.Count(shut, `class="flow"`),
+			"a closed inline valve must stop the dash animation")
+		assert.Equal(t, strings.Count(base, `class="idle"`),
+			strings.Count(shut, `class="idle"`))
 	})
 
 	t.Run("tank level gauges track inventory", func(t *testing.T) {
@@ -161,20 +160,14 @@ func TestViewportGroupWrapsContent(t *testing.T) {
 		"viewport group must close at end of document")
 }
 
-// TestLegendMirrorsSharedTables verifies the docked legend is
-// generated from pipeColours and the status constants rather than
-// its own copy of the semantics.
-func TestLegendMirrorsSharedTables(t *testing.T) {
+// TestLegendRemovalIsIntentional documents that the bottom legend row
+// was removed at operator request; if a legend returns it should be
+// reconsidered deliberately rather than resurrected by accident.
+func TestLegendRemovalIsIntentional(t *testing.T) {
 	p := core.MakePlant()
 	out := renderPlant(t, &p)
-	require.Contains(t, out, `<g id="legend">`)
-	for _, c := range pipeColours {
-		assert.Contains(t, out, ">"+pipeLegendLabels[c]+"<")
-	}
-	assert.Contains(t, out, ">running<")
-	assert.Contains(t, out, ">standby<")
-	assert.Contains(t, out, ">warning<")
-	assert.Contains(t, out, ">trip<")
+	assert.NotContains(t, out, `id="legend"`)
+	assert.NotContains(t, out, `id="alarms"`)
 }
 
 var (
