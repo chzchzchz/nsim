@@ -1,6 +1,7 @@
 package core
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -422,4 +423,46 @@ func TestReactor_OutletProgramRateLimited(t *testing.T) {
 	assert.InDelta(t, want, rise, want*1e-6,
 		"want heatup paced at exactly the 50 F/hr program rate, got %v F in %v",
 		rise, window)
+}
+
+// A cold, zero-power primary holds its operator-maintained pressure:
+// nothing passive raises it toward the design point. Regression for
+// the unconditional design-pressure relaxation, which dragged a
+// cold-shutdown plant up toward 2500 psia.
+//
+// "The RCS and pressurizer are completely filled with borated water
+// and the system pressure is maintained by charging and letdown flow
+// control."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:94-97
+func TestRPV_ColdPressureHoldsAtZeroPower(t *testing.T) {
+	rpv := ReactorPressureVessel{
+		Outlet:       Temperature{Val: 140, Unit: u.Fahrenheit},
+		FissionPower: CoreNeutronSourcePower,
+	}
+	// Cold-shutdown lineup: rods fully inserted pins fission power
+	// at the neutron-source floor (a zero-valued Insertion would be
+	// a withdrawn-rod critical core).
+	rpv.ControlRods.Insertion = 1.0
+	rpv.ControlRods.DemandInsertion = 1.0
+	for range int(300 * time.Second / TimeStep) {
+		rpv = rpv.Step(RCPRatedSpeed, 0)
+	}
+	assert.Less(t, float64(rpv.Pressure), 420.0,
+		"cold primary must not drift toward the design point: got %v",
+		rpv.Pressure)
+}
+
+// The at-power anchor is unchanged: a producing core still settles its
+// RPV pressure baseline at the design point over the same time
+// constant (wiring check against the relaxation constant).
+func TestRPV_PressureStillRelaxesTowardDesignAtPower(t *testing.T) {
+	atPower := ReactorPressureVessel{Pressure: 2000}
+	atPower.SeedSteadyStatePower(CoreRatedThermalPower)
+	for range int(300 * time.Second / TimeStep) {
+		atPower = atPower.Step(RCPRatedSpeed, 0)
+	}
+	want := 2000 + (float64(RPVDesignPressure)-2000)*(1-math.Exp(-1))
+	assert.InDelta(t, want, float64(atPower.Pressure), 5.0,
+		"at power the relaxation should track one time constant: "+
+			"want ~%v got %v", want, atPower.Pressure)
 }

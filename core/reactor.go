@@ -167,11 +167,22 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 
 	// 3) Pressure relaxes toward the RPV design pressure. The
 	// pressurizer (p5) sets the actual RCS pressure; this is the
-	// design baseline the RPV itself sits at in steady state.
+	// design baseline the RPV itself sits at in steady state. The
+	// upward pull scales with produced power like the thermal
+	// relaxation above: nothing passive raises a depressurized
+	// primary toward the design point, so a cold plant holds the
+	// operator-maintained pressure instead of drifting up it.
+	// "The RCS and pressurizer are completely filled with borated
+	// water and the system pressure is maintained by charging and
+	// letdown flow control."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:94-97
 	pressure := float64(ret.Pressure)
-	pressure += (float64(RPVDesignPressure) - pressure) *
+	pressureStep := (float64(RPVDesignPressure) - pressure) *
 		(dt.Seconds() / PrimaryPressureTimeConstant)
-	pressure = max(pressure, 0)
+	if pressureStep > 0 {
+		pressureStep *= powerFrac
+	}
+	pressure = max(pressure+pressureStep, 0)
 	ret.Pressure = Pressure(pressure)
 
 	// 4) Reactivity contributions. The rod-bank term follows the
