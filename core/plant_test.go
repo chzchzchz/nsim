@@ -43,7 +43,13 @@ func TestPlant_MakePlantPressurizerSeedCoherent(t *testing.T) {
 // Spec justification:
 //   - Hot standby sits at ~2235 psig (≈2250 psia), 557 °F.
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:48-61
+//
+// Runtime >5 s: the only end-to-end idle-drift integration cover, and
+// it stays at the production tick because pressurizer pressure is
+// heater-controlled (closed loop; widened ticks move where bang-bang
+// control lands).
 func TestPlant_MakePlantIdlesAtHotStandby(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	stepN(&p, int(2*time.Minute/TimeStep))
 	pzr := p.ReactorBuilding.Pressurizer

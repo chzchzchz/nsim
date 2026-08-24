@@ -3,6 +3,7 @@ package svg
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/chzchzchz/nsim/core"
@@ -10,17 +11,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Each dot invocation on the full P&ID costs seconds, so the
+// read-only layout consumers share one computed Layout;
+// determinism across calls has its own compare-pair in
+// TestComputeLayout_Deterministic.
+var (
+	layoutOnce   sync.Once
+	sharedPlant  *core.Plant
+	sharedLayout *Layout
+	sharedErr    error
+)
+
+func mustSharedLayout(t *testing.T) (*core.Plant, *Layout) {
+	t.Helper()
+	layoutOnce.Do(func() {
+		p := core.MakePlant()
+		l, err := ComputeLayout(&p)
+		sharedPlant, sharedLayout, sharedErr = &p, l, err
+	})
+	require.NoError(t, sharedErr)
+	require.NotNil(t, sharedLayout)
+	require.NotNil(t, sharedLayout.Pos)
+	return sharedPlant, sharedLayout
+}
+
 // TestComputeLayout_PositionsFilled runs ComputeLayout on MakePlant
 // and asserts every graph node ID maps to a positive coordinate
 // within the 1200×900 viewport.
 func TestComputeLayout_PositionsFilled(t *testing.T) {
-	p := core.MakePlant()
-	layout, err := ComputeLayout(&p)
-	require.NoError(t, err)
-	require.NotNil(t, layout)
-	require.NotNil(t, layout.Pos)
+	t.Parallel()
+	p, layout := mustSharedLayout(t)
 
-	g := p.BuildGraphFor(&p)
+	g := p.BuildGraphFor(p)
 	for id := range g.Nodes {
 		a, ok := layout.Pos[id]
 		require.True(t, ok, "want position for node %q", id)
@@ -36,11 +58,10 @@ func TestComputeLayout_PositionsFilled(t *testing.T) {
 // individual nodes. Clamping piles every overlarge coordinate on
 // the viewport edges; scaling preserves relative geometry.
 func TestComputeLayout_ScaledNotClamped(t *testing.T) {
+	t.Parallel()
 	const minSpanFraction = 0.4 // fraction of the viewport that must be used
 
-	p := core.MakePlant()
-	layout, err := ComputeLayout(&p)
-	require.NoError(t, err)
+	_, layout := mustSharedLayout(t)
 
 	ys := []float64{}
 	xs := []float64{}
@@ -83,32 +104,17 @@ func minMax(vs []float64) (float64, float64) {
 }
 
 // TestComputeLayout_Deterministic checks that two calls with the
-// same plant return identical positions, routes, and scale: within
-// a single process the graphviz output must reproduce exactly.
-// Cross-version drift is absorbed by regenerating the committed
-// default file rather than loosened assertions here.
+// same plant return identical positions, routed edge polylines, and
+// fit scale: within a single process the graphviz output must
+// reproduce exactly, since the generated default file depends on it
+// for stable diffs. Cross-version drift is absorbed by regenerating
+// the committed default file rather than loosened assertions here.
 func TestComputeLayout_Deterministic(t *testing.T) {
 	p := core.MakePlant()
 	a := mustComputeLayout(t, &p)
 	b := mustComputeLayout(t, &p)
 	assert.Equal(t, a.Pos, b.Pos)
 	assert.Equal(t, a.Scale, b.Scale)
-}
-
-func mustComputeLayout(t *testing.T, p *core.Plant) *Layout {
-	t.Helper()
-	l, err := ComputeLayout(p)
-	require.NoError(t, err)
-	return l
-}
-
-// TestComputeLayout_RoutesDeterministic checks that routed edge
-// polylines and the fit scale reproduce exactly across calls; the
-// generated default file depends on it for stable diffs.
-func TestComputeLayout_RoutesDeterministic(t *testing.T) {
-	p := core.MakePlant()
-	a := mustComputeLayout(t, &p)
-	b := mustComputeLayout(t, &p)
 
 	require.Equal(t, len(a.Routes), len(b.Routes))
 	for key, ra := range a.Routes {
@@ -119,7 +125,13 @@ func TestComputeLayout_RoutesDeterministic(t *testing.T) {
 			assert.Equal(t, ra[i], rb[i], "route %q point %d", key, i)
 		}
 	}
-	assert.Equal(t, a.Scale, b.Scale)
+}
+
+func mustComputeLayout(t *testing.T, p *core.Plant) *Layout {
+	t.Helper()
+	l, err := ComputeLayout(p)
+	require.NoError(t, err)
+	return l
 }
 
 // TestEmptyLayout returns a Layout whose Pos map is unset; callers

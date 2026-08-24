@@ -145,25 +145,30 @@ func TestScenario4_SteamlineVentDrawsSteamToHotwell(t *testing.T) {
 // and the drained water is tracked into the condenser hotwell.
 // Differential against an identical no-drain plant; tier 3 on rate
 // (invented constant), asserted directionally.
+//
+// Window trimmed to 30 s: the drain flow is constant from the first
+// step (Valve.Open has no travel), so the differential accrues
+// linearly and the floors credit 25 s of the window at full-open rate.
 func TestScenario4_DrainValvePullsLevelToNormalBand(t *testing.T) {
+	t.Parallel()
 	baseline := MakePlant()
 	setControl(t, &baseline, "TurbineBuilding/MainFeedwaterPump/Running", "0")
-	stepFor(&baseline, 60*time.Second)
+	stepFor(&baseline, 30*time.Second)
 
 	drained := MakePlant()
 	setControl(t, &drained, "TurbineBuilding/MainFeedwaterPump/Running", "0")
 	setControl(t, &drained, "ReactorBuilding/SteamGenerator/DrainValve/Open", "1")
 	hotwellBefore := drained.TurbineBuilding.Condenser.HotwellLevel.Float()
-	stepFor(&drained, 60*time.Second)
+	stepFor(&drained, 30*time.Second)
 
 	drainDelta := baseline.ReactorBuilding.SteamGenerator.Water.Float() -
 		drained.ReactorBuilding.SteamGenerator.Water.Float()
-	assert.GreaterOrEqual(t, drainDelta, 0.8*SGDrainValveGalPerSec*55,
+	assert.GreaterOrEqual(t, drainDelta, 0.8*SGDrainValveGalPerSec*25,
 		"drained SG should sit ~%v gal below baseline, delta %v",
-		SGDrainValveGalPerSec*55, drainDelta)
+		SGDrainValveGalPerSec*25, drainDelta)
 	hotwellGain := drained.TurbineBuilding.Condenser.HotwellLevel.Float() -
 		hotwellBefore
-	assert.GreaterOrEqual(t, hotwellGain, 0.8*SGDrainValveGalPerSec*55,
+	assert.GreaterOrEqual(t, hotwellGain, 0.8*SGDrainValveGalPerSec*25,
 		"drained water must land in the hotwell, got %v", hotwellGain)
 }
 
@@ -221,23 +226,29 @@ func TestScenario4_CondensatePumpMovesHotwellToDeaerator(t *testing.T) {
 // Direction is physics-forced (letdown net draw must lower level);
 // magnitude recomputed from the CVCS design constants is a wiring
 // check, asserted as a floor.
+//
+// Window trimmed to 15 s: charging ramps up against the growing level
+// error only as time passes, so average net draw over a shorter window
+// is at least as high and the floor credits 10 s of the window at the
+// design net rate.
 func TestScenario4_LetdownMeasurablyDrainsPressurizer(t *testing.T) {
+	t.Parallel()
 	closed := MakePlant()
 	setControl(t, &closed,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen", "0")
-	stepFor(&closed, 30*time.Second)
+	stepFor(&closed, 15*time.Second)
 	closedWater := closed.ReactorBuilding.Pressurizer.Water.Float()
 
 	open := MakePlant()
 	setControl(t, &open,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen", "1")
 	require.True(t, open.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen)
-	stepFor(&open, 30*time.Second)
+	stepFor(&open, 15*time.Second)
 
 	drain := closedWater - open.ReactorBuilding.Pressurizer.Water.Float()
 	netGalPerSec := CVCSDesignLetdownFlow.Float() -
 		CVCSDesignChargingFlow.Float()
-	assert.GreaterOrEqual(t, drain, 0.8*netGalPerSec*25,
+	assert.GreaterOrEqual(t, drain, 0.8*netGalPerSec*10,
 		"letdown-open PZR should sit >= %v gal below baseline, delta %v",
-		0.8*netGalPerSec*25, drain)
+		0.8*netGalPerSec*10, drain)
 }
