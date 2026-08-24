@@ -21,6 +21,15 @@ import (
 // drive leads the fold while the turbine load setpoint chases
 // production downward, keeping the steam generators throttled near
 // their shell pressure without tripping any protection function.
+//
+// Fidelity note: this glide cannot ride a widened TimeStep. The power
+// fold follows the reactor's per-step reactivity compounding, so a
+// coarser tick folds power more slowly against an unchanged setpoint
+// chase; the growing offtake surplus lifts SG header pressure until
+// the condenser dump leaves its <=0.20 pressure-modulation band and
+// drives toward full open (measured at a uniform 10 ms tick). The
+// whole transient is one coupled maneuver with no passive windows, so
+// it keeps the default step throughout rather than overrideTimeStep.
 
 // scenario14FullPowerPlant extends the shared full-power lineup with
 // the scenario's CVCS lineup: the automatic pressurizer level
