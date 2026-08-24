@@ -1050,6 +1050,59 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			},
 		}
 
+		// Refueling-cavity fill and drain commands. Flooding
+		// begins once the vessel head is unseated for refueling:
+		//   "Reactor cavity is filled with borated water to the
+		//    vessel flange."
+		//   specs/the_westinghouse_pressurized_water_react/
+		//   chapter_13/page_185.txt:53-54
+		// Draining accompanies head reseating:
+		//   "When the head is about 1 foot above the vessel
+		//    flange, the refueling cavity is completely drained
+		//    and the flange surface is cleaned."
+		//   specs/the_westinghouse_pressurized_water_react/
+		//   chapter_13/page_186.txt:113-116
+		m["ReactorBuilding/RefuelingOperations/CavityFlooding"] = &bridge.Control{
+			Part:  "ReactorBuilding/RefuelingOperations",
+			Label: "CavityFlooding",
+			Kind:  "bool",
+			Get: func() string {
+				return bridge.BoolToStr(
+					p.ReactorBuilding.RefuelingOperations.CavityFlooding)
+			},
+			Set: func(s string) error {
+				v, err := bridge.StrToBool(s)
+				if err != nil {
+					return err
+				}
+				p.ReactorBuilding.RefuelingOperations.CavityFlooding = v
+				if v {
+					p.ReactorBuilding.RefuelingOperations.CavityDraining = false
+				}
+				return nil
+			},
+		}
+		m["ReactorBuilding/RefuelingOperations/CavityDraining"] = &bridge.Control{
+			Part:  "ReactorBuilding/RefuelingOperations",
+			Label: "CavityDraining",
+			Kind:  "bool",
+			Get: func() string {
+				return bridge.BoolToStr(
+					p.ReactorBuilding.RefuelingOperations.CavityDraining)
+			},
+			Set: func(s string) error {
+				v, err := bridge.StrToBool(s)
+				if err != nil {
+					return err
+				}
+				p.ReactorBuilding.RefuelingOperations.CavityDraining = v
+				if v {
+					p.ReactorBuilding.RefuelingOperations.CavityFlooding = false
+				}
+				return nil
+			},
+		}
+
 	}
 
 // addReactorBuildingSensors adds Sensor entries keyed by the namespace managed by this file to m.
