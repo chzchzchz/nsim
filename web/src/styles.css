@@ -206,6 +206,9 @@
             gap: 6px;
             margin: 2px 0;
         }
+        /* The (?) icon leads its label in control rows; DOM order
+           stays label-first so the open popup still lands last. */
+        .ctl-row > .ctl-help { order: -1; }
         .ctl-hint { opacity: 0.6; }
         .ctl-hint.faint { opacity: 0.4; font-size: 10px; }
         .ctl-error { outline: 2px solid #b00; }
@@ -243,6 +246,14 @@
             font-size: 10px;
             color: #777;
             word-break: break-all;
+        }
+        /* In read-out cells the (?) icon sits left of the label
+           with the popup flowing inline between them. */
+        .data-table td .help-text {
+            display: inline-block;
+            vertical-align: top;
+            flex-basis: auto;
+            max-width: 40ch;
         }
         #console {
             background: white;

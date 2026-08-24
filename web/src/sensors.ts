@@ -74,11 +74,11 @@ function renderSensorRow(e: Entry, rows: SensorRow[]): HTMLElement {
     tr.dataset.bridgeId = e.id;
 
     const td1 = document.createElement("td");
-    td1.textContent = label;
     const desc = helpFor(e.id);
     if (desc) {
         td1.appendChild(makeHelpButton(desc));
     }
+    td1.appendChild(document.createTextNode(label));
     tr.appendChild(td1);
 
     const td2 = document.createElement("td");
