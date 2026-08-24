@@ -317,6 +317,17 @@ func (p *Plant) Alarms() []Alarm {
 		}
 	}
 
+	// Overlay the activation timestamps the control room
+	// recorded in AlarmSet; the per-condition reads above
+	// construct fresh values and carry no timing of their own.
+	set := p.ReactorBuilding.PlantControlRoom.AlarmSet
+	for i := range list {
+		if stamped, ok := set[list[i].ID]; ok {
+			list[i].Timestamp = stamped.Timestamp
+			list[i].Acknowledged = stamped.Acknowledged
+		}
+	}
+
 	return list
 }
 

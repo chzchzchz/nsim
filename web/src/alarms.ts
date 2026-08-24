@@ -19,6 +19,8 @@ export interface AlarmPanel {
     refresh(json: string): void;
 }
 
+const ALARM_COLUMNS = ["Severity", "ID", "Description", "Time (s)"];
+
 export function renderAlarms(
     container: HTMLElement,
     plant: { sensorJSON(id: string): string | Error; setControl(id: string, value: string): Error | null },
@@ -44,10 +46,19 @@ export function renderAlarms(
 
     const table = document.createElement("table");
     table.className = "data-table";
-    scrollHost.appendChild(table);
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    for (const name of ALARM_COLUMNS) {
+        const th = document.createElement("th");
+        th.textContent = name;
+        headRow.appendChild(th);
+    }
+    thead.appendChild(headRow);
+    table.appendChild(thead);
 
     const tbody = document.createElement("tbody");
     table.appendChild(tbody);
+    scrollHost.appendChild(table);
 
     const rowMap = new Map<string, HTMLElement>();
     for (const a of initialAlarms) {

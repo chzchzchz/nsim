@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // Step advances the Plant Control Room state machine by one
 // timestep. The simplified model implements four per-step
 // dynamics from chapter 8 of the spec:
@@ -91,7 +93,13 @@ func (c *PlantControlRoom) Step(
 			}
 			continue
 		}
-		if !ok || existing.Timestamp != a.Timestamp {
+		if !ok {
+			// First sighting of this condition: record the
+			// activation moment so the operator sees when
+			// the alarm came in, not just that it is up.
+			a.Timestamp = time.Duration(ret.SimTimeNs)
+			ret.AlarmSet[a.ID] = a
+		} else if existing.Timestamp != a.Timestamp {
 			ret.AlarmSet[a.ID] = a
 		}
 	}
@@ -154,6 +162,10 @@ func (c *PlantControlRoom) Step(
 	ret.SafetySystemStationsAvailable =
 		ret.AuxiliaryPanelsAvailable &&
 			(esfBus1Available || esfBus2Available)
+
+	// One Step call per plant tick advances the annunciator
+	// clock by exactly one TimeStep (see SimTimeNs).
+	ret.SimTimeNs += int64(TimeStep)
 
 	return ret
 }

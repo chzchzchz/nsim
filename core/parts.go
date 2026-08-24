@@ -4813,6 +4813,13 @@ type PlantControlRoom struct {
 	// acknowledged the annunciator alarm.
 	// "Turned off by operator acknowledgement."
 	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:66-67
+
+	// SimTimeNs is the control room's simulated clock: the
+	// accumulated plant time at the start of the last Step.
+	// Plant.Step calls Step exactly once per tick, so the
+	// clock tracks simulation time and stamps each alarm's
+	// activation moment in AlarmSet.
+	SimTimeNs int64
 	AlarmAcknowledged bool
 
 	// AlarmSet is the per-condition acknowledgement map keyed

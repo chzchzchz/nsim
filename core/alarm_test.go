@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"testing"
 
 	u "github.com/bcicen/go-units"
@@ -263,4 +264,69 @@ func TestPlant_Alarms_DieselCoolantWarning(t *testing.T) {
 	}
 	require.True(t, found,
 		"want AlarmIDDieselCoolant warning, got %v", p.Alarms())
+}
+
+// A newly seen alarm is stamped with the control room's
+// simulation clock at the step that detected it, so the
+// operator sees when the condition came in.
+func TestPlantControlRoom_AlarmSet_TimestampsActivationTime(t *testing.T) {
+	p := MakePlant()
+	p.Step()
+	p.Update()
+	p.TurbineBuilding.Turbine.OPCTrip = true
+	p.Step()
+	p.Update()
+
+	c := p.ReactorBuilding.PlantControlRoom
+	require.NotEmpty(t, c.AlarmSet)
+	a := c.AlarmSet[AlarmIDOPCTrip]
+	require.NotNil(t, a)
+	assert.Equal(t, int64(TimeStep), int64(a.Timestamp),
+		"want activation stamp at one tick after start, got %v ns",
+		a.Timestamp)
+	assert.Equal(t, 2*int64(TimeStep), c.SimTimeNs,
+		"clock should advance one TimeStep per Step call")
+
+	// The condition persists; the stamp must not move.
+	p.Step()
+	p.Update()
+	assert.Equal(t, int64(TimeStep),
+		int64(p.ReactorBuilding.PlantControlRoom.AlarmSet[AlarmIDOPCTrip].Timestamp),
+		"stamp should hold while the condition stays active")
+}
+
+// The Plant/Alarms bridge sensor carries the activation time in
+// its time_s field so the HMI can render when each alarm fired.
+func TestBridge_PlantAlarms_TimeSReflectsActivation(t *testing.T) {
+	p := MakePlant()
+	p.Step()
+	p.Update()
+	p.TurbineBuilding.Turbine.OPCTrip = true
+	p.Step()
+	p.Update()
+
+	m := GetSensorMap(&p)
+	s, ok := m["Plant/Alarms"]
+	require.True(t, ok, "want Plant/Alarms sensor registered")
+	out, err := s.Get()
+	require.NoError(t, err)
+
+	type row struct {
+		ID     string  `json:"id"`
+		TimeS  float64 `json:"time_s"`
+		Acked  bool    `json:"acknowledged"`
+	}
+	var list []row
+	require.NoError(t, json.Unmarshal([]byte(out), &list))
+	var trip *row
+	for i := range list {
+		if list[i].ID == string(AlarmIDOPCTrip) {
+			trip = &list[i]
+		}
+	}
+	require.NotNil(t, trip, "want opc_trip in %v", out)
+	wantS := TimeStep.Seconds()
+	assert.InDelta(t, wantS, trip.TimeS, 1e-9,
+		"want time_s %v, got %v", wantS, trip.TimeS)
+	assert.False(t, trip.Acked, "fresh alarm starts unacknowledged")
 }
