@@ -483,6 +483,11 @@ const (
 	// control without quoting a minimum admission.
 	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
 	TurbineRollMinSteamFraction = 0.10
+
+	// WattsPerMW converts megawatt-scale inputs (grid dispatch
+	// demand) into the Watt-based ratings used at the conversion
+	// boundary.
+	WattsPerMW float64 = 1e6
 )
 
 // Turbine-generator grid-coupling and protective-control constants
