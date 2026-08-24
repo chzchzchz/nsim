@@ -215,31 +215,36 @@ func (p *Plant) Alarms() []Alarm {
 	// (core/diesel.go:62-71,121,147). The coolant and
 	// fuel conditions also raise dedicated warning
 	// alarms so the operator can see the precursor
-	// state separately from the latched trip.
-	d := p.AuxiliaryBuilding.DieselGenerator
-	if d.State == DieselTripped {
-		list = append(list, Alarm{
-			ID:          AlarmIDDieselTripped,
-			Description: alarmDescription(AlarmIDDieselTripped),
-			Severity:    SeverityTrip,
-			Active:      true,
-		})
-	}
-	if d.CoolantTemp.Float() >= DieselCoolantTripTemp.Float() {
-		list = append(list, Alarm{
-			ID:          AlarmIDDieselCoolant,
-			Description: alarmDescription(AlarmIDDieselCoolant),
-			Severity:    SeverityWarning,
-			Active:      true,
-		})
-	}
-	if d.Fuel.Level.Float() <= DieselLowFuelLevel.Float() {
-		list = append(list, Alarm{
-			ID:          AlarmIDDieselLowFuel,
-			Description: alarmDescription(AlarmIDDieselLowFuel),
-			Severity:    SeverityWarning,
-			Active:      true,
-		})
+	// state separately from the latched trip. Both trains'
+	// diesels alarm into the same annunciators.
+	for _, d := range []DieselGenerator{
+		p.AuxiliaryBuilding.DieselGenerator,
+		p.AuxiliaryBuilding.DieselGeneratorB,
+	} {
+		if d.State == DieselTripped {
+			list = append(list, Alarm{
+				ID:          AlarmIDDieselTripped,
+				Description: alarmDescription(AlarmIDDieselTripped),
+				Severity:    SeverityTrip,
+				Active:      true,
+			})
+		}
+		if d.CoolantTemp.Float() >= DieselCoolantTripTemp.Float() {
+			list = append(list, Alarm{
+				ID:          AlarmIDDieselCoolant,
+				Description: alarmDescription(AlarmIDDieselCoolant),
+				Severity:    SeverityWarning,
+				Active:      true,
+			})
+		}
+		if d.Fuel.Level.Float() <= DieselLowFuelLevel.Float() {
+			list = append(list, Alarm{
+				ID:          AlarmIDDieselLowFuel,
+				Description: alarmDescription(AlarmIDDieselLowFuel),
+				Severity:    SeverityWarning,
+				Active:      true,
+			})
+		}
 	}
 
 	// Turbine emergency-trip devices beyond OPC. Each latches the

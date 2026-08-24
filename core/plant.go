@@ -1025,6 +1025,18 @@ func (p *Plant) Step() {
 	// CSS, HHSI, SWS). The Electrical.Step call is pure on
 	// its input and only writes to nextPlant.Electrical.
 	p.mirrorOffsiteAvailability()
+	// Wire the ESF-bus source candidates before Electrical.Step so
+	// the very first tick sees the live plant instead of zero
+	// scratch state. The candidates read the CURRENT plant's values
+	// (the same one-tick telemetry lag the rest of the model uses):
+	// offsite from the declared-availability mirror above, the unit
+	// generator through the UAT, and each train's own diesel
+	// (independent trains,
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:30-36).
+	p.Electrical.DieselGenA = &p.AuxiliaryBuilding.DieselGenerator
+	p.Electrical.DieselGenB = &p.AuxiliaryBuilding.DieselGeneratorB
+	p.Electrical.MainGenA = &p.TurbineBuilding.Generator
+	p.Electrical.MainGenB = &p.TurbineBuilding.Generator
 	p.nextPlant.Electrical = p.Electrical.Step()
 	plantDriveReady := p.nextPlant.Electrical.ESFBusA.Energized ||
 		p.nextPlant.Electrical.ESFBusB.Energized
@@ -1060,16 +1072,27 @@ func (p *Plant) Step() {
 	// (480 V MCC downstream of an ESF bus).
 	// Emergency diesel auto-start (chapter 16 emergency response):
 	// "backup emergency diesel generators are automatically started"
-	// when normal power to a safeguards bus is lost
+	// when their safeguards bus loses power
 	// (specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:103-109);
 	// diesel start is also item 1 of the SI actuation list
 	// (specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:18-22).
-	// Set before AuxiliaryBuilding.Step so the engine cranks in the
-	// same tick; clearing the latch stays an explicit operator action
-	// after offsite power is restored.
-	if !p.ReactorBuilding.PlantElectricalSystems.OffsitePowerAvailable &&
+	// The trigger is the SENSED bus state, not the operator's offsite
+	// declaration: buses still fed from the unit's own generator while
+	// offsite is declared lost stay live, so their diesels idle until
+	// the unit comes off the line. Each train's diesel answers only
+	// its own bus (independent trains,
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:30-36).
+	// Set before AuxiliaryBuilding.Step so the engines crank in the
+	// same tick; clearing a latch stays an explicit operator action
+	// after the supply is restored.
+	if !p.nextPlant.Electrical.ESFBusA.Energized &&
 		p.AuxiliaryBuilding.DieselGenerator.StartSignal == DieselStartNone {
 		p.AuxiliaryBuilding.DieselGenerator.StartSignal =
+			DieselStartLossOfOffsitePower
+	}
+	if !p.nextPlant.Electrical.ESFBusB.Energized &&
+		p.AuxiliaryBuilding.DieselGeneratorB.StartSignal == DieselStartNone {
+		p.AuxiliaryBuilding.DieselGeneratorB.StartSignal =
 			DieselStartLossOfOffsitePower
 	}
 
@@ -1083,8 +1106,6 @@ func (p *Plant) Step() {
 	p.nextPlant.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.DriveReady =
 		plantDriveReady
 	p.ReactorBuilding.Aux = &p.nextPlant.AuxiliaryBuilding
-	p.Electrical.DieselGenA = &p.nextPlant.AuxiliaryBuilding.DieselGenerator
-	p.Electrical.DieselGenB = &p.nextPlant.AuxiliaryBuilding.DieselGenerator
 
 	// RHR TrainA on BusA, TrainB on BusB. The spec assigns
 	// RHR pumps to their own ESF train, mirroring the EFWS
@@ -1094,9 +1115,9 @@ func (p *Plant) Step() {
 	// features system switchgear groups."
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:33-36
 	p.nextPlant.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.DriveReady =
-		p.nextPlant.Electrical.ESFBusA.Energized
+		p.nextPlant.Electrical.ESFBusA.StageReady(1)
 	p.nextPlant.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.DriveReady =
-		p.nextPlant.Electrical.ESFBusB.Energized
+		p.nextPlant.Electrical.ESFBusB.StageReady(1)
 
 	// Automatic turbine-trip stepback. The control system latches
 	// on the trip and owns the rod demand while it holds neutron
@@ -1177,17 +1198,18 @@ func (p *Plant) Step() {
 	//   - "The HHSI and RHR pumps are aligned to take suction
 	//     directly from the RWST."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
-	if p.AuxiliaryBuilding.DieselGenerator.StartSignal == DieselStartSafetyInjection {
+	if p.AuxiliaryBuilding.anyDieselStartSignal(DieselStartSafetyInjection) {
 		// HHSI pumps need ESF bus power; DriveReady
 		// reflects whether at least one ESF bus is
-		// energised. The actual injection flow is gated
-		// on HHSIPumpRunning && HHSIDriveReady, so the
-		// auto-start latches PumpRunning on the safety
-		// signal (operator intent) and the bus-energised
-		// state decides whether flow actually develops.
+		// energised past its sequence stage. The actual
+		// injection flow is gated on HHSIPumpRunning &&
+		// HHSIDriveReady, so the auto-start latches
+		// PumpRunning on the safety signal (operator intent)
+		// and the bus-energised state decides whether flow
+		// actually develops.
 		p.nextPlant.ReactorBuilding.SafetyInjectionSystem.HHSIDriveReady =
-			p.nextPlant.Electrical.ESFBusA.Energized ||
-				p.nextPlant.Electrical.ESFBusB.Energized
+			p.nextPlant.Electrical.ESFBusA.StageReady(1) ||
+				p.nextPlant.Electrical.ESFBusB.StageReady(1)
 		p.nextPlant.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = true
 		if p.nextPlant.ReactorBuilding.SafetyInjectionSystem.HHSISuction !=
 			SISSuctionSump {
@@ -1226,8 +1248,7 @@ func (p *Plant) Step() {
 		// two SGs" becomes equivalent to "low-low in any
 		// one SG". The per-loop SGs are not modelled
 		// separately at this fidelity band.
-		if p.AuxiliaryBuilding.DieselGenerator.StartSignal ==
-			DieselStartSafetyInjection ||
+		if p.AuxiliaryBuilding.anyDieselStartSignal(DieselStartSafetyInjection) ||
 			p.nextPlant.ReactorBuilding.ReactorProtectionSystem.AuxiliaryFeedPumpsStartActuated ||
 			sgWaterLow {
 			if !efws.SubsystemA.MotorPump.Running {
@@ -1327,8 +1348,8 @@ func (p *Plant) Step() {
 	//     and opens the SAT isolation valves "B"."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-61
 	css := &p.nextPlant.AuxiliaryBuilding.ContainmentSpraySystem
-	cssDriveReady := p.nextPlant.Electrical.ESFBusA.Energized ||
-		p.nextPlant.Electrical.ESFBusB.Energized
+	cssDriveReady := p.nextPlant.Electrical.ESFBusA.StageReady(1) ||
+		p.nextPlant.Electrical.ESFBusB.StageReady(1)
 	css.DriveReady = cssDriveReady
 	// CSS auto-start: latch on the actuation signal
 	// regardless of bus state; DriveReady gates the actual
@@ -1378,10 +1399,9 @@ func (p *Plant) Step() {
 	// (operator intent); the actual flow contribution is
 	// gated on PumpRunning && DriveReady in SWS.Step.
 	if !sws.PumpRunning &&
-		(p.AuxiliaryBuilding.DieselGenerator.StartSignal ==
-			DieselStartSafetyInjection ||
-			p.AuxiliaryBuilding.DieselGenerator.StartSignal ==
-				DieselStartLossOfOffsitePower) {
+		p.AuxiliaryBuilding.anyDieselStartSignal(DieselStartSafetyInjection) ||
+		!sws.PumpRunning &&
+			p.AuxiliaryBuilding.anyDieselStartSignal(DieselStartLossOfOffsitePower) {
 		sws.PumpRunning = true
 	}
 
@@ -1398,8 +1418,7 @@ func (p *Plant) Step() {
 	//   - "The cooling coils remove heat from the air with the
 	//     fan providing the required air flow rates."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:84-85
-	locaSensed := p.AuxiliaryBuilding.DieselGenerator.StartSignal ==
-		DieselStartSafetyInjection
+	locaSensed := p.AuxiliaryBuilding.anyDieselStartSignal(DieselStartSafetyInjection)
 	cbTemp := p.ReactorBuilding.ContainmentBuilding.Temperature
 	for i := 0; i < RCFCUnitCount; i++ {
 		p.nextPlant.AuxiliaryBuilding.RCFCUnits[i] =
@@ -1527,7 +1546,8 @@ func (p *Plant) Step() {
 	//     as essential loads when the engine runs with cooler flow.
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89
 	ccwDuty := p.nextPlant.AuxiliaryBuilding.ComponentCoolingWaterSystem.HXHeatDuty
-	jacketDuty := p.nextPlant.AuxiliaryBuilding.DieselGenerator.JacketHeatDuty
+	jacketDuty := p.nextPlant.AuxiliaryBuilding.DieselGenerator.JacketHeatDuty +
+		p.nextPlant.AuxiliaryBuilding.DieselGeneratorB.JacketHeatDuty
 	p.nextPlant.Outside.ServiceWaterSystem =
 		p.nextPlant.Outside.ServiceWaterSystem.Step(
 			p.Outside.RiverTemp,
@@ -1750,7 +1770,12 @@ func (p *Plant) Step() {
 	//     generators."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:28-33
 	p.nextPlant.ReactorBuilding.PlantElectricalSystems =
-		p.ReactorBuilding.PlantElectricalSystems.Step()
+		p.ReactorBuilding.PlantElectricalSystems.Step(
+			p.nextPlant.Electrical.ESFBusA,
+			p.nextPlant.Electrical.ESFBusB,
+			&p.nextPlant.AuxiliaryBuilding.DieselGenerator,
+			&p.nextPlant.AuxiliaryBuilding.DieselGeneratorB,
+		)
 
 	// Plant control room step (plans/p28_1.txt). The control
 	// room is a passive aggregator: its availability is
@@ -1923,7 +1948,8 @@ func (p *Plant) Step() {
 	//     […] arranged to fail-open on loss of air or electrical power."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:42-47
 	p.nextPlant.Outside.DieselAFWPump.DriveReady =
-		p.nextPlant.AuxiliaryBuilding.DieselGenerator.ReadyToLoad
+		p.nextPlant.AuxiliaryBuilding.DieselGenerator.ReadyToLoad ||
+			p.nextPlant.AuxiliaryBuilding.DieselGeneratorB.ReadyToLoad
 	p.nextPlant.Outside.MotorAFWPump.DriveReady =
 		p.nextPlant.Electrical.ESFBusA.Energized
 	p.nextPlant.Outside.TurbineAFWPump.DriveReady =
@@ -2125,6 +2151,7 @@ func MakePlant() Plant {
 		},
 		CoolantTemp: Temperature{Val: 80, Unit: u.Fahrenheit},
 	}
+	p.AuxiliaryBuilding.DieselGeneratorB = p.AuxiliaryBuilding.DieselGenerator
 	p.Outside.TurbineAFWPump.DriveSource = DriveSteam
 	p.Outside.MotorAFWPump.DriveSource = DriveElectric
 	p.Outside.DieselAFWPump.DriveSource = DriveDiesel

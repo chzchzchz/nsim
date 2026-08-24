@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // Electrical models the AC power distribution that supplies the
 // Engineered Safety Features (ESF) loads. There are two physically and
 // electrically independent trains per the spec.
@@ -68,12 +70,53 @@ type ESFBus struct {
 	Voltage      float64
 	Energized    bool
 	BreakerClosed bool
+
+	// OnDiesel is true while this bus's own diesel generator is
+	// the serving source, and DieselFeedElapsed accumulates the
+	// time since the transfer. Both reset when any non-diesel
+	// source serves the bus or the bus goes dark; they drive the
+	// automatic load sequencer that staggers large loads onto a
+	// freshly transferred bus.
+	OnDiesel          bool
+	DieselFeedElapsed time.Duration
+}
+
+// StageReady reports whether a load in the given sequence stage may be
+// (re-)energized from this bus: immediately when the bus is served by a
+// non-diesel source (no overload constraint), otherwise only after the
+// stage's delay has elapsed since the diesel picked up the bus.
+func (b ESFBus) StageReady(stage int) bool {
+	if !b.Energized {
+		return false
+	}
+	if stage <= 0 || !b.OnDiesel {
+		return true
+	}
+	return b.DieselFeedElapsed >=
+		time.Duration(stage)*esfLoadSequenceStageDelay
 }
 
 // esfbusPickupVoltage is the minimum source voltage at which an ESF bus
 // latches Energized. The spec does not state a number; 90% of rated is a
 // standard protective-relay pickup.
 const esfbusPickupVoltage = 0.9 * DieselRatedVoltage
+
+// esfLoadSequenceStageDelay spaces successive stages of large-load
+// re-energization after a diesel transfer: "Loads are automatically
+// sequenced on the diesel generator buses over a short period of time to
+// preclude the possibility of overload trip due to simultaneous starting
+// loads." The spec gives no interval; 5 s per stage keeps the total
+// sequence well inside the diesel's 30 s rated-load deadline (derived
+// sizing assumption).
+// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:52-55
+const esfLoadSequenceStageDelay = 5 * time.Second
+
+// Load sequence stages for ESF loads re-energized from their diesel.
+// Stage 0 loads (instrument/cooling support) come back with the bus;
+// stage 1 loads (the largest motors: RHR, HHSI, CSS pumps) wait one
+// stage delay so simultaneous starting current cannot overload the
+// freshly transferred bus. Membership is a modeling convention at this
+// fidelity band.
 
 // Step computes the per-train ESF bus state from its available sources.
 // Follows the existing copy-into-nextPlant style: pure on input, writes
@@ -85,20 +128,50 @@ func (e *Electrical) Step() Electrical {
 	return ret
 }
 
+// stepESFBus energizes the bus from its best source (offsite preferred,
+// then the unit's own generator through the UAT, then its diesel) and
+// tracks whether the diesel is serving the bus for the load sequencer.
+// The source preference follows the spec's supply order: normally the
+// system auxiliary transformers (offsite); with offsite lost but the
+// unit on the line, the unit auxiliary transformer carries the bus from
+// the main generator; the diesel is the last line.
+//   - "The unit auxiliary power is transformed from the output of
+//     the plant main generator through the unit auxiliary
+//     transformer to the plant electrical distribution voltage."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:44-48
+//   - "auxiliary power required for safe shutdown will be supplied
+//     from physically and electrically independent diesel
+//     generators located on the site."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:27-31
 func stepESFBus(b ESFBus, offsite, main *PowerGenerator, diesel *DieselGenerator) ESFBus {
 	if !b.BreakerClosed {
 		b.Voltage = 0
 		b.Energized = false
+		b.OnDiesel = false
+		b.DieselFeedElapsed = 0
 		return b
 	}
 	src := firstEnergized(offsite, main, dieselSource(diesel))
 	if src != nil && src.Voltage >= esfbusPickupVoltage && src.BreakerClosed {
 		b.Voltage = src.Voltage
 		b.Energized = true
+		fromDiesel := diesel != nil && src == dieselSource(diesel)
+		if fromDiesel {
+			if !b.OnDiesel {
+				b.OnDiesel = true
+				b.DieselFeedElapsed = 0
+			}
+			b.DieselFeedElapsed += TimeStep
+		} else {
+			b.OnDiesel = false
+			b.DieselFeedElapsed = 0
+		}
 		return b
 	}
 	b.Voltage = 0
 	b.Energized = false
+	b.OnDiesel = false
+	b.DieselFeedElapsed = 0
 	return b
 }
 

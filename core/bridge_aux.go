@@ -790,6 +790,86 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Train-B diesel controls mirror the train-A entries above:
+	// each train's diesel is an independent unit with its own
+	// start, load-fraction, and breaker controls on physically
+	// separated portions of the main control board
+	// "controls for the governor, voltage regulator, generator
+	// breaker, and synchronization for each diesel generator are
+	// located on physically separated portions of the main control
+	// board"
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:2-4.
+	m["AuxiliaryBuilding/DieselGeneratorB/StartSignal"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/DieselGeneratorB",
+		Label: "StartSignal",
+		Kind:  "enum",
+		Enum: []string{
+			"None",
+			"Manual",
+			"Safety Injection",
+			"Loss of Offsite Power",
+			"Test",
+		},
+		Get: func() string {
+			return fmt.Sprintf("%d",
+				p.AuxiliaryBuilding.DieselGeneratorB.StartSignal)
+		},
+		Set: func(s string) error {
+			switch s {
+			case "0":
+				p.AuxiliaryBuilding.DieselGeneratorB.StartSignal = DieselStartNone
+			case "1":
+				p.AuxiliaryBuilding.DieselGeneratorB.StartSignal = DieselStartManual
+			case "2":
+				p.AuxiliaryBuilding.DieselGeneratorB.StartSignal = DieselStartSafetyInjection
+			case "3":
+				p.AuxiliaryBuilding.DieselGeneratorB.StartSignal = DieselStartLossOfOffsitePower
+			case "4":
+				p.AuxiliaryBuilding.DieselGeneratorB.StartSignal = DieselStartTest
+			default:
+				return fmt.Errorf("invalid StartSignal %q (want 0..4)", s)
+			}
+			return nil
+		},
+	}
+	m["AuxiliaryBuilding/DieselGeneratorB/RunningFraction"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/DieselGeneratorB",
+		Label: "RunningFraction",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.DieselGeneratorB.RunningFraction)
+		},
+		Set: func(s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			if f < 0 || f > 1 {
+				return fmt.Errorf("normalized %v out of range [0,1]", f)
+			}
+			p.AuxiliaryBuilding.DieselGeneratorB.RunningFraction = float32(f)
+			return nil
+		},
+	}
+	m["AuxiliaryBuilding/DieselGeneratorB/Generator/BreakerClosed"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/DieselGeneratorB/Generator",
+		Label: "BreakerClosed",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.DieselGeneratorB.Generator.BreakerClosed)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.DieselGeneratorB.Generator.BreakerClosed = v
+			return nil
+		},
+	}
+
 }
 
 // addAuxiliaryBuildingSensors adds Sensor entries keyed by the namespace managed by this file to m.
@@ -808,6 +888,17 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("fahrenheit",
 				p.AuxiliaryBuilding.DieselGenerator.CoolantTemp.Float())
+		},
+	}
+
+	// Train-B diesel sensors mirror the train-A entries.
+	m["AuxiliaryBuilding/DieselGeneratorB/CoolantTemp"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/DieselGeneratorB",
+		Label: "CoolantTemp",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.AuxiliaryBuilding.DieselGeneratorB.CoolantTemp.Float())
 		},
 	}
 
@@ -950,6 +1041,16 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
 				p.AuxiliaryBuilding.DieselGenerator.ReadyToLoad)
+		},
+	}
+
+	m["AuxiliaryBuilding/DieselGeneratorB/ReadyToLoad"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/DieselGeneratorB",
+		Label: "ReadyToLoad",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.DieselGeneratorB.ReadyToLoad)
 		},
 	}
 

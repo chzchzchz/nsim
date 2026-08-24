@@ -165,10 +165,19 @@ func (r *ReactorProtectionSystem) Step(
 
 	// Steamline Isolation: same triggers plus high
 	// steam-pressure rate of change (not modelled at this
-	// fidelity).
+	// fidelity). The low-steamline trigger carries its own
+	// planned-cooldown block, matching the SI block: an
+	// intentional atmospheric-dump cooldown legitimately
+	// carries the header through the shared setpoint.
+	// Containment-pressure and manual triggers stay live
+	// while the block is armed — a block gates its own
+	// consumer only.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:107-110
 	if !ret.SteamlineIsolationActuated {
+		lowSteamline := steamlinePressure < RPSLowSteamlinePressureTrip &&
+			!ret.SteamlineIsolationBlocked
 		if containmentPressureGauge > RPSHighContainmentPressureTrip ||
-			steamlinePressure < RPSLowSteamlinePressureTrip ||
+			lowSteamline ||
 			(tcoldF < RPSLowTcoldTrip && atPowerTripsEnabled) ||
 			ret.ManualSI {
 			ret.SteamlineIsolationActuated = true

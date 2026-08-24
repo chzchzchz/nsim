@@ -65,7 +65,7 @@ type AuxiliaryBuilding struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:23-27
 	EmergencyFeedwaterSystem EFWS
 
-	// DieselGenerator models the emergency diesel. Located
+	// DieselGenerator models the train-A emergency diesel. Located
 	// on site, physically and electrically independent from
 	// offsite power.
 	// "auxiliary power required for safe shutdown will be
@@ -73,6 +73,15 @@ type AuxiliaryBuilding struct {
 	// diesel generators located on the site."
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:28-31
 	DieselGenerator `json:"DieselGenerator"`
+
+	// DieselGeneratorB models the train-B emergency diesel,
+	// independent of the train-A unit and of the train-A ESF bus:
+	// "Each power source, diesel generator and offsite, up to
+	// the point of connection to the engineered safety features
+	// system power buses, is physically and electrically
+	// independent."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:30-36
+	DieselGeneratorB DieselGenerator `json:"DieselGeneratorB"`
 
 	// Transformer models the station auxiliary transformer
 	// that steps down offsite grid voltage to plant
@@ -126,5 +135,15 @@ func (a *AuxiliaryBuilding) Step(
 	ret.SpentFuelPoolCoolingSystem =
 		ret.SpentFuelPoolCoolingSystem.Step(sfpcDriveReady)
 	ret.DieselGenerator = ret.DieselGenerator.Step(swFlowGPM)
+	ret.DieselGeneratorB = ret.DieselGeneratorB.Step(swFlowGPM)
 	return ret
+}
+
+// anyDieselStartSignal reports whether either train's diesel carries
+// the given start signal. The safety systems keyed on the diesel start
+// signal (HHSI, SWS, EFWS, RCFC low-speed switchover) actuate per
+// signal regardless of which train's diesel received it.
+func (a *AuxiliaryBuilding) anyDieselStartSignal(sig DieselStartCause) bool {
+	return a.DieselGenerator.StartSignal == sig ||
+		a.DieselGeneratorB.StartSignal == sig
 }

@@ -713,6 +713,30 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Operator block on the steamline-isolation low-steamline
+	// trigger, armed with the SI block for planned cooldowns: an
+	// intentional atmospheric-dump cooldown legitimately carries
+	// the header through the shared setpoint. Containment-pressure
+	// and manual triggers stay live while blocked.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:107-110
+	m["ReactorBuilding/ReactorProtectionSystem/SteamlineIsolationBlock"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorProtectionSystem",
+		Label: "SteamlineIsolationBlock",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationBlocked)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationBlocked = v
+			return nil
+		},
+	}
+
 	// Channel-under-test selector: isolates one monitored input
 	// for calibration/testing so an injected stimulus on that
 	// channel cannot actuate protections while the crew verifies

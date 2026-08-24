@@ -4657,6 +4657,19 @@ type ReactorProtectionSystem struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:108-110
 	SafetyInjectionBlocked bool
 
+	// SteamlineIsolationBlocked is the matching planned-cooldown
+	// block for the steamline-isolation ESFAS output, whose low
+	// steamline pressure trigger shares SI's setpoint: an
+	// intentional atmospheric-dump cooldown legitimately carries
+	// the header through it. It gates only that trigger — high
+	// containment pressure and manual initiation stay live. The
+	// chapter documents the blocking practice for the shared
+	// setpoint's SI signal; extending it to the same-trigger
+	// isolation output is a modeling assumption (source is silent
+	// on a dedicated isolation block).
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:107-110
+	SteamlineIsolationBlocked bool
+
 	// ManualSI is true when the operator has pressed a manual
 	// safety-injection (or manual steamline-isolation / Phase A)
 	// pushbutton; it carries the "manual" entries of the ESFAS
