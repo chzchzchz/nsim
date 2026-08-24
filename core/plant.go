@@ -220,6 +220,7 @@ func (r *ReactorBuilding) Step(
 		AtmosphericPressure
 	ret.ReactorProtectionSystem = ret.ReactorProtectionSystem.Step(
 		ret.SteamGenerator.Pressure,
+		ret.Pressurizer.Pressure,
 		sgLevelPct,
 		ret.ReactorPressureVessel.Inlet.Float(),
 		containmentGauge,

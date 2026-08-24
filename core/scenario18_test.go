@@ -111,7 +111,7 @@ func TestTurbineBuilding_TripDumpModulatesOnTavgError(t *testing.T) {
 	// overdrafting the header.
 	floorF := SteamDumpTripHeaderFloorFraction * float64(SteamGeneratorShellPressure)
 	lowHeader := Pressure(floorF + 0.15*
-		(SteamDumpPressureModeMargin*float64(SteamGeneratorShellPressure) - floorF))
+		(SteamDumpPressureModeMargin*float64(SteamGeneratorShellPressure)-floorF))
 	midExcess := SteamDumpTripSpanF * 0.1
 	mid := newTripped()
 	for i := 0; i < int(2*time.Second/TimeStep); i++ {

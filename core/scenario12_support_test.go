@@ -92,7 +92,7 @@ func TestRPV_SecondaryExcessCoolsOutlet(t *testing.T) {
 	// between the twins, leaving the pure energy-balance offset.
 	massKg := RCSMassKg
 	wantDropF := float64(excess) / (massKg * SpecificHeatWater) *
-		float64(window)*TimeStep.Seconds() * 9.0 / 5.0
+		float64(window) * TimeStep.Seconds() * 9.0 / 5.0
 	gotDropF := base.Outlet.Float() - dump.Outlet.Float()
 	require.Greater(t, gotDropF, 0.0,
 		"the dumped twin must sit below its neutralized twin")
@@ -130,14 +130,14 @@ func TestRPS_SafetyInjectionBlockGatesActuation(t *testing.T) {
 	lowSteamline := RPSLowSteamlinePressureTrip - 10
 
 	blocked := ReactorProtectionSystem{SafetyInjectionBlocked: true}
-	blocked = blocked.Step(lowSteamline, 50, CoreReferenceInletF, 0, 0)
+	blocked = blocked.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0)
 	assert.False(t, blocked.SafetyInjectionActuated,
 		"a blocked SI signal must not actuate below the setpoint")
 	assert.False(t, blocked.ReactorTripped,
 		"one channel below voting threshold must not trip the reactor")
 
 	open := ReactorProtectionSystem{}
-	open = open.Step(lowSteamline, 50, CoreReferenceInletF, 0, 0)
+	open = open.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0)
 	assert.True(t, open.SafetyInjectionActuated,
 		"without the block the same state must actuate SI")
 }
@@ -301,8 +301,8 @@ func TestPressurizer_NormalSprayNeedsRCPFlow(t *testing.T) {
 func TestPressurizer_AuxSprayControlsPressureWithRCPsSecured(t *testing.T) {
 	hotLeg := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 	pz := Pressurizer{
-		Volume: Volume{Val: 1500, Unit: u.Gallon},
-		Water:  Volume{Val: 900, Unit: u.Gallon},
+		Volume:   Volume{Val: 1500, Unit: u.Gallon},
+		Water:    Volume{Val: 900, Unit: u.Gallon},
 		Pressure: PressurizerHeaterTarget,
 	}
 	window := int(10 * time.Second / TimeStep)
@@ -360,8 +360,8 @@ func TestRHRS_SolidPlantPressureValveHoldsSelectedPressure(t *testing.T) {
 		SolidPlantPressureSetpoint: Pressure(400)}
 	rhrs.SolidPlantPressureValve.Open = 1
 	solid := Pressurizer{
-		Volume: Volume{Val: 1500, Unit: u.Gallon},
-		Water:  Volume{Val: 1500, Unit: u.Gallon},
+		Volume:   Volume{Val: 1500, Unit: u.Gallon},
+		Water:    Volume{Val: 1500, Unit: u.Gallon},
 		Pressure: PressurizerHeaterTarget,
 	}
 
@@ -392,8 +392,8 @@ func TestRHRS_SolidPlantValveNeedsRHRRunning(t *testing.T) {
 	rhrs := RHRS{SolidPlantPressureSetpoint: Pressure(400)}
 	rhrs.SolidPlantPressureValve.Open = 1
 	solid := Pressurizer{
-		Volume: Volume{Val: 1500, Unit: u.Gallon},
-		Water:  Volume{Val: 1500, Unit: u.Gallon},
+		Volume:   Volume{Val: 1500, Unit: u.Gallon},
+		Water:    Volume{Val: 1500, Unit: u.Gallon},
 		Pressure: PressurizerHeaterTarget,
 	}
 	bled := rhrs.SolidPlantRelieve(&solid)

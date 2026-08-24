@@ -36,6 +36,7 @@ package core
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:10-11
 func (r *ReactorProtectionSystem) Step(
 	steamlinePressure Pressure,
+	pzrPressure Pressure,
 	sgLevelPct float64,
 	tcoldF float64,
 	containmentPressureGauge Pressure,
@@ -47,15 +48,11 @@ func (r *ReactorProtectionSystem) Step(
 	// the trip count; the trip is declared when the count
 	// reaches RPSTripVotingThreshold (2/4 logic).
 	//
-	// Note: the simplified model omits the pressurizer-pressure
-	// trip and the high-pressurizer-level trip. The
-	// pressurizer pressure in this fidelity band is
-	// dominated by surge-line interactions and does not
-	// reliably reflect a real low-pressure event; the
-	// high-level trip requires a stable level measurement
-	// that the simplified model does not yet provide. Both
-	// are deferred to a higher fidelity band as called out
-	// in the plan's "Assumptions" section.
+	// Note: the simplified model omits the high-pressurizer-level
+	// trip. It requires a stable level measurement that the
+	// simplified model does not yet provide; it is deferred to a
+	// higher fidelity band as called out in the plan's
+	// "Assumptions" section.
 	//
 	// "A 2/4 logic means that a trip occurs when at least 2
 	// signals out of 4 indicate a trip condition."
@@ -96,6 +93,9 @@ func (r *ReactorProtectionSystem) Step(
 	case RPSContainmentChannelInTest:
 		containmentPressureGauge = min(containmentPressureGauge,
 			RPSHighContainmentPressureTrip-1)
+	case RPSPressurizerChannelInTest:
+		pzrPressure = max(pzrPressure,
+			RPSLowPressurizerPressureTrip+1)
 	}
 
 	var trips int
@@ -109,6 +109,9 @@ func (r *ReactorProtectionSystem) Step(
 		trips++
 	}
 	if tcoldF < RPSLowTcoldTrip && atPowerTripsEnabled {
+		trips++
+	}
+	if pzrPressure < RPSLowPressurizerPressureTrip && atPowerTripsEnabled {
 		trips++
 	}
 	if containmentPressureGauge > RPSHighContainmentPressureTrip {
@@ -140,22 +143,24 @@ func (r *ReactorProtectionSystem) Step(
 	// active; operator reset clears them.
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:6-81
 
-	// Safety Injection: high containment pressure, low
-	// steamline pressure, low Tcold, manual SI. (Low
-	// pressurizer pressure is deferred — see Step preamble.)
+	// Safety Injection: low pressurizer pressure, high
+	// containment pressure, low steamline pressure, low Tcold,
+	// manual SI - the Table 7-1 order. Like low Tcold, the
+	// low-pressurizer-pressure channel sits behind the at-power
+	// permissive so planned cooldowns and cold-condition lineups
+	// do not actuate ESFAS through it (the operator block arms
+	// before reaching setpoints during deliberate cooldowns:
+	// specs/the_westinghouse_pressurized_water_react/
+	// chapter_16/page_227.txt:108-110).
 	// The manual entry is the dedicated manual-SI pushbutton of
 	// Table 7-1, not the manual reactor trip: a plain reactor trip
 	// "avoids unnecessary actuation of engineered safety features"
 	// (specs/the_westinghouse_pressurized_water_react/
-	// chapter_7/page_138.txt:11-13). The operator block arms during
-	// planned cooldowns before these variables reach their
-	// actuation setpoints (specs/the_westinghouse_pressurized_water_react/
-	// chapter_16/page_227.txt:108-110).
-	// The manual trigger is the separate manual-safety-injection
-	// pushbutton, not the manual reactor trip.
-	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:8-14
+	// chapter_7/page_138.txt:11-13).
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:8-15
 	if !ret.SafetyInjectionActuated && !ret.SafetyInjectionBlocked {
-		if containmentPressureGauge > RPSHighContainmentPressureTrip ||
+		if pzrPressure < RPSLowPressurizerPressureTrip && atPowerTripsEnabled ||
+			containmentPressureGauge > RPSHighContainmentPressureTrip ||
 			steamlinePressure < RPSLowSteamlinePressureTrip ||
 			(tcoldF < RPSLowTcoldTrip && atPowerTripsEnabled) ||
 			ret.ManualSI {
@@ -165,18 +170,22 @@ func (r *ReactorProtectionSystem) Step(
 
 	// Steamline Isolation: same triggers plus high
 	// steam-pressure rate of change (not modelled at this
-	// fidelity). The low-steamline trigger carries its own
-	// planned-cooldown block, matching the SI block: an
-	// intentional atmospheric-dump cooldown legitimately
-	// carries the header through the shared setpoint.
-	// Containment-pressure and manual triggers stay live
-	// while the block is armed — a block gates its own
-	// consumer only.
+	// fidelity); "Low pressurizer pressure" heads this Table
+	// 7-1 list as well (chapter_7/page_140.txt:25-31). The
+	// low-steamline trigger carries its own planned-cooldown
+	// block, matching the SI block: an intentional
+	// atmospheric-dump cooldown legitimately carries the header
+	// through the shared setpoint. Containment-pressure and
+	// manual triggers stay live while the block is armed — a
+	// block gates its own consumer only.
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:107-110
 	if !ret.SteamlineIsolationActuated {
 		lowSteamline := steamlinePressure < RPSLowSteamlinePressureTrip &&
 			!ret.SteamlineIsolationBlocked
-		if containmentPressureGauge > RPSHighContainmentPressureTrip ||
+		lowPzr := pzrPressure < RPSLowPressurizerPressureTrip &&
+			atPowerTripsEnabled
+		if lowPzr ||
+			containmentPressureGauge > RPSHighContainmentPressureTrip ||
 			lowSteamline ||
 			(tcoldF < RPSLowTcoldTrip && atPowerTripsEnabled) ||
 			ret.ManualSI {

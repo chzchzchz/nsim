@@ -96,3 +96,60 @@ func TestScenario27_DroppedBankRaisesLoadRunback(t *testing.T) {
 	assert.False(t, p.ReactorBuilding.ReactorPressureVessel.Trip,
 		"the runback fires without needing a reactor trip")
 }
+
+// The low-pressurizer-pressure channel heads both the Safety Injection
+// and Steamline Isolation trigger lists of Table 7-1 and votes the
+// reactor trip behind the at-power permissive, exactly like the low
+// Tcold channel beside it.
+//
+//   - "Safety Injection / Low pressurizer pressure / [...]":
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:8-15
+//   - "Steamline Isolation / Low pressurizer pressure / [...]":
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:25-31
+//   - At-power permissive convention:
+//     specs/westinghouse_plant_operations/chapter_19/page_018.txt:3-7
+func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
+	t.Parallel()
+
+	// At power with the pressurizer just below the setpoint: one trip
+	// channel counts, SI latches on the first step and its vote lands
+	// the reactor trip on the next.
+	r := ReactorProtectionSystem{}
+	low := RPSLowPressurizerPressureTrip - 1
+	s1 := r.Step(SteamGeneratorShellPressure, low, 50,
+		CoreReferenceInletF, AtmosphericPressure, 1.0)
+	assert.Equal(t, 1, s1.TripSignalCount,
+		"low pressurizer pressure contributes one voting channel")
+	assert.True(t, s1.SafetyInjectionActuated,
+		"low pressurizer pressure is an SI trigger")
+	assert.True(t, s1.SteamlineIsolationActuated,
+		"low pressurizer pressure is a steamline-isolation trigger")
+	s2 := s1.Step(SteamGeneratorShellPressure, low, 50,
+		CoreReferenceInletF, AtmosphericPressure, 1.0)
+	assert.True(t, s2.ReactorTripped,
+		"the SI latch votes the reactor trip")
+
+	// Below the at-power permissive the channel stays silent so
+	// planned cooldowns pass through the setpoint without ESFAS.
+	cold := ReactorProtectionSystem{}
+	s3 := cold.Step(SteamGeneratorShellPressure, low, 50,
+		CoreReferenceInletF, AtmosphericPressure,
+		RPSAtPowerPermissiveFraction/2)
+	assert.False(t, s3.SafetyInjectionActuated)
+	assert.Equal(t, 0, s3.TripSignalCount)
+
+	// Channel-under-test isolation forces the monitored pressure
+	// away from the setpoint, so calibration cannot actuate SI.
+	tested := ReactorProtectionSystem{ChannelTest: RPSPressurizerChannelInTest}
+	s4 := tested.Step(SteamGeneratorShellPressure, low, 50,
+		CoreReferenceInletF, AtmosphericPressure, 1.0)
+	assert.False(t, s4.SafetyInjectionActuated,
+		"isolated channel cannot actuate protections")
+
+	// Healthy pressure at power contributes nothing.
+	ok := ReactorProtectionSystem{}
+	s5 := ok.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
+		CoreReferenceInletF, AtmosphericPressure, 1.0)
+	assert.Equal(t, 0, s5.TripSignalCount)
+	assert.False(t, s5.SafetyInjectionActuated)
+}

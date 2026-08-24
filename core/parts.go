@@ -5100,6 +5100,7 @@ const (
 	RPSSGLevelChannelInTest
 	RPSTcoldChannelInTest
 	RPSContainmentChannelInTest
+	RPSPressurizerChannelInTest
 )
 
 // name returns the bridge enum string for the selection.
@@ -5113,6 +5114,8 @@ func (t RPSChannelTest) name() string {
 		return "Tcold"
 	case RPSContainmentChannelInTest:
 		return "Containment"
+	case RPSPressurizerChannelInTest:
+		return "Pressurizer"
 	default:
 		return "None"
 	}
