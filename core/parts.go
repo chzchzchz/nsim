@@ -203,6 +203,20 @@ type Turbine struct {
 	// the controlled rate", which this flag represents.
 	LoadRunback bool
 
+	// LowTavgDeviationHold is set by the turbine step while the
+	// measured RCS average temperature sits more than
+	// TurbineLowTavgDeviationF below the load-referenced program:
+	// the DEHM then holds the load reference instead of raising it,
+	// which is how loading stops automatically when a rods-only
+	// power increase outruns xenon burnout. The hold releases itself
+	// when the deviation recovers; lowering the load reference stays
+	// permitted.
+	//   "Tavg will continue to drop until turbine loading is stopped
+	//    either by manual operation or automatically upon reaching
+	//    the low Tavg deviation setpoint signal."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_232.txt:62-66
+	LowTavgDeviationHold bool
+
 	// OPCAlarm is set by the turbine step when shaft velocity
 	// exceeds TurbineOPCALarmFraction of TurbineRatedSpeed
 	// (103%). The OPC controller raises this as a purely
@@ -529,6 +543,14 @@ const (
 	// 5% per minute (≈0.00083/s) is a typical Westinghouse DEHM
 	// load-runback rate.
 	TurbineLoadRunbackRate float64 = 0.05 / 60.0
+
+	// TurbineLowTavgDeviationF is the deviation (°F, measured minus
+	// programmed) at which the DEHM's low-Tavg-deviation signal stops
+	// turbine loading. Derived convention: the source names the signal
+	// without a magnitude; sized above the rod controller's tracking
+	// noise during dispatched ramps (observed <= 1 °F) so normal follow
+	// never latches it.
+	TurbineLowTavgDeviationF float64 = -2.0
 
 	// GeneratorRatedMVA is the apparent-power rating of the main
 	// generator. "Rating: 1370 mva"

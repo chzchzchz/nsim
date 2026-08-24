@@ -39,7 +39,7 @@ import (
 // headers: design full-load flow scaled by valve admission and header
 // pressure. The turbine converts it into angular Velocity up to
 // TurbineRatedSpeed and into RealPower up to TurbineRatedkW.
-func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveOpen *float64) Turbine {
+func (t *Turbine) Step(sgPressure, condPressure Pressure, tavg Temperature, reset bool, stopValveOpen *float64) Turbine {
 	ret := *t
 	dt := TimeStep
 
@@ -144,13 +144,27 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, reset bool, stopValveO
 	// Dispatcher load reference. When the grid dispatch supplies a
 	// demand, the DEHM ramps the operator setpoint toward it at the
 	// controlled selectable rate unless a protective runback holds
-	// priority.
-	//
-	// Spec: "reference values established by the dispatcher"
-	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
+	// priority. A low-Tavg-deviation signal also stops the ascent:
+	// while measured Tavg sits more than TurbineLowTavgDeviationF
+	// below the load-referenced program, raising the load reference
+	// is held - loading a rods-only core deeper than its poison
+	// allows would otherwise drag Tavg down unbounded. Descent toward
+	// a lowered demand stays permitted, and the hold releases itself
+	// when the deviation recovers.
+	//   "reference values established by the dispatcher"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
+	//   "Tavg will continue to drop until turbine loading is stopped
+	//    either by manual operation or automatically upon reaching
+	//    the low Tavg deviation setpoint signal."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_232.txt:62-66
+	ret.LowTavgDeviationHold = ret.Synchronized &&
+		ret.State == TurbineRunning &&
+		tavg.Float()-programmedRodTavg(ret.Setpoint) < TurbineLowTavgDeviationF
 	if ret.LoadDemandRef > 0 && ret.State == TurbineRunning && !ret.LoadRunback {
 		if ret.Setpoint < ret.LoadDemandRef {
-			ret.Setpoint = min(ret.Setpoint+ret.RampRate*dt.Seconds(), ret.LoadDemandRef)
+			if !ret.LowTavgDeviationHold {
+				ret.Setpoint = min(ret.Setpoint+ret.RampRate*dt.Seconds(), ret.LoadDemandRef)
+			}
 		} else if ret.Setpoint > ret.LoadDemandRef {
 			ret.Setpoint = max(ret.Setpoint-ret.RampRate*dt.Seconds(), ret.LoadDemandRef)
 		}

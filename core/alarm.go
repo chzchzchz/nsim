@@ -57,6 +57,7 @@ const (
 	AlarmIDTurbineTripVacuum     AlarmID = "turbine.trip_vacuum"
 	AlarmIDTurbineTripBearingOil AlarmID = "turbine.trip_bearing_oil"
 	AlarmIDTurbineStepback       AlarmID = "turbine.stepback_active"
+	AlarmIDTurbineLowTavg        AlarmID = "turbine.low_tavg_deviation"
 	AlarmIDGeneratorMVALimit     AlarmID = "generator.mva_limit"
 	AlarmIDSIActuated            AlarmID = "rps.si_actuated"
 	AlarmIDSteamlineIsolation    AlarmID = "rps.steamline_isolation"
@@ -117,6 +118,8 @@ func alarmDescription(id AlarmID) string {
 		return "Turbine trip: bearing oil pressure low"
 	case AlarmIDTurbineStepback:
 		return "Turbine-trip reactor stepback active"
+	case AlarmIDTurbineLowTavg:
+		return "Tavg below program: turbine loading held"
 	case AlarmIDGeneratorMVALimit:
 		return "Generator MVA limit exceeded"
 	case AlarmIDSIActuated:
@@ -277,6 +280,21 @@ func (p *Plant) Alarms() []Alarm {
 		list = append(list, Alarm{
 			ID:          AlarmIDTurbineStepback,
 			Description: alarmDescription(AlarmIDTurbineStepback),
+			Severity:    SeverityWarning,
+			Active:      true,
+		})
+	}
+
+	// Low-Tavg-deviation loading hold: the DEHM stopped raising the
+	// load reference because measured Tavg fell below the program.
+	//   "Tavg will continue to drop until turbine loading is stopped
+	//    either by manual operation or automatically upon reaching
+	//    the low Tavg deviation setpoint signal."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_232.txt:62-66
+	if p.TurbineBuilding.Turbine.LowTavgDeviationHold {
+		list = append(list, Alarm{
+			ID:          AlarmIDTurbineLowTavg,
+			Description: alarmDescription(AlarmIDTurbineLowTavg),
 			Severity:    SeverityWarning,
 			Active:      true,
 		})

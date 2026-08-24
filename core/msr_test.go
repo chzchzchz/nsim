@@ -99,7 +99,7 @@ func TestTurbineExtractionSteamFlow_ScalesWithLoad(t *testing.T) {
 	condP := Pressure(0)
 	stopOpen := 1.0
 
-	tr := (&Turbine{}).Step(sgP, condP, false, &stopOpen)
+	tr := (&Turbine{}).Step(sgP, condP, Temperature{Val: 600}, false, &stopOpen)
 	// First step: rotor spinning up, partial load.
 	zeroLoadFlow := tr.ExtractionSteamFlow.Float()
 
@@ -114,7 +114,7 @@ func TestTurbineExtractionSteamFlow_ScalesWithLoad(t *testing.T) {
 		BearingOilPressure: BearingOilDesignPressure,
 	}
 	for i := 0; i < 1000; i++ {
-		rated = rated.Step(sgP, condP, false, &stopOpen)
+		rated = rated.Step(sgP, condP, Temperature{Val: 600}, false, &stopOpen)
 	}
 	ratedFlow := rated.ExtractionSteamFlow.Float()
 

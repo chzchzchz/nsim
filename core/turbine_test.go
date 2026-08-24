@@ -38,7 +38,7 @@ func steamingTurbine() Turbine {
 func TestTurbine_SteamFlowStartsRunning(t *testing.T) {
 	tr := steamingTurbine()
 	for i := 0; i < 100; i++ {
-		tr = tr.Step(1000, 0, false, openValve())
+		tr = tr.Step(1000, 0, Temperature{Val: 600}, false, openValve())
 	}
 	assert.Equal(t, TurbineRunning, tr.State, "want TurbineRunning")
 	assert.Positive(t, tr.Velocity, "want Velocity > 0 after steam admission")
@@ -48,7 +48,7 @@ func TestTurbine_SteamFlowStartsRunning(t *testing.T) {
 func TestTurbine_ShortSteamLossStaysRunning(t *testing.T) {
 	tr := steamingTurbine()
 	for i := 0; i < 1000; i++ {
-		tr = tr.Step(1000, 0, false, openValve())
+		tr = tr.Step(1000, 0, Temperature{Val: 600}, false, openValve())
 	}
 	require.Equal(t, TurbineRunning, tr.State, "precondition: want Running")
 	velBefore := tr.Velocity
@@ -56,7 +56,7 @@ func TestTurbine_ShortSteamLossStaysRunning(t *testing.T) {
 	// rotor coasts down but the turbine remains Running; once steam
 	// returns the rotor accelerates again.
 	for i := 0; i < int(100*time.Millisecond/TimeStep); i++ {
-		tr = tr.Step(0, 0, false, openValve())
+		tr = tr.Step(0, 0, Temperature{Val: 600}, false, openValve())
 	}
 	assert.Equal(t, TurbineRunning, tr.State,
 		"want still Running after brief transient, got %v", tr.State)
@@ -64,7 +64,7 @@ func TestTurbine_ShortSteamLossStaysRunning(t *testing.T) {
 		"want Velocity to coast down, before %v after %v", velBefore, tr.Velocity)
 	// Restore steam and confirm we accelerate back up.
 	for i := 0; i < 1000; i++ {
-		tr = tr.Step(1000, 0, false, openValve())
+		tr = tr.Step(1000, 0, Temperature{Val: 600}, false, openValve())
 	}
 	assert.GreaterOrEqual(t, tr.Velocity, velBefore,
 		"want Velocity restored, before %v after %v", velBefore, tr.Velocity)
@@ -73,11 +73,11 @@ func TestTurbine_ShortSteamLossStaysRunning(t *testing.T) {
 func TestTurbine_SustainedSteamLossTrips(t *testing.T) {
 	tr := steamingTurbine()
 	for i := 0; i < 1000; i++ {
-		tr = tr.Step(1000, 0, false, openValve())
+		tr = tr.Step(1000, 0, Temperature{Val: 600}, false, openValve())
 	}
 	steps := int(TurbineSteamLossDeadline/TimeStep) + 100
 	for i := 0; i < steps; i++ {
-		tr = tr.Step(0, 0, false, openValve())
+		tr = tr.Step(0, 0, Temperature{Val: 600}, false, openValve())
 	}
 	assert.Equal(t, TurbineTripped, tr.State,
 		"want Tripped after sustained loss of steam, got %v", tr.State)
@@ -88,7 +88,7 @@ func TestTurbine_OverspeedTrips(t *testing.T) {
 	// Pre-load the rotor past the trip threshold; the Step must latch
 	// TurbineTripped on the very next tick.
 	tr.Velocity = Velocity(float64(TurbineRatedSpeed) * TurbineOverspeedTripRatio * 1.5)
-	tr = tr.Step(1000, 0, false, openValve())
+	tr = tr.Step(1000, 0, Temperature{Val: 600}, false, openValve())
 	assert.Equal(t, TurbineTripped, tr.State,
 		"want Tripped on overspeed, got %v (velocity=%v)", tr.State, tr.Velocity)
 }
@@ -97,25 +97,25 @@ func TestTurbine_TrippedRequiresReset(t *testing.T) {
 	tr := steamingTurbine()
 	// Trip via sustained steam loss.
 	for i := 0; i < 1000; i++ {
-		tr = tr.Step(1000, 0, false, openValve())
+		tr = tr.Step(1000, 0, Temperature{Val: 600}, false, openValve())
 	}
 	steps := int(TurbineSteamLossDeadline/TimeStep) + 100
 	for i := 0; i < steps; i++ {
-		tr = tr.Step(0, 0, false, openValve())
+		tr = tr.Step(0, 0, Temperature{Val: 600}, false, openValve())
 	}
 	require.Equal(t, TurbineTripped, tr.State, "precondition: want Tripped")
 	// Steam returns but reset is still false — turbine must remain
 	// tripped until an explicit reset clears it.
 	for i := 0; i < 5000; i++ {
-		tr = tr.Step(1000, 0, false, openValve())
+		tr = tr.Step(1000, 0, Temperature{Val: 600}, false, openValve())
 	}
 	assert.Equal(t, TurbineTripped, tr.State, "want Tripped until reset, got %v", tr.State)
 	// Wait for Velocity to decay to 0 (coast ~1/3 s).
 	for i := 0; i < int(5*time.Second/TimeStep); i++ {
-		tr = tr.Step(0, 0, false, openValve())
+		tr = tr.Step(0, 0, Temperature{Val: 600}, false, openValve())
 	}
 	for i := 0; i < 10; i++ {
-		tr = tr.Step(0, 0, true, openValve())
+		tr = tr.Step(0, 0, Temperature{Val: 600}, true, openValve())
 	}
 	assert.Equal(t, TurbineOff, tr.State, "want Off after reset, got %v", tr.State)
 }
@@ -139,26 +139,26 @@ func TestTurbine_ResetRequestRestartsFromTripped(t *testing.T) {
 	// Trip via sustained steam loss, then let the rotor coast to
 	// rest.
 	for i := 0; i < 1000; i++ {
-		tr = tr.Step(1000, 0, false, openValve())
+		tr = tr.Step(1000, 0, Temperature{Val: 600}, false, openValve())
 	}
 	steps := int(TurbineSteamLossDeadline/TimeStep) + 100
 	for i := 0; i < steps; i++ {
-		tr = tr.Step(0, 0, false, openValve())
+		tr = tr.Step(0, 0, Temperature{Val: 600}, false, openValve())
 	}
 	require.Equal(t, TurbineTripped, tr.State, "precondition: want Tripped")
 	for i := 0; i < int(5*time.Second/TimeStep); i++ {
-		tr = tr.Step(0, 0, false, openValve())
+		tr = tr.Step(0, 0, Temperature{Val: 600}, false, openValve())
 	}
 
 	// Latch the operator reset request and step once.
 	tr.ResetRequest = true
-	tr = tr.Step(0, 0, false, openValve())
+	tr = tr.Step(0, 0, Temperature{Val: 600}, false, openValve())
 	assert.Equal(t, TurbineOff, tr.State,
 		"want Off after consuming ResetRequest")
 	assert.False(t, tr.ResetRequest, "ResetRequest must be consumed")
 
 	// Steam returns: Off -> Running without any further reset.
-	tr = tr.Step(1000, 0, false, openValve())
+	tr = tr.Step(1000, 0, Temperature{Val: 600}, false, openValve())
 	assert.Equal(t, TurbineRunning, tr.State,
 		"want Running once steam returns")
 }
@@ -168,7 +168,7 @@ func TestTurbine_ResetRequestRestartsFromTripped(t *testing.T) {
 func TestTurbine_StopValveClosedBlocksSteam(t *testing.T) {
 	tr := Turbine{}
 	for i := 0; i < 1000; i++ {
-		tr = tr.Step(1000, 0, false, closedValve())
+		tr = tr.Step(1000, 0, Temperature{Val: 600}, false, closedValve())
 	}
 	assert.Equal(t, TurbineOff, tr.State,
 		"want Off with stop valve closed, got %v", tr.State)
@@ -182,7 +182,7 @@ func TestTurbine_StopValveMidRunCoastsDown(t *testing.T) {
 	tr := steamingTurbine()
 	// Reach rated speed.
 	for i := 0; i < 1000; i++ {
-		tr = tr.Step(1000, 0, false, openValve())
+		tr = tr.Step(1000, 0, Temperature{Val: 600}, false, openValve())
 	}
 	require.Equal(t, TurbineRunning, tr.State, "precondition: want Running")
 	velBefore := tr.Velocity
@@ -191,7 +191,7 @@ func TestTurbine_StopValveMidRunCoastsDown(t *testing.T) {
 	// trips.
 	steps := int(TurbineSteamLossDeadline/TimeStep) + 100
 	for i := 0; i < steps; i++ {
-		tr = tr.Step(1000, 0, false, closedValve())
+		tr = tr.Step(1000, 0, Temperature{Val: 600}, false, closedValve())
 	}
 	assert.Less(t, tr.Velocity, velBefore,
 		"want coast-down, before %v after %v", velBefore, tr.Velocity)
@@ -204,7 +204,7 @@ func TestTurbine_StopValveMidRunCoastsDown(t *testing.T) {
 func TestTurbine_NilStopValveAllowsSteam(t *testing.T) {
 	tr := steamingTurbine()
 	for i := 0; i < 100; i++ {
-		tr = tr.Step(1000, 0, false, nil)
+		tr = tr.Step(1000, 0, Temperature{Val: 600}, false, nil)
 	}
 	assert.Equal(t, TurbineRunning, tr.State,
 		"want Running with nil stop valve pointer and steam, got %v", tr.State)
@@ -229,7 +229,7 @@ func TestTurbine_ExtractionOutputAtRatedLoad(t *testing.T) {
 	}
 	open := 1.0
 	for i := 0; i < 1000; i++ {
-		tr = tr.Step(SteamGeneratorShellPressure, 0, false, &open)
+		tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, &open)
 	}
 	assert.Greater(t, tr.ExtractionSteamFlow.Float(), 0.0,
 		"want ExtractionSteamFlow > 0 at rated load, got %v",
@@ -254,7 +254,7 @@ func TestTurbine_OPCAlarmAssertsAbove103Percent(t *testing.T) {
 		Velocity: Velocity(float64(TurbineRatedSpeed) * (TurbineOPCALarmFraction + 0.005)),
 	}
 	open := 1.0
-	tr = tr.Step(SteamGeneratorShellPressure, 0, false, &open)
+	tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, &open)
 	assert.True(t, tr.OPCAlarm,
 		"want OPCAlarm true at %.1f%% rated, got false (vel=%v, frac=%v)",
 		TurbineOPCALarmFraction*100, tr.Velocity, TurbineOPCALarmFraction)
@@ -280,7 +280,7 @@ func TestTurbine_OPCTripClosesStopValveAt110Percent(t *testing.T) {
 		Velocity: Velocity(float64(TurbineRatedSpeed) * (TurbineOPCTripFraction + 0.01)),
 	}
 	open := 1.0
-	tr = tr.Step(SteamGeneratorShellPressure, 0, false, &open)
+	tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, &open)
 	assert.True(t, tr.OPCTrip,
 		"want OPCTrip latched above %.0f%% rated, got false (vel=%v)",
 		TurbineOPCTripFraction*100, tr.Velocity)
@@ -313,7 +313,7 @@ func TestTurbine_LoadRunbackDecreasesSetpoint(t *testing.T) {
 	runbackSec := 1.0 / TurbineLoadRunbackRate
 	steps := int(runbackSec*float64(time.Second)/float64(TimeStep)) + 1000
 	for i := 0; i < steps; i++ {
-		tr = tr.Step(SteamGeneratorShellPressure, 0, false, &open)
+		tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, &open)
 	}
 	assert.Zero(t, tr.Setpoint,
 		"want Setpoint=0 after full-load runback of %d steps (%.0fs), got %v",
@@ -341,7 +341,7 @@ func TestTurbine_SetpointClampsRealPower(t *testing.T) {
 	}
 	open := 1.0
 	for i := 0; i < 100; i++ {
-		tr = tr.Step(SteamGeneratorShellPressure, 0, false, &open)
+		tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, &open)
 	}
 	assert.LessOrEqual(t, float64(tr.RealPower), 0.5*float64(TurbineRatedkW),
 		"want RealPower ≤ 50%% rated at Setpoint=0.5, got %v", tr.RealPower)
@@ -404,7 +404,7 @@ func TestTurbine_TurningGearHoldsSlowRoll(t *testing.T) {
 	tr.TurningGear = true
 	tr.Velocity = TurbineRatedSpeed
 	for i := 0; i < int(5*time.Second/TimeStep); i++ {
-		tr = tr.Step(0, 0, false, closedValve())
+		tr = tr.Step(0, 0, Temperature{Val: 600}, false, closedValve())
 	}
 	assert.InDelta(t, float64(TurbineTurningGearRpm), float64(tr.Velocity), 0.5,
 		"want turning gear to hold ~%v rpm, got %v",
@@ -425,14 +425,14 @@ func TestTurbine_SpeedDemandRampsToRated(t *testing.T) {
 	tr := steamingTurbine()
 	tr.SpeedDemand = 1.0
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		tr = tr.Step(SteamGeneratorShellPressure, 0, false, openValve())
+		tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, openValve())
 	}
 	assert.GreaterOrEqual(t, float64(tr.Velocity), 250.0,
 		"want rotor ramping toward demand, got %v rpm after 10 s", tr.Velocity)
 	assert.Less(t, float64(tr.Velocity), float64(TurbineRatedSpeed),
 		"want rotor still below rated after 10 s, got %v", tr.Velocity)
 	for i := 0; i < int(60*time.Second/TimeStep); i++ {
-		tr = tr.Step(SteamGeneratorShellPressure, 0, false, openValve())
+		tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, openValve())
 	}
 	assert.InDelta(t, float64(TurbineRatedSpeed), float64(tr.Velocity), 60.0,
 		"want rotor at rated speed demand, got %v", tr.Velocity)
@@ -448,7 +448,7 @@ func TestTurbine_LowVacuumTrips(t *testing.T) {
 	tr := steamingTurbine()
 	tr.State = TurbineRunning
 	tr.Velocity = TurbineRatedSpeed
-	tr = tr.Step(SteamGeneratorShellPressure, Pressure(TurbineLowVacuumTripPsia+1), false, openValve())
+	tr = tr.Step(SteamGeneratorShellPressure, Pressure(TurbineLowVacuumTripPsia+1), Temperature{Val: 600}, false, openValve())
 	assert.True(t, tr.TripByVacuum, "want TripByVacuum latched")
 	assert.Equal(t, TurbineTripped, tr.State, "want Tripped on low vacuum")
 	assert.Zero(t, tr.StopValve.Open, "want stop valve shut on low vacuum trip")
@@ -466,7 +466,7 @@ func TestTurbine_LowBearingOilTrips(t *testing.T) {
 	tr.Velocity = TurbineRatedSpeed
 	tr.LubeOilPumpRunning = false
 	for i := 0; i < int(6*time.Second/TimeStep); i++ {
-		tr = tr.Step(SteamGeneratorShellPressure, 0, false, openValve())
+		tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, openValve())
 		if tr.State == TurbineTripped {
 			break
 		}
@@ -489,7 +489,7 @@ func TestTurbine_TripClosesExtractionNRVs(t *testing.T) {
 	tr.Velocity = TurbineRatedSpeed
 	tr.Setpoint = 1.0
 	tr.Synchronized = true
-	tr = tr.Step(SteamGeneratorShellPressure, Pressure(TurbineLowVacuumTripPsia+1), false, openValve())
+	tr = tr.Step(SteamGeneratorShellPressure, Pressure(TurbineLowVacuumTripPsia+1), Temperature{Val: 600}, false, openValve())
 	assert.True(t, tr.ExtractionNRVClosed, "want NRVs latched closed on trip")
 	assert.Zero(t, tr.ExtractionSteamFlow.Float(), "want extraction flow cut")
 }
@@ -503,7 +503,7 @@ func TestTurbine_RealPowerTracksSteamEnergy(t *testing.T) {
 	tr.GoverningValve = Valve{Open: 0.5}
 	tr.Synchronized = true
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		tr = tr.Step(SteamGeneratorShellPressure, 0, false, openValve())
+		tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, openValve())
 	}
 	assert.InDelta(t, 0.5*float64(TurbineRatedkW), float64(tr.RealPower),
 		0.1*float64(TurbineRatedkW),
@@ -526,7 +526,7 @@ func TestTurbine_LoadDemandRefRampsSetpoint(t *testing.T) {
 	tr.GridFrequency = GridRatedFrequency
 	tr.Synchronized = true
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		tr = tr.Step(SteamGeneratorShellPressure, 0, false, openValve())
+		tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, openValve())
 	}
 	assert.InDelta(t, 0.7, tr.Setpoint, 0.01,
 		"want Setpoint ramped to dispatcher reference 0.7, got %v", tr.Setpoint)
@@ -549,7 +549,7 @@ func TestTurbine_SynchronizedSpeedHeldUnderThrottledAdmission(t *testing.T) {
 	tr.GoverningValve = Valve{Open: 0.05}
 	tr.GridFrequency = GridRatedFrequency
 	for i := 0; i < int(30*time.Second/TimeStep); i++ {
-		tr = tr.Step(SteamGeneratorShellPressure, 0, false, openValve())
+		tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, openValve())
 	}
 	assert.Equal(t, TurbineRatedSpeed, tr.Velocity,
 		"want bus-held rotor to stay at rated speed under 5 percent admission")
@@ -571,7 +571,7 @@ func TestTurbine_SynchronizedDrawFollowsLoadReference(t *testing.T) {
 	tr.Synchronized = true
 	tr.Setpoint = 0.6
 	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		tr = tr.Step(SteamGeneratorShellPressure, CondenserDesignVacuum, false,
+		tr = tr.Step(SteamGeneratorShellPressure, CondenserDesignVacuum, Temperature{Val: 600}, false,
 			openValve())
 	}
 	want := CondenserDesignSteamLoadGalPer * 0.6

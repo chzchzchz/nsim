@@ -599,6 +599,7 @@ func (t *TurbineBuilding) StepWithSteam(
 	ret.Turbine = ret.Turbine.Step(
 		sgPressure,
 		c.Pressure,
+		tavg,
 		false,
 		&stopOpen,
 	)

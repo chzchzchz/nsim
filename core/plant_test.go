@@ -881,10 +881,10 @@ func TestTurbine_RollingSteamDrawScalesWithSpeed(t *testing.T) {
 		Synchronized:   false,
 		GoverningValve: Valve{Open: 1},
 	}
-	half := base.Step(SteamGeneratorShellPressure, CondenserDesignVacuum, false, nil)
+	half := base.Step(SteamGeneratorShellPressure, CondenserDesignVacuum, Temperature{Val: 600}, false, nil)
 	syncd := base
 	syncd.Synchronized = true
-	full := syncd.Step(SteamGeneratorShellPressure, CondenserDesignVacuum, false, nil)
+	full := syncd.Step(SteamGeneratorShellPressure, CondenserDesignVacuum, Temperature{Val: 600}, false, nil)
 
 	speedFrac := max(float64(base.Velocity)/float64(TurbineRatedSpeed),
 		TurbineRollMinSteamFraction)

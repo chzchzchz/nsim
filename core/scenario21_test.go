@@ -58,3 +58,80 @@ func TestXenonBurnoutPacesReturnToPower(t *testing.T) {
 	assert.Less(t, highNorm, lowNorm,
 		"holding at 90 percent clears the surplus slower than ascending")
 }
+
+// The low-Tavg-deviation loading stop: while measured Tavg sits more
+// than TurbineLowTavgDeviationF below the load-referenced program, the
+// DEHM holds the load reference instead of raising it, and the hold
+// releases itself once the deviation recovers. Descent toward a lower
+// demand stays permitted. This is the automatic branch of the rods-only
+// return-to-power caveat.
+//
+//   "Tavg will continue to drop until turbine loading is stopped
+//    either by manual operation or automatically upon reaching the
+//    low Tavg deviation setpoint signal."
+//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_232.txt:62-66
+func TestTurbineLowTavgDeviationStopsLoading(t *testing.T) {
+	newAscending := func() Turbine {
+		return Turbine{
+			State:              TurbineRunning,
+			Synchronized:       true,
+			Setpoint:           0.9,
+			RampRate:           TurbineLoadRunbackRate,
+			LoadDemandRef:      1.0,
+			StopValve:          Valve{Open: 1},
+			LubeOilPumpRunning: true,
+		}
+	}
+	minute := int(time.Minute / TimeStep)
+	open := 1.0
+
+	// Loading with Tavg tracking the program ascends freely and never
+	// latches the hold (the controlled rate needs two minutes to walk
+	// 0.9 -> 1.0).
+	tracking := newAscending()
+	for i := 0; i < 2*minute; i++ {
+		tracking = tracking.Step(1000, 0,
+			Temperature{Val: programmedRodTavg(tracking.Setpoint)},
+			false, &open)
+	}
+	assert.InDelta(t, 1.0, tracking.Setpoint, 1e-9,
+		"tracked loading must reach the dispatcher reference")
+	assert.False(t, tracking.LowTavgDeviationHold,
+		"tracked loading must not latch the deviation hold")
+
+	// Loading with Tavg pinned below its program latches the hold and
+	// freezes the reference at the pre-ramp level.
+	sagging := newAscending()
+	coldTavg := programmedRodTavg(0.9) + TurbineLowTavgDeviationF - 1
+	for i := 0; i < minute; i++ {
+		sagging = sagging.Step(1000, 0,
+			Temperature{Val: coldTavg}, false, &open)
+	}
+	assert.InDelta(t, 0.9, sagging.Setpoint, 1e-9,
+		"held loading must freeze the load reference")
+	assert.True(t, sagging.LowTavgDeviationHold,
+		"deep deviation must latch the hold")
+
+	// Recovery releases the hold and loading resumes toward the
+	// reference.
+	for i := 0; i < minute; i++ {
+		sagging = sagging.Step(1000, 0,
+			Temperature{Val: programmedRodTavg(sagging.Setpoint)},
+			false, &open)
+	}
+	assert.False(t, sagging.LowTavgDeviationHold,
+		"recovered deviation must release the hold")
+	assert.Greater(t, sagging.Setpoint, 0.9,
+		"loading must resume after recovery")
+
+	// Lowering the demand under an active hold stays permitted: the
+	// stop gates the ascent only.
+	held := newAscending()
+	held.Step(1000, 0, Temperature{Val: coldTavg}, false, &open)
+	held.LoadDemandRef = 0.85
+	for i := 0; i < int(10*time.Second/TimeStep); i++ {
+		held = held.Step(1000, 0, Temperature{Val: coldTavg}, false, &open)
+	}
+	assert.Less(t, held.Setpoint, 0.9,
+		"descent toward a lowered demand must stay permitted under hold")
+}
