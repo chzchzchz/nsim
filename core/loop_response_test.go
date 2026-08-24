@@ -118,6 +118,59 @@ func TestPlant_TrippedDumpRestoresTavgWithoutCollapsingHeader(t *testing.T) {
 		"Tavg must glide downward under dump control, not stagnate")
 }
 
+// The declared loss de-energizes the reactor coolant pumps and the
+// trip latches: the pumps coast down on their flywheels instead of
+// stepping to zero, the diesel-backed buses do not restart them, and
+// bringing one back is an explicit operator action.
+//   - "Reactor coolant pumps supplied from the offsite electrical
+//     source will maintain forced flow cooling to the reactor core."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:66-68
+//   - "If offsite power is not available, the long coast down times
+//     of the reactor coolant pumps assures adequate flow during the
+//     power decay transient."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:80-84
+func TestPlant_LoopTripsReactorCoolantPumpsUntilOperatorRestart(t *testing.T) {
+	overrideTimeStep(t, 100 * time.Millisecond)
+
+	p := MakePlant()
+	controls := p.GetControlMap()
+	require.NoError(t,
+		controls["ReactorBuilding/ReactorCoolantPump/Running"].Set("1"),
+		"seed the at-power pump lineup through the operator control")
+	p.Step()
+	p.Update()
+	require.True(t, p.ReactorBuilding.ReactorCoolantPumps.AnyRunning(),
+		"precondition: pumps run at power")
+
+	loop := controls["ReactorBuilding/PlantElectricalSystems/OffsitePowerAvailable"]
+	require.NotNil(t, loop)
+	require.NoError(t, loop.Set("0"))
+
+	p.Step()
+	p.Update()
+
+	assert.False(t, p.ReactorBuilding.ReactorCoolantPumps.AnyRunning(),
+		"pumps must trip without an operator write")
+	assert.Greater(t, float64(p.ReactorBuilding.ReactorCoolantPump.Velocity), 0.0,
+		"the flywheel must coast down, not stop instantly")
+
+	for i := 0; i < 400; i++ {
+		p.Step()
+		p.Update()
+	}
+	require.True(t, p.Electrical.ESFBusA.Energized,
+		"precondition for the restart check: buses re-energized")
+	assert.False(t, p.ReactorBuilding.ReactorCoolantPumps.AnyRunning(),
+		"diesel-backed buses must not restart the pumps")
+
+	require.NoError(t,
+		controls["ReactorBuilding/ReactorCoolantPump/Running"].Set("1"))
+	p.Step()
+	p.Update()
+	assert.True(t, p.ReactorBuilding.ReactorCoolantPumps.AnyRunning(),
+		"a supply exists, so the operator restart must latch")
+}
+
 // The declared state must actually gate the offsite sources: with
 // offsite available the buses sit at the offsite voltage; one step
 // after the declaration they read zero

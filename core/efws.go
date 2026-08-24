@@ -64,14 +64,16 @@ func (e *EFWS) Step(
 
 	// Secured condition: when the RCS hot-leg temperature has
 	// been reduced to EFWSSecureTemp and the RHRS has taken
-	// over, the EFWS is no longer needed and is secured.
+	// over, the EFWS is no longer needed and is secured. The
+	// spec names the system, not a start mode, so manually
+	// started pumps secure exactly like autostarted ones.
 	//
 	// Spec justification:
 	//   - "the reactor coolant hot leg temperature is reduced
 	//     to 350°F (176.7°C) and the RHRS has been activated,
 	//     the EFWS is secured."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:101-104
-	if ret.Active && rpvOutlet.Float() <= EFWSSecureTemp && rhrsActive {
+	if rpvOutlet.Float() <= EFWSSecureTemp && rhrsActive {
 		ret.SubsystemA.MotorPump.Running = false
 			ret.SubsystemA.TurbinePump.Running = false
 			ret.SubsystemB.MotorPump.Running = false

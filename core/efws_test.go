@@ -243,6 +243,56 @@ func TestEFWS_SecuredWhenHotLegBelow350FAndRHRSActive(t *testing.T) {
 		e2.SubsystemB.TurbinePump.Running)
 }
 
+// The secured condition names the system, not a start mode: pumps
+// started manually through the bridge controls (Active stays the
+// auto-start latch) must secure exactly like autostarted ones.
+//
+// Spec justification:
+//   - "the reactor coolant hot leg temperature is reduced to
+//     350°F (176.7°C) and the RHRS has been activated, the EFWS
+//     is secured."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:101-104
+func TestEFWS_SecuresManuallyStartedPumpsToo(t *testing.T) {
+	e := EFWS{
+		SubsystemA: EFWSSubsystem{
+			Tank: EFWSTank{
+				Level:      EFWSPrimaryTankCapacity,
+				Capacity:   EFWSPrimaryTankCapacity,
+				IsPrimary:  true,
+				Temperature: EFWSPrimaryTankMaxTemp,
+			},
+			MotorPump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
+			TurbinePump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
+		},
+		SubsystemB: EFWSSubsystem{
+			Tank: EFWSTank{
+				Level:      EFWSPrimaryTankCapacity,
+				Capacity:   EFWSPrimaryTankCapacity,
+				IsPrimary:  true,
+				Temperature: EFWSPrimaryTankMaxTemp,
+			},
+			MotorPump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
+			TurbinePump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
+		},
+	}
+	assert.False(t, e.Active,
+		"precondition: manually started pumps leave Active=false")
+
+	e2 := e.Step(
+		Temperature{Val: EFWSSecureTemp, Unit: u.Fahrenheit},
+		true,
+	)
+
+	assert.False(t, e2.SubsystemA.MotorPump.Running,
+		"manual-started pump must secure at the secure condition")
+	assert.False(t, e2.SubsystemA.TurbinePump.Running,
+		"manual-started pump must secure at the secure condition")
+	assert.False(t, e2.SubsystemB.MotorPump.Running,
+		"manual-started pump must secure at the secure condition")
+	assert.False(t, e2.SubsystemB.TurbinePump.Running,
+		"manual-started pump must secure at the secure condition")
+}
+
 // End-to-end via Plant.Step: a safety-injection actuation
 // signal starts the EFWS motor-driven pumps, the EFWS feeds
 // water to the steam generators, and the primary tank level

@@ -1107,6 +1107,23 @@ func (p *Plant) Step() {
 	for _, pu := range p.nextPlant.ReactorBuilding.ReactorCoolantPumps.All() {
 		pu.DriveReady = plantDriveReady
 	}
+	// Loss of the pump power supply de-energizes the reactor coolant
+	// pumps and the trip latches: on its loss the flywheel coastdown
+	// carries core flow through the power decay. The diesel-backed
+	// ESF buses do not restart the pumps; bringing one back is an
+	// explicit operator action once a supply exists.
+	//   "Reactor coolant pumps supplied from the offsite electrical
+	//    source will maintain forced flow cooling to the reactor
+	//    core."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:66-68
+	//   "If offsite power is not available, the long coast down times
+	//    of the reactor coolant pumps assures adequate flow during
+	//    the power decay transient."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:80-84
+	if !plantDriveReady {
+		p.nextPlant.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(false)
+		p.nextPlant.ReactorBuilding.ReactorCoolantPump.Running = false
+	}
 
 	// Refueling operations step. The phase machine advances
 	// based on phase-relative time; the cavity flood/drain
