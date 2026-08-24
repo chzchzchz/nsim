@@ -82,10 +82,10 @@ func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
 	// under the demanded-setpoint rate limit
 	// (specs/pwr_sim/chapter_2/page_024.txt:3-12), and the
 	// integrator scales linearly with dt, so the widened step still
-	// lands exactly on target while cutting step count 10x. Must
+	// lands exactly on target while cutting step count 20x. Must
 	// not run in parallel: overrideTimeStep mutates global
 	// simulation state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	overrideTimeStep(t, 50*time.Millisecond)
 	p := rpcReactorLeadPlant()
 
 	setControl(t, &p, "PlantOperation/LeadLagMode", "1")

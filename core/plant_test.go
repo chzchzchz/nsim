@@ -702,6 +702,12 @@ func TestPowerGenerator_MVAEnforced(t *testing.T) {
 //     bring the reactor back to full power."
 //     specs/pwr_sim/chapter_3/page_041.txt:28-35
 func TestPlant_TurbineTripStepbackHoldsSixtyPercent(t *testing.T) {
+	// The anchored fission compounding makes the stepback fold
+	// width-exact; the parked-level assertion is a +/-3 percent band,
+	// and every state transition rides timers or threshold crossings
+	// that shift by at most one tick. Must not run in parallel:
+	// overrideTimeStep mutates global simulation state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -788,6 +794,12 @@ func TestPlant_MainFeedwaterReplenishesSGFromHotwell(t *testing.T) {
 //      coolant contraction" (the surge coupling, either sign).
 //      specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:70-72
 func TestPlant_PressurizerSurgeTracksCoolantExpansion(t *testing.T) {
+	// Heatup runs through dt-scaled thermal lags and the surge
+	// coupling integrates expansion linearly in dt; the conservation
+	// ledger holds by construction at any width. Directional
+	// assertions only. Must not run in parallel: overrideTimeStep
+	// mutates global simulation state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)

@@ -136,7 +136,7 @@ func TestRodAutoControlFrozenWhileTripped(t *testing.T) {
 // program slews at the spec's 5-percent-per-minute loading rate), not
 // fixed-horizon spot values.
 //
-// Time-step policy: uniform 10 ms. This test originally exposed the
+// Time-step policy: uniform 25 ms. This test originally exposed the
 // reactor's step-quantized fission compounding ("scales the previous
 // fission power by 1 + rho/100 every step",
 // specs/the_westinghouse_pressurized_water_react/glossary.md:142 via
@@ -147,15 +147,16 @@ func TestRodAutoControlFrozenWhileTripped(t *testing.T) {
 // DefaultTimeStep and raised to the elapsed tick count, so one 10 ms
 // Step lands where ten 1 ms Steps would (verified by
 // TestReactorFissionPower_WidthInvariance) and the whole maneuver runs
-// wide. Must not run in parallel: the override mutates process-global
-// state.
+// wide.
 //
 // Spec:
 //   "The rod control system automatically adjusts the power level of
 //   the reactor to match the power demanded by the turbine [...]"
 //   specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:68-71
 func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
-	overrideTimeStep(t, 10*time.Millisecond)
+	// Must not run in parallel: overrideTimeStep mutates global
+	// simulation state.
+	overrideTimeStep(t, 25*time.Millisecond)
 	p := MakePlant()
 	boron := 500.0
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = boron

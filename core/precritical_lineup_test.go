@@ -151,6 +151,12 @@ func TestPrecriticalLineup_DutyCycleBalancesChargingLetdown(t *testing.T) {
 // backup."
 // specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:1-4
 func TestMakeup_AutoInitiatesOnVCTLowLevel(t *testing.T) {
+	// Level drift, flow delivery, and the initiation latch are
+	// linear in dt; crossing detection shifts by at most one tick
+	// against 30 s windows and band assertions built for slack. Must
+	// not run in parallel: overrideTimeStep mutates global simulation
+	// state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	run := func(auto string) (initiated, cleared bool, minVCT, maxVCT, endVCT float64) {
 		p := MakePlant()
 		cm := GetControlMap(&p)
