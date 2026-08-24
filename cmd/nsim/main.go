@@ -106,20 +106,18 @@ func main() {
 		}
 		return
 	}
-	// Shared helper: compute layout and install it so
-	// WritePlantSVG picks up graphviz positions instead of
-	// the hardcoded fallback constants.
-	computeAndSetLayout := func() (*svg.Layout, error) {
+	// Shared helper: compute layout so the SVG writers render with
+	// graphviz positions instead of the embedded default.
+	computeLayout := func() (*svg.Layout, error) {
 		layout, err := svg.ComputeLayout(&p)
 		if err != nil {
 			return nil, fmt.Errorf("compute layout: %w", err)
 		}
-		svg.SetLayout(layout)
 		return layout, nil
 	}
 
 	if *svgLayoutPath != "" {
-		_, err := computeAndSetLayout()
+		layout, err := computeLayout()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to compute layout: %v\n", err)
 			os.Exit(1)
@@ -130,14 +128,15 @@ func main() {
 			os.Exit(1)
 		}
 		defer f.Close()
-		if err := svg.WritePlantSVG(f, &p); err != nil {
+		if err := svg.WritePlantSVGWith(f, &p, layout); err != nil {
 			fmt.Fprintln(os.Stderr, "failed to export svg-layout:", err)
 			os.Exit(1)
 		}
 		return
 	}
 	if *svgPath != "" {
-		if _, err := computeAndSetLayout(); err != nil {
+		layout, err := computeLayout()
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to compute layout: %v\n", err)
 			os.Exit(1)
 		}
@@ -147,7 +146,7 @@ func main() {
 			os.Exit(1)
 		}
 		defer f.Close()
-		if err := svg.WritePlantSVG(f, &p); err != nil {
+		if err := svg.WritePlantSVGWith(f, &p, layout); err != nil {
 			fmt.Fprintln(os.Stderr, "failed to export svg:", err)
 			os.Exit(1)
 		}

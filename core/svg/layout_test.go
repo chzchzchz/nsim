@@ -141,12 +141,14 @@ func TestParsePlainExt_ValidInput(t *testing.T) {
 		"graph 1 %g %g\n"+
 			"node A %g %g %g %g \"\" solid none black lightgrey\n"+
 			"node B %g %g %g %g \"\" solid none black lightgrey\n"+
+			"edge A B 2 %g %g %g %g solid black\n"+
 			"stop\n",
 		wantW, wantH,
 		wantAX, wantAY, nodeSize, nodeSize,
-		wantBX, wantBY, nodeSize, nodeSize)
+		wantBX, wantBY, nodeSize, nodeSize,
+		wantAX, wantAY, wantBX, wantBY)
 
-	pos, wIn, hIn, err := parsePlainExt(strings.NewReader(input))
+	pos, routes, wIn, hIn, err := parsePlainExt(strings.NewReader(input))
 	require.NoError(t, err)
 	assert.InDelta(t, wantW, wIn, 1e-9)
 	assert.InDelta(t, wantH, hIn, 1e-9)
@@ -155,6 +157,7 @@ func TestParsePlainExt_ValidInput(t *testing.T) {
 	assert.InDelta(t, wantAY, pos["A"].Y, 1e-9)
 	assert.InDelta(t, wantBX, pos["B"].X, 1e-9)
 	assert.InDelta(t, wantBY, pos["B"].Y, 1e-9)
+	require.Len(t, routes["A>B"], 2)
 }
 
 // TestParsePlainExt_InvalidValues ensures malformed numeric fields
@@ -164,8 +167,37 @@ func TestParsePlainExt_InvalidValues(t *testing.T) {
 node A abc 1.0 1.0 2.0 "" solid none black lightgrey
 stop
 `
-	_, _, _, err := parsePlainExt(strings.NewReader(input))
+	_, _, _, _, err := parsePlainExt(strings.NewReader(input))
 	require.Error(t, err)
+}
+
+// TestAssignEdgeHops checks the hop chains that subdivide DOT
+// edges through inline devices, including suffix dedup for repeated
+// valve names and reuse of an existing plant-graph node.
+func TestAssignEdgeHops(t *testing.T) {
+	p := core.MakePlant()
+	g := p.BuildGraphFor(&p)
+	hops := assignEdgeHops(g)
+
+	idsFor := func(from, to string) []string {
+		for i, e := range g.Edges {
+			if e.From == from && e.To == to {
+				ids := make([]string, len(hops[i]))
+				for j, h := range hops[i] {
+					ids[j] = h.id
+				}
+				return ids
+			}
+		}
+		return nil
+	}
+
+	assert.Equal(t, []string{"RCP"}, idsFor("RPV", "SG"))
+	assert.Equal(t, []string{"CondensatePump"}, idsFor("CST", "HDT"))
+	assert.Equal(t, []string{"MainFeedwaterPump", "MainFeedValve"}, idsFor("HDT", "SG"))
+	assert.Equal(t, []string{"CSTValve"}, idsFor("CST", "DieselAFWPump"))
+	assert.Equal(t, []string{"CSTValve_2"}, idsFor("CST", "MotorAFWPump"))
+	assert.Equal(t, []string{"CSTValve_3"}, idsFor("CST", "TurbineAFWPump"))
 }
 
 // TestComputeFit verifies the behavioral contract of the fit
@@ -222,10 +254,10 @@ func TestNodeSize_Defaults(t *testing.T) {
 }
 
 // TestNodeSize_Known checks that known kinds resolve through the
-// configured size table.
+// shared symbol table.
 func TestNodeSize_Known(t *testing.T) {
-	want := nodeSizes["ReactorPressureVessel"]
+	want := symbolTable["ReactorPressureVessel"]
 	w, h := nodeSize("ReactorPressureVessel")
-	assert.Equal(t, want[0], w)
-	assert.Equal(t, want[1], h)
+	assert.Equal(t, want.wIn, w)
+	assert.Equal(t, want.hIn, h)
 }

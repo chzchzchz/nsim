@@ -16,95 +16,29 @@ import (
 )
 
 // Layout maps plant-graph node IDs to anchor coordinates in SVG
-// user-space units (dots per inch = 96). Scale is the uniform
+// user-space units (dots per inch = 96). Routes carries dot's
+// routed polyline per "From>To" edge pair. Scale is the uniform
 // factor that fit dot's drawing inside the viewport; symbol
 // dimensions multiply by it so the rendered diagram matches the
 // spacing graphviz computed.
 type Layout struct {
-	Pos   map[string]Anchor
-	Scale float64
-	DPI   float64
+	Pos    map[string]Anchor
+	Routes map[string][]Anchor
+	Scale  float64
+	DPI    float64
 }
 
 // EmptyLayout returns a Layout whose Pos map is unset; callers
-// fall back to the hardcoded constants when ComputeLayout is
-// not available.
+// fall back to straight-line pipes when ComputeLayout is not
+// available.
 func EmptyLayout() *Layout {
-	return &Layout{Pos: make(map[string]Anchor), Scale: 1.0, DPI: layoutDPI}
+	return &Layout{
+		Pos:    make(map[string]Anchor),
+		Routes: make(map[string][]Anchor),
+		Scale:  1.0,
+		DPI:    layoutDPI,
+	}
 }
-
-// nodeSizes maps PlantGraph node Kind strings to a width/height
-// pair in inches (Graphviz default DPI is 96). Values are taken
-// from the current <use> width/height values in svg.go so the
-// layout proportions match the hand-composed symbols.
-var nodeSizes = map[string][2]float64{
-	"ReactorPressureVessel":     {100.0 / 96.0, 240.0 / 96.0},
-	"Pressurizer":           {60.0 / 96.0, 200.0 / 96.0},
-	"SteamGenerator":        {190.0 / 96.0, 430.0 / 96.0},
-	"Condenser":             {400.0 / 96.0, 100.0 / 96.0},
-	"ReactorCoolantPump":    {50.0 / 96.0, 160.0 / 96.0},
-	"CondensatePump":        {60.0 / 96.0, 40.0 / 96.0},
-	"MainFeedwaterPump":     {60.0 / 96.0, 40.0 / 96.0},
-	"HeaterDrainPump":       {60.0 / 96.0, 40.0 / 96.0},
-	"DieselAFWPump":         {60.0 / 96.0, 40.0 / 96.0},
-	"MotorAFWPump":          {60.0 / 96.0, 40.0 / 96.0},
-	"TurbineAFWPump":        {60.0 / 96.0, 40.0 / 96.0},
-	"Turbine":               {360.0 / 96.0, 200.0 / 96.0},
-	"Generator":             {220.0 / 96.0, 140.0 / 96.0},
-	"CondensateStorageTank": {100.0 / 96.0, 130.0 / 96.0},
-	"HeaterDrainTank":       {100.0 / 96.0, 50.0 / 96.0},
-	"LowPressureHeaterDrain":  {50.0 / 96.0, 100.0 / 96.0},
-	"HighPressureHeaterDrain": {50.0 / 96.0, 100.0 / 96.0},
-	"SafetyInjectionSystem":     {60.0 / 96.0, 80.0 / 96.0},
-	"EmergencyFeedwaterSystem":  {80.0 / 96.0, 100.0 / 96.0},
-	"ComponentCoolingWaterSystem": {100.0 / 96.0, 50.0 / 96.0},
-	"ResidualHeatRemovalSystem": {200.0 / 96.0, 80.0 / 96.0},
-	"SpentFuelPool":              {200.0 / 96.0, 100.0 / 96.0},
-	"DieselGenerator":           {200.0 / 96.0, 100.0 / 96.0},
-	"FuelTank":                  {30.0 / 96.0, 40.0 / 96.0},
-	"StationTransformer":        {50.0 / 96.0, 50.0 / 96.0},
-	"ESFBus":                    {120.0 / 96.0, 20.0 / 96.0},
-	"OffsiteGrid":               {30.0 / 96.0, 50.0 / 96.0},
-	"safety":                    {20.0 / 96.0, 20.0 / 96.0},
-	"PressurizerReliefTank":     {60.0 / 96.0, 80.0 / 96.0},
-	"modulating":                {24.0 / 96.0, 20.0 / 96.0},
-	"stop":                      {24.0 / 96.0, 20.0 / 96.0},
-	"gate":                      {24.0 / 96.0, 20.0 / 96.0},
-}
-
-var nodeImages = map[string]string{
-	"ReactorPressureVessel":     "reactor_vessel.svg",
-	"Pressurizer":           "pressurizer.svg",
-	"SteamGenerator":        "steam_generator.svg",
-	"Condenser":             "condenser.svg",
-	"ReactorCoolantPump":    "pump-rcp.svg",
-	"CondensateStorageTank": "tank-cst.svg",
-	"HeaterDrainTank":       "tank-horizontal.svg",
-	"LowPressureHeaterDrain":  "heat-exchanger-horizontal.svg",
-	"HighPressureHeaterDrain": "heat-exchanger-vertical.svg",
-	"DieselAFWPump":         "pump-horizontal.svg",
-	"MotorAFWPump":          "pump-horizontal.svg",
-	"TurbineAFWPump":        "pump-turbine.svg",
-	"CondensatePump":        "pump-horizontal.svg",
-	"MainFeedwaterPump":     "pump-horizontal.svg",
-	"HeaterDrainPump":       "pump-horizontal.svg",
-	"SpentFuelPool":     "tank-sfp.svg",
-	"SafetyInjectionSystem":     "sis-accumulators.svg",
-	"EmergencyFeedwaterSystem":  "efws-tank.svg",
-	"ComponentCoolingWaterSystem": "ccws-hx.svg",
-	"ResidualHeatRemovalSystem": "rhrs-train.svg",
-	"DieselGenerator":           "diesel-generator.svg",
-	"FuelTank":                  "fuel-tank.svg",
-	"StationTransformer":        "transformer-2w.svg",
-	"ESFBus":                    "esf-bus.svg",
-	"OffsiteGrid":               "grid-bus.svg",
-	"safety":                    "valve-safety.svg",
-	"modulating":                "valve-modulating.svg",
-	"stop":                      "valve-stop.svg",
-	"gate":                      "valve-gate.svg",
-	"PressurizerReliefTank":     "tank-vertical.svg",
-}
-
 
 // extraNodes are renderer-only parts that carry no fluid edge but
 // must appear in the P&ID. Adding them to the DOT lets graphviz
@@ -182,30 +116,7 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 	for _, id := range ids {
 		n := g.Nodes[id]
 		mainNodes[id] = true
-		size, ok := nodeSizes[n.Kind]
-		w, h := defaultNodeInches, defaultNodeInches
-		if ok {
-			w, h = size[0], size[1]
-		}
-		c := clusterFor[id]
-		cl := clusters[c]
-		if img, ok := nodeImages[n.Kind]; ok {
-			if p, ok := pos[id]; ok {
-				fmt.Fprintf(cl, `    "%s" [width=%.3f, height=%.3f, label="", image="%s", pos="%.1f,%.1f", pin=true];`+"\n",
-					id, w, h, img, p.X, p.Y)
-			} else {
-				fmt.Fprintf(cl, `    "%s" [width=%.3f, height=%.3f, label="", image="%s"];`+"\n",
-					id, w, h, img)
-			}
-		} else {
-			if p, ok := pos[id]; ok {
-				fmt.Fprintf(cl, `    "%s" [width=%.3f, height=%.3f, label="", pos="%.1f,%.1f", pin=true];`+"\n",
-					id, w, h, p.X, p.Y)
-			} else {
-				fmt.Fprintf(cl, `    "%s" [width=%.3f, height=%.3f, label=""];`+"\n",
-					id, w, h)
-			}
-		}
+		emitEdgeNode(clusters, id, clusterFor[id], n.Kind, pos)
 	}
 
 	// Renderer-only parts join the layout so graphviz positions
@@ -224,61 +135,13 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 	// graphviz coordinates meaning instead of stranding them in an
 	// isolated row detached from the components they serve. An id
 	// matching an existing plant-graph node (RCP) reuses that node.
-	type edgeHop struct{ id, cluster, kind string }
-	hops := make([][]edgeHop, len(g.Edges))
-	seen := map[string]bool{}
-	for i, e := range g.Edges {
-		addHop := func(id, cluster, kind string) {
-			h := edgeHop{id: id, cluster: cluster, kind: kind}
-			if !mainNodes[id] {
-				if seen[id] {
-					for n := 2; ; n++ {
-						cand := fmt.Sprintf("%s_%d", id, n)
-						if !seen[cand] {
-							id = cand
-							break
-						}
-					}
-				}
-				seen[id] = true
-				emitEdgeNode(clusters, id, cluster, kind, pos)
+	// The same assignment drives ComputeLayout's route stitching.
+	hops := assignEdgeHops(g)
+	for i := range hops {
+		for _, h := range hops[i] {
+			if !mainNodes[h.id] {
+				emitEdgeNode(clusters, h.id, h.cluster, h.kind, pos)
 			}
-			h.id = id
-			hops[i] = append(hops[i], h)
-		}
-		if e.Pump != nil {
-			switch {
-			case e.From == "RPV" && e.To == "SG":
-				addHop("RCP", clusterFor["RPV"], "ReactorCoolantPump")
-			case e.From == "CST" && e.To == "HDT":
-				addHop("CondensatePump", clusterFor["CST"], "CondensatePump")
-			case e.From == "HDT" && e.To == "SG":
-				addHop("MainFeedwaterPump", clusterFor["HDT"], "MainFeedwaterPump")
-			case e.From == "HPHeaterDrain" && e.To == "HDT":
-				addHop("HeaterDrainPump", clusterFor["HPHeaterDrain"], "HeaterDrainPump")
-			}
-		}
-		if e.Valve != nil {
-			var id, cluster, kind string
-			switch {
-			case e.From == "RPV" && e.To == "Pressurizer":
-				id, cluster, kind = "SafetyValve", clusterFor["RPV"], "safety"
-			case e.From == "Pressurizer" && e.To == "RPV":
-				id, cluster, kind = "ModulatingValve", clusterFor["Pressurizer"], "modulating"
-			case e.From == "SG" && e.To == "Condenser":
-				id, cluster, kind = "MakeupValve", clusterFor["SG"], "modulating"
-			case e.From == "HDT" && e.To == "SG":
-				id, cluster, kind = "MainFeedValve", clusterFor["HDT"], "modulating"
-			case e.From == "Condenser" && e.To == "CST":
-				id, cluster, kind = "RecirculateValve", clusterFor["Condenser"], "stop"
-			case e.To == "DieselAFWPump" || e.To == "MotorAFWPump" || e.To == "TurbineAFWPump":
-				id, cluster, kind = "CSTValve", clusterFor["CST"], "gate"
-			case e.From == "DieselAFWPump" || e.From == "MotorAFWPump" || e.From == "TurbineAFWPump":
-				id, cluster, kind = "ServiceWaterValve", clusterFor[e.From], "gate"
-			default:
-				id, cluster, kind = "Valve", clusterFor[e.From], "gate"
-			}
-			addHop(id, cluster, kind)
 		}
 	}
 
@@ -336,29 +199,100 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 }
 
 func emitEdgeNode(clusters map[string]*strings.Builder, id, cluster, kind string, pos map[string]Anchor) {
-	size, ok := nodeSizes[kind]
-	w, h := defaultNodeInches, defaultNodeInches
-	if ok {
-		w, h = size[0], size[1]
-	}
+	w, h := nodeSize(kind)
 	cl := clusters[cluster]
-	if img, ok := nodeImages[kind]; ok {
-		if p, ok := pos[id]; ok {
-			fmt.Fprintf(cl, `    "%s" [width=%.3f, height=%.3f, label="", image="%s", pos="%.1f,%.1f", pin=true];`+"\n",
-				id, w, h, img, p.X, p.Y)
-		} else {
-			fmt.Fprintf(cl, `    "%s" [width=%.3f, height=%.3f, label="", image="%s"];`+"\n",
-				id, w, h, img)
-		}
+	img := nodeImage(kind)
+	if p, ok := pos[id]; ok {
+		fmt.Fprintf(cl, `    "%s" [width=%.3f, height=%.3f, label="", image="%s", pos="%.1f,%.1f", pin=true];`+"\n",
+			id, w, h, img, p.X, p.Y)
 	} else {
-		if p, ok := pos[id]; ok {
-			fmt.Fprintf(cl, `    "%s" [width=%.3f, height=%.3f, label="", pos="%.1f,%.1f", pin=true];`+"\n",
-				id, w, h, p.X, p.Y)
-		} else {
-			fmt.Fprintf(cl, `    "%s" [width=%.3f, height=%.3f, label=""];`+"\n",
-				id, w, h)
+		fmt.Fprintf(cl, `    "%s" [width=%.3f, height=%.3f, label="", image="%s"];`+"\n",
+			id, w, h, img)
+	}
+}
+
+// edgeHopRef names one inline device node on a subdivided DOT
+// edge, plus the cluster and symbol-table kind it emits under.
+type edgeHopRef struct{ id, cluster, kind string }
+
+// pumpHopFor maps a pumped edge to its inline pump device.
+func pumpHopFor(e core.GraphEdge) (edgeHopRef, bool) {
+	switch {
+	case e.From == "RPV" && e.To == "SG":
+		return edgeHopRef{"RCP", clusterFor["RPV"], "ReactorCoolantPump"}, true
+	case e.From == "CST" && e.To == "HDT":
+		return edgeHopRef{"CondensatePump", clusterFor["CST"], "CondensatePump"}, true
+	case e.From == "HDT" && e.To == "SG":
+		return edgeHopRef{"MainFeedwaterPump", clusterFor["HDT"], "MainFeedwaterPump"}, true
+	case e.From == "HPHeaterDrain" && e.To == "HDT":
+		return edgeHopRef{"HeaterDrainPump", clusterFor["HPHeaterDrain"], "HeaterDrainPump"}, true
+	}
+	return edgeHopRef{}, false
+}
+
+// valveHopFor maps a valved edge to its inline valve device.
+func valveHopFor(e core.GraphEdge) (edgeHopRef, bool) {
+	var r edgeHopRef
+	switch {
+	case e.From == "RPV" && e.To == "Pressurizer":
+		r = edgeHopRef{"SafetyValve", clusterFor["RPV"], "safety"}
+	case e.From == "Pressurizer" && e.To == "RPV":
+		r = edgeHopRef{"ModulatingValve", clusterFor["Pressurizer"], "modulating"}
+	case e.From == "SG" && e.To == "Condenser":
+		r = edgeHopRef{"MakeupValve", clusterFor["SG"], "modulating"}
+	case e.From == "HDT" && e.To == "SG":
+		r = edgeHopRef{"MainFeedValve", clusterFor["HDT"], "modulating"}
+	case e.From == "Condenser" && e.To == "CST":
+		r = edgeHopRef{"RecirculateValve", clusterFor["Condenser"], "stop"}
+	case e.To == "DieselAFWPump" || e.To == "MotorAFWPump" || e.To == "TurbineAFWPump":
+		r = edgeHopRef{"CSTValve", clusterFor["CST"], "gate"}
+	case e.From == "DieselAFWPump" || e.From == "MotorAFWPump" || e.From == "TurbineAFWPump":
+		r = edgeHopRef{"ServiceWaterValve", clusterFor[e.From], "gate"}
+	default:
+		r = edgeHopRef{"Valve", clusterFor[e.From], "gate"}
+	}
+	return r, true
+}
+
+// assignEdgeHops returns, per graph edge, the ordered hop nodes its
+// DOT routing passes through. Ids colliding with earlier hops get a
+// numeric suffix; an id matching an existing plant-graph node (RCP)
+// is reused verbatim so the standalone node becomes connected.
+func assignEdgeHops(g *core.PlantGraph) [][]edgeHopRef {
+	mainNodes := make(map[string]bool, len(g.Nodes))
+	for id := range g.Nodes {
+		mainNodes[id] = true
+	}
+	seen := map[string]bool{}
+	out := make([][]edgeHopRef, len(g.Edges))
+	for i, e := range g.Edges {
+		add := func(ref edgeHopRef) {
+			if !mainNodes[ref.id] {
+				if seen[ref.id] {
+					for n := 2; ; n++ {
+						cand := fmt.Sprintf("%s_%d", ref.id, n)
+						if !seen[cand] {
+							ref.id = cand
+							break
+						}
+					}
+				}
+				seen[ref.id] = true
+			}
+			out[i] = append(out[i], ref)
+		}
+		if e.Pump != nil {
+			if h, ok := pumpHopFor(e); ok {
+				add(h)
+			}
+		}
+		if e.Valve != nil {
+			if h, ok := valveHopFor(e); ok {
+				add(h)
+			}
 		}
 	}
+	return out
 }
 
 // valveLabel returns the edge label text for a valve.
@@ -403,14 +337,16 @@ func runDot(dot string) (string, error) {
 const layoutDPI = 96.0
 
 // parsePlainExt parses the "plain-ext" output from dot and returns
-// node centers plus the overall drawing size in inches. Format:
+// node centers, routed edge polylines keyed "from>to", and the
+// overall drawing size in inches. Format:
 //	graph <name> <width> <height>
 //	node <name> <x> <y> <w> <h> <label> <style> <shape> ...
 //	edge <from> <to> <n> <x1> <y1> ... <xn> <yn> <style> ...
 //	stop
 // Coordinates are Y-up from the bottom-left corner.
-func parsePlainExt(r io.Reader) (map[string]Anchor, float64, float64, error) {
+func parsePlainExt(r io.Reader) (map[string]Anchor, map[string][]Anchor, float64, float64, error) {
 	pos := map[string]Anchor{}
+	routes := map[string][]Anchor{}
 	var wIn, hIn float64
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
@@ -419,14 +355,14 @@ func parsePlainExt(r io.Reader) (map[string]Anchor, float64, float64, error) {
 		case strings.HasPrefix(line, "graph "):
 			fields := strings.Fields(line)
 			if len(fields) < 4 {
-				return nil, 0, 0, fmt.Errorf("parse graph header %q", line)
+				return nil, nil, 0, 0, fmt.Errorf("parse graph header %q", line)
 			}
 			var err error
 			if wIn, err = strconv.ParseFloat(fields[2], 64); err != nil {
-				return nil, 0, 0, fmt.Errorf("parse graph width: %w", err)
+				return nil, nil, 0, 0, fmt.Errorf("parse graph width: %w", err)
 			}
 			if hIn, err = strconv.ParseFloat(fields[3], 64); err != nil {
-				return nil, 0, 0, fmt.Errorf("parse graph height: %w", err)
+				return nil, nil, 0, 0, fmt.Errorf("parse graph height: %w", err)
 			}
 		case strings.HasPrefix(line, "node "):
 			fields := strings.Fields(line)
@@ -436,19 +372,41 @@ func parsePlainExt(r io.Reader) (map[string]Anchor, float64, float64, error) {
 			name := fields[1]
 			x, err := strconv.ParseFloat(fields[2], 64)
 			if err != nil {
-				return nil, 0, 0, fmt.Errorf("parse node %q x: %w", name, err)
+				return nil, nil, 0, 0, fmt.Errorf("parse node %q x: %w", name, err)
 			}
 			y, err := strconv.ParseFloat(fields[3], 64)
 			if err != nil {
-				return nil, 0, 0, fmt.Errorf("parse node %q y: %w", name, err)
+				return nil, nil, 0, 0, fmt.Errorf("parse node %q y: %w", name, err)
 			}
 			pos[name] = Anchor{X: x, Y: y}
+		case strings.HasPrefix(line, "edge "):
+			fields := strings.Fields(line)
+			if len(fields) < 5 {
+				continue
+			}
+			nSeg, err := strconv.Atoi(fields[3])
+			if err != nil || nSeg < 2 || len(fields) < 4+2*nSeg {
+				continue
+			}
+			pts := make([]Anchor, 0, nSeg)
+			for k := 0; k < nSeg; k++ {
+				x, err := strconv.ParseFloat(fields[4+2*k], 64)
+				if err != nil {
+					return nil, nil, 0, 0, fmt.Errorf("parse edge %q point x: %w", fields[1], err)
+				}
+				y, err := strconv.ParseFloat(fields[5+2*k], 64)
+				if err != nil {
+					return nil, nil, 0, 0, fmt.Errorf("parse edge %q point y: %w", fields[1], err)
+				}
+				pts = append(pts, Anchor{X: x, Y: y})
+			}
+			routes[fields[1]+">"+fields[2]] = pts
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, 0, 0, fmt.Errorf("scan plain-ext: %w", err)
+		return nil, nil, 0, 0, fmt.Errorf("scan plain-ext: %w", err)
 	}
-	return pos, wIn, hIn, nil
+	return pos, routes, wIn, hIn, nil
 }
 
 // fitTransform converts inch-space, Y-up layout coordinates into
@@ -488,10 +446,6 @@ func (t fitTransform) point(a Anchor) Anchor {
 	}
 }
 
-// defaultNodeInches is the fallback footprint for kinds missing
-// from nodeSizes: Graphviz's own half-inch default box.
-const defaultNodeInches = 0.5
-
 // clusterAssignments maps every DOT-emitted node id to its
 // building cluster, combining fluid-graph clusters with the
 // renderer-only extra nodes.
@@ -508,64 +462,10 @@ var clusterAssignments = func() map[string]string {
 
 const buildingPad = 20.0
 
-// clusterKind returns the diagramPart footprint key for a layout
-// node id.
-func clusterKind(id string) string {
-	for i := range diagramParts {
-		if diagramParts[i].id == id {
-			return diagramParts[i].kind
-		}
-	}
-	return ""
-}
-
-// clusterBox returns the bounding rectangle in document space of
-// all laid-out nodes assigned to a cluster, padded so building
-// outlines enclose their symbols.
-func clusterBox(name string) (x, y, w, h float64, ok bool) {
-	first := true
-	for id, a := range loadedLayout.Pos {
-		if clusterAssignments[id] != name {
-			continue
-		}
-		sw, sh := symbolSizePx(clusterKind(id))
-		minX, minY := a.X-sw/2-buildingPad, a.Y-sh/2-buildingPad
-		maxX, maxY := a.X+sw/2+buildingPad, a.Y+sh/2+buildingPad
-		if first {
-			x, y, w, h = minX, minY, maxX-minX, maxY-minY
-			first = false
-			continue
-		}
-		if minX < x {
-			w += x - minX
-			x = minX
-		}
-		if minY < y {
-			h += y - minY
-			y = minY
-		}
-		if maxX > x+w {
-			w = maxX - x
-		}
-		if maxY > y+h {
-			h = maxY - y
-		}
-	}
-	return x, y, w, h, !first
-}
-
-// nodeSize returns the width/height in inches for a graph node kind.
-func nodeSize(kind string) (w, h float64) {
-	if s, ok := nodeSizes[kind]; ok {
-		return s[0], s[1]
-	}
-	return defaultNodeInches, defaultNodeInches
-}
-
 // ComputeLayout generates a DOT description of the plant graph, runs
-// Graphviz dot to obtain a layout, and converts node positions into
-// SVG user-space coordinates. Fallback to EmptyLayout when dot is
-// unavailable.
+// Graphviz dot to obtain a layout, and converts node positions and
+// routed edge polylines into SVG user-space coordinates. Fallback
+// to EmptyLayout when dot is unavailable.
 func ComputeLayout(p *core.Plant) (*Layout, error) {
 	g := p.BuildGraphFor(p)
 	dot, err := BuildDot(g, nil)
@@ -576,15 +476,16 @@ func ComputeLayout(p *core.Plant) (*Layout, error) {
 	if err != nil {
 		return EmptyLayout(), err
 	}
-	posIn, wIn, hIn, err := parsePlainExt(strings.NewReader(out))
+	posIn, routesIn, wIn, hIn, err := parsePlainExt(strings.NewReader(out))
 	if err != nil {
 		return EmptyLayout(), err
 	}
 	t := computeFit(wIn, hIn)
 	layout := &Layout{
-		Pos:   make(map[string]Anchor, len(posIn)),
-		Scale: t.scale,
-		DPI:   layoutDPI,
+		Pos:    make(map[string]Anchor, len(posIn)),
+		Routes: make(map[string][]Anchor, len(g.Edges)),
+		Scale:  t.scale,
+		DPI:    layoutDPI,
 	}
 	for id, aIn := range posIn {
 		a := t.point(aIn)
@@ -592,7 +493,47 @@ func ComputeLayout(p *core.Plant) (*Layout, error) {
 		a.Y = clampRange(a.Y, layoutMargin, DocumentHeight-layoutMargin)
 		layout.Pos[id] = a
 	}
+	// Rebuild each ORIGINAL edge's polyline by concatenating the
+	// routed segments through its hop chain.
+	transformed := make(map[string][]Anchor, len(routesIn))
+	for key, pts := range routesIn {
+		out := make([]Anchor, len(pts))
+		for i, pt := range pts {
+			out[i] = t.point(pt)
+		}
+		transformed[key] = out
+	}
+	hops := assignEdgeHops(g)
+	for i, e := range g.Edges {
+		key := e.From + ">" + e.To
+		chain := append([]string{e.From}, hopIDs(hops[i])...)
+		chain = append(chain, e.To)
+		var route []Anchor
+		complete := true
+		for j := 0; j+1 < len(chain); j++ {
+			seg, ok := transformed[chain[j]+">"+chain[j+1]]
+			if !ok {
+				complete = false
+				break
+			}
+			if len(route) > 0 {
+				route = route[:len(route)-1] // drop duplicated junction
+			}
+			route = append(route, seg...)
+		}
+		if complete && len(route) >= 2 {
+			layout.Routes[key] = route
+		}
+	}
 	return layout, nil
+}
+
+func hopIDs(hops []edgeHopRef) []string {
+	ids := make([]string, len(hops))
+	for i, h := range hops {
+		ids[i] = h.id
+	}
+	return ids
 }
 
 func clampRange(v, lo, hi float64) float64 {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/chzchzchz/nsim/core"
@@ -27,6 +28,11 @@ func main() {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	routeKeys := make([]string, 0, len(layout.Routes))
+	for key := range layout.Routes {
+		routeKeys = append(routeKeys, key)
+	}
+	sort.Strings(routeKeys)
 
 	var b strings.Builder
 	b.WriteString("package svg\n\n")
@@ -35,11 +41,21 @@ func main() {
 	b.WriteString("\tPos: map[string]Anchor{\n")
 	for _, id := range ids {
 		a := layout.Pos[id]
-		b.WriteString(fmt.Sprintf("\t\t%q: {X: %g, Y: %g},\n", id, a.X, a.Y))
+		fmt.Fprintf(&b, "\t\t%q: {X: %s, Y: %s},\n", id, fnum(a.X), fnum(a.Y))
 	}
 	b.WriteString("\t},\n")
-	b.WriteString(fmt.Sprintf("\tScale: %g,\n", layout.Scale))
-	b.WriteString(fmt.Sprintf("\tDPI: %g,\n", layout.DPI))
+	b.WriteString("\tRoutes: map[string][]Anchor{\n")
+	for _, key := range routeKeys {
+		pts := layout.Routes[key]
+		parts := make([]string, len(pts))
+		for i, pt := range pts {
+			parts[i] = fmt.Sprintf("{X: %s, Y: %s}", fnum(pt.X), fnum(pt.Y))
+		}
+		fmt.Fprintf(&b, "\t\t%q: {%s},\n", key, strings.Join(parts, ", "))
+	}
+	b.WriteString("\t},\n")
+	fmt.Fprintf(&b, "\tScale: %s,\n", fnum(layout.Scale))
+	fmt.Fprintf(&b, "\tDPI: %s,\n", fnum(layout.DPI))
 	b.WriteString("}\n\n")
 	b.WriteString("func init() {\n")
 	b.WriteString("\tloadedLayout = defaultLayout\n")
@@ -50,4 +66,12 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("wrote", *outPath)
+}
+
+// fnum renders a coordinate with fixed decimals so regenerated
+// files stay diff-stable across graphviz versions.
+func fnum(v float64) string {
+	s := strconv.FormatFloat(v, 'f', 3, 64)
+	s = strings.TrimRight(s, "0")
+	return strings.TrimSuffix(s, ".")
 }

@@ -2,13 +2,14 @@ package svg
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/chzchzchz/nsim/core"
 )
 
-// Pipe-rendering primitives used by the composition pass to
-// draw edges from PlantGraph. Helpers accept the same colour
-// string returned by ColourForEdge.
+// Pipe-rendering primitives used by the composition pass to draw
+// edges from PlantGraph. Helpers accept the same colour string
+// returned by ColourForEdge.
 //
 // Pipe colour convention (Westinghouse P&ID):
 //
@@ -29,10 +30,10 @@ import (
 //     containment."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:70-81
 
-// DrawPipe returns an SVG fragment for a process pipe from
-// (fromX, fromY) to (toX, toY). When elbowed is true the segment
-// is broken into horizontal + vertical legs with a small Q-curve
-// elbow at the corner.
+// DrawPipe returns an SVG fragment for a straight process pipe
+// from (fromX, fromY) to (toX, toY). When elbowed is true the
+// segment is broken into horizontal + vertical legs with a small
+// Q-curve elbow at the corner.
 func DrawPipe(fromX, fromY, toX, toY float64, colour string, elbowed bool) string {
 	if !elbowed {
 		return fmt.Sprintf(
@@ -48,17 +49,31 @@ func DrawPipe(fromX, fromY, toX, toY float64, colour string, elbowed bool) strin
 		toX, toY, colour)
 }
 
-// DrawPipeWithValve draws a pipe plus a valve symbol at the
-// midpoint. valveKind selects the symbol via SymbolForKind; vw and
-// vh give the drawn valve size so it scales with the layout.
-func DrawPipeWithValve(fromX, fromY, toX, toY float64, colour, valveKind string, vw, vh float64) string {
-	mx := (fromX + toX) / 2
-	my := (fromY + toY) / 2
-	pipe := DrawPipe(fromX, fromY, mx, my, colour, false) +
-		DrawPipe(mx, my, toX, toY, colour, false)
+// DrawPipePath renders dot's routed polyline for one edge as a
+// single SVG polyline so pipes follow graphviz's routing instead
+// of cutting straight across the drawing.
+func DrawPipePath(pts []Anchor, colour string) string {
+	var b strings.Builder
+	b.WriteString(`<polyline points="`)
+	for i, p := range pts {
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		fmt.Fprintf(&b, "%.1f,%.1f", p.X, p.Y)
+	}
+	fmt.Fprintf(&b, `" fill="none" stroke="%s" stroke-width="2"/>`, colour)
+	return b.String()
+}
+
+// DrawPipePathWithValve renders a routed pipe plus a valve symbol
+// anchored at `at`: the hop node's laid-out position when known,
+// otherwise the path midpoint. vw/vh give the drawn valve size so
+// it scales with the layout.
+func DrawPipePathWithValve(pts []Anchor, colour, valveKind string, at Anchor, vw, vh float64) string {
+	pipe := DrawPipePath(pts, colour)
 	return pipe + fmt.Sprintf(
 		`<use href="#%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>`,
-		SymbolForKind(valveKind), mx-vw/2, my-vh/2, vw, vh)
+		SymbolForKind(valveKind), at.X-vw/2, at.Y-vh/2, vw, vh)
 }
 
 // ColourForEdge returns the pipe colour for an edge between the

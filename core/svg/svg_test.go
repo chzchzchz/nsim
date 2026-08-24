@@ -1,11 +1,14 @@
 package svg
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	u "github.com/bcicen/go-units"
 	"github.com/chzchzchz/nsim/core"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestWritePlantSVG_ValidXML verifies that WritePlantSVG
@@ -57,6 +60,47 @@ func TestWritePlantSVG_ValidXML(t *testing.T) {
 	// "<text>T <n>°F</text>" centred just below the RPV symbol.
 	if !strings.Contains(out, "T 621°F") {
 		t.Errorf("want RPV outlet-temperature overlay containing \"T 621°F\", not found in SVG")
+	}
+}
+
+// TestWritePlantSVG_NoMissingAnchors ensures every rendered part
+// resolved against the embedded layout; a missing anchor silently
+// drops the part, so the document carries an explicit comment when
+// that happens.
+func TestWritePlantSVG_NoMissingAnchors(t *testing.T) {
+	p := core.MakePlant()
+	var b strings.Builder
+	require.NoError(t, WritePlantSVG(&b, &p))
+	assert.NotContains(t, b.String(), "anchors missing from layout")
+}
+
+// TestSymbolManifest checks that every symbol id the composition
+// can reference exists in the emitted <defs>, so a typo renders as
+// a test failure instead of blank space.
+func TestSymbolManifest(t *testing.T) {
+	p := core.MakePlant()
+	var b strings.Builder
+	require.NoError(t, WritePlantSVG(&b, &p))
+	out := b.String()
+
+	defs := map[string]bool{}
+	for _, m := range regexp.MustCompile(`<symbol id="([^"]+)"`).FindAllStringSubmatch(out, -1) {
+		defs[m[1]] = true
+	}
+	require.NotEmpty(t, defs)
+
+	refs := map[string]bool{
+		"containment-dome": true, "css-spray-headers": true, "rcfc-unit": true,
+		"valve-safety": true, "valve-porv": true,
+	}
+	for _, dp := range diagramParts {
+		refs[symbolID(dp.kind)] = true
+	}
+	for _, kind := range []string{"gate", "swing_check", "relief", "porv"} {
+		refs[SymbolForKind(kind)] = true
+	}
+	for sym := range refs {
+		assert.True(t, defs[sym], "symbol %q referenced but not defined in defs", sym)
 	}
 }
 
