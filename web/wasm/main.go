@@ -34,16 +34,23 @@ type plantHandle struct {
 	sensors    bridge.SensorMap
 }
 
-func newPlantHandle() *plantHandle {
+func newPlantHandle(scenarioID string) (*plantHandle, error) {
 	p := core.MakePlant()
-	return &plantHandle{
-		p:        &p,
-		createdAt: time.Now(),
-		queue:    &cmdfile.Queue{},
-		journal:  &cmdfile.Journal{},
-		controls: p.GetControlMap(),
-		sensors:  p.GetSensorMap(),
+	if scenarioID != "" {
+		sc, ok := core.ScenarioByID(scenarioID)
+		if !ok {
+			return nil, fmt.Errorf("unknown scenario %q", scenarioID)
+		}
+		sc.Apply(&p)
 	}
+	return &plantHandle{
+		p:         &p,
+		createdAt: time.Now(),
+		queue:     &cmdfile.Queue{},
+		journal:   &cmdfile.Journal{},
+		controls:  p.GetControlMap(),
+		sensors:   p.GetSensorMap(),
+	}, nil
 }
 
 // step advances the plant by ticks `Step()`/`Update()` cycles.
@@ -247,6 +254,34 @@ func (h *plantHandle) plantJSON() (string, error) {
 	return string(b), nil
 }
 
+// scenariosJSON snapshots the operator-evolution catalog as JSON so
+// the front-end can render the selection screen without one JS<->Go
+// crossing per entry.
+type scenarioInfoJSON struct {
+	ID         string `json:"id"`
+	Number     int    `json:"number"`
+	Category   string `json:"category"`
+	Title      string `json:"title"`
+	StartState string `json:"startState"`
+	Objective  string `json:"objective"`
+}
+
+func scenariosJSON() (string, error) {
+	catalog := core.Scenarios()
+	out := make([]scenarioInfoJSON, len(catalog))
+	for i, s := range catalog {
+		out[i] = scenarioInfoJSON{
+			ID: s.ID, Number: s.Number, Category: s.Category,
+			Title: s.Title, StartState: s.StartState, Objective: s.Objective,
+		}
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 // jsStringSlice converts a Go []string into a JS Array<string>.
 func jsStringSlice(s []string) js.Value {
 	arr := js.Global().Get("Array").New(len(s))
@@ -382,8 +417,27 @@ func main() {
 	// Expose a single factory to JS. The TypeScript wrapper calls
 	// nsimNewPlant() to obtain a handle, then drives it through
 	// the methods exposed above.
-	js.Global().Set("nsimNewPlant", js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		return jsHandle(newPlantHandle())
+	// The optional string argument selects a starting scenario from
+	// the catalog; an empty or absent argument builds the default
+	// full-load plant.
+	js.Global().Set("nsimNewPlant", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		scenarioID := ""
+		if len(args) > 0 && args[0].Type() == js.TypeString {
+			scenarioID = args[0].String()
+		}
+		h, err := newPlantHandle(scenarioID)
+		if err != nil {
+			return js.Global().Get("Error").New(err.Error())
+		}
+		return jsHandle(h)
+	}))
+	js.Global().Set("nsimScenarios", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		s, err := scenariosJSON()
+		if err != nil {
+			return js.Global().Get("Error").New(err.Error())
+		}
+		return s
+		return s
 	}))
 
 	// Block forever. The wasm module's lifecycle is tied to the

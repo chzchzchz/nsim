@@ -18,6 +18,11 @@ import {
     PANEL_LAYOUT_VERSION,
 } from "./layout";
 import { Sim } from "./sim";
+import {
+    loadScenarios,
+    renderScenarioPicker,
+    type ScenarioInfo,
+} from "./scenarios";
 
 const COPY_FEEDBACK_MS = 1500;
 // Stepping runs on a wall-clock accumulator so the achieved rate
@@ -47,10 +52,16 @@ async function main(): Promise<void> {
     const fpsInput = document.getElementById("fps-input") as HTMLInputElement;
     const spsInput = document.getElementById("sps-input") as HTMLInputElement;
     const copyBtn = document.getElementById("btn-copy") as HTMLButtonElement;
+    const scenarioBtn = document.getElementById("btn-scenario") as HTMLButtonElement;
+    const scenarioNameEl = document.getElementById("scenario-name") as HTMLElement;
     const statusEl = document.getElementById("sim-status") as HTMLElement;
     const spsEl = document.getElementById("sps-indicator") as HTMLElement;
 
-    const sim = new Sim(newPlant);
+    // The factory closure reads the current selection at reset time,
+    // so both the initial plant and every later Reset rebuild the
+    // chosen scenario's starting state.
+    let currentScenarioId = "";
+    const sim = new Sim(() => newPlant(currentScenarioId));
 
     // Drag a tile by its prefix heading to swap it with a
     // neighbour; see grid.ts for the gesture thresholds.
@@ -147,6 +158,36 @@ async function main(): Promise<void> {
             initConsolePanel();
         },
     });
+
+    // Scenario selection: the catalog ships inside the wasm binary.
+    // The picker opens over the paused default dashboard at startup
+    // and again from the header button; confirming a choice swaps in
+    // the scenario's starting plant through the same reset path the
+    // Reset button uses.
+    let scenarios: ScenarioInfo[] = [];
+    try {
+        scenarios = loadScenarios();
+    } catch (err) {
+        console.error("scenario catalog unavailable:", err);
+        scenarioBtn.disabled = true;
+    }
+    function applyScenarioChoice(id: string | null): void {
+        currentScenarioId = id ?? "";
+        const title = id
+            ? scenarios.find((s) => s.id === id)?.title ?? ""
+            : "";
+        scenarioNameEl.textContent = title;
+        sim.reset();
+    }
+    function openScenarioPicker(): void {
+        renderScenarioPicker(document.body, scenarios, {
+            onStart: applyScenarioChoice,
+        });
+    }
+    scenarioBtn.addEventListener("click", openScenarioPicker);
+    if (scenarios.length > 0) {
+        openScenarioPicker();
+    }
 
     let lastSvg = performance.now();
     let lastUiRefreshMs = 0;

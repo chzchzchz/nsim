@@ -37,16 +37,20 @@ export interface PlantHandle {
 declare global {
     interface Window {
         Go: any;
-        // nsimNewPlant is the only top-level wasm export. It
-        // returns a fresh PlantHandle wrapping a *core.Plant
-        // constructed by core.MakePlant().
-        nsimNewPlant: () => PlantHandle;
+        // nsimNewPlant is the only plant factory wasm export. The
+        // optional scenario id selects a catalog starting state
+        // (see scenarios.ts); omitting it yields the default
+        // full-load plant.
+        nsimNewPlant: (scenarioId?: string) => PlantHandle;
+        // nsimScenarios returns the JSON snapshot of the operator
+        // evolution catalog rendered by the selection screen.
+        nsimScenarios: () => string;
     }
 }
 
-export function newPlant(): PlantHandle {
+export function newPlant(scenarioId?: string): PlantHandle {
     if (typeof window === "undefined" || !window.nsimNewPlant) {
         throw new Error("nsim wasm not loaded; call loadWasm() first");
     }
-    return window.nsimNewPlant();
+    return window.nsimNewPlant(scenarioId);
 }

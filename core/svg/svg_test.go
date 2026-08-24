@@ -79,6 +79,21 @@ func TestWritePlantSVG_NoMissingAnchors(t *testing.T) {
 	assert.NotContains(t, b.String(), "anchors missing from layout")
 }
 
+// TestWritePlantSVG_ScenarioStartStates renders every catalog
+// starting state because the web UI mounts the diagram immediately
+// after building the scenario plant.
+func TestWritePlantSVG_ScenarioStartStates(t *testing.T) {
+	for _, s := range core.Scenarios() {
+		t.Run(s.ID, func(t *testing.T) {
+			p := core.MakePlant()
+			s.Apply(&p)
+			var b strings.Builder
+			require.NoError(t, WritePlantSVG(&b, &p))
+			assert.Contains(t, b.String(), `<svg xmlns="http://www.w3.org/2000/svg"`)
+		})
+	}
+}
+
 // TestSymbolManifest checks that every symbol id the composition
 // can reference exists in the emitted <defs>, so a typo renders as
 // a test failure instead of blank space.

@@ -1,0 +1,140 @@
+package core
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// The scenario catalog feeds the web selection screen, so its
+// identifiers must be unique and the numbering must track
+// plans/x/scenarios.txt items 1-29 in order.
+func TestScenarioCatalogIdentifiers(t *testing.T) {
+	seen := make(map[string]bool)
+	for i, s := range Scenarios() {
+		require.False(t, seen[s.ID], "duplicate scenario id %q", s.ID)
+		seen[s.ID] = true
+		assert.Equal(t, i+1, s.Number, "catalog order must match item numbers")
+		assert.NotEmpty(t, s.Title)
+		assert.NotEmpty(t, s.Category)
+		assert.NotEmpty(t, s.StartState)
+		assert.NotEmpty(t, s.Objective)
+	}
+	assert.Len(t, Scenarios(), 29)
+
+	s, ok := ScenarioByID("porv-stuck-open")
+	require.True(t, ok)
+	assert.Equal(t, 26, s.Number)
+
+	_, ok = ScenarioByID("no-such-scenario")
+	assert.False(t, ok)
+}
+
+// Every scenario override must land the plant in a state that steps
+// cleanly from time zero; a short run catches wiring mistakes such as
+// latches that instantly trip or panic on zero-valued fields.
+func TestScenarioOverridesStepCleanly(t *testing.T) {
+	for _, s := range Scenarios() {
+		t.Run(s.ID, func(t *testing.T) {
+			p := MakePlant()
+			require.NotPanics(t, func() { s.Apply(&p) })
+			stepN(&p, 200)
+		})
+	}
+}
+
+// Wiring checks: the full-power lineup must land synchronized from
+// tick zero instead of relying on the first Step to reconcile
+// contradictory seeds.
+func TestFullPowerScenarioLineupIsSynchronized(t *testing.T) {
+	p := MakePlant()
+	Scenarios()[7].Apply(&p)
+
+	assert.Equal(t, PowerOperation, p.PlantOperation.Mode)
+	assert.True(t, p.ReactorBuilding.ReactorCoolantPumps.AnyRunning())
+	assert.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State)
+	assert.True(t, p.TurbineBuilding.Generator.BreakerClosed)
+}
+
+// Wiring check on the shared hot-standby fixture: source-level power,
+// inserted rods, water-solid inventory, SI blocked per its citation.
+func TestColdScenarioLineupStaysSubcriticalAndSolid(t *testing.T) {
+	p := MakePlant()
+	Scenarios()[0].Apply(&p)
+
+	assert.Equal(t, CoreNeutronSourcePower,
+		p.ReactorBuilding.ReactorPressureVessel.FissionPower)
+	assert.Equal(t, 1.0, p.ReactorBuilding.ReactorPressureVessel.Insertion)
+	assert.LessOrEqual(t, p.ReactorBuilding.Pressurizer.SteamBubble.Float(), 0.0,
+		"pre-critical lineup opens water solid")
+	assert.True(t, p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionBlocked)
+}
+
+// Wiring check: the post-trip lineup must hold its latches through
+// steps, not just at construction (RPS re-drives RPV.Trip).
+func TestPostTripScenarioLineupHoldsTripState(t *testing.T) {
+	p := MakePlant()
+	Scenarios()[15].Apply(&p)
+	stepN(&p, 100)
+
+	rps := p.ReactorBuilding.ReactorProtectionSystem
+	assert.True(t, rps.ReactorTripped)
+	assert.Equal(t, 1.0, p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion)
+	assert.Equal(t, TurbineTripped, p.TurbineBuilding.Turbine.State)
+	assert.False(t, p.TurbineBuilding.Generator.BreakerClosed)
+}
+
+// Wiring checks: each malfunction catalog entry preinserts its fault
+// so the transient starts at time zero.
+func TestMalfunctionScenariosPreinsertTheirFaults(t *testing.T) {
+	cases := []struct {
+		id   string
+		want func(*Plant) bool
+	}{
+		{"loss-of-offsite-power", func(p *Plant) bool {
+			return !p.Electrical.OffsiteSourceA.BreakerClosed &&
+				!p.Electrical.OffsiteSourceB.BreakerClosed
+		}},
+		{"loss-of-feedwater", func(p *Plant) bool {
+			return !p.TurbineBuilding.MainFeedwaterPump.Running
+		}},
+		{"rcp-trip", func(p *Plant) bool {
+			return !p.ReactorBuilding.ReactorCoolantPumps.LoopA.Running &&
+				p.ReactorBuilding.ReactorCoolantPumps.LoopB.Running
+		}},
+		{"steam-line-break", func(p *Plant) bool {
+			return p.ReactorBuilding.SteamGenerator.MainSteamLineBreak.Open == 1
+		}},
+		{"porv-stuck-open", func(p *Plant) bool {
+			return p.ReactorBuilding.Pressurizer.PORVStuckOpen
+		}},
+		{"dropped-rod-bank", func(p *Plant) bool {
+			return p.ReactorBuilding.ReactorPressureVessel.ControlRods.DroppedBank
+		}},
+		{"si-recirculation", func(p *Plant) bool {
+			return p.ReactorBuilding.ReactorProtectionSystem.ManualSI
+		}},
+		{"containment-spray", func(p *Plant) bool {
+			return p.ReactorBuilding.ReactorProtectionSystem.ContainmentSprayActuated
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.id, func(t *testing.T) {
+			s, ok := ScenarioByID(tc.id)
+			require.True(t, ok)
+			p := MakePlant()
+			s.Apply(&p)
+			assert.True(t, tc.want(&p), "fault not preinserted")
+		})
+	}
+}
+
+func TestRefuelingScenarioStartsCavityFlood(t *testing.T) {
+	p := MakePlant()
+	Scenarios()[21].Apply(&p)
+
+	refuel := p.ReactorBuilding.RefuelingOperations
+	assert.Equal(t, RefuelingPhasePreparation, refuel.Phase)
+	assert.True(t, refuel.CavityFlooding)
+}
