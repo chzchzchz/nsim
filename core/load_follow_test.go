@@ -145,13 +145,13 @@ func TestLoadFollow_XenonActiveReservePointBoration(t *testing.T) {
 		return r
 	}
 	exact := mk(loadFollowBoronPlateauXenon)
-	exact = exact.Step(RCPRatedSpeed)
+	exact = exact.Step(RCPRatedSpeed, 0)
 	assert.InDelta(t, 0.0, float64(exact.Reactivity), 1e-4,
 		"xenon-active reserve solve should be critical, rho=%v",
 		exact.Reactivity)
 
 	naive := mk(loadFollowBoronPlateau)
-	naive = naive.Step(RCPRatedSpeed)
+	naive = naive.Step(RCPRatedSpeed, 0)
 	assert.Greater(t, float64(naive.Reactivity), 0.05,
 		"pre-xenon plateau boron must leave the core supercritical under "+
 			"active iodine/xenon, rho=%v", naive.Reactivity)
