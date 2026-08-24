@@ -546,6 +546,29 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Stuck-open PORV failure latch (malfunction injection, secondary
+	// training source): while latched the relief valve ignores its
+	// auto-reclose and operator close writes; only the block valve
+	// terminates the inventory loss.
+	// specs/pwr_sim/chapter_4/page_049.txt:26-31
+	m["ReactorBuilding/Pressurizer/PORVStuckOpen"] = &bridge.Control{
+		Part:  "ReactorBuilding/Pressurizer",
+		Label: "PORVStuckOpen",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.Pressurizer.PORVStuckOpen)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.Pressurizer.PORVStuckOpen = v
+			return nil
+		},
+	}
+
 
 	// Pressurizer ASME-code safety valves (chapter 3):
 	// "If system pressure continues to rise, self-actuating

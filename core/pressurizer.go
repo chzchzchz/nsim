@@ -169,16 +169,18 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
 
 	// 5) Relief valve actuation. The PORV opens automatically at a
 	// setpoint and the code safety valves self-actuate above that;
-	// below their setpoints they re-close. "Reductions in plant
-	// electrical load [...] cause the air-operated relief valves to
-	// open. These valves are automatically opened at a pressure
-	// below system design pressure. [...] If system pressure
-	// continues to rise, self-actuating ASME-code safety valves
-	// will open."
+	// below their setpoints they re-close - unless the PORV is
+	// latched stuck open, in which case neither the reclose logic nor
+	// an operator close write can shut it and only the block valve
+	// terminates the loss. "Reductions in plant electrical load [...]
+	// cause the air-operated relief valves to open. These valves are
+	// automatically opened at a pressure below system design
+	// pressure. [...] If system pressure continues to rise,
+	// self-actuating ASME-code safety valves will open."
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:23-32
 	if porv != nil {
 		v := *porv
-		if ret.Pressure > PressurizerPORVTrip {
+		if ret.PORVStuckOpen || ret.Pressure > PressurizerPORVTrip {
 			v.Open = max(v.Open, 1)
 		} else if v.Open > 0 {
 			v.Open = 0
@@ -293,6 +295,20 @@ type Pressurizer struct {
 	// temperature-pressure curves."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:142-145
 	PressureSetpoint Pressure
+
+	// PORVStuckOpen models a relief valve jammed mechanically open:
+	// while latched, the PORV ignores both its auto-reclose below the
+	// setpoint and operator close commands, venting steam to the
+	// pressurizer relief tank until the block valve isolates it.
+	// Secondary-source malfunction (training-evolution class, not a
+	// primary-spec evolution): "This malfunction transient causes
+	// depressurization of the pressurizer; with steam vapor going to
+	// the letdown condenser through the failed opened pressure relief
+	// valve" - this model routes the same failure into the PRT per
+	// chapter_3/page_068.txt:32-34.
+	// specs/pwr_sim/chapter_4/page_049.txt:26-31 (secondary)
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:23-29
+	PORVStuckOpen bool
 
 	// PrevRCSTemp is the hot-leg temperature seen by the previous
 	// step; its finite difference drives thermal-expansion surge.
