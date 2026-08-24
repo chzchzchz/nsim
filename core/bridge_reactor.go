@@ -288,6 +288,33 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Main steam line break malfunction (pwr_sim exercise 4.19).
+	// Open is the normalized break size upstream of the MSIV; 1
+	// inserts the full "100 % main steam header break".
+	//   "insert the malfunction '100 % main steam header break'"
+	//   specs/pwr_sim/chapter_4/page_053.txt:14-16
+	m["ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/SteamGenerator/MainSteamLineBreak",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.SteamGenerator.MainSteamLineBreak.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SteamGenerator.MainSteamLineBreak.Open = v
+			return nil
+		},
+	}
+
 	// Steam generator safety valve (chapter 15).
 	// Self-actuating ASME-Code spring-loaded safety valve;
 	// the bridge exposes it as a control for completeness

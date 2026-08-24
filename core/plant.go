@@ -46,7 +46,19 @@ func (r *ReactorBuilding) secondaryExcessDrawW(offtakeFraction float64, turbineA
 		return 0
 	}
 	advFrac := r.SteamGenerator.AtmosphericDumpValve.Open * AtmosphericDumpFraction
-	drawnW := (offtakeFraction + advFrac) * float64(SteamGeneratorFullLoadHeatInput)
+	// The break path draws from the same header with the same
+	// unscaled choked-blowdown convention SteamGenerator.Step uses,
+	// so the deficit here matches the discharge there.
+	//   "The pipe break also results in increase in steam flow from
+	//    the steam generators, leading to increase in heat removal
+	//    from the reactor coolant system."
+	//   specs/pwr_sim/chapter_4/page_053.txt:9-11
+	brkFrac := 0.0
+	if r.SteamGenerator.MainSteamLineBreak.Open > 0 && r.SteamGenerator.Pressure > 0 {
+		brkFrac = r.SteamGenerator.MainSteamLineBreak.Open *
+			SteamLineBreakCapacityFraction
+	}
+	drawnW := (offtakeFraction + advFrac + brkFrac) * float64(SteamGeneratorFullLoadHeatInput)
 	// Signed imbalance through a first-order filter before
 	// rectification: one-step telemetry lag and rod-control noise
 	// are zero-mean and must not ratchet into phantom primary
@@ -1453,12 +1465,19 @@ func (p *Plant) Step() {
 		massKgPerS := spray.SprayFlow * KilogramsPerGPM
 		cssHeatOut = Watts(massKgPerS * float64(LatentHeatOfSteamization))
 	}
-	// RCS break enthalpy release is deferred until a break-flow
-	// state exists (plans/x/possible_bugs.md, containment model
-	// split); heatIn carries only the negative spray contribution.
+	// Main-steam-line-break enthalpy release: the discharge flashes
+	// into the containment atmosphere at the latent heat of
+	// vaporisation, the same convention the spray sink uses.
+	//   "This malfunction event causes steam pipe break in the main
+	//    steam line before the main steam stop valve (MSV) inside
+	//    containment"
+	//   specs/pwr_sim/chapter_4/page_053.txt:5-6
+	breakGalPerStep := p.nextPlant.ReactorBuilding.SteamGenerator.BreakFlow.Float()
+	steamBreakHeatIn := Watts(breakGalPerStep / TimeStep.Seconds() *
+		KilogramsPerGallon * float64(LatentHeatOfSteamization))
 	p.nextPlant.ReactorBuilding.ContainmentBuilding =
 		p.nextPlant.ReactorBuilding.ContainmentBuilding.Step(
-			-cssHeatOut, rcfcHeatOut,
+			steamBreakHeatIn-cssHeatOut, rcfcHeatOut,
 		)
 
 	// RPS-driven CIS manual flags. The Reactor Protection

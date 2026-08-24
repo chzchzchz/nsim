@@ -58,6 +58,19 @@ type SteamGenerator struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
 	AtmosphericDumpValve Valve
 
+	// MainSteamLineBreak is the malfunction path modeling a main
+	// steam header rupture upstream of the MSIV, discharging
+	// straight into containment. Open is the normalized break
+	// size (0 intact, 1 full header severance); the discharge
+	// debits shell inventory and feeds the containment enthalpy
+	// input through BreakFlow.
+	// "This malfunction event causes steam pipe break in the main
+	//  steam line before the main steam stop valve (MSV) inside
+	//  containment, leading to rapid depressurizaton of the main
+	//  steam pressure."
+	// specs/pwr_sim/chapter_4/page_053.txt:3-7
+	MainSteamLineBreak Valve
+
 	// WetLayupFillValve tops the shell steam side with water up to
 	// the vents once the reactor coolant is at layup temperature
 	// and the header is de-pressurised. The Step refuses to fill a
@@ -96,6 +109,13 @@ type SteamGenerator struct {
 	// drained water stay inside the tracked secondary inventory.
 	VentFlow  Volume
 	DrainFlow Volume
+
+	// BreakFlow is the per-step volume discharged through
+	// MainSteamLineBreak during the most recent Step (gallons per
+	// step, same convention as VentFlow). Unlike the vent draw it
+	// is lost from the secondary: Plant.Step converts it into
+	// containment enthalpy input instead of condenser makeup.
+	BreakFlow Volume
 }
 
 func (s *SteamGenerator) Update() SteamGenerator {
@@ -177,6 +197,18 @@ const (
 	// small trim on any operating power level.
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-122
 	SteamlineVentCapacityFraction = 0.05
+
+	// SteamLineBreakCapacityFraction is the fraction of rated
+	// full-load steam flow a full main-steam header severance
+	// passes. The exercise inserts the malfunction as a "100 %
+	// main steam header break", i.e. one whose area admits the
+	// full design steam flow; delivery holds that fraction while
+	// any header pressure remains (choked blowdown, the same
+	// unscaled convention the atmospheric dump path uses).
+	//   "100% main steam header break ... causes steam pipe break
+	//    in the main steam line before the main steam stop valve"
+	//   specs/pwr_sim/chapter_4/page_053.txt:3-5
+	SteamLineBreakCapacityFraction = 1.0
 
 	// SGDrainValveGalPerSec sizes the shell drain at full open so
 	// draining from the wet-layup fill to the normal operating band
@@ -302,6 +334,31 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 		ret.Water = vol(ret.Water, newWater)
 	}
 
+	// Main-steam-line-break discharge. Delivery holds its rated
+	// fraction while any header pressure remains — choked blowdown
+	// stays near design mass flux across the depressurisation
+	// range, the same unscaled convention the atmospheric dump
+	// path uses. Scaling instead by the instantaneous pressure
+	// ratio would let the draw collapse with the header and arrest
+	// the transient above the low-steamline protection setpoint.
+	// The discharged volume leaves the secondary entirely: it
+	// flashes into containment and is exported in BreakFlow for
+	// Plant.Step to charge to the containment enthalpy balance.
+	//   "The pipe break also results in increase in steam flow
+	//    from the steam generators"
+	//   specs/pwr_sim/chapter_4/page_053.txt:9-10
+	ret.BreakFlow = Volume{Val: 0, Unit: u.Gallon}
+	breakFraction := 0.0
+	if ret.MainSteamLineBreak.Open > 0 && ret.Pressure > 0 {
+		breakFraction = ret.MainSteamLineBreak.Open *
+			SteamLineBreakCapacityFraction
+		ret.BreakFlow = Volume{Val: breakFraction *
+			SteamGeneratorFullLoadSteamFlow.Float()/SecondsPerHour*
+			dt.Seconds(), Unit: u.Gallon}
+		newWater := max(ret.Water.Float()-ret.BreakFlow.Float(), 0)
+		ret.Water = vol(ret.Water, newWater)
+	}
+
 	// Steamline vent draw. The vent bank passes its capacity
 	// fraction of rated flow at full open and draws from the same
 	// header as the turbine and the dump banks, so an open vent
@@ -370,7 +427,8 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 	// steam generation and Pressure decays toward zero.
 	pressure := float64(ret.Pressure)
 	if ret.HeatInput > 0 && ret.Water.Float() > 0 {
-		outflow := steamOutflowFraction + advFraction + svFraction + ventFraction
+		outflow := steamOutflowFraction + advFraction + svFraction +
+			ventFraction + breakFraction
 		supply := boilRateM3PerSec / ratedBoilM3PerSec
 		target := float64(SteamGeneratorShellPressure)
 		switch {
