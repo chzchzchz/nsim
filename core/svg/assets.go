@@ -39,6 +39,12 @@ var containmentAsset string
 //go:embed assets/safety_systems.svg
 var safetySystemsAsset string
 
+//go:embed assets/cooling_tower.svg
+var coolingTowerAsset string
+
+//go:embed assets/circulating_water.svg
+var circulatingWaterAsset string
+
 // extractSymbols returns the inner <symbol>...</symbol> blocks
 // of an embedded asset file, separated by newlines.
 func extractSymbols(asset string) string {
@@ -171,6 +177,8 @@ var (
 	DieselAsset        = extractSymbols(dieselAsset)
 	ContainmentAsset   = extractSymbols(containmentAsset)
 	SafetySystemsAsset = extractSymbols(safetySystemsAsset)
+	CoolingTowerAsset  = extractSymbols(coolingTowerAsset)
+	CircWaterAsset     = extractSymbols(circulatingWaterAsset)
 )
 
 // SymbolFile describes a standalone SVG file to write.
@@ -221,6 +229,10 @@ func SymbolFiles() []SymbolFile {
 		add("efws-tank.svg", symbolBlockForID(safetySystemsAsset, "efws-tank"), 80, 100),
 		add("ccws-hx.svg", symbolBlockForID(safetySystemsAsset, "ccws-hx"), 100, 50),
 		add("rhrs-train.svg", symbolBlockForID(safetySystemsAsset, "rhrs-train"), 200, 80),
+		add("cooling-tower.svg", symbolBlockForID(coolingTowerAsset, "cooling-tower"), 140, 190),
+		add("river-intake.svg", symbolBlockForID(circulatingWaterAsset, "river-intake"), 180, 80),
+		add("pump-cw.svg", symbolBlockForID(circulatingWaterAsset, "pump-cw"), 50, 90),
+		add("sws-train.svg", symbolBlockForID(circulatingWaterAsset, "sws-train"), 120, 24),
 	}
 }
 

@@ -1,6 +1,7 @@
 package svg
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -50,6 +51,10 @@ func TestWritePlantSVG_ValidXML(t *testing.T) {
 		`<symbol id="efws-tank"`,
 		`<symbol id="ccws-hx"`,
 		`<symbol id="rhrs-train"`,
+		`<symbol id="cooling-tower"`,
+		`<symbol id="river-intake"`,
+		`<symbol id="pump-cw"`,
+		`<symbol id="sws-train"`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in SVG output", want)
@@ -133,6 +138,60 @@ func TestRCFCPartsRender(t *testing.T) {
 	require.NoError(t, WritePlantSVG(&b, &p))
 	out := b.String()
 	assert.Contains(t, out, ">RCFC A<")
+	assert.NotContains(t, out, "anchors missing")
+}
+
+// TestSVG_CoolingTowerSymbol checks the tower glyph carries the
+// fan, fill, and basin cues from plans/svg/cooling_tower.md.
+func TestSVG_CoolingTowerSymbol(t *testing.T) {
+	sym := symbolBlockForID(coolingTowerAsset, "cooling-tower")
+	require.NotEmpty(t, sym)
+	for _, want := range []string{
+		`id="cooling-tower-level"`,
+		`id="ct-anchor-hot-inlet"`,
+		`id="ct-anchor-cold-out"`,
+		`id="ct-anchor-makeup"`,
+	} {
+		assert.Contains(t, sym, want)
+	}
+	p := core.MakePlant()
+	var b strings.Builder
+	require.NoError(t, WritePlantSVG(&b, &p))
+	out := b.String()
+	assert.Contains(t, out, `<g data-part="Outside/CoolingTower"`)
+	assert.Contains(t, out, `<use href="#cooling-tower"`)
+}
+
+// TestSVG_CoolingTowerOverlays checks the basin gauge, fan run
+// dot, and cold-basin readout track live state.
+func TestSVG_CoolingTowerOverlays(t *testing.T) {
+	p := core.MakePlant()
+	ct := &p.Outside.CoolingTower
+	ct.FanRunning = true
+	ct.Basin.Level.Val = ct.Basin.Capacity.Val / 2
+	var b strings.Builder
+	require.NoError(t, WritePlantSVG(&b, &p))
+	out := b.String()
+	assert.Contains(t, out, `class="level-gauge"`)
+	assert.Contains(t, out, `fill="green"`)
+	assert.Contains(t, out,
+		fmt.Sprintf("CT %.0f°F", ct.ColdBasinTemp.Float()))
+}
+
+// TestSVG_IntakeAndSWSRender checks the heat-rejection boundary
+// parts from plans/svg/circulating_water.md resolve against the
+// embedded layout.
+func TestSVG_IntakeAndSWSRender(t *testing.T) {
+	p := core.MakePlant()
+	var b strings.Builder
+	require.NoError(t, WritePlantSVG(&b, &p))
+	out := b.String()
+	assert.Contains(t, out, `<use href="#river-intake"`)
+	assert.Contains(t, out, `<use href="#sws-train"`)
+	assert.Contains(t, out, `<use href="#pump-cw"`)
+	assert.Contains(t, out, "Intake House")
+	assert.Contains(t, out, "river ")
+	assert.Contains(t, out, "wb ")
 	assert.NotContains(t, out, "anchors missing")
 }
 

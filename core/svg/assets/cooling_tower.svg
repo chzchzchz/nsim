@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg">
+<title>PWR cooling tower symbols</title>
+<desc>Mechanical-draft counter-flow cooling tower cell. Source-of-truth citations live in plans/svg/cooling_tower.md.</desc>
+
+<symbol id="cooling-tower" viewBox="-70 -95 140 190">
+<title>Mechanical-Draft Cooling Tower</title>
+<!-- casing -->
+<rect x="-55" y="-70" width="110" height="120" fill="#e6e6e6" stroke="black"/>
+<!-- fan deck and stack -->
+<rect x="-60" y="-80" width="120" height="10" fill="#cccccc" stroke="black"/>
+<circle cx="0" cy="-85" r="12" fill="#dcdcdc" stroke="black"/>
+<path d="M 0 -85 L -9 -91 M 0 -85 L 9 -91 M 0 -85 L -11 -81 M 0 -85 L 11 -81" stroke="black" stroke-width="1" fill="none"/>
+<!-- drift eliminators -->
+<path d="M -50 -62 l 8 -5 l 8 5 l 8 -5 l 8 5 l 8 -5 l 8 5 l 8 -5 l 8 5 l 8 -5 l 8 5 l 8 -5 l 8 5" stroke="#888" stroke-width="0.8" fill="none"/>
+<!-- spray distribution -->
+<g stroke="#4a90d9" stroke-width="0.8">
+<line x1="-40" y1="-52" x2="-40" y2="-46"/>
+<line x1="-20" y1="-52" x2="-20" y2="-46"/>
+<line x1="0" y1="-52" x2="0" y2="-46"/>
+<line x1="20" y1="-52" x2="20" y2="-46"/>
+<line x1="40" y1="-52" x2="40" y2="-46"/>
+</g>
+<!-- fill section -->
+<rect x="-50" y="-42" width="100" height="26" fill="none" stroke="#888" stroke-width="0.8"/>
+<path d="M -50 -42 l 100 26 M -50 -16 l 100 -26 M -50 -29 h 100" stroke="#888" stroke-width="0.5" fill="none"/>
+<!-- basin -->
+<rect x="-55" y="34" width="110" height="16" fill="#cccccc" stroke="black"/>
+<rect id="cooling-tower-level" x="-53" y="36" width="106" height="12" fill="#aad4ff" fill-opacity="0.5" stroke="none"/>
+<!-- hot water inlet from condenser -->
+<rect x="-70" y="-58" width="15" height="8" fill="#cccccc" stroke="black"/>
+<!-- cold water outlet to CW pump suction -->
+<rect x="-8" y="50" width="16" height="6" fill="#cccccc" stroke="black"/>
+<text x="0" y="28" text-anchor="middle" font-size="7">CT</text>
+<circle id="ct-anchor-hot-inlet" cx="-70" cy="-54" r="2" fill="none" stroke="none"/>
+<circle id="ct-anchor-cold-out" cx="0" cy="56" r="2" fill="none" stroke="none"/>
+<circle id="ct-anchor-makeup" cx="55" cy="42" r="2" fill="none" stroke="none"/>
+</symbol>
+</svg>

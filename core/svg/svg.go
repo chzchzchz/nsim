@@ -112,6 +112,9 @@ var diagramParts = []diagramPart{
 	{"CCWSPump", "AuxiliaryBuilding/ComponentCoolingWaterSystem", "ComponentCoolingWaterPump", "CCW Pump"},
 	{"SFPPA", "AuxiliaryBuilding/SpentFuelPoolCoolingSystem", "SpentFuelPoolPump", "SFP PA"},
 	{"SFPPB", "AuxiliaryBuilding/SpentFuelPoolCoolingSystem", "SpentFuelPoolPump", "SFP PB"},
+	{"CoolingTower", "Outside/CoolingTower", "CoolingTower", "Cooling Tower"},
+	{"Intake", "Outside/CirculatingWaterSystem", "RiverIntake", "Intake House"},
+	{"SWSHeader", "Outside/ServiceWaterSystem", "ServiceWaterHeader", "SWS Header"},
 }
 
 // buildingLabels captions the cluster outlines drawn behind symbols.
@@ -182,6 +185,12 @@ var runAccessors = map[string]func(*core.Plant) bool{
 	"SFPPB": func(p *core.Plant) bool {
 		return p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.StandbyRunning
 	},
+	"CoolingTower": func(p *core.Plant) bool {
+		return p.Outside.CoolingTower.FanRunning
+	},
+	"SWSHeader": func(p *core.Plant) bool {
+		return p.Outside.ServiceWaterSystem.PumpRunning
+	},
 }
 
 // levelAccessors maps tank-backed diagram parts to their live
@@ -215,6 +224,10 @@ var levelAccessors = map[string]func(*core.Plant) (core.Volume, core.Volume){
 	"Pressurizer": func(p *core.Plant) (core.Volume, core.Volume) {
 		pz := p.ReactorBuilding.Pressurizer
 		return pz.Water, pz.Volume
+	},
+	"CoolingTower": func(p *core.Plant) (core.Volume, core.Volume) {
+		t := p.Outside.CoolingTower.Basin
+		return t.Level, t.Capacity
 	},
 }
 
@@ -702,6 +715,8 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	b.WriteString(GeneratorAsset)
 	b.WriteString(TransformerAsset)
 	b.WriteString(DieselAsset)
+	b.WriteString(CoolingTowerAsset)
+	b.WriteString(CircWaterAsset)
 	b.WriteString(PipeArrowMarkers())
 	b.WriteString(flowStyleCSS)
 	b.WriteString(partFocusCSS)
@@ -840,7 +855,8 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			fmt.Fprintf(&b,
 				`<circle cx="%.0f" cy="%.0f" r="%.0f" fill="%s" stroke="%s" stroke-width="1"/>`+"\n",
 				a.X+sw*0.38, a.Y-sh*0.42, dotR, statusOn, pidDotEdge)
-		} else if lv, okL := levelAccessors[dp.id]; okL {
+		}
+		if lv, okL := levelAccessors[dp.id]; okL {
 			level, capacity := lv(p)
 			writeLevelGauge(&b, a, sw, sh, volumeFraction(level, capacity))
 		}
@@ -981,6 +997,47 @@ var readouts = []readoutDef{
 		text: func(p *core.Plant) string {
 			return fmt.Sprintf("%.2f psia",
 				float64(p.TurbineBuilding.Condenser.Pressure))
+		},
+	},
+	{
+		// CW supply conditions at the condenser tubes; the source
+		// is river or cooling tower depending on configuration.
+		id: "Condenser",
+		dy: 28,
+		text: func(p *core.Plant) string {
+			cws := p.Outside.CirculatingWaterSystem
+			return fmt.Sprintf("CW %.0f°F %.0fk gpm",
+				cws.InletTemp.Float(), cws.FlowGPM/1000.0)
+		},
+	},
+	{
+		// Ambient boundary pair beside the intake house; the wet-
+		// bulb is the evaporative lower bound for the tower.
+		id: "Intake",
+		dy: 12,
+		text: func(p *core.Plant) string {
+			return fmt.Sprintf("river %.0f°F / wb %.0f°F",
+				p.Outside.RiverTemp.Float(),
+				p.Outside.AmbientWetBulbTemp.Float())
+		},
+	},
+	{
+		id: "SWSHeader",
+		dy: 16,
+		show: func(p *core.Plant) bool {
+			return p.Outside.ServiceWaterSystem.PumpRunning
+		},
+		text: func(p *core.Plant) string {
+			return fmt.Sprintf("SWS %.0f°F",
+				p.Outside.ServiceWaterSystem.OutletTemp.Float())
+		},
+	},
+	{
+		id: "CoolingTower",
+		dy: 12,
+		text: func(p *core.Plant) string {
+			return fmt.Sprintf("CT %.0f°F",
+				p.Outside.CoolingTower.ColdBasinTemp.Float())
 		},
 	},
 }

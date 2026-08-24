@@ -59,6 +59,12 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	{"SFPPA", "cluster_containment", "SpentFuelPoolPump"},
 	{"SFPPB", "cluster_containment", "SpentFuelPoolPump"},
 
+	// Heat-rejection boundary: the shared intake house and the
+	// essential service water header it feeds
+	// (plans/svg/circulating_water.md).
+	{"Intake", "cluster_turbine", "RiverIntake"},
+	{"SWSHeader", "cluster_auxiliary", "ServiceWaterHeader"},
+
 	// Live valves that carry no fluid edge; positions come from
 	// standaloneValves rendering.
 	{"SGMSIV", "cluster_containment", "modulating"},
