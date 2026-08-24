@@ -2,7 +2,7 @@
 // The diagram is stateless markup; part highlighting binds via
 // data-part attributes, so remounting never loses handlers.
 
-import { revealPart } from "./bindings";
+import { REF_FLASH_MS, revealPart } from "./bindings";
 
 // Zoom state lives here rather than on the mounted <svg> because
 // refreshes replace that node wholesale; re-applying the same
@@ -111,22 +111,35 @@ function bindZoomGestures(target: HTMLElement): void {
 
     let downX = 0;
     let downY = 0;
+    // Capture is deferred until travel exceeds the click threshold:
+    // capturing immediately would retarget the compatibility click
+    // event to the host and hide the component that was clicked.
+    let pressed = false;
     let dragging = false;
     let lastX = 0;
     let lastY = 0;
     target.addEventListener("pointerdown", (ev) => {
         downX = ev.clientX;
         downY = ev.clientY;
-        if (ev.button !== 0) return;
-        // Let the zoom overlay keep its own click behaviour.
-        if ((ev.target as HTMLElement | null)?.closest(".pid-zoom")) return;
-        dragging = true;
-        lastX = ev.clientX;
-        lastY = ev.clientY;
-        target.setPointerCapture(ev.pointerId);
+        pressed = ev.button === 0 &&
+            !(ev.target as HTMLElement | null)?.closest(".pid-zoom");
+        if (pressed) {
+            lastX = ev.clientX;
+            lastY = ev.clientY;
+        }
     });
     target.addEventListener("pointermove", (ev) => {
-        if (!dragging) return;
+        if (!pressed) return;
+        if (!dragging) {
+            if (
+                Math.hypot(ev.clientX - downX, ev.clientY - downY) <
+                    CLICK_SUPPRESS_PX
+            ) {
+                return;
+            }
+            dragging = true;
+            target.setPointerCapture(ev.pointerId);
+        }
         panX += ev.clientX - lastX;
         panY += ev.clientY - lastY;
         lastX = ev.clientX;
@@ -134,6 +147,7 @@ function bindZoomGestures(target: HTMLElement): void {
         applyTransform();
     });
     const endDrag = (ev: PointerEvent): void => {
+        pressed = false;
         if (!dragging) return;
         dragging = false;
         if (target.hasPointerCapture(ev.pointerId)) {
@@ -152,8 +166,17 @@ function bindZoomGestures(target: HTMLElement): void {
         ) {
             return;
         }
-        const part = (ev.target as Element | null)?.closest("[data-part]")
-            ?.getAttribute("data-part");
-        if (part) revealPart(part);
+        const g = (ev.target as Element | null)?.closest("[data-part]");
+        const part = g?.getAttribute("data-part");
+        if (!g || !part) return;
+        if (revealPart(part)) return;
+        // Components without bridge rows (e.g. the heater drain
+        // pump has no bindings yet) still acknowledge the click so
+        // it does not feel dead.
+        g.classList.add("ref-flash");
+        window.setTimeout(
+            () => g.classList.remove("ref-flash"),
+            REF_FLASH_MS,
+        );
     });
 }

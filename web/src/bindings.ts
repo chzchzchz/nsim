@@ -88,7 +88,7 @@ export type PartDisplay = (part: string) => string;
 
 // Duration of the jump-target highlight, matching the ctl-error
 // flash cadence used elsewhere.
-const REF_FLASH_MS = 1500;
+export const REF_FLASH_MS = 1500;
 
 // makeHelpButton builds the "(?)" toggle that reveals an element's
 // description inline; shared by the controls panel, the sensor
