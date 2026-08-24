@@ -2,6 +2,7 @@ Self-actuating ASME-code spring safety valve on the pressurizer. If system press
 
 The bridge exposes aggregate state mostly for visibility; the simulation auto-lifts the valve when pressure exceeds the code setpoint. Manual intervention here is not part of normal operations.
 
-See also: [PORV](ReactorBuilding/PORV/Open), [Level](ReactorBuilding/PressurizedReliefTank/Level), [PRTSprayValve](ReactorBuilding/PRTSprayValve/Open)
+Related controls: [PORV](ReactorBuilding/PORV/Open), [PRTSprayValve](ReactorBuilding/PRTSprayValve/Open)
+Related sensors: [PORV](ReactorBuilding/PORV/Open), [Level](ReactorBuilding/PressurizedReliefTank/Level)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:30-34

@@ -2,6 +2,7 @@ Diesel jacket water coolant temperature in Fahrenheit. The engine's own heat is 
 
 Diesels are kept warm and ready precisely so that a start from standby lands in the acceptable temperature band instead of thermal-shocking the block.
 
-See also: [Flow](Outside/ServiceWaterSystem/Flow), [RunningFraction](AuxiliaryBuilding/DieselGenerator/RunningFraction)
+Related controls: [RunningFraction](AuxiliaryBuilding/DieselGenerator/RunningFraction)
+Related sensors: [Flow](Outside/ServiceWaterSystem/Flow)
 
 Source: $W/chapter_12/page_169.txt:16-19

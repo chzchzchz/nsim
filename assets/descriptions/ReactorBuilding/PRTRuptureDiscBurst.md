@@ -2,6 +2,6 @@ Indicates the rupture disc on the pressurizer relief tank has burst. The disc is
 
 Bursting is one-way - the disc does not reseat. Containment pressure and temperature will climb with continued discharge, engaging the same responses as any other mass-and-energy release inside containment.
 
-See also: [Level](ReactorBuilding/PressurizedReliefTank/Level), [ContainmentPressure](ReactorBuilding/ContainmentPressure)
+Related sensors: [Level](ReactorBuilding/PressurizedReliefTank/Level), [ContainmentPressure](ReactorBuilding/ContainmentPressure)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:35-37

@@ -2,7 +2,8 @@ Steam-driven emergency feedwater pump for subsystem A. It auto-starts on low-low
 
 Turbine-driven pumps are the defense-in-depth half of EFWS: independent driver, independent steam supply, same immediate-delivery philosophy as the motor pumps.
 
-See also: [AtmosphericDumpValve](ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open), [MotorPumpRunning](AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPumpRunning)
+Related controls: [AtmosphericDumpValve](ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open), [MotorPumpRunning](AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPumpRunning)
+Related sensors: [AtmosphericDumpValve](ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open), [MotorPumpRunning](AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPumpRunning)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:82-85
 Source: specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:1-9

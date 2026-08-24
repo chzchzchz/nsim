@@ -2,4 +2,4 @@ Makeup flow through the reactor makeup control valve in gpm - the instantaneous 
 
 Compare against letdown flow to understand net inventory movement: charging exceeding letdown grows primary inventory and slowly raises [pressurizer level](ReactorBuilding/Pressurizer/Water).
 
-See also: [ReactorMakeupControlValve](ReactorBuilding/ReactorMakeupControlValve/Open), [ChargingPumpRunning](AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning)
+Related controls: [ReactorMakeupControlValve](ReactorBuilding/ReactorMakeupControlValve/Open), [ChargingPumpRunning](AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning)

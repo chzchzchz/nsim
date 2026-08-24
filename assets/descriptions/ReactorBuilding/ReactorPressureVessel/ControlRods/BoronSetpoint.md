@@ -2,6 +2,7 @@ Target RCS boron concentration in ppm handed to the CVCS boration/dilution logic
 
 This setpoint is the operator-visible handle on the slow shim path; fast transients belong to the rods, chemistry belongs here. The full path runs through [CVCS mode](AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode) and the BTRS/makeup equipment.
 
-See also: [BoronMode](AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode), [BoronConcentration](ReactorBuilding/ReactorPressureVessel/BoronConcentration)
+Related controls: [BoronMode](AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode)
+Related sensors: [BoronConcentration](ReactorBuilding/ReactorPressureVessel/BoronConcentration)
 
 Source: $W/chapter_7/page_135.txt:58-62

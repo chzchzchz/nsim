@@ -2,4 +2,5 @@ JSON list of every currently active alarm with severity (info / warning / trip),
 
 Each row shows when the condition began, which is what the operator needs for post-trip review: sequence of events starts from activation times. Clicking a row acknowledges that single alarm through [Reset](Alarms/Reset).
 
-See also: [Reset](Alarms/Reset), [Alarms](Plant/Alarms)
+Related controls: [Reset](Alarms/Reset)
+Related sensors: [Alarms](Plant/Alarms)

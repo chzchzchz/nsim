@@ -2,6 +2,6 @@ Cleanup flow through the filter and demineralizer loop, about 100 gpm per loop. 
 
 Falling purification flow with steady cooling points at strainer clogging - chemistry control of the pool depends on this side stream.
 
-See also: [PumpRunning](AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PumpRunning), [StandbyRunning](AuxiliaryBuilding/SpentFuelPoolCoolingSystem/StandbyRunning)
+Related sensors: [PumpRunning](AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PumpRunning), [StandbyRunning](AuxiliaryBuilding/SpentFuelPoolCoolingSystem/StandbyRunning)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:68-71

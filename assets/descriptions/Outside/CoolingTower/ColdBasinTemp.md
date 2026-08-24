@@ -2,4 +2,4 @@ Temperature of cooled water collected in the tower basin and returned to the con
 
 Ambient wet-bulb temperature bounds performance - a tower cannot cool below it, so hot humid days quietly cost output even with everything mechanically perfect.
 
-See also: [Level](Outside/CoolingTower/Basin/Level), [Flow](Outside/CirculatingWaterSystem/Flow)
+Related sensors: [Level](Outside/CoolingTower/Basin/Level), [Flow](Outside/CirculatingWaterSystem/Flow)

@@ -2,4 +2,5 @@ Turbine operating state string - stopped, turning gear, rolling, synchronized/on
 
 Useful as a quick sanity check during maneuvers: state should always agree with stop valve position, breaker status, and speed. A mismatch means an interlock fired or an indication failed.
 
-See also: [StopValve](TurbineBuilding/Turbine/StopValve), [Velocity](TurbineBuilding/Turbine/Velocity), [Reset](TurbineBuilding/Turbine/Reset)
+Related controls: [StopValve](TurbineBuilding/Turbine/StopValve), [Reset](TurbineBuilding/Turbine/Reset)
+Related sensors: [Velocity](TurbineBuilding/Turbine/Velocity)

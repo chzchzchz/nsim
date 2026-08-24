@@ -2,6 +2,6 @@ Spent fuel pool cooling pump running indicator. Normal operation requires two pu
 
 The pool is a long-memory system: even weeks after shutdown, fuel assemblies carry enough decay heat that losing SFPCS cooling starts a clock toward boiling and evaporation.
 
-See also: [StandbyRunning](AuxiliaryBuilding/SpentFuelPoolCoolingSystem/StandbyRunning), [PurificationFlow](AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PurificationFlow), [DriveReady](AuxiliaryBuilding/SpentFuelPoolCoolingSystem/DriveReady)
+Related sensors: [StandbyRunning](AuxiliaryBuilding/SpentFuelPoolCoolingSystem/StandbyRunning), [PurificationFlow](AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PurificationFlow), [DriveReady](AuxiliaryBuilding/SpentFuelPoolCoolingSystem/DriveReady)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:43-44

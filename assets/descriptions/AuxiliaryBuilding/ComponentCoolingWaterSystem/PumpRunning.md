@@ -2,6 +2,7 @@ Component cooling water pump running indicator. CCW is the intermediate loop: it
 
 The design provides two separate redundant safeguards trains with no cross-connection, plus an auxiliary subsystem giving 100 percent cooling for normal operation - pump state tells you which arrangement you are in.
 
-See also: [OutletTemp](AuxiliaryBuilding/ComponentCoolingWaterSystem/OutletTemp), [PumpRunning](Outside/ServiceWaterSystem/PumpRunning)
+Related controls: [PumpRunning](Outside/ServiceWaterSystem/PumpRunning)
+Related sensors: [OutletTemp](AuxiliaryBuilding/ComponentCoolingWaterSystem/OutletTemp)
 
 Source: $W/chapter_5/page_105.txt:1-14

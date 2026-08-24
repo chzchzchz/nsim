@@ -2,6 +2,7 @@ Turbine shaft speed in rpm, nominally 1800 at rated conditions for this four-pol
 
 Speed is the primary controlled variable while rolling and a protection input afterward: overspeed detection trips the turbine mechanically independent of the control system.
 
-See also: [SpeedDemand](TurbineBuilding/Turbine/SpeedDemand), [State](TurbineBuilding/Turbine/State)
+Related controls: [SpeedDemand](TurbineBuilding/Turbine/SpeedDemand)
+Related sensors: [State](TurbineBuilding/Turbine/State)
 
 Source: $W/chapter_15/page_202.txt:11-14

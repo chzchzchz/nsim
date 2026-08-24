@@ -2,6 +2,6 @@ Containment spray header valves open. Actuated spray delivers borated sodium hyd
 
 Storage tanks provide roughly 30 minutes of spray with additive; when the refueling water storage tank reaches its Lo-Lo setpoint the pumps are manually switched to recirculation sump suction for long-term operation.
 
-See also: [PumpRunning](AuxiliaryBuilding/ContainmentSpraySystem/PumpRunning), [ContainmentPressure](ReactorBuilding/ContainmentPressure)
+Related sensors: [PumpRunning](AuxiliaryBuilding/ContainmentSpraySystem/PumpRunning), [ContainmentPressure](ReactorBuilding/ContainmentPressure)
 
 Source: $W/chapter_6/page_115.txt:4-16

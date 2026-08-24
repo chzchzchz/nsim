@@ -2,6 +2,7 @@ RHR train TrainA suction valve 1 position. Opening aligns an RCS loop to the RHR
 
 These valves are part of the RCS pressure boundary during RHR operation, so their status defines whether the train can actually take suction - pump running with suction shut is a dead-headed pump.
 
-See also: [PumpRunning](AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/PumpRunning), [BlockValve](ReactorBuilding/BlockValve/Open)
+Related controls: [PumpRunning](AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/PumpRunning), [BlockValve](ReactorBuilding/BlockValve/Open)
+Related sensors: [PumpRunning](AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/PumpRunning), [BlockValve](ReactorBuilding/BlockValve/Open)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:15-24

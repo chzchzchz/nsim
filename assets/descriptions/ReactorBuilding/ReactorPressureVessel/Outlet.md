@@ -2,6 +2,6 @@ Reactor coolant outlet temperature (hot leg) in Fahrenheit, nominal design value
 
 Tavg - the average of inlet and outlet across loops - is the controlled variable the rod system tracks against its program; hot leg excursions above program while cold leg holds steady point at either excess power or lost flow.
 
-See also: [Inlet](ReactorBuilding/ReactorPressureVessel/Inlet), [Tref](PlantOperation/Tref), [HeatInput](ReactorBuilding/SteamGenerator/HeatInput)
+Related sensors: [Inlet](ReactorBuilding/ReactorPressureVessel/Inlet), [Tref](PlantOperation/Tref), [HeatInput](ReactorBuilding/SteamGenerator/HeatInput)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60-61

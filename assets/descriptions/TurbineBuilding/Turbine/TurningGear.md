@@ -2,4 +2,5 @@ Engages turning gear, rotating the shaft slowly on startup jigs to prevent rotor
 
 Sequence discipline matters: turning gear before vacuum and lube oil circulation are established is wrong order. The gear runs through outages until rolling speed replaces it.
 
-See also: [LubeOilPump](TurbineBuilding/Turbine/LubeOilPump), [Velocity](TurbineBuilding/Turbine/Velocity)
+Related controls: [LubeOilPump](TurbineBuilding/Turbine/LubeOilPump)
+Related sensors: [Velocity](TurbineBuilding/Turbine/Velocity)

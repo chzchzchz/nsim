@@ -2,6 +2,6 @@ Electrical frequency at the generator terminals in Hz - 60 exactly once synchron
 
 While rolling, frequency is shaft speed expressed electrically and is matched against the grid as part of synchronization permissives alongside voltage magnitude and phase.
 
-See also: [Frequency](ReactorBuilding/Grid/Frequency), [Velocity](TurbineBuilding/Turbine/Velocity)
+Related sensors: [Frequency](ReactorBuilding/Grid/Frequency), [Velocity](TurbineBuilding/Turbine/Velocity)
 
 Source: $W/chapter_11/page_168.txt:15

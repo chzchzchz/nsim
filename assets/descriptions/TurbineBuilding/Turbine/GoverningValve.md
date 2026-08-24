@@ -2,6 +2,7 @@ Governing (control) valve position from closed (0) to fully open (1). These valv
 
 Together with intercept valves they form the entire forward path of turbine control; hunting or sluggish position here shows up immediately as load or frequency wobble.
 
-See also: [Setpoint](TurbineBuilding/Turbine/Setpoint), [FirstStagePressure](TurbineBuilding/Turbine/FirstStagePressure)
+Related controls: [Setpoint](TurbineBuilding/Turbine/Setpoint)
+Related sensors: [FirstStagePressure](TurbineBuilding/Turbine/FirstStagePressure)
 
 Source: $W/chapter_15/page_202.txt:11-18

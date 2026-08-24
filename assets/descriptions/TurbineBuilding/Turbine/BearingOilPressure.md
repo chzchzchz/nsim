@@ -2,4 +2,4 @@ Bearing lubricating oil pressure in psig. Every journal and thrust bearing depen
 
 Keep an auxiliary lube oil pump ready via [LubeOilPump](TurbineBuilding/Turbine/LubeOilPump) whenever main oil supply is suspect, especially through trips and coast-downs.
 
-See also: [LubeOilPump](TurbineBuilding/Turbine/LubeOilPump)
+Related controls: [LubeOilPump](TurbineBuilding/Turbine/LubeOilPump)

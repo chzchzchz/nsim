@@ -2,6 +2,7 @@ Off-site grid voltage. Before closing the generator breaker the operator matches
 
 Off-site power is also the normal source for the ESF buses via the system auxiliary transformers, so grid conditions couple directly into the electrical lineup described under the ESF bus entries.
 
-See also: [Voltage](TurbineBuilding/Generator/Voltage), [BreakerClosed](TurbineBuilding/Generator/BreakerClosed), [Energized](Electrical/ESFBusA/Energized)
+Related controls: [BreakerClosed](TurbineBuilding/Generator/BreakerClosed)
+Related sensors: [Voltage](TurbineBuilding/Generator/Voltage), [Energized](Electrical/ESFBusA/Energized)
 
 Source: $W/chapter_11/page_165.txt:81-82

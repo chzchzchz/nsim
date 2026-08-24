@@ -2,4 +2,5 @@ Structured feed of active alarm conditions across all modeled subsystems; drives
 
 Alarm kinds are routed away from the scalar sensor table so the panel can render severity badges and acknowledgment state. Severity escalates info - warning - trip; trip-class alarms correspond to conditions that actuate protection logic rather than merely annunciate.
 
-See also: [Active](Alarms/Active), [Reset](Alarms/Reset)
+Related controls: [Reset](Alarms/Reset)
+Related sensors: [Active](Alarms/Active)

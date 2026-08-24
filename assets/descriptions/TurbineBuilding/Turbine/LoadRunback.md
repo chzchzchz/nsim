@@ -2,6 +2,6 @@ Forces a controlled reduction of turbine load - runback instead of trip - when e
 
 A managed runback keeps the unit online and lets rod control follow demand down, versus the abrupt >10 percent step that would fire the steam dump system and walk Tavg off program.
 
-See also: [MainFeedwaterPump](TurbineBuilding/MainFeedwaterPump/Running), [Setpoint](TurbineBuilding/Turbine/Setpoint)
+Related controls: [MainFeedwaterPump](TurbineBuilding/MainFeedwaterPump/Running), [Setpoint](TurbineBuilding/Turbine/Setpoint)
 
 Source: $W/chapter_15/page_216.txt:12-16

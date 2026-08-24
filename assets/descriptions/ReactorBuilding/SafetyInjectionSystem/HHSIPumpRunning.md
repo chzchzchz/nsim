@@ -2,7 +2,7 @@ Manually starts the high-head safety injection (HHSI) pump. From the main contro
 
 In an accident the HHSI pumps start on the SI signal and run on miniflow until RCS pressure drops below shutoff head, then inject - first taking suction from the refueling water storage tank, later swapped to the containment sump for long-term recirculation.
 
-See also: [BoronMode](AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode), [ChargingPumpRunning](AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning), [SafetyInjectionBlock](ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock)
+Related controls: [BoronMode](AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode), [ChargingPumpRunning](AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning), [SafetyInjectionBlock](ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:159-164
 Source: specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:26-36

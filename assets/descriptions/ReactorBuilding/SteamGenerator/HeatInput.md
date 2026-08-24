@@ -2,6 +2,6 @@ Primary-side heat currently transferred into this steam generator in watts. The 
 
 At full power each generator absorbs about half the reactor's thermal output, corresponding to the rated 3,813,000 lb/hr steam flow per unit listed in the design data.
 
-See also: [Outlet](ReactorBuilding/ReactorPressureVessel/Outlet), [Pressure](ReactorBuilding/SteamGenerator/Pressure)
+Related sensors: [Outlet](ReactorBuilding/ReactorPressureVessel/Outlet), [Pressure](ReactorBuilding/SteamGenerator/Pressure)
 
 Source: $W/chapter_3/page_065.txt:56

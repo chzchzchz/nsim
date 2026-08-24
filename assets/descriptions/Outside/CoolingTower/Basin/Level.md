@@ -2,6 +2,7 @@ Cooling tower basin inventory in gallons. Cooled water falls into the basin, whi
 
 Below minimum suction level the CW pumps lose suction and condenser heat rejection collapses - the fastest way to a station blackout of cooling. Makeup control exists precisely to defend this level.
 
-See also: [MakeupValve](Outside/CoolingTower/MakeupValve/Open), [PumpRunning](Outside/CirculatingWaterSystem/PumpRunning)
+Related controls: [MakeupValve](Outside/CoolingTower/MakeupValve/Open), [PumpRunning](Outside/CirculatingWaterSystem/PumpRunning)
+Related sensors: [PumpRunning](Outside/CirculatingWaterSystem/PumpRunning)
 
 Source: specs/westinghouse_tech_manual/chapter_14/page_1044.txt:37-39

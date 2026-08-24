@@ -2,4 +2,5 @@ Starts the auxiliary lube oil pump supplying bearing oil. Bearing oil pressure m
 
 Low bearing oil pressure is a turbine trip condition in its own right; watch [bearing oil pressure](TurbineBuilding/Turbine/BearingOilPressure) whenever pump state changes.
 
-See also: [BearingOilPressure](TurbineBuilding/Turbine/BearingOilPressure), [TurningGear](TurbineBuilding/Turbine/TurningGear)
+Related controls: [TurningGear](TurbineBuilding/Turbine/TurningGear)
+Related sensors: [BearingOilPressure](TurbineBuilding/Turbine/BearingOilPressure)

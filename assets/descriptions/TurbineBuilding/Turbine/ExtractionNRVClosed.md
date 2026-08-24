@@ -2,4 +2,4 @@ Indicates extraction line non-return (check) valves are closed. Extraction steam
 
 They slam shut on turbine trip or load rejection - reverse flow protection that has saved many trains of blading from water-induced damage.
 
-See also: [OutletTemperature](TurbineBuilding/MoistureSeparatorReheater/OutletTemperature)
+Related sensors: [OutletTemperature](TurbineBuilding/MoistureSeparatorReheater/OutletTemperature)

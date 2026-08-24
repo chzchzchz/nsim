@@ -2,6 +2,6 @@ Opens the letdown line, letting reactor coolant flow out of the RCS toward the C
 
 Letdown versus charging sets net inventory direction; the [letdown flow sensor](AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownFlow) shows the actual rate.
 
-See also: [LetdownFlow](AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownFlow), [ChargingFlow](AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingFlow)
+Related sensors: [LetdownFlow](AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownFlow), [ChargingFlow](AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingFlow)
 
 Source: $W/chapter_16/page_224.txt:19-27

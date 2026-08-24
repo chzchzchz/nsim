@@ -2,6 +2,7 @@ Acknowledges every currently active alarm at once instead of clicking rows indiv
 
 The annunciator philosophy follows the reference control room: alarm points are turned off by operator acknowledgement, so silence-all style actions are convenience wrappers over the same per-alarm reset path.
 
-See also: [Reset](Alarms/Reset), [Active](Alarms/Active)
+Related controls: [Reset](Alarms/Reset)
+Related sensors: [Active](Alarms/Active)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:66-67

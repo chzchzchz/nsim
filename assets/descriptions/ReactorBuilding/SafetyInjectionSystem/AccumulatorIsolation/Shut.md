@@ -2,6 +2,7 @@ Closes the SI accumulator isolation valves. The accumulators are passive tanks t
 
 Normally the valves stand open so the tanks stay discharge-ready at all times; closing them is part of the same planned-cooldown lineup as blocking the SI signal.
 
-See also: [SafetyInjectionBlock](ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock), [HHSIPumpRunning](ReactorBuilding/SafetyInjectionSystem/HHSIPumpRunning)
+Related controls: [SafetyInjectionBlock](ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock), [HHSIPumpRunning](ReactorBuilding/SafetyInjectionSystem/HHSIPumpRunning)
+Related sensors: [HHSIPumpRunning](ReactorBuilding/SafetyInjectionSystem/HHSIPumpRunning)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:111-113

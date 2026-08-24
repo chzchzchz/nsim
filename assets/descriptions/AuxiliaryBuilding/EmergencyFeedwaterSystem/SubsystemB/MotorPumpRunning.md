@@ -2,6 +2,7 @@ Emergency feedwater motor-driven pump for subsystem B - the redundant twin of su
 
 With reactor tripped and EFW matching steam removal of decay heat plus one RCP's heat input, the plant sits in stable hot standby indefinitely; that balance is the design anchor of the whole system.
 
-See also: [Water](ReactorBuilding/SteamGenerator/Water), [MotorPumpRunning](AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPumpRunning)
+Related controls: [MotorPumpRunning](AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPumpRunning)
+Related sensors: [Water](ReactorBuilding/SteamGenerator/Water), [MotorPumpRunning](AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPumpRunning)
 
 Source: $W/chapter_5/page_101.txt:26-33
