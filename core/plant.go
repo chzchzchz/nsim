@@ -2055,23 +2055,28 @@ func MakePlant() Plant {
 	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
 
 	// Pressurizer design defaults: 60% liquid, 40% steam
-	// bubble, pressure at PressurizerHeaterTarget. The RPS
-	// reads Pressurizer pressure; without an explicit
-	// initialisation the bubble is empty and the idle path
-	// settles Pressure on the saturation floor of the default
-	// coolant temperature, below the
+	// bubble, pressure held by the heaters at
+	// PressurizerHeaterTarget. Hot standby holds ~2235 psig
+	// (≈2250 psia) with heater-and-spray operation maintaining
+	// pressure; without an initialised bubble or heat input the
+	// idle-condensation path settles Pressure on the saturation
+	// floor of the default coolant temperature, below the
 	// RPSLowPressurizerPressureTrip (1800 psi) setpoint.
-	//
-	// HeatersOn is left at its zero value (false) so that
-	// tests which override Pressure to a high value are not
-	// re-clamped at the heater target. The plant-level
-	// pressurizer control loop (planned for a future plan)
-	// will manage HeatersOn and SprayOpen.
+	// HeatersOn is seeded on so a fresh plant holds its no-load
+	// pressure while idled; the heater block only raises toward
+	// the target and stands inert above it, so fixtures that
+	// override Pressure to a high value keep their state.
+	//   "As the reactor coolant temperature increases, operation
+	//    of pressurizer heaters and spray maintains the system
+	//    pressure in accordance with the applicable
+	//    temperature-pressure curves."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:141-145
 	p.ReactorBuilding.Pressurizer = Pressurizer{
 		Volume:      Volume{Val: 1500, Unit: u.Gallon},
 		Water:       Volume{Val: 900, Unit: u.Gallon}, // 60% liquid
 		Pressure:    PressurizerHeaterTarget,
 		SteamBubble: Volume{Val: 600, Unit: u.Gallon},
+		HeatersOn:   true,
 	}
 	p.TurbineBuilding.HeaterDrainTank = Tank{
 		Level:    Volume{Val: 0, Unit: u.Gallon},
@@ -2258,23 +2263,22 @@ func MakePlant() Plant {
 	}
 
 	// CVCS defaults (plans/p14_1.txt). At construction the
-	// charging pumps are off, the letdown valve is open, the
-	// VCT is at design level, and the RCS is at the
-	// hot-zero-power (HZP) boron concentration.
-	// Spec: "The operating mode (boration or dilution) and the
-	// magnitude of the boron concentration change required is
-	// determined by comparison of the measured Tc (cold leg
-	// temperature) with the programmed (function of power) Tc."
-	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
+	// charging pump is secured and the letdown valve is shut so
+	// a fresh plant neither drains nor fills the pressurizer
+	// while idle; an open letdown path with the design flows
+	// unbalances the inventory and empties the pressurizer
+	// within minutes. The operator lines both up manually to
+	// obtain the desired pressurizer water level during
+	// startup.
+	//   "The charging pump flow and low-pressure letdown valve
+	//    are controlled manually to obtain the desired
+	//    pressurizer water level."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115-116
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem = CVCS{
-		Mode:                CVCSVolumeControl,
-		VCTLevel:            Volume{Val: VCTDesignLevel, Unit: u.Gallon},
-		BoronConcentration:  CVCSInitialBoron,
-		ChargingPumpRunning: true,
-		LetdownValveOpen:    true,
+		Mode:               CVCSVolumeControl,
+		VCTLevel:           Volume{Val: VCTDesignLevel, Unit: u.Gallon},
+		BoronConcentration: CVCSInitialBoron,
 	}
-	// Charging/letdown balance is the normal steady-state; the
-	// flows are populated from the field on the first Step.
 
 	// RHRS defaults (plans/p15_1.txt). Both pumps are off and
 	// the hot-leg isolation valves are closed at construction;

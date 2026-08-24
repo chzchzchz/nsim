@@ -432,6 +432,11 @@ func TestPlant_AuxSprayMovesPressureWithRCPsSecured(t *testing.T) {
 		cm := GetControlMap(&p)
 		require.NoError(t, cm["AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning"].Set("1"))
 		require.NoError(t, cm["AuxiliaryBuilding/ChemicalVolumeControlSystem/AuxSprayValve/Open"].Set(auxOpen))
+		// Aux-spray pressure control is a heaters-secured evolution:
+		// "All pressurizer heaters are turned off and the spray
+		// valves are controlled manually [...]"
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:81-84
+		p.ReactorBuilding.Pressurizer.HeatersOn = false
 		before := p.ReactorBuilding.Pressurizer.Pressure
 		stepN(&p, int(5*time.Second/TimeStep))
 		return float64(before) - float64(p.ReactorBuilding.Pressurizer.Pressure)

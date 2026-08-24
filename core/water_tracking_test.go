@@ -19,6 +19,9 @@ func forcePORVOpen(p *Plant) {
 	pz.Water = Volume{Val: 1500 - bubbleGal, Unit: u.Gallon}
 	pz.Pressure = PressurizerHeaterTarget + Pressure(bubbleGal*PressurizerBubbleStiffness)
 	p.ReactorBuilding.ReactorPressureVessel.Pressure = pz.Pressure
+	// The ledger below counts idle-condensation recondensation, so
+	// the seeded hot-standby heaters must stand down for this window.
+	p.ReactorBuilding.Pressurizer.HeatersOn = false
 	p.ReactorBuilding.SafetyValve.Open = 0
 }
 

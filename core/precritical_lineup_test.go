@@ -72,6 +72,10 @@ func TestPrecriticalLineup_DutyCycleBalancesChargingLetdown(t *testing.T) {
 	// core/reactor.go decay-heat constants).
 	p.ReactorBuilding.ReactorPressureVessel.DecayHeatSlow = Watts(
 		0.004 * float64(CoreRatedThermalPower))
+	// A cold, water-solid lineup runs with the heaters standing:
+	// pressure follows the coolant saturation instead of the
+	// hot-standby heater target.
+	p.ReactorBuilding.Pressurizer.HeatersOn = false
 
 	cm := GetControlMap(&p)
 	set := func(key, val string) {

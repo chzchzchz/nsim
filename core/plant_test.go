@@ -33,6 +33,32 @@ func TestPlant_MakePlantPressurizerSeedCoherent(t *testing.T) {
 		"Water + SteamBubble must equal Volume")
 }
 
+// A fresh default plant must hold its seeded hot-standby operating
+// point while idled: the pressurizer keeps its inventory and its
+// heater-maintained pressure instead of driving itself toward the
+// relief valves or the saturation floor within minutes. This is the
+// closure assertion for the scenario-6 seed-equilibrium gap.
+//
+// Spec justification:
+//   - Hot standby sits at ~2235 psig (≈2250 psia), 557 °F.
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:48-61
+func TestPlant_MakePlantIdlesAtHotStandby(t *testing.T) {
+	p := MakePlant()
+	stepN(&p, int(2*time.Minute/TimeStep))
+	pzr := p.ReactorBuilding.Pressurizer
+	assert.Positive(t, pzr.Water.Float(),
+		"idle draining dried out the pressurizer: water=%v", pzr.Water.Float())
+	assert.InDelta(t, float64(PressurizerHeaterTarget),
+		float64(pzr.Pressure), 50,
+		"idle drift moved pressurizer pressure: %v", pzr.Pressure)
+	assert.Zero(t, p.ReactorBuilding.PORV.Open,
+		"PORV lifted on an idled fresh plant")
+	assert.Zero(t, p.ReactorBuilding.SafetyValve.Open,
+		"code safety lifted on an idled fresh plant")
+	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+		"fresh plant tripped while idled")
+}
+
 func TestPlant_ReactorTripCascadesToTurbine(t *testing.T) {
 	p := MakePlant()
 	// Bring the reactor to rated power; let the SG build pressure.

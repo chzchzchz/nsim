@@ -89,6 +89,9 @@ func TestPressurizer_InflowRaisesLevelWithoutMovingPressure(t *testing.T) {
 	p.ReactorBuilding.Pressurizer.Volume = Volume{Val: 1000, Unit: u.Gallon}
 	p.ReactorBuilding.Pressurizer.Water = Volume{Val: 800, Unit: u.Gallon}
 	p.ReactorBuilding.Pressurizer.Pressure = 2000
+	// De-energize the seeded hot-standby heaters so the window sees
+	// only the level loop against idle drift.
+	p.ReactorBuilding.Pressurizer.HeatersOn = false
 	// Charge-only window: letdown stays shut so the net RCS inflow
 	// is the full design charging flow.
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = true

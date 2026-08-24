@@ -135,6 +135,9 @@ func TestPzrAutoControlHoldsPlantLevel(t *testing.T) {
 		Unit: u.Gallon,
 	}
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = true
+	// The automatic controller modulates the letdown path, so its
+	// manual valve latch must line up with the program.
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = true
 	// Neutralize the makeup edge: the ledger below assumes letdown
 	// is the only source feeding the VCT/BRS path. Heaters sit at
 	// their target so the idle-cooldown path stays idle instead of
