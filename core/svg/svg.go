@@ -191,6 +191,19 @@ var runAccessors = map[string]func(*core.Plant) bool{
 	"SWSHeader": func(p *core.Plant) bool {
 		return p.Outside.ServiceWaterSystem.PumpRunning
 	},
+	"ESF_A": func(p *core.Plant) bool {
+		return p.Electrical.ESFBusA.Energized
+	},
+	"ESF_B": func(p *core.Plant) bool {
+		return p.Electrical.ESFBusB.Energized
+	},
+	"Grid": func(p *core.Plant) bool {
+		return p.ReactorBuilding.Grid.Voltage > 0
+	},
+	"Transformer": func(p *core.Plant) bool {
+		st := p.ReactorBuilding.StationTransformer
+		return st.UATEnergized || st.SATEnergized
+	},
 }
 
 // levelAccessors maps tank-backed diagram parts to their live
@@ -565,13 +578,18 @@ func (r *renderer) pipe(p *core.Plant, e core.GraphEdge) string {
 	colour := ColourForEdge(e.From, e.To)
 	// Flow animation: only edges whose pump is running and whose
 	// inline valve, if any, passes water animate, so a closed
-	// discharge valve cannot show streaming flow. Period stays
-	// inversely proportional to pump speed; the root --phase keeps
-	// remounts mid-cycle (see RenderOptions).
+	// discharge valve cannot show streaming flow. Period is
+	// inversely proportional to effective flow (speed times valve
+	// open fraction) so a throttled regulator reads as reduced
+	// flow; the root --phase keeps remounts mid-cycle.
 	var pathFrag string
 	if e.Pump != nil && e.Pump.Running && e.Pump.Velocity > 0 &&
 		(e.Valve == nil || e.Valve.Open > 0) {
-		dur := clampRange(900/float64(e.Pump.Velocity), 0.6, 10)
+		open := 1.0
+		if e.Valve != nil {
+			open = e.Valve.Open
+		}
+		dur := flowDurationSec(float64(e.Pump.Velocity), open)
 		pathFrag = DrawPipePathAnimated(pts, colour, dur)
 	} else {
 		pathFrag = DrawPipePathIdle(pts, colour)
@@ -587,24 +605,33 @@ func (r *renderer) pipe(p *core.Plant, e core.GraphEdge) string {
 		at = pts[len(pts)/2]
 	}
 	// Live position is encoded twice: a pie wedge fills the valve
-	// body proportional to open fraction, and a native <title>
-	// tooltip carries the exact percentage for hover inspection.
+	// body proportional to open fraction (red while a relief-kind
+	// device is actually lifting), and a native <title> tooltip
+	// carries the exact percentage for hover inspection.
+	kind := ValveKindForEdge(p, e)
 	pct := int(math.Round(e.Valve.Open * 100))
-	wedge := valveWedgePath(at, math.Min(vw, vh)*0.45, e.Valve.Open)
+	wedge := valveWedgePath(at, math.Min(vw, vh)*0.45, e.Valve.Open,
+		valveWedgeFill(kind, e.Valve.Open))
 	use := fmt.Sprintf(
 		`<use href="#%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>`,
-		SymbolForKind(ValveKindForEdge(p, e)), at.X-vw/2, at.Y-vh/2, vw, vh)
+		SymbolForKind(kind), at.X-vw/2, at.Y-vh/2, vw, vh)
 	return pathFrag + fmt.Sprintf(
 		`<g><title>%d%%</title>%s%s</g>`, pct, use, wedge)
 }
 
 // valveWedgePath returns a pie-slice subpath centred on `at` whose
 // sweep encodes the open fraction (clockwise from 12 o'clock), or
-// "" when closed. Full-open renders as a complete disc.
-func valveWedgePath(at Anchor, r, open float64) string {
+// "" when closed. Full-open renders as a complete disc. An empty
+// fill keeps the default wedge look; a colour names the wedge red
+// for lift indication.
+func valveWedgePath(at Anchor, r, open float64, fill string) string {
 	open = clampRange(open, 0, 1)
 	if open <= 0 || r <= 0 {
 		return ""
+	}
+	fillAttr := ""
+	if fill != "" {
+		fillAttr = fmt.Sprintf(` fill="%s"`, fill)
 	}
 	a0 := -math.Pi / 2
 	a1 := a0 + open*2*math.Pi
@@ -615,11 +642,25 @@ func valveWedgePath(at Anchor, r, open float64) string {
 		large = 1
 	}
 	if open >= 1 {
-		return fmt.Sprintf(`M %.1f,%.1f A %.1f,%.1f 0 1 1 %.1f,%.1f A %.1f,%.1f 0 1 1 %.1f,%.1f Z`,
-			at.X-r, at.Y, r, r, at.X+r, at.Y, r, r, at.X-r, at.Y)
+		return fmt.Sprintf(`M %.1f,%.1f A %.1f,%.1f 0 1 1 %.1f,%.1f A %.1f,%.1f 0 1 1 %.1f,%.1f Z%s`,
+			at.X-r, at.Y, r, r, at.X+r, at.Y, r, r, at.X-r, at.Y, fillAttr)
 	}
-	return fmt.Sprintf(`M %.1f,%.1f L %.1f,%.1f A %.1f,%.1f 0 %d 1 %.1f,%.1f Z`,
-		at.X, at.Y, x0, y0, r, r, large, x1, y1)
+	return fmt.Sprintf(`M %.1f,%.1f L %.1f,%.1f A %.1f,%.1f 0 %d 1 %.1f,%.1f Z%s`,
+		at.X, at.Y, x0, y0, r, r, large, x1, y1, fillAttr)
+}
+
+// reliefKinds marks one-shot protective valves: unlike modulating
+// valves their partial opening is a lift event, so an Open>0 PORV
+// or safety valve tints red instead of looking throttled.
+var reliefKinds = map[string]bool{"safety": true, "porv": true, "relief": true}
+
+// valveWedgeFill returns the wedge fill for a valve: alarm red
+// while a relief-kind device is relieving, "" otherwise.
+func valveWedgeFill(kind string, open float64) string {
+	if open > 0 && reliefKinds[kind] {
+		return tintRed
+	}
+	return ""
 }
 
 // partLabel derives a human-readable aria-label from the bridge
@@ -630,6 +671,33 @@ func partLabel(part string) string {
 		return part[i+1:]
 	}
 	return part
+}
+
+// readoutValues resolves every gated readout text once per render
+// so part tooltips reuse them without recomputing per group.
+func readoutValues(p *core.Plant) map[string][]string {
+	vals := map[string][]string{}
+	for _, ro := range readouts {
+		if ro.show != nil && !ro.show(p) {
+			continue
+		}
+		vals[ro.id] = append(vals[ro.id], ro.text(p))
+	}
+	return vals
+}
+
+// groupTitle composes a native tooltip for a part group: its human
+// caption plus any live readouts bound to the same diagram id, so
+// static exports carry a hover affordance without host-page wiring.
+func groupTitle(id, label, part string, vals map[string][]string) string {
+	name := label
+	if name == "" {
+		name = partLabel(part)
+	}
+	if vs := vals[id]; len(vs) > 0 {
+		name += ": " + strings.Join(vs, ", ")
+	}
+	return "<title>" + html.EscapeString(name) + "</title>"
 }
 
 // WritePlantSVG writes a P&ID-style SVG of the given plant to w
@@ -681,22 +749,35 @@ const partFocusCSS = `<style>` +
 
 // blinkStyleCSS flashes unacknowledged alarm halos until the
 // operator acks them; the phase comes from the root element's
-// --phase so remounts continue mid-cycle like .flow does.
+// --phase so remounts continue mid-cycle like .flow does. The media
+// queries keep motion-free contexts honest: reduced-motion users
+// lose both streaming dashes and flashing halos, and print never
+// freezes mid-flash with an invisible (opacity 0) halo.
 const blinkStyleCSS = `<style>` +
 	`.blink{animation:nsimblink 1s steps(1,end) infinite;` +
 	`animation-delay:calc(var(--phase,0)*-1ms);}` +
 	`@keyframes nsimblink{0%,49%{opacity:1;}50%,100%{opacity:0;}}` +
+	`@media (prefers-reduced-motion:reduce){.flow,.blink{animation:none;}}` +
+	`@media print{.blink{animation:none;}}` +
 	`</style>` + "\n"
 
 func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error {
 	r := newRenderer(l)
 	var b strings.Builder
 
+	// One Alarms() aggregation per render, shared by the tint/halo
+	// pass, the ring pass, and the <desc> summary below.
+	alarms := p.Alarms()
+	nuclearPct := 100 * float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower) /
+		float64(core.CoreRatedThermalPower)
+
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	fmt.Fprintf(&b,
-		`<svg xmlns="http://www.w3.org/2000/svg" width="%.0fpx" height="%.0fpx" viewBox="0 0 %.0f %.0f" style="--phase:%gms">`+"\n",
-		DocumentWidth, DocumentHeight, DocumentWidth, DocumentHeight, o.PhaseMs)
+		`<svg xmlns="http://www.w3.org/2000/svg" width="%.0fpx" height="%.0fpx" viewBox="0 0 %.0f %.0f" style="--phase:%gms" data-sim-time="%g">`+"\n",
+		DocumentWidth, DocumentHeight, DocumentWidth, DocumentHeight, o.PhaseMs, o.PhaseMs)
 	b.WriteString(`<title>PWR plant P&amp;ID</title>` + "\n")
+	fmt.Fprintf(&b, "<desc>%.0f%% nuclear power, %d active alarms</desc>\n",
+		clampRange(nuclearPct, 0, 100), len(alarms))
 
 	// defs: every symbol referenced by the diagram, loaded from
 	// the embedded asset library under core/svg/assets.
@@ -737,10 +818,13 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="10" fill="%s" `+
 			`text-anchor="middle">%s</text>`+"\n", x, y, pidText, html.EscapeString(text))
 	}
-	writePartEl := func(part, frag string) {
+	writePartEl := func(part, label, frag string) {
+		if label == "" {
+			label = partLabel(part)
+		}
 		fmt.Fprintf(&b,
 			`<g data-part="%s" role="img" aria-label="%s" tabindex="0">%s</g>`+"\n",
-			html.EscapeString(part), html.EscapeString(partLabel(part)), frag)
+			html.EscapeString(part), html.EscapeString(label), frag)
 	}
 
 	// Containment psig drives both the readout and the over-pressure
@@ -763,8 +847,11 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		bx, by = math.Max(bx, 0), math.Max(by, 0)
 		bw = math.Min(bw, DocumentWidth-bx)
 		bh = math.Min(bh, DocumentHeight-by)
+		// data-cluster lets embedders hit-test buildings without
+		// re-deriving cluster geometry Go-side.
+		fmt.Fprintf(&b, `<g data-cluster="%s">`+"\n", name)
 		if name == "cluster_containment" {
-			writePartEl("ReactorBuilding/ContainmentBuilding",
+			writePartEl("ReactorBuilding/ContainmentBuilding", "",
 				useAt("containment-dome", bx+bw/2, by+bh/2, bw, bh))
 			// Over-pressure wash: above the 60 psig containment
 			// design pressure the outline gets a translucent red
@@ -774,16 +861,17 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			//   specs/the_westinghouse_pressurized_water_react/chapter_6/page_110.txt:27-30
 			if contPsig > float64(core.ContainmentDesignPressure) {
 				fmt.Fprintf(&b,
-					`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" class="dome-wash" fill="%s" fill-opacity="0.12" stroke="%s" stroke-width="3"/>`+"\n",
+					`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" class="dome-wash" fill="%s" fill-opacity="0.12" stroke="%s" stroke-width="3" vector-effect="non-scaling-stroke"/>`+"\n",
 					bx, by, bw, bh, tintRed, tintRed)
 			}
 			writeLabel(bx+bw/2, by-6, buildingLabels[name])
-			continue
+		} else {
+			fmt.Fprintf(&b, `<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" `+
+				`fill="%s" stroke="%s" stroke-width="1.5"/>`+"\n",
+				bx, by, bw, bh, pidBackground, pidBuildingEdge)
+			writeLabel(bx+bw/2, by+14, buildingLabels[name])
 		}
-		fmt.Fprintf(&b, `<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" `+
-			`fill="%s" stroke="%s" stroke-width="1.5"/>`+"\n",
-			bx, by, bw, bh, pidBackground, pidBuildingEdge)
-		writeLabel(bx+bw/2, by+14, buildingLabels[name])
+		b.WriteString("</g>\n")
 	}
 
 	// Containment internals: spray headers sized relative to the
@@ -792,7 +880,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	if cx, cy, cw, ch, ok := r.clusterBox("cluster_containment"); ok {
 		sx, sy, sw2, sh2 := cx+cw*0.62, cy+ch*0.20, cw*0.35, ch*0.16
 		if !r.overlapsPart(sx-sw2/2, sy-sh2/2, sw2, sh2) {
-			writePartEl("ReactorBuilding/ContainmentBuilding",
+			writePartEl("ReactorBuilding/ContainmentBuilding", "",
 				useAt("css-spray-headers", sx, sy, sw2, sh2))
 		}
 	}
@@ -806,14 +894,11 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		}
 	}
 
-	// One alarm-list aggregation per render; shared by halos,
-	// rings, and the docked panel below.
-	alarms := p.Alarms()
-
 	// Symbols bound to parts for the live web UI. Pump-backed
 	// parts also get a run-status dot and speed readout so static
 	// exports carry state the web UI otherwise injects.
 	tints := tintsByPart(alarms)
+	liveVals := readoutValues(p)
 	for _, dp := range diagramParts {
 		a, ok := r.anchor(dp.id)
 		if !ok {
@@ -821,14 +906,16 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			continue
 		}
 		sw, sh := r.size(dp.kind)
-		writePartEl(dp.part, useAt(symbolID(dp.kind), a.X, a.Y, sw, sh))
+		frag := groupTitle(dp.id, dp.label, dp.part, liveVals) +
+			useAt(symbolID(dp.kind), a.X, a.Y, sw, sh)
+		writePartEl(dp.part, dp.label, frag)
 		if tint, ok := tints[dp.id]; ok {
 			class := ""
 			if tint.blink {
 				class = ` class="blink"`
 			}
 			fmt.Fprintf(&b,
-				`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" rx="3"%s fill="none" stroke="%s" stroke-width="2"/>`+"\n",
+				`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" rx="3"%s fill="none" stroke="%s" stroke-width="2" vector-effect="non-scaling-stroke"/>`+"\n",
 				a.X-sw/2-3, a.Y-sh/2-3, sw+6, sh+6, class, tint.colour)
 		}
 		if dp.label != "" {
@@ -873,11 +960,12 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		vw, vh := r.size(sv.kind)
 		v := sv.valve(p)
 		pct := int(math.Round(v.Open * 100))
-		wedge := valveWedgePath(a, math.Min(vw, vh)*0.45, v.Open)
+		wedge := valveWedgePath(a, math.Min(vw, vh)*0.45, v.Open,
+			valveWedgeFill(sv.kind, v.Open))
 		use := fmt.Sprintf(
 			`<use href="#%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>`,
 			SymbolForKind(sv.kind), a.X-vw/2, a.Y-vh/2, vw, vh)
-		writePartEl(sv.part,
+		writePartEl(sv.part, "",
 			fmt.Sprintf(`<g><title>%d%%</title>%s%s</g>`, pct, use, wedge))
 	}
 
@@ -937,6 +1025,39 @@ var readouts = []readoutDef{
 		},
 	},
 	{
+		// Nuclear power fraction, the most-watched core number
+		// after PZR pressure. FissionPower alone excludes RCP heat
+		// and decay heat, matching what "percent power" means on
+		// the operating floor.
+		id: "RPV",
+		dy: 26,
+		text: func(p *core.Plant) string {
+			pct := 100 * float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower) /
+				float64(core.CoreRatedThermalPower)
+			return fmt.Sprintf("PWR %.0f%%", pct)
+		},
+	},
+	{
+		// Rod position indication: standard mimic furniture next
+		// to power; Insertion 0 is withdrawn, 1 is tripped-in.
+		id: "RPV",
+		dy: 40,
+		text: func(p *core.Plant) string {
+			return fmt.Sprintf("rods %.0f%%",
+				100*p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion)
+		},
+	},
+	{
+		// Boron concentration tracked by CVCS; scenario-relevant
+		// (dilution/boration) yet invisible on the mimic until now.
+		id: "RPV",
+		dy: 54,
+		text: func(p *core.Plant) string {
+			return fmt.Sprintf("B %.0f ppm",
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration)
+		},
+	},
+	{
 		id: "Generator",
 		dy: 14,
 		text: func(p *core.Plant) string {
@@ -953,7 +1074,9 @@ var readouts = []readoutDef{
 		},
 		text: func(p *core.Plant) string {
 			mw := float64(p.TurbineBuilding.Generator.RealPower) / core.WattsPerMW
-			return fmt.Sprintf("%.0f MW", mw)
+			demand := p.ReactorBuilding.Grid.LoadDemand *
+				float64(core.TurbineRatedkW) / core.WattsPerMW
+			return fmt.Sprintf("%.0f MW / dem %.0f MW", mw, demand)
 		},
 	},
 	{
@@ -1077,7 +1200,7 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms [
 	ring := func(a Anchor, radius float64, colour string) {
 		fmt.Fprintf(b,
 			`<circle cx="%.0f" cy="%.0f" r="%.0f" `+
-				`fill="none" stroke="%s" stroke-width="3"/>`+"\n",
+				`fill="none" stroke="%s" stroke-width="3" vector-effect="non-scaling-stroke"/>`+"\n",
 			a.X, a.Y, radius, colour)
 	}
 	bottom := func(id string) (Anchor, bool) {

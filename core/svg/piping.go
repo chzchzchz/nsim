@@ -13,10 +13,12 @@ import (
 //
 // Pipe colour convention (Westinghouse P&ID):
 //
-//	red    — primary coolant (RCS)
-//	brown  — steam / condensate (secondary)
-//	blue   — feedwater / auxiliary feedwater
-//	green  — service water
+//	red    - primary coolant (RCS)
+//	brown  - steam / condensate (secondary)
+//	blue   - feedwater / cooling water (circulating water shares
+//	         the feedwater hue: both are liquid water supplies,
+//	         while the condenser steam/condensate sides stay brown)
+//	green  - service water
 //	black  — anything else
 //
 // Spec justification:
@@ -84,9 +86,30 @@ func DrawPipePath(pts []Anchor, colour string) string {
 		}
 		fmt.Fprintf(&b, "%.1f,%.1f", p.X, p.Y)
 	}
+	// vector-effect keeps the 2px stroke crisp when the host page
+	// scales g#viewport for pan/zoom.
 	fmt.Fprintf(&b, `" fill="none" stroke="%s" stroke-width="2" `, colour)
+	fmt.Fprintf(&b, `vector-effect="non-scaling-stroke" `)
 	fmt.Fprintf(&b, `marker-mid="url(#arrow-%s)"/>`, colour)
 	return b.String()
+}
+
+// Flow-dash tuning: effective speed (rpm times valve open
+// fraction) divides flowDashScale for the raw period, clamped
+// between minFlowDurSec and maxFlowDurSec.
+const (
+	flowDashScale  = 900.0
+	minFlowDurSec  = 0.6
+	maxFlowDurSec  = 10.0
+)
+
+// flowDurationSec maps pump speed times throttle position to the
+// dash-streaming period: faster flow streams faster, and a
+// throttled regulator reads as reduced flow rather than full-speed
+// dashes.
+func flowDurationSec(velocity, open float64) float64 {
+	return clampRange(flowDashScale/(velocity*clampRange(open, 0, 1)),
+		minFlowDurSec, maxFlowDurSec)
 }
 
 // DrawPipePathAnimated renders a routed polyline whose dash pattern
@@ -124,6 +147,14 @@ func DrawPipePathWithValve(pts []Anchor, colour, valveKind string, at Anchor, vw
 // given source and destination graph node IDs.
 func ColourForEdge(fromID, toID string) string {
 	switch {
+	case fromID == "CoolingTower" || toID == "CoolingTower":
+		// Condenser-tube circulating water is cooling water, not
+		// steam/condensate:
+		//   "The Circulating Water System serves as the major heat
+		//    sink for the power plant by providing large amounts of
+		//    cooling water for the main condensers."
+		//   specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:10-13
+		return "blue"
 	case fromID == "RPV" || toID == "RPV" ||
 		fromID == "Pressurizer" || toID == "Pressurizer" ||
 		fromID == "RCP" || toID == "RCP":

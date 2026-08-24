@@ -73,3 +73,41 @@ func TestPipeArrowMarkers(t *testing.T) {
 		assert.Contains(t, out, `id="arrow-`+c+`"`)
 	}
 }
+
+// TestColourForEdge_CirculatingWaterIsBlue pins the condenser-tube
+// side: cooling water shares feedwater blue while steam and
+// condensate keep brown.
+func TestColourForEdge_CirculatingWaterIsBlue(t *testing.T) {
+	assert.Equal(t, "blue", ColourForEdge("Condenser", "CoolingTower"))
+	assert.Equal(t, "blue", ColourForEdge("CoolingTower", "CoolingTower"))
+	assert.Equal(t, "brown", ColourForEdge("Condenser", "CST"))
+	assert.Equal(t, "red", ColourForEdge("RPV", "SG"))
+}
+
+// TestDrawPipePath_NonScalingStroke keeps the 2px stroke crisp once
+// the host page scales g#viewport.
+func TestDrawPipePath_NonScalingStroke(t *testing.T) {
+	out := DrawPipePath([]Anchor{{X: 0, Y: 0}, {X: 5, Y: 5}}, "red")
+	assert.Contains(t, out, `vector-effect="non-scaling-stroke"`)
+}
+
+// TestFlowDurationSec verifies dash periods shrink with effective
+// flow (speed times throttle) and clamp to the documented range.
+func TestFlowDurationSec(t *testing.T) {
+	full := flowDurationSec(1000, 1)
+	throttled := flowDurationSec(1000, 0.25)
+	faster := flowDurationSec(1500, 1)
+
+	assert.Greater(t, throttled, full,
+		"a throttled regulator must read as slower flow")
+	assert.Less(t, faster, full,
+		"higher pump speed must stream faster")
+
+	for _, tc := range []struct{ velocity, open float64 }{
+		{0, 0}, {1000, 0}, {1e9, 1}, {1, 1e-9},
+	} {
+		dur := flowDurationSec(tc.velocity, tc.open)
+		assert.GreaterOrEqual(t, dur, minFlowDurSec)
+		assert.LessOrEqual(t, dur, maxFlowDurSec)
+	}
+}

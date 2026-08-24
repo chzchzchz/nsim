@@ -2,6 +2,7 @@ package svg
 
 import (
 	"encoding/xml"
+	"fmt"
 	"io"
 	"math/rand"
 	"regexp"
@@ -93,6 +94,87 @@ func TestOverlay_Coverage(t *testing.T) {
 		out := renderPlant(t, &p)
 		assert.Regexp(t, `PZR \d+ psig`, out)
 		assert.Regexp(t, `lvl \d+%`, out)
+	})
+
+	t.Run("core operator numbers under the RPV", func(t *testing.T) {
+		p := core.MakePlant()
+		out := renderPlant(t, &p)
+		assert.Regexp(t, `PWR \d+%`, out)
+		assert.NotRegexp(t, `rods \d+%.*rods`, out)
+
+		rpv := &p.ReactorBuilding.ReactorPressureVessel
+		rpv.ControlRods.Insertion = 0.42
+		rpv.ControlRods.BoronConcentration = 1200
+		out = renderPlant(t, &p)
+		assert.Regexp(t, `rods 42%`, out)
+		assert.Regexp(t, `B 1200 ppm`, out)
+	})
+
+	t.Run("generator demand tracks the dispatcher", func(t *testing.T) {
+		p := core.MakePlant()
+		p.TurbineBuilding.Generator.BreakerClosed = true
+		p.ReactorBuilding.Grid.LoadDemand = 0.7
+		assert.Regexp(t, `\d+ MW / dem 700 MW`, renderPlant(t, &p))
+	})
+
+	t.Run("relief-kind lifts tint red, throttling does not", func(t *testing.T) {
+		p := core.MakePlant()
+		base := strings.Count(renderPlant(t, &p), `fill="#e02020"`)
+
+		p.ReactorBuilding.PORV.Open = 0.3
+		lifted := strings.Count(renderPlant(t, &p), `fill="#e02020"`)
+		assert.Greater(t, lifted, base,
+			"a lifting PORV must read as relief, not throttle")
+
+		p2 := core.MakePlant()
+		p2.ReactorBuilding.SafetyValve.Open = 0.2
+		assert.Greater(t,
+			strings.Count(renderPlant(t, &p2), `fill="#e02020"`), base,
+			"edge-carried safety valves lift red too")
+
+		p3 := core.MakePlant()
+		p3.TurbineBuilding.Turbine.GoverningValve.Open = 0.5
+		assert.Equal(t, base,
+			strings.Count(renderPlant(t, &p3), `fill="#e02020"`),
+			"a modulating valve at partial travel is not a lift")
+	})
+
+	t.Run("part tooltips carry label and live values", func(t *testing.T) {
+		p := core.MakePlant()
+		out := renderPlant(t, &p)
+		assert.Regexp(t, `<title>PZR: PZR \d+ psig, lvl \d+%</title>`, out)
+		assert.Regexp(t,
+			`<title>RPV: T \d+°F, PWR \d+%, rods \d+%, B \d+ ppm</title>`, out)
+		assert.Contains(t, out, `<title>Turbine</title>`,
+			"parts without readouts still get a labelled tooltip")
+	})
+
+	t.Run("aria labels distinguish trains", func(t *testing.T) {
+		p := core.MakePlant()
+		out := renderPlant(t, &p)
+		assert.Contains(t, out, `aria-label="RHRS A"`)
+		assert.Contains(t, out, `aria-label="RHRS B"`)
+	})
+
+	t.Run("building groups expose their cluster", func(t *testing.T) {
+		p := core.MakePlant()
+		out := renderPlant(t, &p)
+		for _, name := range []string{
+			"cluster_containment", "cluster_turbine",
+			"cluster_auxiliary", "cluster_electrical",
+		} {
+			assert.Contains(t, out, fmt.Sprintf(`<g data-cluster="%s">`, name))
+		}
+	})
+
+	t.Run("electrical alignment dots", func(t *testing.T) {
+		p := core.MakePlant()
+		before := strings.Count(renderPlant(t, &p), `fill="green"`)
+		p.Electrical.ESFBusA.Energized = true
+		p.ReactorBuilding.Grid.Voltage = 24000
+		assert.Greater(t,
+			strings.Count(renderPlant(t, &p), `fill="green"`), before,
+			"energized ESF bus and hot grid draw green run dots")
 	})
 
 	t.Run("generator mw readout when breaker closed", func(t *testing.T) {

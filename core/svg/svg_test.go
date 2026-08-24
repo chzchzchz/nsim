@@ -110,14 +110,43 @@ func TestSymbolManifest(t *testing.T) {
 }
 
 // TestRenderOptions_PhaseAndFlow checks that the animation phase
-// reaches the root element and the flow stylesheet is emitted.
+// reaches the root element (with its freshness stamp), and that
+// the flow stylesheet plus motion guards are emitted.
 func TestRenderOptions_PhaseAndFlow(t *testing.T) {
 	p := core.MakePlant()
 	var b strings.Builder
 	require.NoError(t, WritePlantSVGWithOptions(&b, &p, CurrentLayout(), RenderOptions{PhaseMs: 1234}))
 	out := b.String()
 	assert.Contains(t, out, `style="--phase:1234ms"`)
+	assert.Contains(t, out, `data-sim-time="1234"`,
+		"remounted DOMs must be datable as stale vs current")
 	assert.Contains(t, out, "@keyframes nsimflow")
+}
+
+// TestDocumentSummary checks the <desc> one-liner under <title>
+// carries power and alarm count for screen readers and previews.
+func TestDocumentSummary(t *testing.T) {
+	p := core.MakePlant()
+	var b strings.Builder
+	require.NoError(t, WritePlantSVG(&b, &p))
+	out := b.String()
+	idxTitle := strings.Index(out, "</title>")
+	idxDesc := strings.Index(out, "<desc>")
+	require.Positive(t, idxDesc)
+	assert.Less(t, idxTitle, idxDesc, "desc sits under title")
+	assert.Regexp(t, `<desc>\d+% nuclear power, \d+ active alarms</desc>`, out)
+}
+
+// TestMotionGuards checks reduced-motion users and print exports
+// never see streaming dashes or a mid-flash (invisible) halo.
+func TestMotionGuards(t *testing.T) {
+	p := core.MakePlant()
+	var b strings.Builder
+	require.NoError(t, WritePlantSVG(&b, &p))
+	out := b.String()
+	assert.Contains(t, out,
+		"@media (prefers-reduced-motion:reduce){.flow,.blink{animation:none;}}")
+	assert.Contains(t, out, "@media print{.blink{animation:none;}}")
 }
 
 // TestValveWedgeRendersWhenOpen checks that a half-open valve emits
