@@ -42,4 +42,15 @@
 <line x1="-7" y1="7" x2="7" y2="-7" stroke="black" stroke-width="1.5"/>
 </symbol>
 
+<symbol id="inverter-bus" viewBox="-20 -15 40 30">
+<title>Inverter-Powered Instrument Bus</title>
+<rect x="-16" y="-12" width="32" height="18" fill="white" stroke="black" stroke-width="1.5"/>
+<line x1="-11" y1="-6" x2="11" y2="-6" stroke="black" stroke-width="2"/>
+<line x1="-11" y1="-2" x2="-7" y2="-2" stroke="black" stroke-width="2"/>
+<line x1="-6" y1="-2" x2="-2" y2="-2" stroke="black" stroke-width="2"/>
+<line x1="-1" y1="-2" x2="3" y2="-2" stroke="black" stroke-width="2"/>
+<circle id="inv-anchor-feed" cx="0" cy="-12" r="2" fill="none" stroke="none"/>
+<circle id="inv-anchor-load" cx="0" cy="6" r="2" fill="none" stroke="none"/>
+</symbol>
+
 </svg>

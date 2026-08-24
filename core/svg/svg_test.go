@@ -385,3 +385,27 @@ func TestSecondDieselTrainRenders(t *testing.T) {
 	assert.Greater(t,
 		strings.Count(renderPlant(t, &p), `stroke="#f0a500"`), 0)
 }
+
+// TestStatorCoolingAndInvertersRender checks the SCCW pump and the
+// inverter-fed instrument bus resolve against the layout and light
+// their run dots from live flags.
+func TestStatorCoolingAndInvertersRender(t *testing.T) {
+	p := core.MakePlant()
+	out := renderPlant(t, &p)
+	assert.Contains(t, out, ">SCCW Pump<")
+	assert.Contains(t, out, ">Inverter<")
+	assert.NotContains(t, out, "anchors missing")
+
+	// The plant builds with inverters available, so that dot is in
+	// the baseline; starting the SCCW pump adds one.
+	base := strings.Count(out, `fill="green"`)
+	p.TurbineBuilding.Generator.SCCWPumpRunning = true
+	withPump := strings.Count(renderPlant(t, &p), `fill="green"`)
+	assert.Equal(t, base+1, withPump,
+		"a running SCCW pump must draw its run dot")
+
+	p.ReactorBuilding.PlantElectricalSystems.InverterPowerAvailable = false
+	assert.Equal(t, base,
+		strings.Count(renderPlant(t, &p), `fill="green"`),
+		"losing inverter power must extinguish its availability dot")
+}

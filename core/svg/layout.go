@@ -116,6 +116,14 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	// Spent-fuel pool heat exchanger between the pool pumps.
 	{"SFPHX", "cluster_containment", "ComponentCoolingWaterSystem"},
 
+	// Stator coil cooling water pump for the generator
+	// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:48-61)
+	// and the inverter-fed instrument buses that keep RPS power
+	// through a station blackout
+	// (specs/the_westinghouse_pressurized_water_react/chapter_11/page_167.txt:22-27).
+	{"SCCWPump", "cluster_turbine", "StatorCoolingPump"},
+	{"INVERTER", "cluster_electrical", "InverterBus"},
+
 	// Moisture separator reheater between the HP/LP turbine
 	// sections (chapter_15 figure 15.3-1 steam path).
 	{"MSR", "cluster_turbine", "MoistureSeparatorReheater"},

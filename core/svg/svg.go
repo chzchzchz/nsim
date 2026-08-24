@@ -134,6 +134,8 @@ var diagramParts = []diagramPart{
 	{"DieselB", "AuxiliaryBuilding/DieselGeneratorB", "DieselGenerator", "EDG B"},
 	{"FuelTankB", "AuxiliaryBuilding/DieselGeneratorB", "FuelTank", "EDG B Fuel"},
 	{"SFPHX", "AuxiliaryBuilding/SpentFuelPoolCoolingSystem/HX", "ComponentCoolingWaterSystem", "SFP HX"},
+	{"SCCWPump", "TurbineBuilding/Generator/StatorCooling", "StatorCoolingPump", "SCCW Pump"},
+	{"INVERTER", "ReactorBuilding/PlantElectricalSystems/Inverters", "InverterBus", "Inverter"},
 }
 
 // buildingLabels captions the cluster outlines drawn behind symbols.
@@ -249,6 +251,12 @@ var runAccessors = map[string]func(*core.Plant) bool{
 	},
 	"EXCITER": func(p *core.Plant) bool {
 		return p.TurbineBuilding.Generator.GeneratorExcitationSystem.ExciterActive
+	},
+	"SCCWPump": func(p *core.Plant) bool {
+		return p.TurbineBuilding.Generator.SCCWPumpRunning
+	},
+	"INVERTER": func(p *core.Plant) bool {
+		return p.ReactorBuilding.PlantElectricalSystems.InverterPowerAvailable
 	},
 }
 
