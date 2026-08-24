@@ -78,6 +78,8 @@
             touch-action: none;
         }
         #pid svg { max-height: 50vh; max-width: 100%; width: auto; height: auto; display: block; }
+        /* Components act as anchors into the control panel. */
+        #pid g[data-part] { cursor: pointer; }
         .pid-canvas { transform-origin: 0 0; will-change: transform; }
         .pid-zoom {
             position: absolute;

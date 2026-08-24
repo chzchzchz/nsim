@@ -142,6 +142,14 @@ function openTip(btn: HTMLButtonElement, text: string): void {
     btn.insertAdjacentElement("afterend", tip);
 }
 
+// flashRow scrolls a rendered row into view and highlights it
+// briefly; both reveal helpers share it.
+function flashRow(row: HTMLElement): void {
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.add("ref-flash");
+    window.setTimeout(() => row.classList.remove("ref-flash"), REF_FLASH_MS);
+}
+
 // revealElement jumps the viewport to the rendered row for a bridge
 // id and flashes it. Rows tag themselves with data-bridge-id;
 // scanning them all is cheap (a few hundred nodes) and avoids
@@ -152,12 +160,39 @@ export function revealElement(id: string): boolean {
     );
     for (const row of rows) {
         if (row.dataset.bridgeId !== id) continue;
-        row.scrollIntoView({ behavior: "smooth", block: "center" });
-        row.classList.add("ref-flash");
-        window.setTimeout(() => row.classList.remove("ref-flash"), REF_FLASH_MS);
+        flashRow(row);
         return true;
     }
     return false;
+}
+
+// revealPart jumps to the best rendered row for a diagram part
+// (the data-part value on a P&ID component group). Clicking a
+// component usually means "operate it", so control rows outrank
+// sensor rows, and exact id matches outrank prefix matches because
+// diagram symbols can be more granular than binding parts.
+export function revealPart(part: string): boolean {
+    const prefix = part + "/";
+    let best: { row: HTMLElement; score: number } | null = null;
+    const rows = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-bridge-id]"),
+    );
+    for (const row of rows) {
+        const id = row.dataset.bridgeId ?? "";
+        let score: number;
+        if (id === part) {
+            score = 2;
+        } else if (id.startsWith(prefix)) {
+            score = 1;
+        } else {
+            continue;
+        }
+        if (row.classList.contains("ctl-row")) score += 0.5;
+        if (!best || score > best.score) best = { row, score };
+    }
+    if (!best) return false;
+    flashRow(best.row);
+    return true;
 }
 
 function fetchMeta(plant: PlantHandle, ids: string[]): Entry[] {

@@ -2,6 +2,8 @@
 // The diagram is stateless markup; part highlighting binds via
 // data-part attributes, so remounting never loses handlers.
 
+import { revealPart } from "./bindings";
+
 // Zoom state lives here rather than on the mounted <svg> because
 // refreshes replace that node wholesale; re-applying the same
 // transform after each mount keeps the operator's viewpoint stable
@@ -10,6 +12,10 @@ const MIN_SCALE = 1;
 const MAX_SCALE = 12;
 const WHEEL_FACTOR = 1.1;
 const BUTTON_FACTOR = 1.25;
+// A pan gesture ends with a browser click event; jumps from
+// clicking a component are suppressed beyond this travel so
+// dragging the mimic never triggers navigation.
+const CLICK_SUPPRESS_PX = 5;
 
 let canvas: HTMLDivElement | null = null;
 let scale = 1;
@@ -103,10 +109,14 @@ function bindZoomGestures(target: HTMLElement): void {
         zoomAt(target, ev.clientX, ev.clientY, factor);
     }, { passive: false });
 
+    let downX = 0;
+    let downY = 0;
     let dragging = false;
     let lastX = 0;
     let lastY = 0;
     target.addEventListener("pointerdown", (ev) => {
+        downX = ev.clientX;
+        downY = ev.clientY;
         if (ev.button !== 0) return;
         // Let the zoom overlay keep its own click behaviour.
         if ((ev.target as HTMLElement | null)?.closest(".pid-zoom")) return;
@@ -132,4 +142,18 @@ function bindZoomGestures(target: HTMLElement): void {
     };
     target.addEventListener("pointerup", endDrag);
     target.addEventListener("pointercancel", endDrag);
+
+    // Clicking a diagram component jumps to the control that can
+    // operate it, mirroring how (?) popups cross-reference rows.
+    target.addEventListener("click", (ev) => {
+        if (
+            Math.hypot(ev.clientX - downX, ev.clientY - downY) >
+                CLICK_SUPPRESS_PX
+        ) {
+            return;
+        }
+        const part = (ev.target as Element | null)?.closest("[data-part]")
+            ?.getAttribute("data-part");
+        if (part) revealPart(part);
+    });
 }
