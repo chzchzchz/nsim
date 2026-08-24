@@ -132,7 +132,17 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 
 	// Reload escalates at the selectable rate; output follows the
 	// demand ladder up while the bypass hands the steam load back.
-	setControl(t, &p, "ReactorBuilding/Grid/LoadDemand", "0.10")
+	// Dispatcher demand reaches the turbine only under the
+	// load-follow permissive ("to act as a permissive network so
+	// that unsafe demands from the computer [...]",
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:10-12),
+	// and it is entered in MW: 100 MW against the 1000 MW machine is
+	// the 0.10 setpoint fraction this phase demands. Without the
+	// permissive LoadDemandRef stays zero, Setpoint == 0 leaves the
+	// steam-derived output uncapped by contract, and the walk never
+	// starts.
+	setControl(t, &p, "PlantOperation/LoadFollow", "1")
+	setControl(t, &p, "ReactorBuilding/Grid/LoadDemand", "100")
 	maxSgP := 0.0
 	for i := 0; i < int(140*time.Second/scenario15Tick); i++ {
 		stepN(&p, 1)

@@ -113,7 +113,8 @@ func TestCCWS_InletRecoversWithinFourHours(t *testing.T) {
 	// The recovery tau is one hour, orders of magnitude wider than
 	// the step, and Step folds the closed-form lag on every call,
 	// so a coarse step cannot distort the relaxation toward the
-	// spec's four-hour recovery point (chapter_5/page_105.txt:108-112,
+	// spec's four-hour recovery point
+	// (specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112,
 	// quoted above). Must not run in parallel: overrideTimeStep
 	// mutates global simulation state.
 	overrideTimeStep(t, time.Minute)

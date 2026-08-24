@@ -181,19 +181,20 @@ func addPlantOperationControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-	// Dispatcher load demand, fraction of rated generator output.
-	// Reaches the turbine load reference only while the dispatch
-	// permissive above is engaged.
+	// Dispatcher load demand in MW against the 1000 MW machine
+	// rating; the wiring normalizes it to the Setpoint fraction at
+	// the model boundary (core/plant.go). Reaches the turbine load
+	// reference only while the dispatch permissive above is engaged.
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:44-47
 	m["ReactorBuilding/Grid/LoadDemand"] = &bridge.Control{
 		Part:  "ReactorBuilding/Grid",
 		Label: "LoadDemand",
-		Kind:  "normalized",
+		Kind:  "mw",
 		Get: func() string {
 			return fmt.Sprintf("%v", p.ReactorBuilding.Grid.LoadDemand)
 		},
 		Set: func(s string) error {
-			validated, err := bridge.ConvertControlValue("normalized", s)
+			validated, err := bridge.ConvertControlValue("mw", s)
 			if err != nil {
 				return err
 			}

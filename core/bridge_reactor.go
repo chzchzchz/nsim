@@ -314,9 +314,10 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-	// Dispatcher load demand on the unit, as a fraction of rated
-	// electrical output. The DEHM latches it as the turbine's load
-	// reference each step.
+	// Dispatcher load demand on the unit, in MW against the 1000 MW
+	// machine rating; the wiring normalizes it to the Setpoint
+	// fraction at the model boundary (core/plant.go). The DEHM
+	// latches it as the turbine's load reference each step.
 	//   - "computes signals comparing turbine speed and first-stage
 	//     pressure with reference values established by the
 	//     dispatcher or initiated at the operator's panel."
@@ -328,12 +329,12 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	m["ReactorBuilding/Grid/LoadDemand"] = &bridge.Control{
 		Part:  "ReactorBuilding/Grid",
 		Label: "LoadDemand",
-		Kind:  "normalized",
+		Kind:  "mw",
 		Get: func() string {
 			return fmt.Sprintf("%v", p.ReactorBuilding.Grid.LoadDemand)
 		},
 		Set: func(s string) error {
-			validated, err := bridge.ConvertControlValue("normalized", s)
+			validated, err := bridge.ConvertControlValue("mw", s)
 			if err != nil {
 				return err
 			}
@@ -787,8 +788,8 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			},
 		}
 
-		// Dispatcher load reference for this unit as a fraction of
-		// rated electrical output. Plant.Step latches it into
+		// Dispatcher load reference for this unit in MW against
+		// the 1000 MW machine rating. Plant.Step normalizes it into
 		// Turbine.LoadDemandRef, which the electro-hydraulic control
 		// ramps Setpoint toward while the unit is synchronized; the
 		// operator panel writes the same reference directly:
@@ -799,13 +800,13 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		m["ReactorBuilding/Grid/LoadDemand"] = &bridge.Control{
 			Part:  "ReactorBuilding/Grid",
 			Label: "LoadDemand",
-			Kind:  "normalized",
+			Kind:  "mw",
 			Get: func() string {
 				return fmt.Sprintf("%v",
 					p.ReactorBuilding.Grid.LoadDemand)
 			},
 			Set: func(s string) error {
-				validated, err := bridge.ConvertControlValue("normalized", s)
+				validated, err := bridge.ConvertControlValue("mw", s)
 				if err != nil {
 					return err
 				}

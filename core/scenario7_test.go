@@ -145,8 +145,17 @@ func TestScenario7_SynchronizedUnitEscalatesAtControlledRate(t *testing.T) {
 	// (core/parts.go). The full walk from zero to rated demand takes
 	// 1.0 / TurbineLoadRunbackRate = 1200 s of simulated time, which
 	// costs about a second of wall time at the coarse tick because
-	// the walk is linear in dt.
-	setControl(t, p, "ReactorBuilding/Grid/LoadDemand", "1")
+	// the walk is linear in dt. The demand reaches the DEHM only
+	// under the dispatching permissive ("to act as a permissive
+	// network so that unsafe demands from the computer [...]",
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:10-12;
+	// the wiring gates LoadDemandRef on
+	// PlantOperation/LoadFollowActive), so engage it before entering
+	// the demand.
+	setControl(t, p, "PlantOperation/LoadFollow", "1")
+	// Rated demand in MW: LoadDemandRef = 1000 x WattsPerMW /
+	// TurbineRatedkW = 1.0 setpoint fraction.
+	setControl(t, p, "ReactorBuilding/Grid/LoadDemand", "1000")
 	maxDump := 0.0
 	maxPowerFrac := 0.0
 	minSgP := 2000.0
