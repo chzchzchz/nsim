@@ -2831,6 +2831,21 @@ func (p *Plant) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON restores a Plant from JSON. The internal
 // nextPlant pointer is left nil (rebuilt by Step).
+//
+// Two redundancies are reconciled so a plant JSON only has to seed
+// one copy of each value:
+//
+//   - ReactorBuilding.Aux aliases the top-level AuxiliaryBuilding
+//     during simulation (Step re-points it at nextPlant every tick),
+//     but a JSON round-trip decodes it as a detached copy. It is
+//     re-pointed at the decoded master here, matching the Step
+//     aliasing, so pre-step reads and writes through the mirror hit
+//     live state instead of a discarded duplicate.
+//   - The RCS boron concentration is stored on the CVCS (master)
+//     and on ControlRods (reactivity-model input); Plant.Step
+//     propagates the CVCS value every tick, so the ControlRods copy
+//     is refreshed from the master here and a stale divergent copy
+//     cannot silently win.
 func (p *Plant) UnmarshalJSON(data []byte) error {
 	type plant Plant
 	var p2 plant
@@ -2839,6 +2854,11 @@ func (p *Plant) UnmarshalJSON(data []byte) error {
 	}
 	*p = Plant(p2)
 	p.nextPlant = nil
+	if p.ReactorBuilding.Aux != nil {
+		*p.ReactorBuilding.Aux = p.AuxiliaryBuilding
+	}
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration =
+		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"math"
 	"testing"
 	"time"
@@ -1033,4 +1034,64 @@ func TestPlant_TripBypassModulatesAndHoldsHeaderPressure(t *testing.T) {
 		"SG safety valves stay seated through the trip and hold")
 	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionActuated,
 		"no low-steamline protection actuation")
+}
+
+// A plant JSON must not need to seed duplicated state twice. Two
+// redundancies exist: the ReactorBuilding.Aux mirror of the
+// top-level AuxiliaryBuilding, and the ControlRods copy of the CVCS
+// boron concentration. Loading a document that seeds only one copy
+// of each must yield the same live state as seeding both, and a
+// stale divergent mirror must not win.
+func TestPlant_UnmarshalReconcilesBoronStorage(t *testing.T) {
+	const seeded = 2140.0
+
+	doc := `{
+		"AuxiliaryBuilding": {
+			"ChemicalVolumeControlSystem": {"BoronConcentration": 2140}
+		},
+		"ReactorBuilding": {
+			"Aux": {
+				"ChemicalVolumeControlSystem": {"BoronConcentration": 999}
+			}
+		}
+	}`
+	var p Plant
+	require.NoError(t, json.Unmarshal([]byte(doc), &p))
+	assert.Equal(t, seeded,
+		p.ReactorBuilding.Aux.ChemicalVolumeControlSystem.BoronConcentration,
+		"the Aux mirror must read the master AuxiliaryBuilding seed")
+	assert.Equal(t, seeded,
+		p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration,
+		"the reactivity model must start at the CVCS boron value")
+
+	p.Step()
+	p.Update()
+	assert.Equal(t, seeded,
+		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration,
+		"the first step must not clobber a single-seeded boron value")
+
+	// A document without the mirror key loads the same way; the
+	// alias is rebuilt by Step exactly as after this load.
+	var q Plant
+	minimal := `{
+		"AuxiliaryBuilding": {
+			"ChemicalVolumeControlSystem": {"BoronConcentration": 558}
+		}
+	}`
+	require.NoError(t, json.Unmarshal([]byte(minimal), &q))
+	assert.Nil(t, q.ReactorBuilding.Aux)
+	assert.Equal(t, 558.0,
+		q.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration)
+
+	// A full document round-trips cleanly through the
+	// reconciliation (a zero-valued partial fixture cannot be
+	// marshaled at all: its degenerate divisions yield NaN).
+	var r Plant
+	full, err := json.Marshal(MakePlant())
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(full, &r))
+	r.Step()
+	r.Update()
+	_, err = json.Marshal(&r)
+	require.NoError(t, err)
 }
