@@ -42,6 +42,10 @@ func newGatePlant(sgPressure Pressure) *Plant {
 	pzr.SprayOpen = 0
 	pzr.Volume = Volume{Val: 1500, Unit: u.Gallon}
 	pzr.Water = Volume{Val: 1440, Unit: u.Gallon}
+	// Coherent seed: 60 gal of steam space sits at ~1650 psia per
+	// the bubble-pressure relation, so the stored pressure matches
+	// the lineup instead of the full-power default ceiling.
+	pzr.Pressure = Pressure(1650)
 	return &p
 }
 
@@ -61,14 +65,18 @@ func stepSeconds(p *Plant, seconds int) {
 }
 
 // The planned-startup lineup blocks the SI initiation signals and
-// isolates the accumulators, so pressurizing across the 1900 psig gate
-// with a still-vented secondary must not actuate safeguards and must
-// hold the accumulator inventory.
+// isolates the accumulators, so the operator may carry pressurizer
+// pressure across the 1900 psig gate with a still-vented secondary:
+// the block holds SI off through the crossing and the accumulator
+// inventory stays put. The block is an operator lineup device; the
+// corpus states only that the signals ARE blocked during planned
+// lineups (chapter_16/page_227.txt:108-110), not that any pressure
+// strips it, so none is modelled.
 //
 // "The Safety Injection System is lined up for operation, with the
 // initiation signal manually blocked and accumulators isolated."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:11-13
-func TestStartupLineup_BlockedPressurizationAcross1900Psig(t *testing.T) {
+func TestStartupLineup_BlockedCrossingHoldsAcross1900Psig(t *testing.T) {
 	p := newGatePlant(Pressure(15))
 	setGateControls(t, p, map[string]string{
 		"ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock":    "1",
@@ -77,11 +85,13 @@ func TestStartupLineup_BlockedPressurizationAcross1900Psig(t *testing.T) {
 	})
 
 	levelBefore := p.ReactorBuilding.SafetyInjectionSystem.Accumulator.Level.Float()
-	stepSeconds(p, 4)
+	stepSeconds(p, 6)
 
 	assert.GreaterOrEqual(t, float64(p.ReactorBuilding.Pressurizer.Pressure),
 		gateCrossPsia,
 		"heaters must carry pressurizer pressure across the 1900 psig gate")
+	assert.True(t, p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionBlocked,
+		"the operator block stands through the crossing")
 	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionActuated,
 		"the blocked initiation signal must not actuate SI during the crossing")
 	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
