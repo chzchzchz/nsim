@@ -94,7 +94,7 @@ var clusterFor = map[string]string{
 func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 	var b strings.Builder
 	b.WriteString("digraph plant {\n")
-	b.WriteString(`  graph [splines=true, overlap=false, sep="+12,+12", ranksep=0.5, dpi=96];` + "\n")
+	b.WriteString(`  graph [splines=true, overlap=false, sep="+8,+8", nodesep=0.22, ranksep=0.38, dpi=96];` + "\n")
 	b.WriteString(`  node [shape=none];` + "\n")
 
 	// Cluster definitions, keyed by cluster name.
@@ -117,6 +117,17 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 		n := g.Nodes[id]
 		mainNodes[id] = true
 		emitEdgeNode(clusters, id, clusterFor[id], n.Kind, pos)
+	}
+
+	// Dot parks disconnected nodes in the first rank, which after
+	// the Y flip floats the auxiliary and electrical buildings
+	// above the plant with no physical meaning. Invisible edges
+	// from a low turbine-building node sink them into the drawing's
+	// bottom band; clusters keep each building contiguous.
+	connected := map[string]bool{}
+	for _, e := range g.Edges {
+		connected[e.From] = true
+		connected[e.To] = true
 	}
 
 	// Renderer-only parts join the layout so graphviz positions
@@ -169,6 +180,17 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 		}
 		b.WriteString(body.String())
 		b.WriteString("  }\n")
+	}
+
+	// Sink the isolated auxiliary/electrical buildings to the bottom
+	// rank via invisible edges (see note above).
+	for _, id := range ids {
+		switch clusterAssignments[id] {
+		case "cluster_auxiliary", "cluster_electrical":
+			if !connected[id] {
+				fmt.Fprintf(&b, `  "Condenser" -> "%s" [style=invis];`+"\n", id)
+			}
+		}
 	}
 
 	// Emit edges routed through any inline pump/valve hops so the

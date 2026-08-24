@@ -27,6 +27,7 @@ package svg
 
 import (
 	"fmt"
+	"html"
 	"io"
 	"math"
 	"sort"
@@ -113,6 +114,42 @@ var buildingLabels = map[string]string{
 	"cluster_electrical":  "Electrical / ESF",
 }
 
+// diagramKindByID indexes diagramParts by node id so anchor lookups
+// avoid a linear scan per rendered element.
+var diagramKindByID = func() map[string]string {
+	m := make(map[string]string, len(diagramParts))
+	for _, dp := range diagramParts {
+		m[dp.id] = dp.kind
+	}
+	return m
+}()
+
+// pumpAccessors maps diagram parts backed by a core.Pump to its
+// live state, letting static exports show run status.
+var pumpAccessors = map[string]func(*core.Plant) *core.Pump{
+	"RCP": func(p *core.Plant) *core.Pump {
+		return &p.ReactorBuilding.ReactorCoolantPump
+	},
+	"CondensatePump": func(p *core.Plant) *core.Pump {
+		return &p.TurbineBuilding.CondensatePump
+	},
+	"MainFeedwaterPump": func(p *core.Plant) *core.Pump {
+		return &p.TurbineBuilding.MainFeedwaterPump
+	},
+	"HeaterDrainPump": func(p *core.Plant) *core.Pump {
+		return &p.TurbineBuilding.HeaterDrainPump
+	},
+	"DieselAFWPump": func(p *core.Plant) *core.Pump {
+		return &p.Outside.DieselAFWPump.Pump
+	},
+	"MotorAFWPump": func(p *core.Plant) *core.Pump {
+		return &p.Outside.MotorAFWPump.Pump
+	},
+	"TurbineAFWPump": func(p *core.Plant) *core.Pump {
+		return &p.Outside.TurbineAFWPump.Pump
+	},
+}
+
 // renderer composes one SVG document against a specific layout,
 // collecting any nodes the layout failed to place so callers can
 // surface gaps instead of silently dropping parts.
@@ -150,12 +187,7 @@ func (r *renderer) size(kind string) (float64, float64) {
 
 // kindOf returns the symbolTable key bound to a diagram part id.
 func (r *renderer) kindOf(id string) string {
-	for i := range diagramParts {
-		if diagramParts[i].id == id {
-			return diagramParts[i].kind
-		}
-	}
-	return ""
+	return diagramKindByID[id]
 }
 
 // clusterBox returns the bounding rectangle in document space of
@@ -223,6 +255,9 @@ func (r *renderer) overlapsPart(x, y, w, h float64) bool {
 func clipToward(center, toward Anchor, w, h float64) Anchor {
 	dx := toward.X - center.X
 	dy := toward.Y - center.Y
+	if dx == 0 && dy == 0 {
+		return center
+	}
 	sx, sy := math.Inf(1), math.Inf(1)
 	if dx != 0 {
 		sx = w / 2 / math.Abs(dx)
@@ -273,7 +308,13 @@ func (r *renderer) pipe(p *core.Plant, e core.GraphEdge) string {
 		r.missing[ref.id] = true
 		at = pts[len(pts)/2]
 	}
-	return DrawPipePathWithValve(pts, colour, ValveKindForEdge(p, e), at, vw, vh)
+	frag := DrawPipePathWithValve(pts, colour, ValveKindForEdge(p, e), at, vw, vh)
+	// Static exports encode live position: the valve's open
+	// percentage rides above its symbol.
+	frag += fmt.Sprintf(
+		`<text x="%.0f" y="%.0f" font-size="8" text-anchor="middle" fill="#555">%s</text>`,
+		at.X, at.Y-vh/2-3, html.EscapeString(fmt.Sprintf("%.0f%%", e.Valve.Open*100)))
+	return frag
 }
 
 // WritePlantSVG writes a P&ID-style SVG of the given plant to w
@@ -315,6 +356,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout) error {
 	b.WriteString(GeneratorAsset)
 	b.WriteString(TransformerAsset)
 	b.WriteString(DieselAsset)
+	b.WriteString(PipeArrowMarkers())
 	b.WriteString("</defs>\n")
 
 	useAt := func(sym string, cx, cy, w, h float64) string {
@@ -325,10 +367,10 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout) error {
 	}
 	writeLabel := func(x, y float64, text string) {
 		fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="10" `+
-			`text-anchor="middle">%s</text>`+"\n", x, y, text)
+			`text-anchor="middle">%s</text>`+"\n", x, y, html.EscapeString(text))
 	}
 	writePartEl := func(part, frag string) {
-		fmt.Fprintf(&b, `<g data-part="%s">%s</g>`+"\n", part, frag)
+		fmt.Fprintf(&b, `<g data-part="%s">%s</g>`+"\n", html.EscapeString(part), frag)
 	}
 
 	// Building outlines derive from cluster membership so they
@@ -406,7 +448,9 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout) error {
 		}
 	}
 
-	// Symbols bound to parts for the live web UI.
+	// Symbols bound to parts for the live web UI. Pump-backed
+	// parts also get a run-status dot and speed readout so static
+	// exports carry state the web UI otherwise injects.
 	for _, dp := range diagramParts {
 		a, ok := r.anchor(dp.id)
 		if !ok {
@@ -417,6 +461,24 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout) error {
 		writePartEl(dp.part, useAt(symbolID(dp.kind), a.X, a.Y, sw, sh))
 		if dp.label != "" {
 			writeLabel(a.X, a.Y-sh/2-6, dp.label)
+		}
+		acc, okP := pumpAccessors[dp.id]
+		if !okP {
+			continue
+		}
+		pu := acc(p)
+		dotR := math.Max(3, sw*0.06)
+		dx, dyDot := sw*0.38, -sh*0.42
+		dotColour := "#aaa"
+		if pu.Running {
+			dotColour = "green"
+		}
+		fmt.Fprintf(&b,
+			`<circle cx="%.0f" cy="%.0f" r="%.0f" fill="%s" stroke="#333" stroke-width="1"/>`+"\n",
+			a.X+dx, a.Y+dyDot, dotR, dotColour)
+		if pu.Velocity > 0 {
+			writeLabel(a.X+dx, a.Y+dyDot+dotR+9,
+				fmt.Sprintf("%d rpm", int(pu.Velocity)))
 		}
 	}
 

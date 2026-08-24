@@ -31,27 +31,50 @@ import (
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:70-81
 
 // DrawPipe returns an SVG fragment for a straight process pipe
-// from (fromX, fromY) to (toX, toY). When elbowed is true the
-// segment is broken into horizontal + vertical legs with a small
-// Q-curve elbow at the corner.
+// from (fromX, fromY) to (toX, toY), with a flow arrowhead at the
+// destination. When elbowed is true the segment is broken into
+// horizontal + vertical legs with a small Q-curve elbow at the
+// corner.
 func DrawPipe(fromX, fromY, toX, toY float64, colour string, elbowed bool) string {
+	arrow := fmt.Sprintf(` marker-end="url(#arrow-%s)"`, colour)
 	if !elbowed {
 		return fmt.Sprintf(
 			`<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" `+
-				`stroke="%s" stroke-width="2"/>`,
-			fromX, fromY, toX, toY, colour)
+				`stroke="%s" stroke-width="2"%s/>`,
+			fromX, fromY, toX, toY, colour, arrow)
 	}
 	return fmt.Sprintf(
 		`<path d="M %.1f,%.1f L %.1f,%.1f Q %.1f,%.1f %.1f,%.1f `+
-			`L %.1f,%.1f" fill="none" stroke="%s" stroke-width="2"/>`,
+			`L %.1f,%.1f" fill="none" stroke="%s" stroke-width="2"%s/>`,
 		fromX, fromY, fromX, toY,
 		fromX, toY, fromX+1, toY,
-		toX, toY, colour)
+		toX, toY, colour, arrow)
+}
+
+// pipeColours lists every colour ColourForEdge can return so the
+// document defines one flow-arrow marker per colour.
+var pipeColours = []string{"red", "blue", "brown", "black"}
+
+// PipeArrowMarkers emits one arrowhead <marker> per pipe colour.
+// Polylines attach them with marker-mid so arrowheads appear on
+// every interior vertex, oriented along the local segment.
+func PipeArrowMarkers() string {
+	var b strings.Builder
+	for _, c := range pipeColours {
+		fmt.Fprintf(&b,
+			`<marker id="arrow-%s" viewBox="0 0 10 10" refX="9" refY="5" `+
+				`markerWidth="5" markerHeight="5" orient="auto-start-reverse">`+
+				`<path d="M 0 0 L 10 5 L 0 10 z" fill="%s"/></marker>`+"\n",
+			c, c)
+	}
+	return b.String()
 }
 
 // DrawPipePath renders dot's routed polyline for one edge as a
 // single SVG polyline so pipes follow graphviz's routing instead
-// of cutting straight across the drawing.
+// of cutting straight across the drawing. marker-mid drops a flow
+// arrowhead on every interior vertex, oriented along the local
+// segment direction.
 func DrawPipePath(pts []Anchor, colour string) string {
 	var b strings.Builder
 	b.WriteString(`<polyline points="`)
@@ -61,7 +84,8 @@ func DrawPipePath(pts []Anchor, colour string) string {
 		}
 		fmt.Fprintf(&b, "%.1f,%.1f", p.X, p.Y)
 	}
-	fmt.Fprintf(&b, `" fill="none" stroke="%s" stroke-width="2"/>`, colour)
+	fmt.Fprintf(&b, `" fill="none" stroke="%s" stroke-width="2" `, colour)
+	fmt.Fprintf(&b, `marker-mid="url(#arrow-%s)"/>`, colour)
 	return b.String()
 }
 

@@ -15,3 +15,6 @@ web/public/descriptions.json
 web/src/wasm_exec.js
 web/web.tgz
 web/web-debug.tgz
+
+# stray cross-build artifact from `GOOS=js go build ./web/...`
+/wasm
