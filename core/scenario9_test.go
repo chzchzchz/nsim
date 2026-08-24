@@ -24,6 +24,9 @@ import (
 // A 200 ppm boration must shift reactivity by exactly the folded boron
 // worth while leaving the xenon inventory untouched: the poison state
 // evolves on the hours clock, the chemistry lever acts immediately.
+// The concentration is driven through the CVCS state directly; the
+// bridge BoronSetpoint path ramps on the BTRS flow clock and is
+// covered by its own test.
 func TestScenario9_BorationShiftsReactivityWithXenonPinned(t *testing.T) {
 	p := MakePlant()
 	rpv := &p.ReactorBuilding.ReactorPressureVessel
@@ -31,8 +34,7 @@ func TestScenario9_BorationShiftsReactivityWithXenonPinned(t *testing.T) {
 	before := rpv.Reactivity
 	xeBefore := xenonNormalized(rpv.Xenon135)
 
-	setControl(t, &p,
-		"ReactorBuilding/ReactorPressureVessel/ControlRods/BoronSetpoint", "1200")
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 1200
 	stepN(&p, 1)
 
 	delta := rpv.Reactivity - before

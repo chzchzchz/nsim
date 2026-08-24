@@ -776,23 +776,72 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
-	// CVCS boron concentration setpoint. The operator writes
-	// the desired RCS boron concentration in ppm directly; this
-	// feeds the reactivity model on the next step. The CVCS
-	// rate dynamics (boration/dilution) still run in their
-	// respective modes; the setpoint is the operator-visible
-	// handle on the slow shim path.
+	// Rod insertion limit enforcement. The limit caps how far the
+	// banks may sink while operating so a trip retains its required
+	// shutdown margin; ControlRods.Step clamps DemandInsertion to it
+	// while latched (the scram path supersedes).
+	//   "Control rods must be pulled above a certain height, the rod
+	//    insertion limit, so that in the event a trip occurs the full
+	//    insertion of the rods will add at least a prescribed amount
+	//    of negative reactivity."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:30-34
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/InsertionLimit"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "InsertionLimit",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.InsertionLimit)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorPressureVessel.ControlRods.InsertionLimit = v
+			return nil
+		},
+	}
+
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/EnforceInsertionLimit"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "EnforceInsertionLimit",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.EnforceInsertionLimit)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorPressureVessel.ControlRods.EnforceInsertionLimit = v
+			return nil
+		},
+	}
+
+
+	// CVCS boron concentration setpoint. The operator writes the
+	// desired RCS boron concentration in ppm; CVCS.Step latches
+	// tracking toward it and ramps the concentration through the
+	// BTRS boration/dilution flow paths until it arrives in the
+	// tolerance band, then releases chemistry to volume control.
+	// The read-back is the measured concentration so the operator
+	// watches the ramp close on the target.
+	//   "A boron dilution is started to bring the boron
+	//   concentration to the estimated critical concentration."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:36-38
 	//   "The operating mode (boration or dilution) and the
 	//   magnitude of the boron concentration change required
 	//   is determined by comparison of the measured Tc
 	//   (cold leg temperature) with the programmed (function
 	//   of power) Tc."
 	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
-	//   "Operational Reactivity Control — Reactivity control is
-	//   provided by the neutron absorbing control rods and a
-	//   soluble chemical neutron absorber (boric acid) in the
-	//   reactor coolant."
-	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_036.txt:114
 	m["ReactorBuilding/ReactorPressureVessel/ControlRods/BoronSetpoint"] = &bridge.Control{
 		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
 		Label: "BoronSetpoint",
@@ -810,11 +859,8 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			if err != nil {
 				return err
 			}
-			// Write to CVCS so the next step's propagation
-			// (CVCS.BoronConcentration → RPV.ControlRods.BoronConcentration)
-			// does not overwrite the operator's demand.
-			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = v
-			p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = v
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronTargetConcentration = v
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronSetpointTracking = true
 			return nil
 			},
 		}
@@ -1143,6 +1189,72 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("normalized",
 				p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion)
+		},
+	}
+
+
+	// Bank position indications decompose the lumped rod path into
+	// the shutdown banks and the four control banks under the
+	// standard overlap program, so bank sequencing and overlap are
+	// observable during rod withdrawal.
+	//   "The shutdown banks of the reactor control rods are
+	//   withdrawn. [...] The control rod banks are then manually
+	//   withdrawn to achieve criticality while observing proper
+	//   bank overlap, rod position indications, and nuclear
+	//   instrumentation."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:25-26,55-58
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/ShutdownBank"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "ShutdownBank",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.ShutdownBankInsertion())
+		},
+	}
+	for _, bank := range []string{"A", "B", "C", "D"} {
+		m["ReactorBuilding/ReactorPressureVessel/ControlRods/ControlBank"+bank] = &bridge.Sensor{
+			Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+			Label: "ControlBank" + bank,
+			Kind:  "normalized",
+			Get: func(bank string) func() (string, error) {
+				idx := map[string]int{"A": 0, "B": 1, "C": 2, "D": 3}[bank]
+				return func() (string, error) {
+					banks := p.ReactorBuilding.ReactorPressureVessel.
+						ControlRods.ControlBankInsertions()
+					return bridge.FormatSensorValue("normalized", banks[idx])
+				}
+			}(bank),
+		}
+	}
+
+	// Source-range count rate. The source-range channels use
+	// proportional counters whose pulse rate tracks neutron flux;
+	// rising counts with no rod motion are the criticality evidence.
+	//   "Evidence of criticality is indicated by a positive sustained
+	//   startup rate with no rod motion and increasing source range
+	//   counts."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:59-63
+	m["ReactorBuilding/ReactorPressureVessel/SourceRangeCounts"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "SourceRangeCounts",
+		Kind:  "cps",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("cps",
+				p.ReactorBuilding.ReactorPressureVessel.SourceRangeCounts)
+		},
+	}
+
+	// Startup-rate indication in decades per minute.
+	//   "Startup rate indication is also provided in the control room."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_121.txt:19-20
+	m["ReactorBuilding/ReactorPressureVessel/StartupRate"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "StartupRate",
+		Kind:  "dpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("dpm",
+				p.ReactorBuilding.ReactorPressureVessel.StartupRateDPM)
 		},
 	}
 

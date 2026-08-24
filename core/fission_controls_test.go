@@ -104,18 +104,25 @@ func TestBridge_RodInsertionControlClamps(t *testing.T) {
 		rods.Insertion)
 }
 
-// BoronSetpoint writes through to CVCS so the next step's
-// CVCS→RPV propagation does not overwrite the operator demand.
+// BoronSetpoint engages CVCS tracking that ramps the measured
+// concentration toward the target through the BTRS dilution flow
+// path, releasing chemistry to volume control on arrival.
 func TestBridge_BoronSetpointWritable(t *testing.T) {
 	p := MakePlant()
 	c := GetControlMap(&p)["ReactorBuilding/ReactorPressureVessel/ControlRods/BoronSetpoint"]
 	require.NotNil(t, c, "want BoronSetpoint control registered")
-	require.NoError(t, c.Set("800"))
-	stepN(&p, 1)
-	got, err := GetSensorMap(&p)["ReactorBuilding/ReactorPressureVessel/BoronConcentration"].Get()
-	require.NoError(t, err)
-	assert.Equal(t, "800", got,
-		"want BoronConcentration=800 after BoronSetpoint, got %v", got)
+	require.NoError(t, c.Set("990"))
+	cvcs := &p.AuxiliaryBuilding.ChemicalVolumeControlSystem
+	require.True(t, cvcs.BoronSetpointTracking,
+		"the write must latch setpoint tracking")
+	stepN(&p, int(15*time.Second/TimeStep))
+	assert.InDelta(t, 990, cvcs.BoronConcentration, 1.0,
+		"want BoronConcentration ramped to the 990 ppm setpoint, got %v",
+		cvcs.BoronConcentration)
+	assert.False(t, cvcs.BoronSetpointTracking,
+		"arrival inside the tolerance band must release tracking")
+	assert.Equal(t, CVCSVolumeControl, cvcs.Mode,
+		"released chemistry returns to volume control")
 }
 
 // Sensors for RPV inlet/outlet, SG heat extraction, and RCP

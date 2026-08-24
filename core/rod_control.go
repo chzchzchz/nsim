@@ -60,7 +60,84 @@ const (
 	// exceed 5 percent of full power per minute."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:148-150
 	RodCtrlProgramSlewPerSec = 0.05 / 60.0
+
+	// CoreShutdownBankWorthShare is the shutdown banks' share of
+	// the full rod-bank worth; the control banks carry the rest.
+	// Derived convention: the sources name the bank sequence but no
+	// worth split ("The shutdown banks of the reactor control rods
+	// are withdrawn. A corresponding boron concentration is
+	// calculated so that reactor criticality will occur at a
+	// selected control bank position above the rod insertion
+	// limit.").
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:25-28
+	CoreShutdownBankWorthShare = 0.3
+
+	// RodShutdownBankCount and RodControlBankCount are the bank
+	// counts of each group. The plant operates "All shutdown banks
+	// and control banks A and B must be fully withdrawn, while
+	// control banks C and D must be withdrawn to positions that are
+	// greater than the limits".
+	// specs/westinghouse_plant_operations/chapter_19/page_012.txt:37-40
+	RodShutdownBankCount = 2
+	RodControlBankCount  = 4
+
+	// RodBankOverlapFrac is the overlap between successive control
+	// banks as a fraction of one bank's travel: an incoming bank
+	// starts moving when the outgoing bank has covered half its own,
+	// which flattens the differential worth into the linear curve
+	// the reactivity model already assumes. Operators withdraw the
+	// banks "while observing proper bank overlap".
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:55-58
+	RodBankOverlapFrac = 0.5
 )
+
+// Bank indications decompose the lumped rod path into the physical
+// bank groups. The aggregate Insertion stays the reactivity driver;
+// these maps give the operator the per-bank positions behind it:
+// shutdown banks travel first during withdrawal, then the four
+// control banks in sequence with overlap.
+//
+// Spec justification:
+//   - "The shutdown banks of the reactor control rods are
+//     withdrawn. [...] The control rod banks are then manually
+//     withdrawn to achieve criticality while observing proper bank
+//     overlap, rod position indications, and nuclear instrumentation."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:25-26,55-58
+//   - Shutdown banks fully withdrawn before control-bank motion:
+//     "Verify all shutdown banks are fully withdrawn within 15
+//     minutes of withdrawing control banks."
+//     specs/westinghouse_plant_operations/chapter_19/page_017.txt:7-8
+
+// ShutdownBankInsertion returns the common insertion fraction of the
+// shutdown banks for the aggregate position. Withdrawal progress w =
+// 1-Insertion spends its first CoreShutdownBankWorthShare on the
+// shutdown group, so a trip (Insertion=1) reads every bank fully
+// inserted.
+func (c ControlRods) ShutdownBankInsertion() float64 {
+	w := 1 - min(max(c.Insertion, 0), 1)
+	sdOut := min(w/CoreShutdownBankWorthShare, 1)
+	return 1 - sdOut
+}
+
+// ControlBankInsertions returns the per-bank insertion fractions of
+// the four control banks (A first on withdrawal) under the standard
+// half-travel overlap program. The overlapped segments tile the
+// control share of travel so their worth-weighted sum matches the
+// linear aggregate curve exactly.
+func (c ControlRods) ControlBankInsertions() [RodControlBankCount]float64 {
+	var out [RodControlBankCount]float64
+	w := 1 - min(max(c.Insertion, 0), 1)
+	wc := max(w-CoreShutdownBankWorthShare, 0) /
+		(1 - CoreShutdownBankWorthShare)
+	unit := 1 / (float64(RodControlBankCount) -
+			float64(RodControlBankCount-1)*RodBankOverlapFrac)
+	for k := range RodControlBankCount {
+		start := float64(k) * unit * (1 - RodBankOverlapFrac)
+		outFrac := min(max((wc-start)/unit, 0), 1)
+		out[k] = 1 - outFrac
+	}
+	return out
+}
 // programmedRodTavg maps turbine load demand onto the Tavg program,
 // anchored at hot-standby no-load (557°F) and the rated inlet/outlet
 // midpoint, clamped outside [0,1].

@@ -863,6 +863,23 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 	}
 
 
+	// Boron setpoint target: the operator-written concentration the
+	// tracking drive ramps toward through the BTRS flow modes. While
+	// tracking is released the field holds the last target.
+	//   "A boron dilution is started to bring the boron concentration
+	//   to the estimated critical concentration."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:36-38
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronTarget"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "BoronTarget",
+		Kind:  "ppm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("ppm",
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronTargetConcentration)
+		},
+	}
+
+
 	// Pressurizer level program output: the Tavg-referenced
 	// programmed value the automatic level controller holds.
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40

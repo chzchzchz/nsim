@@ -900,6 +900,13 @@ const (
 	// mode. Sized symmetrically with CVCSBorationRate.
 	CVCSDilutionRate float64 = 0.8
 
+	// CVCSBoronSetpointTolerancePpm is the arrival band around
+	// BoronTargetConcentration inside which the setpoint drive
+	// releases chemistry back to volume control. Derived: one
+	// BTRS rate step, so the release cannot chatter on a single
+	// tick's increment.
+	CVCSBoronSetpointTolerancePpm = 1.0
+
 	// VCTDesignLevel is the nominal VCT level (gal). The spec
 	// does not state a numeric volume; the value is sized so
 	// VCT accumulator dynamics are visible at operator-training
@@ -1214,6 +1221,23 @@ type ControlRods struct {
 	// depletion."
 	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
 	BoronConcentration float64
+
+	// EnforceInsertionLimit latches the rod insertion limit: while
+	// true, Step clamps DemandInsertion to at most InsertionLimit so
+	// resting positions stay withdrawn enough for a trip to add the
+	// required shutdown margin. The zero value keeps demand
+	// operator-owned. A reactor trip bypasses the clamp (the scram
+	// forces full insertion regardless of demand).
+	//   "Control rods must be pulled above a certain height, the rod
+	//    insertion limit, so that in the event a trip occurs the full
+	//    insertion of the rods will add at least a prescribed amount
+	//    of negative reactivity."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:30-34
+	EnforceInsertionLimit bool
+
+	// InsertionLimit is the maximum allowed rod insertion fraction
+	// (0..1) while EnforceInsertionLimit is latched.
+	InsertionLimit float64
 }
 
 // Step advances Insertion toward DemandInsertion at the rate
@@ -1226,6 +1250,11 @@ type ControlRods struct {
 // this rate limit: the trip clamp in ReactorPressureVessel.Step
 // forces Insertion=1.0 directly (see plans/x/trip.md).
 //
+// While EnforceInsertionLimit is latched, the demand (and the
+// controller-integrated demand writers feed it) clamps to
+// InsertionLimit so resting positions cannot sink below the
+// shutdown-margin envelope; the scram path supersedes it.
+//
 // The previous-step Insertion is read from the receiver (c.Insertion)
 // and the rate-limited target written into the returned copy.
 // The clamp at [0,1] mirrors the normalised-kind validation in
@@ -1234,6 +1263,10 @@ func (c ControlRods) Step() ControlRods {
 	ret := c
 	demand := ret.DemandInsertion
 	demand = min(max(demand, 0), 1)
+	if ret.EnforceInsertionLimit {
+		demand = min(demand, ret.InsertionLimit)
+		ret.DemandInsertion = demand
+	}
 	delta := demand - c.Insertion
 	maxStep := RodInsertionSpeed * TimeStep.Seconds()
 	ret.Insertion = c.Insertion + min(max(delta, -maxStep), maxStep)
@@ -2229,6 +2262,23 @@ type CVCS struct {
 	// Tc."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-62
 	BoronConcentration float64
+
+	// BoronTargetConcentration is the operator-written boron
+	// setpoint in ppm. While BoronSetpointTracking is latched, Step
+	// selects the boration or dilution mode toward it and ramps
+	// BoronConcentration at the BTRS flow rates until it lands in
+	// the tolerance band, then releases chemistry back to volume
+	// control. The ramp replaces an instantaneous write so a dilution
+	// evolution moves on the real flow-rate clock:
+	// "A boron dilution is started to bring the boron concentration
+	// to the estimated critical concentration."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:36-38
+	BoronTargetConcentration float64
+
+	// BoronSetpointTracking engages the drive toward
+	// BoronTargetConcentration. The zero value keeps Mode
+	// operator-owned; while latched it defers to AutoBoronControl.
+	BoronSetpointTracking bool
 
 	// VCTLevel is the volume control tank level (gal). It is
 	// replenished by reactor makeup control system and

@@ -104,6 +104,33 @@ func (c *CVCS) Step(
 	ret.BorationRate = 0
 	ret.DilutionRate = 0
 
+	// Boron setpoint tracking: while latched (and not displaced by
+	// the automatic trim), the operator's setpoint selects the BTRS
+	// mode and pump so the concentration ramps on the real flow-rate
+	// clock instead of stepping. Arrival inside the tolerance band
+	// releases chemistry back to volume control.
+	//   "A boron dilution is started to bring the boron concentration
+	//    to the estimated critical concentration."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:36-38
+	tracking := ret.BoronSetpointTracking && !ret.AutoBoronControl
+	if tracking {
+		delta := ret.BoronTargetConcentration - ret.BoronConcentration
+		tol := CVCSBoronSetpointTolerancePpm
+		switch {
+		case delta > tol:
+			ret.Mode = CVCSBoration
+			ret.BTRSRecirculationPumpRunning = true
+		case delta < -tol:
+			ret.Mode = CVCSDilution
+			ret.BTRSRecirculationPumpRunning = true
+		default:
+			ret.BoronSetpointTracking = false
+			ret.Mode = CVCSVolumeControl
+			ret.BTRSRecirculationPumpRunning = false
+			tracking = false
+		}
+	}
+
 	// Charging is an independent path gated by its own latch,
 	// not the reactor coolant pumps; the pumps are fed from the
 	// engineered safety features bus during accident conditions,
@@ -218,6 +245,27 @@ func (c *CVCS) Step(
 		// level; the imbalance is the makeup that reaches the
 		// VCT level controller (already accumulated above).
 		// No boron concentration change.
+	}
+
+	// Setpoint arrival: a rate step that lands past the target is
+	// clamped to it, and once inside the band the drive releases
+	// chemistry to volume control so operator Mode ownership is
+	// restored.
+	if tracking {
+		if ret.DilutionRate > 0 &&
+			ret.BoronConcentration < ret.BoronTargetConcentration {
+			ret.BoronConcentration = ret.BoronTargetConcentration
+		}
+		if ret.BorationRate > 0 &&
+			ret.BoronConcentration > ret.BoronTargetConcentration {
+			ret.BoronConcentration = ret.BoronTargetConcentration
+		}
+		if math.Abs(ret.BoronTargetConcentration-ret.BoronConcentration) <=
+			CVCSBoronSetpointTolerancePpm {
+			ret.BoronSetpointTracking = false
+			ret.Mode = CVCSVolumeControl
+			ret.BTRSRecirculationPumpRunning = false
+		}
 	}
 
 	// Clear the divert latch once the VCT is back in its design

@@ -285,6 +285,26 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_041.txt:18-20
 	ret.FissionPower = max(ret.FissionPower, CoreNeutronSourcePower)
 	ret.FissionPower = min(ret.FissionPower, CoreRatedThermalPower)
+
+	// Nuclear-instrumentation observables. The source-range count
+	// rate tracks the flux that drives the proportional counters;
+	// the startup-rate reading low-passes the instantaneous log
+	// derivative the way a control-room period amplifier displays
+	// it. "Evidence of criticality is indicated by a positive
+	// sustained startup rate with no rod motion and increasing
+	// source range counts."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:161-163
+	ret.SourceRangeCounts = CoreSourceRangeCountsPerWatt *
+		float64(ret.FissionPower)
+	prevW := float64(r.FissionPower)
+	surInst := 0.0
+	if prevW > 0 && dt.Seconds() > 0 {
+		surInst = math.Log(float64(ret.FissionPower)/prevW) /
+			dt.Seconds() / math.Ln10 * 60
+	}
+	filter := CoreStartupRateFilterTimeConstant.Seconds()
+	ret.StartupRateDPM += (surInst - ret.StartupRateDPM) *
+		min(dt.Seconds()/filter, 1)
 	dtS := dt.Seconds()
 	fastTarget := float64(ret.FissionPower) * CoreDecayHeatFastFraction
 	slowTarget := float64(ret.FissionPower) * CoreDecayHeatSlowFraction
@@ -482,6 +502,20 @@ type ReactorPressureVessel struct {
 	// inserted, boron present).
 	FissionPower Watts
 
+	// SourceRangeCounts is the source-range count-rate reading
+	// (counts per second) proportional to fission power. The
+	// four source-range channels use proportional counters:
+	// "Neutron flux, as measured in the primary shield area,
+	// produces current pulses in the detectors."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_121.txt:40-43
+	SourceRangeCounts float64
+
+	// StartupRateDPM is the filtered startup-rate indication in
+	// decades per minute. "Startup rate indication is also provided
+	// in the control room."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_121.txt:19-20
+	StartupRateDPM float64
+
 	// DecayHeatFast and DecayHeatSlow are fission-product decay
 	// inventories: produced in proportion to FissionPower,
 	// drained at fixed radioactive decay constants that
@@ -642,6 +676,24 @@ const (
 	CoreNeutronSourcePower Watts = 1e-9 * CoreRatedThermalPower
 	CoreDecayHeatTimeConstant             = 20 * time.Hour
 	CoreDecayHeatFastTimeConstant         = 50 * time.Second
+
+	// CoreSourceRangeCountsPerWatt converts fission power into a
+	// source-range count rate. The source-range channels use
+	// proportional counters whose pulse rate tracks neutron flux:
+	// "Neutron flux, as measured in the primary shield area,
+	// produces current pulses in the detectors."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_121.txt:40-43
+	// The spec gives no counts-per-flux calibration; derived so the
+	// neutron-source floor reads a nominal 1000 cps, a typical
+	// shutdown source-range observation level.
+	CoreSourceRangeCountsPerWatt = 1e3 / float64(CoreNeutronSourcePower)
+
+	// CoreStartupRateFilterTimeConstant smooths the instantaneous
+	// startup-rate reading into the control-room indication. Derived;
+	// the spec mandates the indication but not its response time:
+	// "Startup rate indication is also provided in the control room."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_121.txt:19-20
+	CoreStartupRateFilterTimeConstant = 5 * time.Second
 
 	// CoreFissionPowerAtRated is the fission-chain output at 100%
 	// rated operation under the modeled 6.5% decay-heat share; the
