@@ -1,5 +1,5 @@
-plans/
-specs/
+plans
+specs
 cmd/nsim/nsim
 cmd/nsimrun/nsimrun
 *.swp
