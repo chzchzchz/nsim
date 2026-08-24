@@ -12,7 +12,7 @@ Flags:
 
 - `-plant <file.json>` — Plant state JSON file. Optional; if omitted the plant is initialized with design defaults via `MakePlant`.
 - `-seconds <number>` — Number of seconds to simulate. Plain number (e.g. `5`, `1.5`), not a duration string like `1s`.
-- `-cmd <file>` — Command file. Each line is `TimeOffset Part.Label Value`. The control is set once elapsed time reaches the offset (in milliseconds). Supports dot or slash paths. Logs errors and continues on parse/set failures. Files ending in `.json` (case insensitive) are loaded as web-console exports: `{"commands":[{"offsetMs":...,"control":...,"value":...}]}`, with offsets measured from simulation start.
+- `-cmd <file>` — Command file. Each line is `TimeOffset Part.Label Value`. The control is set once elapsed time reaches the offset (in milliseconds). Supports dot or slash paths. Blank lines and lines starting with `#` are ignored. Logs errors and continues on parse/set failures. Files ending in `.json` (case insensitive) are loaded as web-console exports: `{"commands":[{"offsetMs":...,"control":...,"value":...}]}`, with offsets measured from simulation start.
 
 ## Behavior
 
