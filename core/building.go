@@ -13,6 +13,18 @@ package core
 type ReactorBuilding struct {
 	ReactorPressureVessel `json:"ReactorPressureVessel"`
 	SteamGenerator        `json:"SteamGenerator"`
+
+	// ReactorCoolantPumps are the per-loop pumps, one per primary
+	// loop, started sequentially during heatup
+	// (specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:35-37).
+	ReactorCoolantPumps ReactorCoolantPumps
+
+	// ReactorCoolantPump is the lumped hydraulic view of the pump
+	// group: Running mirrors AnyRunning and Velocity the loop-
+	// average shaft speed. Plant.Step is its single writer each
+	// step; the flow graph, SVG overlay, and legacy aggregate bridge
+	// paths read it. Operator commands must target the group (the
+	// aggregate control fans out), never this view.
 	ReactorCoolantPump Pump
 	Pressurizer           `json:"Pressurizer"`
 	SafetyValve            Valve

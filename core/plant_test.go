@@ -799,7 +799,7 @@ func TestPlant_PressurizerSurgeTracksCoolantExpansion(t *testing.T) {
 	// Both fixtures then isolate the surge-line coupling.
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = false
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = false
-	p.ReactorBuilding.ReactorCoolantPump.Running = true
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 
 	// Secure every secondary outlet so core heat accumulates in the
 	// primary: stop valves shut, condenser dump shut, atmospheric

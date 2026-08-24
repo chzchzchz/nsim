@@ -135,5 +135,7 @@ func TestQueueApplyMutatesPlant(t *testing.T) {
 	m := p.GetControlMap()
 	require.NoError(t, q.Submit("0 ReactorBuilding.ReactorCoolantPump.Running 1", 0))
 	q.FireDue(0, m)
-	assert.True(t, p.ReactorBuilding.ReactorCoolantPump.Running)
+	// The aggregate control fans out to the per-loop pump group; the
+	// lumped view field resyncs on the next Step, so assert the group.
+	assert.True(t, p.ReactorBuilding.ReactorCoolantPumps.AnyRunning())
 }

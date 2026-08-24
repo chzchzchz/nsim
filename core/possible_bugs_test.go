@@ -31,7 +31,7 @@ func TestBug_RPVHeatInputRoutesToSGRatedPerLoop(t *testing.T) {
 	// at SteamGeneratorFullLoadHeatInput (one SG worth), not
 	// at the full 3.8 GW.
 	p := MakePlant()
-	p.ReactorBuilding.ReactorCoolantPump.Running = true
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -49,7 +49,7 @@ func TestBug_RPVHeatInputRoutesToSGRatedPerLoop(t *testing.T) {
 // SG.HeatInput > 3× that value at rated thermal power.
 func TestBug_SGHeatInputEqualsOneSGRatedAtCoreRated(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorCoolantPump.Running = true
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -246,7 +246,7 @@ func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
 	steps := int(30 * time.Second / TimeStep)
 
 	high := MakePlant()
-	high.ReactorBuilding.ReactorCoolantPump.Running = true
+	high.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	high.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	high.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
 	high.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = 1000
@@ -255,7 +255,7 @@ func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
 	stepN(&high, steps)
 
 	low := MakePlant()
-	low.ReactorBuilding.ReactorCoolantPump.Running = true
+	low.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	low.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	low.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
 	low.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = 0
@@ -285,7 +285,7 @@ func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
 // that shell volume.
 func TestBug_SGWaterExceedsVolume(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorCoolantPump.Running = true
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	p.ReactorBuilding.Pressurizer.HeatersOn = true
 
 	// The phantom top-up grew SG water within seconds, so a half
@@ -316,7 +316,7 @@ func TestBug_SGWaterExceedsVolume(t *testing.T) {
 //   - specs/the_westinghouse_pressurized_water_react/chapter_3/page_064.txt:20-27
 func TestPlant_SGInventoryNotToppedUpFromPrimary(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorCoolantPump.Running = true
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	p.ReactorBuilding.Pressurizer.HeatersOn = true
 
 	// The phantom top-up grew SG water within seconds, so a half

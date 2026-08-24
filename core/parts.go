@@ -55,6 +55,82 @@ func (p *Pump) IsRunning() bool {
 	return p.Running && p.DriveReady
 }
 
+// ReactorCoolantPumps holds the reactor coolant pumps, one per
+// primary loop, so operators can start them sequentially and secure
+// individual machines:
+//
+//   - "Reactor coolant pumps are started sequentially and pump heat
+//     is used to raise the RCS temperature."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:35-37
+//   - "a maximum of two out of four reactor coolant pumps (RCPs)
+//     may be secured."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:104-108
+//
+// The count follows SteamGeneratorLoopCount: one SG and one RCP per
+// loop ("Number and type: 1 vertical, U-tube steam generator with
+// integral steam-drum per loop",
+// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:31-32).
+type ReactorCoolantPumps struct {
+	LoopA Pump
+	LoopB Pump
+	LoopC Pump
+	LoopD Pump
+}
+
+// All returns the per-loop pumps in loop order for iteration by the
+// step wiring and fixtures.
+func (r *ReactorCoolantPumps) All() []*Pump {
+	return []*Pump{&r.LoopA, &r.LoopB, &r.LoopC, &r.LoopD}
+}
+
+// ByName resolves a per-loop pump from its bridge path segment
+// ("A" .. "D"), returning nil for unknown names.
+func (r *ReactorCoolantPumps) ByName(name string) *Pump {
+	for i, n := range []string{"A", "B", "C", "D"} {
+		if n == name {
+			return r.All()[i]
+		}
+	}
+	return nil
+}
+
+// SetAllRunning latches every pump's operator start command, the
+// master-switch stand-in behind the legacy aggregate control.
+func (r *ReactorCoolantPumps) SetAllRunning(running bool) {
+	for _, pu := range r.All() {
+		pu.Running = running
+	}
+}
+
+// Velocity is the loop-average shaft speed the lumped hydraulic
+// consumers see: with N of four rotors spinning, the primary flow
+// fraction scales with their mean.
+func (r *ReactorCoolantPumps) Velocity() Velocity {
+	sum := 0.0
+	for _, pu := range r.All() {
+		sum += float64(pu.Velocity)
+	}
+	return Velocity(sum / float64(len(r.All())))
+}
+
+// AnyRunning reports whether any pump carries an operator start
+// command.
+func (r *ReactorCoolantPumps) AnyRunning() bool {
+	return r.RunningCount() > 0
+}
+
+// RunningCount counts the operator start latches across the four
+// loops; the hot-standby lineup cap is expressed against this count.
+func (r *ReactorCoolantPumps) RunningCount() int {
+	n := 0
+	for _, pu := range r.All() {
+		if pu.Running {
+			n++
+		}
+	}
+	return n
+}
+
 type Turbine struct {
 	Part
 	Velocity

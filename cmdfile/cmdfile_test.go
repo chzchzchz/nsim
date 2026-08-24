@@ -76,14 +76,16 @@ func TestApply(t *testing.T) {
 		c := m["ReactorBuilding/ReactorCoolantPump/Running"]
 		require.NotNil(t, c)
 		require.NoError(t, Apply(m, Command{ControlKey: "ReactorBuilding/ReactorCoolantPump/Running", Value: "1"}))
-		assert.True(t, p.ReactorBuilding.ReactorCoolantPump.Running)
+		// The aggregate control fans out to the per-loop pump group;
+		// the lumped view field resyncs on the next Step.
+		assert.True(t, p.ReactorBuilding.ReactorCoolantPumps.AnyRunning())
 	})
 
 	t.Run("dot notation", func(t *testing.T) {
 		p := core.MakePlant()
 		m := p.GetControlMap()
 		require.NoError(t, Apply(m, Command{ControlKey: "ReactorBuilding.ReactorCoolantPump.Running", Value: "1"}))
-		assert.True(t, p.ReactorBuilding.ReactorCoolantPump.Running)
+		assert.True(t, p.ReactorBuilding.ReactorCoolantPumps.AnyRunning())
 	})
 
 	t.Run("unknown control", func(t *testing.T) {

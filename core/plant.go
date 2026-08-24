@@ -263,11 +263,16 @@ func (r *ReactorBuilding) Step(
 		ret.secondaryExcessDrawW(sgSteamOutflowFraction, turbineAdmitting, op, dt))
 	ret.ReactorPressureVessel = rpv
 
-	// RCP velocity dynamics (plans/p33_1.txt). Exponential
-	// ramp toward RCPRatedSpeed when Running; exponential decay
-	// (the flywheel coastdown) when not. The Euler update
-	// mirrors the diesel (`core/diesel.go:17-18`) and turbine
-	// (`core/turbine.go:315-319`) start/coast patterns.
+	// RCP velocity dynamics (plans/p33_1.txt). Each loop's pump
+	// ramps exponentially toward RCPRatedSpeed when its operator
+	// latch is set and coasts down exponentially when not; the
+	// Euler update mirrors the diesel (`core/diesel.go:17-18`)
+	// and turbine (`core/turbine.go:315-319`) start/coast
+	// patterns. Per-pump state is what makes the sequential
+	// start evolution representable:
+	//   "Reactor coolant pumps are started sequentially and pump
+	//    heat is used to raise the RCS temperature."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:35-37
 	//
 	// Spec justification:
 	//   - "A flywheel in the motor increases the total
@@ -282,28 +287,40 @@ func (r *ReactorBuilding) Step(
 	//     pumps assures adequate flow during the power decay
 	//     transient."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:80-94
-	rcpV := float64(ret.ReactorCoolantPump.Velocity)
-	if ret.ReactorCoolantPump.Running {
-		rcpV += (float64(RCPRatedSpeed) - rcpV) *
-			TimeStep.Seconds() / float64(RCPStartupTimeConstant.Seconds())
-	} else {
-		rcpV -= rcpV *
-			TimeStep.Seconds() / float64(RCPCoastdownTimeConstant.Seconds())
+	for _, pu := range ret.ReactorCoolantPumps.All() {
+		rcpV := float64(pu.Velocity)
+		if pu.Running {
+			rcpV += (float64(RCPRatedSpeed) - rcpV) *
+				TimeStep.Seconds() / float64(RCPStartupTimeConstant.Seconds())
+		} else {
+			rcpV -= rcpV *
+				TimeStep.Seconds() / float64(RCPCoastdownTimeConstant.Seconds())
+		}
+		rcpV = max(rcpV, 0)
+		pu.Velocity = Velocity(rcpV)
 	}
-	rcpV = max(rcpV, 0)
-	ret.ReactorCoolantPump.Velocity = Velocity(rcpV)
+	// Lumped hydraulic view for the graph, SVG, and legacy bridge
+	// paths; single-writer sync from the group above.
+	ret.ReactorCoolantPump.Running = ret.ReactorCoolantPumps.AnyRunning()
+	ret.ReactorCoolantPump.Velocity = ret.ReactorCoolantPumps.Velocity()
 
-	// RCP shaft-loss heat entering the primary coolant. The
-	// motor and bearing waste power scale with speed squared
-	// (over the small 1 ms step this is linear in ω² at the
-	// current velocity). Zero when the rotor is stopped.
+	// RCP shaft-loss heat entering the primary coolant. Each
+	// pump's motor and bearing waste power scales with its speed
+	// squared (over the small 1 ms step this is linear in ω² at
+	// the current velocity); zero when stopped. RCPRatedHeatInput
+	// is per pump, so N spinning rotors contribute N shares —
+	// sequential starts stage the heat input the same way they
+	// stage the flow.
 	//
 	// Spec: "Primary temperature is maintained through the
 	// balanced use of reactor coolant pump heat input and a
 	// steam dump system..."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-111
-	rcpHeat := float64(RCPRatedHeatInput) * rcpV * rcpV /
-		(float64(RCPRatedSpeed) * float64(RCPRatedSpeed))
+	rcpHeat := 0.0
+	for _, pu := range ret.ReactorCoolantPumps.All() {
+		frac := float64(pu.Velocity) / float64(RCPRatedSpeed)
+		rcpHeat += float64(RCPRatedHeatInput) * frac * frac
+	}
 	ret.ReactorPressureVessel.PumpHeatInput = Watts(rcpHeat)
 
 	// RHRS: once RCS has cooled below the entrance threshold
@@ -1071,6 +1088,9 @@ func (p *Plant) Step() {
 	//    two 6600-volt engineered safety features buses."
 	//   specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:72-74
 	p.nextPlant.ReactorBuilding.ReactorCoolantPump.DriveReady = plantDriveReady
+	for _, pu := range p.nextPlant.ReactorBuilding.ReactorCoolantPumps.All() {
+		pu.DriveReady = plantDriveReady
+	}
 
 	// Refueling operations step. The phase machine advances
 	// based on phase-relative time; the cavity flood/drain
@@ -1869,10 +1889,7 @@ func (p *Plant) Step() {
 	//   - Hot-standby RCP cap: "a maximum of two out of four
 	//     reactor coolant pumps (RCPs) may be secured."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:104-108
-	runningRCPs := 0
-	if p.nextPlant.ReactorBuilding.ReactorCoolantPump.Running {
-		runningRCPs = 1
-	}
+	runningRCPs := p.nextPlant.ReactorBuilding.ReactorCoolantPumps.RunningCount()
 	// Steam-flow fraction as an actual offtake fraction of rated
 	// capacity: the pressure-ratio proxy formerly used here read
 	// "main feedwater in service" whenever the SG sat near design

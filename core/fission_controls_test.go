@@ -125,7 +125,7 @@ func TestBridge_BoronSetpointWritable(t *testing.T) {
 // sensor reads non-zero.
 func TestBridge_SensorsReflectState(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorCoolantPump.Running = true
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	stepN(&p, int(15*time.Second/TimeStep))
 	sensors := GetSensorMap(&p)
 	for _, id := range []string{
@@ -318,7 +318,7 @@ func TestThermal_Fission4_BorationLowersOutlet(t *testing.T) {
 	overrideTimeStep(t, 10*time.Millisecond)
 	run := func(borate bool) float64 {
 		p := MakePlant()
-		p.ReactorBuilding.ReactorCoolantPump.Running = true
+		p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 		p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 		p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
 		// Start at 1100 ppm — below the ~1140 ppm critical

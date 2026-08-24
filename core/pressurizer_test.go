@@ -54,8 +54,10 @@ func TestPressurizer_SprayDrivesPressureDown(t *testing.T) {
 	// "To provide spray flow a RCP must be operating in one of the
 	// two loops with spray flow connections."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:96-98
-	p.ReactorBuilding.ReactorCoolantPump.Running = true
-	p.ReactorBuilding.ReactorCoolantPump.Velocity = RCPRatedSpeed
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
+	for _, pu := range p.ReactorBuilding.ReactorCoolantPumps.All() {
+		pu.Velocity = RCPRatedSpeed
+	}
 	floor := PressurizerSatPressure(
 		p.ReactorBuilding.ReactorPressureVessel.Outlet.Float())
 

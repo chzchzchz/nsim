@@ -22,15 +22,54 @@ import (
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_056.txt:175-177
 func TestRCP_Startup(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorCoolantPump.Running = true
-	p.ReactorBuilding.ReactorCoolantPump.Velocity = 0
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	stepN(&p, int(5*time.Second/TimeStep))
 	assert.GreaterOrEqual(t, float64(p.ReactorBuilding.ReactorCoolantPump.Velocity),
 		0.9*float64(RCPRatedSpeed),
-		"want RCP velocity >= 0.9 * RCPRatedSpeed after 5 s startup, got %v",
+		"want loop-average RCP velocity >= 0.9 * RCPRatedSpeed after 5 s startup, got %v",
 		p.ReactorBuilding.ReactorCoolantPump.Velocity)
 }
 
+
+// TestRCP_SequentialStartStagesFlow verifies that starting the loop
+// pumps one at a time stages the loop-average flow: N of four rotors
+// at rated put the lumped telemetry near N/4 of rated speed. This is
+// what makes the sequential-start evolution observable.
+//
+// Spec justification:
+//   - "Reactor coolant pumps are started sequentially and pump heat
+//     is used to raise the RCS temperature."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:35-37
+//   - "a maximum of two out of four reactor coolant pumps (RCPs)
+//     may be secured."
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:104-108
+func TestRCP_SequentialStartStagesFlow(t *testing.T) {
+	// Must not run in parallel: overrideTimeStep mutates global
+	// simulation state (same discipline as TestRCP_Coastdown).
+	overrideTimeStep(t, 10*time.Millisecond)
+	p := MakePlant()
+	for stage := 1; stage <= 4; stage++ {
+		p.ReactorBuilding.ReactorCoolantPumps.All()[stage-1].Running = true
+		want := float64(stage) / 4 * float64(RCPRatedSpeed)
+		// Poll to the staged plateau: the exponential ramp passes
+		// 95 percent of its asymptote after ~3 tau (6 s sim).
+		reached := false
+		for i := 0; i < int(12*time.Second/TimeStep) && !reached; i++ {
+			p.Step()
+			p.Update()
+			reached = float64(p.ReactorBuilding.ReactorCoolantPump.Velocity) >=
+				0.95*want
+		}
+		require.Truef(t, reached,
+			"stage %d: want loop-average speed >= %.0f rpm, got %.0f",
+			stage, 0.95*want, p.ReactorBuilding.ReactorCoolantPump.Velocity)
+		assert.LessOrEqualf(t,
+			float64(p.ReactorBuilding.ReactorCoolantPump.Velocity), want*1.001,
+			"stage %d: the mean must sit on the N/4 plateau", stage)
+	}
+	assert.Equal(t, 4, p.ReactorBuilding.ReactorCoolantPumps.RunningCount(),
+		"all four loop pumps carry start commands after the sequence")
+}
 
 // The RCP DriveReady latch must survive the ReactorBuilding step
 // assignment inside Plant.Step so the sensor tracks the ESF bus
@@ -47,6 +86,8 @@ func TestPlant_RCPDriveReadyFollowsESFBreaker(t *testing.T) {
 	stepN(&p, 10)
 	require.False(t, p.ReactorBuilding.ReactorCoolantPump.DriveReady,
 		"precondition: ESF breakers open, want DriveReady=false")
+	require.False(t, p.ReactorBuilding.ReactorCoolantPumps.LoopA.DriveReady,
+		"precondition: the DriveReady latch feeds every loop pump")
 
 	p.Electrical.ESFBusA.BreakerClosed = true
 	p.Electrical.ESFBusB.BreakerClosed = true
@@ -76,7 +117,7 @@ func TestRCP_Coastdown(t *testing.T) {
 	// global simulation state.
 	overrideTimeStep(t, 10*time.Millisecond)
 	p := MakePlant()
-	p.ReactorBuilding.ReactorCoolantPump.Running = true
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	// Poll to rated speed with a cap; the ramp is monotone so the
 	// exit comes as soon as the precondition holds.
 	reached := false
@@ -92,7 +133,7 @@ func TestRCP_Coastdown(t *testing.T) {
 	require.True(t, reached,
 		"precondition: want RCP at rated speed before coastdown, got %v",
 		p.ReactorBuilding.ReactorCoolantPump.Velocity)
-	p.ReactorBuilding.ReactorCoolantPump.Running = false
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(false)
 	// The flywheel coastdown is long by design (chapter 16 relies on
 	// it for flow during the power decay transient), so poll for the
 	// sub-1% crossing instead of stepping a fixed window past it.
@@ -122,8 +163,8 @@ func TestRCP_Coastdown(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-111
 func TestRCP_HeatInputScalesWithSpeed(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorCoolantPump.Running = true
-	p.ReactorBuilding.ReactorCoolantPump.Velocity = RCPRatedSpeed / 2
+	p.ReactorBuilding.ReactorCoolantPumps.LoopA.Running = true
+	p.ReactorBuilding.ReactorCoolantPumps.LoopA.Velocity = RCPRatedSpeed / 2
 	p.ReactorBuilding.ReactorPressureVessel.PumpHeatInput = 0
 	stepN(&p, 1)
 	got := float64(p.ReactorBuilding.ReactorPressureVessel.PumpHeatInput)
@@ -137,8 +178,10 @@ func TestRCP_HeatInputScalesWithSpeed(t *testing.T) {
 // when the pump is stopped (velocity = 0).
 func TestRCP_HeatInputOff(t *testing.T) {
 	p := MakePlant()
-	p.ReactorBuilding.ReactorCoolantPump.Running = false
-	p.ReactorBuilding.ReactorCoolantPump.Velocity = 0
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(false)
+	for _, pu := range p.ReactorBuilding.ReactorCoolantPumps.All() {
+		pu.Velocity = 0
+	}
 	p.ReactorBuilding.ReactorPressureVessel.PumpHeatInput = 0
 	stepN(&p, 1)
 	assert.Equal(t, 0.0,

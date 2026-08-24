@@ -20,16 +20,43 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		Kind:  "bool",
 		Get: func() string {
 			return bridge.BoolToStr(
-				p.ReactorBuilding.ReactorCoolantPump.Running)
+				p.ReactorBuilding.ReactorCoolantPumps.AnyRunning())
 		},
+		// Aggregate master switch: the write fans out to all four
+		// loop pumps; individual machines are driven through the
+		// ReactorCoolantPumps/A..D controls (sequential start,
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:35-37).
 		Set: func(s string) error {
 			v, err := bridge.StrToBool(s)
 			if err != nil {
 				return err
 			}
-			p.ReactorBuilding.ReactorCoolantPump.Running = v
+			p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(v)
 			return nil
 		},
+	}
+	for _, loop := range []string{"A", "B", "C", "D"} {
+		m["ReactorBuilding/ReactorCoolantPumps/"+loop+"/Running"] = &bridge.Control{
+			Part:  "ReactorBuilding/ReactorCoolantPumps",
+			Label: loop + "/Running",
+			Kind:  "bool",
+			Get: func(loop string) func() string {
+				return func() string {
+					return bridge.BoolToStr(
+						p.ReactorBuilding.ReactorCoolantPumps.ByName(loop).Running)
+				}
+			}(loop),
+			Set: func(loop string) func(string) error {
+				return func(s string) error {
+					v, err := bridge.StrToBool(s)
+					if err != nil {
+						return err
+					}
+					p.ReactorBuilding.ReactorCoolantPumps.ByName(loop).Running = v
+					return nil
+				}
+			}(loop),
+		}
 	}
 
 
@@ -859,8 +886,21 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Kind:  "rpm",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("rpm",
-				float64(p.ReactorBuilding.ReactorCoolantPump.Velocity))
+				float64(p.ReactorBuilding.ReactorCoolantPumps.Velocity()))
 		},
+	}
+	for _, loop := range []string{"A", "B", "C", "D"} {
+		m["ReactorBuilding/ReactorCoolantPumps/"+loop+"/Speed"] = &bridge.Sensor{
+			Part:  "ReactorBuilding/ReactorCoolantPumps",
+			Label: loop + "/Speed",
+			Kind:  "rpm",
+			Get: func(loop string) func() (string, error) {
+				return func() (string, error) {
+					return bridge.FormatSensorValue("rpm",
+						float64(p.ReactorBuilding.ReactorCoolantPumps.ByName(loop).Velocity))
+				}
+			}(loop),
+		}
 	}
 
 

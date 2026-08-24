@@ -13,7 +13,7 @@ func TestPlantMarshalUnmarshal(t *testing.T) {
 	p.Electrical.ESFBusA.Energized = true
 	p.Electrical.OffsiteSourceA.Voltage = DieselRatedVoltage
 	p.Outside.RiverTemp.Val = 88
-	p.ReactorBuilding.ReactorCoolantPump.Running = true
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	p.ReactorBuilding.ReactorCoolantPump.Damage = 0.25
 	p.Outside.CondensateStorageTank.Level.Val = 123456
 

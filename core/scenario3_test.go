@@ -76,7 +76,12 @@ func TestScenario3_SecuredRHRSHeatupUnderLimit(t *testing.T) {
 		"AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/PumpRunning", "0")
 	require.False(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Pump.Running)
 	require.False(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.Pump.Running)
-	setControl(t, p, "ReactorBuilding/ReactorCoolantPump/Running", "1")
+	// First stage of the sequential start: loop A only, so the
+	// partial lineup is what paces the early heatup
+	// (specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:35-37).
+	setControl(t, p, "ReactorBuilding/ReactorCoolantPumps/A/Running", "1")
+	require.Equal(t, 1,
+		p.ReactorBuilding.ReactorCoolantPumps.RunningCount())
 
 	rideStart := outletF(p)
 	// Wiring check: recomputed from the same production balance
@@ -96,6 +101,14 @@ func TestScenario3_SecuredRHRSHeatupUnderLimit(t *testing.T) {
 	assert.InDelta(t, wantRate, gotRate, wantRate*0.35,
 		"want heatup at the seeded heat-balance rate %v F/s, got %v F/s",
 		wantRate, gotRate)
+	// One spinning rotor of four puts the loop-average telemetry near
+	// a quarter of rated: the staged lineup must be visible.
+	assert.InDelta(t,
+		0.25*float64(RCPRatedSpeed),
+		float64(p.ReactorBuilding.ReactorCoolantPump.Velocity),
+		0.1*float64(RCPRatedSpeed),
+		"want one-pump lineup near a quarter of rated speed, got %v",
+		p.ReactorBuilding.ReactorCoolantPump.Velocity)
 }
 
 // Final pressurization from the post-transit state: heaters drive
