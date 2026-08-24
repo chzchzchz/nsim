@@ -682,22 +682,29 @@ func (r *renderer) pipe(p *core.Plant, e core.GraphEdge) string {
 	}
 
 	colour := ColourForEdge(e.From, e.To)
-	// Flow animation: only edges whose pump is running and whose
-	// inline valve, if any, passes water animate, so a closed
-	// discharge valve cannot show streaming flow. Period is
-	// inversely proportional to effective flow (speed times valve
-	// open fraction) so a throttled regulator reads as reduced
-	// flow; the root --phase keeps remounts mid-cycle.
+	// Flow encoding has three states. A leg streams dashes only
+	// when its pump runs and its inline valve, if any, passes
+	// water (period inversely proportional to effective flow; the
+	// root --phase keeps remounts mid-cycle). A leg whose drive is
+	// secured or whose valve is shut is known dead and renders
+	// black. Passive legs with no pump or valve at all (cold leg,
+	// surge line, drain cascades) stay dimmed fluid colour: the
+	// model cannot observe them, so black would mislabel live
+	// natural paths as dead.
 	var pathFrag string
-	if e.Pump != nil && e.Pump.Running && e.Pump.Velocity > 0 &&
-		(e.Valve == nil || e.Valve.Open > 0) {
+	switch {
+	case e.Pump != nil && e.Pump.Running && e.Pump.Velocity > 0 &&
+		(e.Valve == nil || e.Valve.Open > 0):
 		open := 1.0
 		if e.Valve != nil {
 			open = e.Valve.Open
 		}
 		dur := flowDurationSec(float64(e.Pump.Velocity), open)
 		pathFrag = DrawPipePathAnimated(pts, colour, dur)
-	} else {
+	case (e.Pump != nil && (!e.Pump.Running || e.Pump.Velocity <= 0)) ||
+		(e.Valve != nil && e.Valve.Open <= 0):
+		pathFrag = DrawPipePathDead(pts)
+	default:
 		pathFrag = DrawPipePathIdle(pts, colour)
 	}
 	if e.Valve == nil {

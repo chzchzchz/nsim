@@ -205,6 +205,19 @@ func TestOverlay_Coverage(t *testing.T) {
 		p := core.MakePlant()
 		base := renderPlant(t, &p)
 
+		deadBlack := func(doc string) int {
+			n := 0
+			for _, pl := range regexp.MustCompile(`<polyline [^>]*/>`).
+				FindAllString(doc, -1) {
+				if strings.Contains(pl, `class="idle"`) &&
+					strings.Contains(pl, `stroke="black"`) {
+					n++
+				}
+			}
+			return n
+		}
+		baseDead := deadBlack(base)
+
 		mfp := &p.TurbineBuilding.MainFeedwaterPump
 		mfp.Running, mfp.Velocity = true, 1000
 		fw := &p.TurbineBuilding.MainFeedwaterControlValve
@@ -215,16 +228,23 @@ func TestOverlay_Coverage(t *testing.T) {
 			"a running pump with an open valve must animate its pipe")
 		assert.Less(t, strings.Count(flowing, `class="idle"`),
 			strings.Count(base, `class="idle"`))
+		assert.Equal(t, baseDead-1, deadBlack(flowing),
+			"the feedwater leg must lift out of black while passing water")
 
-		// Shutting the regulator kills both the dashes and the
-		// full-strength stroke: the leg reads as a dead line again.
+		// Shutting the regulator kills the dashes and blacks the
+		// leg: with the pump running but the valve shut nothing is
+		// moving, and that is now stated outright.
 		fw.Open = 0
 		shut := renderPlant(t, &p)
 		assert.Equal(t, strings.Count(base, `class="flow"`),
 			strings.Count(shut, `class="flow"`),
 			"a closed inline valve must stop the dash animation")
-		assert.Equal(t, strings.Count(base, `class="idle"`),
-			strings.Count(shut, `class="idle"`))
+		assert.Equal(t, baseDead, deadBlack(shut),
+			"a running pump behind a shut valve must black its leg")
+
+		// Passive legs (no pump, no valve) keep dimmed fluid colour:
+		// the model cannot observe them, so they never go black.
+		assert.Equal(t, baseDead, deadBlack(base))
 	})
 
 	t.Run("tank level gauges track inventory", func(t *testing.T) {

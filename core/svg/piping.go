@@ -124,11 +124,22 @@ func DrawPipePathAnimated(pts []Anchor, colour string, durSec float64) string {
 		1)
 }
 
-// DrawPipePathIdle renders a routed polyline for a dead leg: same
-// geometry and arrows as a flowing pipe, dimmed by the .idle rule so
-// live lines pop without losing direction information.
+// DrawPipePathIdle renders a routed polyline for a passive leg the
+// model cannot observe (no pump, no valve): same geometry and
+// arrows as a flowing pipe, dimmed by the .idle rule so live lines
+// pop without losing direction or fluid-system information.
 func DrawPipePathIdle(pts []Anchor, colour string) string {
 	base := DrawPipePath(pts, colour)
+	return strings.Replace(base, `/>`, ` class="idle"/>`, 1)
+}
+
+// DrawPipePathDead renders a routed polyline whose flow state is
+// positively known to be zero - a secured pump upstream or a shut
+// inline valve. Black is the unassigned-pipe colour, so the leg
+// reads as a dead line rather than a dimmed hint of its former
+// self; arrows stay on for direction.
+func DrawPipePathDead(pts []Anchor) string {
+	base := DrawPipePath(pts, "black")
 	return strings.Replace(base, `/>`, ` class="idle"/>`, 1)
 }
 
