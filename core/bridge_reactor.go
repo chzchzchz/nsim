@@ -347,6 +347,37 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Loss-of-offsite-power declaration (chapter 16 emergency
+	// response): "If conditions occur which result in a loss of
+	// normal electrical power to a safeguards electrical bus,
+	// backup emergency diesel generators are automatically started
+	// and necessary equipment will be automatically sequenced on
+	// the buses to safely cool down the primary plant if required."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:103-109
+	// The flag is the model's name for the state of the offsite
+	// supply: "The system auxiliary power is supplied from
+	// independent and electrically isolated buses of the off-site
+	// main distribution grid."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:45-47
+	m["ReactorBuilding/PlantElectricalSystems/OffsitePowerAvailable"] = &bridge.Control{
+		Part:  "ReactorBuilding/PlantElectricalSystems",
+		Label: "OffsitePowerAvailable",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.PlantElectricalSystems.OffsitePowerAvailable)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.PlantElectricalSystems.OffsitePowerAvailable = v
+			return nil
+		},
+	}
+
+
 	// Pressurizer heaters (chapter 16 startup):
 	// "All pressurizer heaters are energized to start the
 	// heatup of the pressurizer necessary to form the
@@ -532,10 +563,16 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			if err != nil {
 				return err
 			}
+			p.ReactorBuilding.ReactorPressureVessel.Trip = v
+			// Plant.Step overwrites RPV.Trip from the RPS output
+			// every tick, so an operator/command-file trip must
+			// enter through the RPS manual-trip input or it latches
+			// nothing: "The RPS provides for manual initiation of
+			// reactor trip by operator action in the control room."
+			// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:8-9
 			if v {
 				p.ReactorBuilding.ReactorProtectionSystem.ManualTrip = true
 			}
-			p.ReactorBuilding.ReactorPressureVessel.Trip = v
 			return nil
 		},
 	}

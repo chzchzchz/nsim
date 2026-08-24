@@ -143,9 +143,13 @@ func (r *ReactorProtectionSystem) Step(
 	// Safety Injection: high containment pressure, low
 	// steamline pressure, low Tcold, manual SI. (Low
 	// pressurizer pressure is deferred — see Step preamble.)
-	// The operator block arms during planned cooldowns before
-	// these variables reach their actuation setpoints
+	// The manual entry is the dedicated manual-SI pushbutton of
+	// Table 7-1, not the manual reactor trip: a plain reactor trip
+	// "avoids unnecessary actuation of engineered safety features"
 	// (specs/the_westinghouse_pressurized_water_react/
+	// chapter_7/page_138.txt:11-13). The operator block arms during
+	// planned cooldowns before these variables reach their
+	// actuation setpoints (specs/the_westinghouse_pressurized_water_react/
 	// chapter_16/page_227.txt:108-110).
 	// The manual trigger is the separate manual-safety-injection
 	// pushbutton, not the manual reactor trip.

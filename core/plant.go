@@ -1007,6 +1007,7 @@ func (p *Plant) Step() {
 	// downstream consumer (CW pump, SFPC pump, RHRS, CCWS,
 	// CSS, HHSI, SWS). The Electrical.Step call is pure on
 	// its input and only writes to nextPlant.Electrical.
+	p.mirrorOffsiteAvailability()
 	p.nextPlant.Electrical = p.Electrical.Step()
 	plantDriveReady := p.nextPlant.Electrical.ESFBusA.Energized ||
 		p.nextPlant.Electrical.ESFBusB.Energized
@@ -1040,6 +1041,21 @@ func (p *Plant) Step() {
 	// only when power is actually delivered to the pump.
 	// The SFPC pump reads the same plantDriveReady signal
 	// (480 V MCC downstream of an ESF bus).
+	// Emergency diesel auto-start (chapter 16 emergency response):
+	// "backup emergency diesel generators are automatically started"
+	// when normal power to a safeguards bus is lost
+	// (specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:103-109);
+	// diesel start is also item 1 of the SI actuation list
+	// (specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:18-22).
+	// Set before AuxiliaryBuilding.Step so the engine cranks in the
+	// same tick; clearing the latch stays an explicit operator action
+	// after offsite power is restored.
+	if !p.ReactorBuilding.PlantElectricalSystems.OffsitePowerAvailable &&
+		p.AuxiliaryBuilding.DieselGenerator.StartSignal == DieselStartNone {
+		p.AuxiliaryBuilding.DieselGenerator.StartSignal =
+			DieselStartLossOfOffsitePower
+	}
+
 	p.nextPlant.AuxiliaryBuilding = p.AuxiliaryBuilding.Step(
 		p.Outside.ServiceWaterSystem.InletTemp,
 		p.Outside.ServiceWaterSystem.Flow,
@@ -1930,6 +1946,28 @@ func (p *Plant) Step() {
 	// Graph nodes hold pointers into nextPlant; the mutations land in
 	// nextPlant directly so Update() copies them into p.
 	simulateFluidFlow(p.BuildGraphFor(p.nextPlant), TimeStep)
+}
+
+// mirrorOffsiteAvailability applies the declared offsite-power state
+// (ReactorBuilding.PlantElectricalSystems) to the ESF-bus source model:
+// declaring a loss of normal electrical power drops both offsite source
+// voltages to zero so stepESFBus transfers each bus to its diesel,
+// mirroring "automatic transfer of supplies is provided on sensing loss
+// of power" (specs/the_westinghouse_pressurized_water_react/
+// chapter_11/page_165.txt:56-59) for the condition chapter_16/page_233.txt
+// describes at :103-105. The OffsiteA/OffsiteB aliases are re-pointed
+// each tick the same way as DieselGenA/B: a JSON round-trip deserializes
+// them into separate PowerGenerator values, so a stale alias would
+// disconnect the declared state from the buses.
+func (p *Plant) mirrorOffsiteAvailability() {
+	p.Electrical.OffsiteA = &p.Electrical.OffsiteSourceA
+	p.Electrical.OffsiteB = &p.Electrical.OffsiteSourceB
+	voltage := DieselRatedVoltage
+	if !p.ReactorBuilding.PlantElectricalSystems.OffsitePowerAvailable {
+		voltage = 0
+	}
+	p.Electrical.OffsiteSourceA.Voltage = voltage
+	p.Electrical.OffsiteSourceB.Voltage = voltage
 }
 
 func (p *Plant) Update() {
