@@ -348,6 +348,109 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// EFWS discharge flow-modulating valves. After the assumed
+	// 30-minute full-open window the flow is adjusted by
+	// positioning these valves, and manual starts are operated
+	// the same way; the automatic lineup overrides them only
+	// while the actuation window is open.
+	// "When operator action can be taken (after an assumed
+	// 30-minute delay), the emergency feedwater flow is adjusted
+	// by positioning the flow modulating valves to restore and
+	// maintain the steam generator water levels within the narrow
+	// control range."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:29-34
+	// "the pumps are manually started and the flowrates are
+	// manually controlled by positioning the flow modulating
+	// valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_102.txt:14-18
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPump/FlowModulatingValve/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPump",
+		Label: "FlowModulatingValve",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.FlowModulatingValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.FlowModulatingValve.Open = v
+			return nil
+		},
+	}
+
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/FlowModulatingValve/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump",
+		Label: "FlowModulatingValve",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.FlowModulatingValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.FlowModulatingValve.Open = v
+			return nil
+		},
+	}
+
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/MotorPump/FlowModulatingValve/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/MotorPump",
+		Label: "FlowModulatingValve",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPump.FlowModulatingValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPump.FlowModulatingValve.Open = v
+			return nil
+		},
+	}
+
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump/FlowModulatingValve/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump",
+		Label: "FlowModulatingValve",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.FlowModulatingValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.FlowModulatingValve.Open = v
+			return nil
+		},
+	}
+
 
 	// CVCS charging-pump running latch. The CVCS Step reads
 	// ChargingPumpRunning to decide ChargingFlow — this is the

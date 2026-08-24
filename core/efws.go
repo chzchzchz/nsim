@@ -77,6 +77,7 @@ func (e *EFWS) Step(
 			ret.SubsystemB.MotorPump.Running = false
 			ret.SubsystemB.TurbinePump.Running = false
 		ret.Active = false
+		ret.AutoStartElapsed = 0
 		return ret
 	}
 
@@ -103,7 +104,55 @@ func (e *EFWS) Step(
 	ret.SubsystemA = depleteEFWSSubsystemTank(ret.SubsystemA, dt)
 	ret.SubsystemB = depleteEFWSSubsystemTank(ret.SubsystemB, dt)
 
+	if ret.Active {
+		ret.AutoStartElapsed += dt
+	}
+
 	return ret
+}
+
+// ApplyModulatingValveLineup positions the four discharge flow
+// modulating valves for the current actuation phase:
+//
+//  1. Inside the assumed no-operator-action window after an
+//     automatic start the valves are full open.
+//  2. Afterwards they hold the steam generator level inside a
+//     narrow band below the high-level trip (on-off with
+//     hysteresis; between bands the previous position stands).
+//  3. Manual starts and the secured state leave the valves at
+//     their operator-positioned values.
+//
+// "When operator action can be taken (after an assumed 30-minute
+// delay), the emergency feedwater flow is adjusted by positioning
+// the flow modulating valves to restore and maintain the steam
+// generator water levels within the narrow control range." ...
+// "it is assumed that no operator action can be taken for 30
+// minutes, and for this period it is assumed that these valves
+// will be full open."
+// specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:29-39
+func (e *EFWS) ApplyModulatingValveLineup(sgLevelPct float64) {
+	valves := []*Valve{
+		&e.SubsystemA.MotorPump.FlowModulatingValve,
+		&e.SubsystemA.TurbinePump.FlowModulatingValve,
+		&e.SubsystemB.MotorPump.FlowModulatingValve,
+		&e.SubsystemB.TurbinePump.FlowModulatingValve,
+	}
+	switch {
+	case e.Active && e.AutoStartElapsed < EFWSFullOpenPeriod:
+		for _, v := range valves {
+			v.Open = 1.0
+		}
+	case e.Active:
+		demand := 1.0
+		if sgLevelPct >= EFWSLevelControlClose {
+			demand = 0.0
+		} else if sgLevelPct > EFWSLevelControlReopen {
+			return
+		}
+		for _, v := range valves {
+			v.Open = demand
+		}
+	}
 }
 
 // depleteEFWSSubsystemTank decrements the subsystem's primary

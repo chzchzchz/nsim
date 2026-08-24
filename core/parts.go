@@ -2829,6 +2829,12 @@ type EFWS struct {
 	// delivering water to the steam generators.
 	Active bool
 
+	// AutoStartElapsed is the time since the automatic-start
+	// latch engaged. It gates the full-open flow-modulating-valve
+	// window; manual starts do not run the clock because their
+	// valves are operator-positioned from the outset.
+	AutoStartElapsed time.Duration
+
 	// MotorPumpStartCount and TurbinePumpStartCount are the
 	// cumulative count of times the motor/turbine pumps have
 	// been started in this run. Exposed for operator-display
@@ -2939,6 +2945,31 @@ const (
 	// is secured."
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:101-104
 	EFWSSecureTemp float64 = 350.0
+
+	// EFWSFullOpenPeriod is the assumed no-operator-action delay
+	// after an automatic EFWS start, during which the discharge
+	// flow-modulating valves are credited full open.
+	//
+	// "When operator action can be taken (after an assumed
+	// 30-minute delay), the emergency feedwater flow is adjusted
+	// by positioning the flow modulating valves to restore and
+	// maintain the steam generator water levels within the narrow
+	// control range." ... "it is assumed that no operator action
+	// can be taken for 30 minutes, and for this period it is
+	// assumed that these valves will be full open."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:29-39
+	EFWSFullOpenPeriod = 30 * time.Minute
+
+	// EFWSLevelControlClose and EFWSLevelControlReopen bound the
+	// post-window level-maintenance band (percent of SG volume):
+	// above Close the modulating valves shut, below Reopen they
+	// reopen. The source specifies a "narrow control range"
+	// without numbers; the band sits under the 90 percent
+	// high-level trip with hysteresis so the valves do not
+	// chatter. Assumption; the source is silent about the exact
+	// band.
+	EFWSLevelControlClose  float64 = 85.0
+	EFWSLevelControlReopen float64 = 80.0
 )
 
 // EFWSPrimaryTankCapacity is the full water capacity of each
@@ -4556,8 +4587,18 @@ const (
 	RPSHighSteamGeneratorLevelTrip float64 = 90.0
 
 	// RPSLowSteamlinePressureTrip is the steamline pressure
-	// (psig) below which a trip signal is generated.
-	RPSLowSteamlinePressureTrip Pressure = 500.0
+	// (psia) below which a trip signal is generated. The SG shell
+	// channel is absolute, so the spec's 585 psig limit converts
+	// to ~600 psia.
+	//
+	// "Before raising primary system pressure above 1900 psig
+	// (132 bar), steam generator pressure must be greater than
+	// 585 psig (41 bar) or a low steamline pressure safety
+	// injection will occur."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:150-153
+	// (cooldown twin:
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:50-53)
+	RPSLowSteamlinePressureTrip Pressure = 600.0
 
 	// RPSLowTcoldTrip is the reactor coolant cold-leg
 	// temperature (°F) below which a trip signal is generated.

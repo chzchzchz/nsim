@@ -1169,6 +1169,7 @@ func (p *Plant) Step() {
 				efws.MotorPumpStartCount++
 			}
 			efws.Active = true
+			efws.AutoStartElapsed = 0
 		}
 		if sgWaterLow {
 			// Single-SG low-low simultaneously satisfies
@@ -1476,29 +1477,14 @@ func (p *Plant) Step() {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:68-71
 	_ = p.nextPlant.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
 
-	// Flow-modulating valves: full-open while their pump runs.
-	// The spec assumes no operator action for the first 30
-	// minutes after actuation with the valves full open; manual
-	// starts get the same fail-open treatment, and the simplified
-	// model leaves them at full-open for the duration of the run.
-	//
-	// Spec justification:
-	//   - "it is assumed that no operator action can be taken
-	//     for 30 minutes, and for this period it is assumed
-	//     that these valves will be full open."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:36-39
-	if efws.SubsystemA.MotorPump.Running {
-		efws.SubsystemA.MotorPump.FlowModulatingValve.Open = 1.0
-	}
-	if efws.SubsystemA.TurbinePump.Running {
-		efws.SubsystemA.TurbinePump.FlowModulatingValve.Open = 1.0
-	}
-	if efws.SubsystemB.MotorPump.Running {
-		efws.SubsystemB.MotorPump.FlowModulatingValve.Open = 1.0
-	}
-	if efws.SubsystemB.TurbinePump.Running {
-		efws.SubsystemB.TurbinePump.FlowModulatingValve.Open = 1.0
-	}
+	// Flow-modulating valves. Inside the assumed 30-minute
+	// no-operator-action window after an automatic start the
+	// valves are full open; afterwards they hold the SG level in
+	// a narrow band below the high-level trip. Manual starts and
+	// the secured state leave the operator's position standing.
+	// See EFWS.ApplyModulatingValveLineup for citations.
+	efws.ApplyModulatingValveLineup(100.0 * p.ReactorBuilding.SteamGenerator.Water.Float() /
+		p.ReactorBuilding.SteamGenerator.Volume.Float())
 
 	// Reactor-to-turbine trip cascade. The spec's protective feature
 	// list includes "Turbine trip following a reactor trip" (item 2)
