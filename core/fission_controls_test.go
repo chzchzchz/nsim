@@ -305,6 +305,11 @@ func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 // RPV.ControlRods.BoronConcentration (bridge.go:815-829),
 // plant.go:49-50 keeps them synchronised on every Plant.Step.
 func TestThermal_Fission4_BorationLowersOutlet(t *testing.T) {
+	// Boron marches linearly in dt and the outlet relaxes on a
+	// seconds-scale lag, so the widened step preserves both legs'
+	// trajectories while cutting step count 100x. Must not run in
+	// parallel: overrideTimeStep mutates global simulation state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	run := func(borate bool) float64 {
 		p := MakePlant()
 		p.ReactorBuilding.ReactorCoolantPump.Running = true

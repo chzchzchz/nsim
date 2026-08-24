@@ -136,6 +136,10 @@ func TestRodAutoControlFrozenWhileTripped(t *testing.T) {
 // program slews at the spec's 5-percent-per-minute loading rate), not
 // fixed-horizon spot values.
 //
+// Fidelity note: the closed loop settles onto a different plateau
+// once the step widens even to 10 ms, so this test must keep the
+// default TimeStep rather than overrideTimeStep.
+//
 // Spec:
 //   "The rod control system automatically adjusts the power level of
 //   the reactor to match the power demanded by the turbine [...]"

@@ -235,7 +235,11 @@ func TestBug_MakePlantPreservesCallerRPVTemperatures(t *testing.T) {
 //     significantly with fuel depletion."
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
 func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
-	t.Parallel()
+	// Boron integrates linearly in dt and the asserted swing is a
+	// settled reactivity band, so the widened step preserves both
+	// legs' trajectories while cutting step count 100x. Must not run
+	// in parallel: overrideTimeStep mutates global simulation state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	// Boron is seeded directly in both legs, so Reactivity reflects
 	// the swing as soon as thermal feedback settles; 30 s covers
 	// the relaxation without a full minute of stepping.
