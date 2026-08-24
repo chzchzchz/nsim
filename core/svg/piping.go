@@ -49,28 +49,16 @@ func DrawPipe(fromX, fromY, toX, toY float64, colour string, elbowed bool) strin
 }
 
 // DrawPipeWithValve draws a pipe plus a valve symbol at the
-// midpoint. valveKind selects the symbol via SymbolForKind.
-func DrawPipeWithValve(fromX, fromY, toX, toY float64, colour, valveKind string) string {
+// midpoint. valveKind selects the symbol via SymbolForKind; vw and
+// vh give the drawn valve size so it scales with the layout.
+func DrawPipeWithValve(fromX, fromY, toX, toY float64, colour, valveKind string, vw, vh float64) string {
 	mx := (fromX + toX) / 2
 	my := (fromY + toY) / 2
 	pipe := DrawPipe(fromX, fromY, mx, my, colour, false) +
 		DrawPipe(mx, my, toX, toY, colour, false)
 	return pipe + fmt.Sprintf(
-		`<use href="#%s" x="%.1f" y="%.1f" width="24" height="16"/>`,
-		SymbolForKind(valveKind), mx-12, my-8)
-}
-
-// DrawPipeWithPump draws a pipe plus a pump symbol at the
-// midpoint. pumpSymbolId selects the symbol (e.g. "pump-rcp",
-// "pump-horizontal", "pump-turbine").
-func DrawPipeWithPump(fromX, fromY, toX, toY float64, colour, pumpSymbolId string) string {
-	mx := (fromX + toX) / 2
-	my := (fromY + toY) / 2
-	pipe := DrawPipe(fromX, fromY, mx, my, colour, false) +
-		DrawPipe(mx, my, toX, toY, colour, false)
-	return pipe + fmt.Sprintf(
-		`<use href="#%s" x="%.1f" y="%.1f" width="50" height="40"/>`,
-		pumpSymbolId, mx-25, my-20)
+		`<use href="#%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>`,
+		SymbolForKind(valveKind), mx-vw/2, my-vh/2, vw, vh)
 }
 
 // ColourForEdge returns the pipe colour for an edge between the

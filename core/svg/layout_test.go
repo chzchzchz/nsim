@@ -1,6 +1,7 @@
 package svg
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -28,6 +29,57 @@ func TestComputeLayout_PositionsFilled(t *testing.T) {
 		assert.True(t, a.Y >= 0 && a.Y <= DocumentHeight,
 			"node %q Y out of range: %f", id, a.Y)
 	}
+}
+
+// The dot drawing is larger than the fixed viewport, so
+// ComputeLayout must uniformly scale it instead of clamping
+// individual nodes. Clamping piles every overlarge coordinate on
+// the viewport edges; scaling preserves relative geometry.
+func TestComputeLayout_ScaledNotClamped(t *testing.T) {
+	const minSpanFraction = 0.4 // fraction of the viewport that must be used
+
+	p := core.MakePlant()
+	layout, err := ComputeLayout(&p)
+	require.NoError(t, err)
+
+	ys := []float64{}
+	xs := []float64{}
+	for _, a := range layout.Pos {
+		ys = append(ys, a.Y)
+		xs = append(xs, a.X)
+	}
+	minY, maxY := minMax(ys)
+	minX, maxX := minMax(xs)
+	assert.Greater(t, maxY-minY, minSpanFraction*DocumentHeight,
+		"positions collapsed vertically; layout was clamped, not scaled")
+	assert.Greater(t, maxX-minX, minSpanFraction*DocumentWidth,
+		"positions collapsed horizontally; layout was clamped, not scaled")
+
+	// The plant graph contains cycles, so exact rank order depends
+	// on where dot breaks them; just require the anchors to differ.
+	for _, pair := range [][2]string{
+		{"RPV", "Condenser"},
+		{"SG", "CST"},
+	} {
+		from, okF := layout.Pos[pair[0]]
+		to, okT := layout.Pos[pair[1]]
+		require.True(t, okF && okT, "missing anchors for %v", pair)
+		assert.NotEqual(t, from.Y, to.Y,
+			"want distinct rows for %s and %s", pair[0], pair[1])
+	}
+}
+
+func minMax(vs []float64) (float64, float64) {
+	lo, hi := vs[0], vs[0]
+	for _, v := range vs[1:] {
+		if v < lo {
+			lo = v
+		}
+		if v > hi {
+			hi = v
+		}
+	}
+	return lo, hi
 }
 
 // TestComputeLayout_Deterministic checks that two calls with the
@@ -70,22 +122,39 @@ func TestEmptyLayout(t *testing.T) {
 	assert.Equal(t, 0, len(l.Pos))
 }
 
-// TestParsePlainExt_ValidInput checks that parsePlainExt correctly
-// extracts node positions from a minimal plain-ext string.
+// TestParsePlainExt_ValidInput checks that parsePlainExt extracts
+// node positions and the drawing dimensions from a minimal
+// plain-ext document. The fixture is built from the expected
+// values so the test states a round trip rather than duplicating
+// magic numbers.
 func TestParsePlainExt_ValidInput(t *testing.T) {
-	input := `graph 1 2.0 3.0
-node A 0.5 1.0 1.0 2.0 "" solid none black lightgrey
-node B 1.5 2.0 1.0 2.0 "" solid none black lightgrey
-edge A B 1 0.5 1.0 1.5 2.0 solid black
-stop
-`
-	pos, err := parsePlainExt(strings.NewReader(input))
+	const (
+		wantW    = 2.5
+		wantH    = 3.5
+		wantAX   = 0.75
+		wantAY   = 1.25
+		wantBX   = 1.25
+		wantBY   = 2.25
+		nodeSize = 1.5
+	)
+	input := fmt.Sprintf(
+		"graph 1 %g %g\n"+
+			"node A %g %g %g %g \"\" solid none black lightgrey\n"+
+			"node B %g %g %g %g \"\" solid none black lightgrey\n"+
+			"stop\n",
+		wantW, wantH,
+		wantAX, wantAY, nodeSize, nodeSize,
+		wantBX, wantBY, nodeSize, nodeSize)
+
+	pos, wIn, hIn, err := parsePlainExt(strings.NewReader(input))
 	require.NoError(t, err)
+	assert.InDelta(t, wantW, wIn, 1e-9)
+	assert.InDelta(t, wantH, hIn, 1e-9)
 	require.Len(t, pos, 2)
-	assert.Equal(t, 0.5, pos["A"].X)
-	assert.Equal(t, 1.0, pos["A"].Y)
-	assert.Equal(t, 1.5, pos["B"].X)
-	assert.Equal(t, 2.0, pos["B"].Y)
+	assert.InDelta(t, wantAX, pos["A"].X, 1e-9)
+	assert.InDelta(t, wantAY, pos["A"].Y, 1e-9)
+	assert.InDelta(t, wantBX, pos["B"].X, 1e-9)
+	assert.InDelta(t, wantBY, pos["B"].Y, 1e-9)
 }
 
 // TestParsePlainExt_InvalidValues ensures malformed numeric fields
@@ -95,22 +164,68 @@ func TestParsePlainExt_InvalidValues(t *testing.T) {
 node A abc 1.0 1.0 2.0 "" solid none black lightgrey
 stop
 `
-	_, err := parsePlainExt(strings.NewReader(input))
+	_, _, _, err := parsePlainExt(strings.NewReader(input))
 	require.Error(t, err)
+}
+
+// TestComputeFit verifies the behavioral contract of the fit
+// transform: oversized drawings shrink to fit inside the viewport
+// with margins, keep their aspect ratio (uniform scaling), flip Y
+// so rank order reads top-down, and stay centered. All dimensions
+// are derived from the document constants instead of hard-coded
+// pixel values.
+func TestComputeFit(t *testing.T) {
+	availW := DocumentWidth - 2*layoutMargin
+	availH := DocumentHeight - 2*layoutMargin
+
+	t.Run("oversized scales down", func(t *testing.T) {
+		// A drawing wider than the viewport in both directions.
+		wIn := (availW * 2) / layoutDPI
+		hIn := (availH * 1.5) / layoutDPI
+		tr := computeFit(wIn, hIn)
+
+		assert.Less(t, tr.scale, 1.0, "oversized drawing must scale down")
+
+		bottomLeft := tr.point(Anchor{X: 0, Y: 0})
+		topRight := tr.point(Anchor{X: wIn, Y: hIn})
+		assert.Greater(t, bottomLeft.Y, topRight.Y, "Y must flip so ranks read top-down")
+
+		for _, a := range []Anchor{bottomLeft, topRight} {
+			assert.GreaterOrEqual(t, a.X, 0.0)
+			assert.LessOrEqual(t, a.X, DocumentWidth)
+			assert.GreaterOrEqual(t, a.Y, 0.0)
+			assert.LessOrEqual(t, a.Y, DocumentHeight)
+		}
+
+		// Uniform scale preserves the drawing's aspect ratio.
+		gotAspect := (topRight.X - bottomLeft.X) / (bottomLeft.Y - topRight.Y)
+		assert.InDelta(t, wIn/hIn, gotAspect, 1e-6)
+
+		// The drawing is centered inside the margins.
+		leftGap := bottomLeft.X
+		rightGap := DocumentWidth - topRight.X
+		assert.InDelta(t, leftGap, rightGap, 1e-6)
+	})
+
+	t.Run("smaller than viewport stays full scale", func(t *testing.T) {
+		tr := computeFit((availW/4)/layoutDPI, (availH/4)/layoutDPI)
+		assert.Equal(t, 1.0, tr.scale)
+	})
 }
 
 // TestNodeSize_Defaults checks that unknown kinds fall back to
 // the default half-inch box.
 func TestNodeSize_Defaults(t *testing.T) {
 	w, h := nodeSize("unknown")
-	assert.Equal(t, 0.5, w)
-	assert.Equal(t, 0.5, h)
+	assert.Equal(t, defaultNodeInches, w)
+	assert.Equal(t, defaultNodeInches, h)
 }
 
-// TestNodeSize_Known checks that known kinds return their configured
-// size in inches.
+// TestNodeSize_Known checks that known kinds resolve through the
+// configured size table.
 func TestNodeSize_Known(t *testing.T) {
+	want := nodeSizes["ReactorPressureVessel"]
 	w, h := nodeSize("ReactorPressureVessel")
-	assert.Equal(t, 100.0/96.0, w)
-	assert.Equal(t, 240.0/96.0, h)
+	assert.Equal(t, want[0], w)
+	assert.Equal(t, want[1], h)
 }

@@ -38,6 +38,8 @@ func main() {
 		b.WriteString(fmt.Sprintf("\t\t%q: {X: %g, Y: %g},\n", id, a.X, a.Y))
 	}
 	b.WriteString("\t},\n")
+	b.WriteString(fmt.Sprintf("\tScale: %g,\n", layout.Scale))
+	b.WriteString(fmt.Sprintf("\tDPI: %g,\n", layout.DPI))
 	b.WriteString("}\n\n")
 	b.WriteString("func init() {\n")
 	b.WriteString("\tloadedLayout = defaultLayout\n")
