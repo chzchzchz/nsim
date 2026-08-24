@@ -1182,6 +1182,21 @@ type ControlRods struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_223.txt:172
 	DemandInsertion float64
 
+	// DroppedBank models one rod bank jammed fully into the core: a
+	// mechanical failure, not a demand. While latched the actual
+	// insertion carries a floor at RodDroppedBankInsertion that no
+	// drive motion or controller withdrawal can recover, so the
+	// dropped worth outruns the movable compensation - the condition
+	// the automatic load runback's initiator list calls the dropped
+	// rod signal.
+	//   "Automatic load runback initiated by a dropped rod signal"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:26-29
+	// Malfunction class (secondary training source): "One bank of dark
+	// rods drops [...], imparting large negative reactivity into the
+	// core."
+	// specs/pwr_sim/chapter_4/page_049.txt:61-67
+	DroppedBank bool
+
 	// AutoControl engages the automatic Tavg-program rod
 	// controller, which integrates the program error into
 	// DemandInsertion each step. The zero value keeps the demand
@@ -1270,6 +1285,11 @@ func (c ControlRods) Step() ControlRods {
 	delta := demand - c.Insertion
 	maxStep := RodInsertionSpeed * TimeStep.Seconds()
 	ret.Insertion = c.Insertion + min(max(delta, -maxStep), maxStep)
+	// The dropped bank sits below every reachable position: no drive
+	// motion recovers it, whatever the demand does.
+	if ret.DroppedBank {
+		ret.Insertion = max(ret.Insertion, RodDroppedBankInsertion)
+	}
 	return ret
 }
 

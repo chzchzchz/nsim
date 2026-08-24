@@ -881,6 +881,30 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Dropped-bank failure latch (malfunction injection, secondary
+	// training source): while latched one rod bank sits jammed fully
+	// into the core at RodDroppedBankInsertion, and the dropped-rod
+	// signal raises the automatic load runback.
+	// specs/pwr_sim/chapter_4/page_049.txt:61-67
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:26-29
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/DroppedBank"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "DroppedBank",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.DroppedBank)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorPressureVessel.ControlRods.DroppedBank = v
+			return nil
+		},
+	}
+
 
 	// Automatic rod control engage switch. With it latched the
 	// controller integrates the Tavg program error into

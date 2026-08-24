@@ -6,12 +6,15 @@ import (
 
 	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Scenario 27 dropped rod bank: once one bank has dropped (large
 // sustained negative reactivity), the automatic power control system
 // responds by withdrawing rod demand at its capped slew rate - an
-// attempt that cannot recover the worth before the protective trip.
+// attempt that cannot recover the worth because the dropped bank pins
+// the actual insertion, and the dropped-rod signal raises the
+// automatic load runback before any trip.
 //
 //   - Catalog: plans/x/scenarios.txt item 27.
 //   - Malfunction class (secondary training source): "One bank of dark
@@ -21,6 +24,9 @@ import (
 //     specs/pwr_sim/chapter_4/page_050.txt:1-9
 //   - Withdrawal authority is the demand slew cap
 //     (RodCtrlMaxDemandSlewPerSec), a named production constant.
+//   - Runback initiator: "Automatic load runback initiated by a
+//     dropped rod signal [...]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:26-29
 func TestScenario27_RPCWithdrawsAtCappedRateAfterDrop(t *testing.T) {
 	t.Parallel()
 
@@ -31,12 +37,14 @@ func TestScenario27_RPCWithdrawsAtCappedRateAfterDrop(t *testing.T) {
 	c := ControlRods{
 		Insertion:       0.85,
 		DemandInsertion: 0.85,
+		DroppedBank:     true,
 		AutoControl:     true,
 	}
 	steps := int(1 * time.Second / TimeStep)
 	for i := 0; i < steps; i++ {
 		c.applyAutoControl(
 			Temperature{Val: 621, Unit: u.Fahrenheit}, 1.0, 0.30, -3.9)
+		c = c.Step()
 	}
 
 	withdrawn := 0.85 - c.DemandInsertion
@@ -48,6 +56,12 @@ func TestScenario27_RPCWithdrawsAtCappedRateAfterDrop(t *testing.T) {
 	assert.GreaterOrEqual(t, withdrawn,
 		RodCtrlMaxDemandSlewPerSec*float64(steps)*TimeStep.Seconds()*0.99,
 		"sustained large error keeps the cap pinned")
+
+	// The dropped bank pins the actual insertion at the failure depth:
+	// controller withdrawal moves only the demand, never the rods -
+	// this is why the combined worth cannot recover.
+	assert.Equal(t, RodDroppedBankInsertion, c.Insertion,
+		"dropped bank holds the insertion floor under withdrawal")
 
 	// Balance hold: at the program point with balanced reactivity the
 	// deadband returns before any integration, so a compensated plant
@@ -61,4 +75,24 @@ func TestScenario27_RPCWithdrawsAtCappedRateAfterDrop(t *testing.T) {
 	}
 	assert.Equal(t, 0.30, held.DemandInsertion,
 		"deadband must leave a balanced lineup untouched")
+}
+
+// Latching the dropped bank raises the automatic load runback on the
+// very first step - before any reactor trip - so the turbine begins
+// shedding toward house loads while the core folds.
+func TestScenario27_DroppedBankRaisesLoadRunback(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	cm := GetControlMap(&p)
+	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/ControlRods/DroppedBank"].Set("1"))
+
+	stepN(&p, 100)
+
+	assert.True(t, p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion >=
+		RodDroppedBankInsertion,
+		"dropped bank sits at its failure depth immediately")
+	assert.True(t, p.TurbineBuilding.Turbine.LoadRunback,
+		"dropped-rod signal raises the load runback pre-trip")
+	assert.False(t, p.ReactorBuilding.ReactorPressureVessel.Trip,
+		"the runback fires without needing a reactor trip")
 }

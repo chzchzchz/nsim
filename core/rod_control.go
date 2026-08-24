@@ -89,6 +89,14 @@ const (
 	// banks "while observing proper bank overlap".
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:55-58
 	RodBankOverlapFrac = 0.5
+
+	// RodDroppedBankInsertion is the aggregate-insertion floor a
+	// dropped bank holds (convention; the sources give no worth
+	// figure for one dropped group). Sized deep enough that the
+	// movable compensation authority cannot recover it inside the
+	// protective-response window.
+	// specs/pwr_sim/chapter_4/page_049.txt:61-67 (secondary)
+	RodDroppedBankInsertion = 0.85
 )
 
 // Bank indications decompose the lumped rod path into the physical

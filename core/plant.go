@@ -1624,7 +1624,15 @@ func (p *Plant) Step() {
 	// signal, high kw/ft signal or low departure from nucleate
 	// boiling ratio signal."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:26-29
-	if p.ReactorBuilding.ReactorPressureVessel.Trip {
+	// The dropped-rod initiator is wired to its named signal: a
+	// latched DroppedBank raises the runback immediately, before any
+	// trip, so the turbine begins shedding toward house loads while
+	// the core folds. The kw/ft, low-DNBR, and flux-rate channels
+	// remain deferred (no such instrumentation channels are modeled);
+	// the reactor trip keeps raising the same bit as the most
+	// aggressive member of the family.
+	if p.ReactorBuilding.ReactorPressureVessel.Trip ||
+		p.ReactorBuilding.ReactorPressureVessel.ControlRods.DroppedBank {
 		p.TurbineBuilding.Turbine.LoadRunback = true
 	}
 
