@@ -91,15 +91,18 @@ export type PartDisplay = (part: string) => string;
 const REF_FLASH_MS = 1500;
 
 // makeHelpButton builds the "(?)" toggle that reveals an element's
-// description inline; shared by the controls panel and the sensor
-// readout table. Descriptions are markdown (see
-// assets/descriptions/**.md) rendered with marked.
+// description inline; shared by the controls panel, the sensor
+// readout table, and the alarm panel. Descriptions are markdown (see
+// assets/descriptions and assets/alarms) rendered with marked.
 export function makeHelpButton(text: string): HTMLButtonElement {
     const btn = document.createElement("button");
     btn.textContent = "?";
     btn.className = "ctl-help";
     btn.title = "What is this?";
-    btn.addEventListener("click", () => {
+    // Stop propagation so a help click inside a row with its own
+    // click behavior (alarm acknowledgment) does not fire both.
+    btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
         const prev = btn.nextElementSibling;
         if (
             prev instanceof HTMLElement &&

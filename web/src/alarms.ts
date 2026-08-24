@@ -3,6 +3,8 @@
 // here; everything else continues through sensors.ts.
 
 import { makeTile } from "./tile";
+import { makeHelpButton } from "./bindings";
+import { helpFor } from "./descriptions";
 
 export interface AlarmEntry {
     id: string;
@@ -124,6 +126,10 @@ function updateAlarmRow(tr: HTMLElement, a: AlarmEntry): void {
     // Acknowledged alarms stay visible but dimmed.
     tr.classList.toggle("alarm-acked", a.acknowledged);
 
+    // The row rebuilds on every refresh tick; carry an open help
+    // popup across so a description does not vanish mid-read.
+    const openTip = tr.querySelector<HTMLElement>(".help-text");
+
     while (tr.firstChild) tr.removeChild(tr.firstChild);
 
     const tdSev = document.createElement("td");
@@ -134,8 +140,16 @@ function updateAlarmRow(tr: HTMLElement, a: AlarmEntry): void {
     tr.appendChild(tdSev);
 
     const tdId = document.createElement("td");
-    tdId.textContent = a.id;
     tdId.className = "mono";
+    tdId.textContent = a.id;
+    const help = helpFor(a.id);
+    if (help) {
+        // Anchor for description cross-references and the (?)
+        // toggle; stopPropagation inside the button keeps a help
+        // click from acknowledging the alarm.
+        tr.dataset.bridgeId = a.id;
+        tdId.appendChild(makeHelpButton(help));
+    }
     tr.appendChild(tdId);
 
     const tdDesc = document.createElement("td");
@@ -146,6 +160,13 @@ function updateAlarmRow(tr: HTMLElement, a: AlarmEntry): void {
     tdTime.textContent = a.time_s.toFixed(1) + " s";
     tdTime.className = "nowrap";
     tr.appendChild(tdTime);
+
+    if (openTip) {
+        tr.querySelector("button.ctl-help")?.insertAdjacentElement(
+            "afterend",
+            openTip,
+        );
+    }
 }
 
 export function isAlarmKind(kind: string | undefined): boolean {

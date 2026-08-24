@@ -34,7 +34,7 @@ BUNDLE_DEPS := $(shell find src index.html vite.config.ts package.json 2>/dev/nu
 
 DESC_JSON := public/descriptions.json
 DESC_SRCS := scripts/gen-descriptions.mjs \
-	$(shell find ../assets/descriptions -name '*.md' 2>/dev/null)
+	$(shell find ../assets/descriptions ../assets/alarms -name '*.md' 2>/dev/null)
 
 # Sentinel marking node_modules as in sync with the manifests.
 # It lives inside node_modules so wiping the directory also wipes
