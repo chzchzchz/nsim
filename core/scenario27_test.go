@@ -33,7 +33,9 @@ func TestScenario27_RPCWithdrawsAtCappedRateAfterDrop(t *testing.T) {
 	// Post-drop state: actual and demanded insertion parked deep, core
 	// power collapsed to 30 percent under roughly -3.9 percent delta-k,
 	// turbine demand still at rated so the program point stays 100
-	// percent.
+	// percent. The atmosphere sits near the program minus the deficit
+	// sag, so the measured-Tavg trim pulls withdrawal alongside the
+	// power error.
 	c := ControlRods{
 		Insertion:       0.85,
 		DemandInsertion: 0.85,
@@ -43,7 +45,8 @@ func TestScenario27_RPCWithdrawsAtCappedRateAfterDrop(t *testing.T) {
 	steps := int(1 * time.Second / TimeStep)
 	for i := 0; i < steps; i++ {
 		c.applyAutoControl(
-			Temperature{Val: 621, Unit: u.Fahrenheit}, 1.0, 0.30, -3.9)
+			Temperature{Val: programmedRodTavg(1.0) - 10, Unit: u.Fahrenheit},
+			1.0, 0.30, -3.9)
 		c = c.Step()
 	}
 
@@ -63,15 +66,16 @@ func TestScenario27_RPCWithdrawsAtCappedRateAfterDrop(t *testing.T) {
 	assert.Equal(t, RodDroppedBankInsertion, c.Insertion,
 		"dropped bank holds the insertion floor under withdrawal")
 
-	// Balance hold: at the program point with balanced reactivity the
-	// deadband returns before any integration, so a compensated plant
-	// does not hunt.
+	// Balance hold: at the program point with balanced reactivity and
+	// an atmosphere sitting on the program the deadband returns before
+	// any integration, so a compensated plant does not hunt.
 	var held ControlRods
 	held.AutoControl = true
 	held.DemandInsertion = 0.30
 	for i := 0; i < steps; i++ {
 		held.applyAutoControl(
-			Temperature{Val: 621, Unit: u.Fahrenheit}, 0.30, 0.30, 0)
+			Temperature{Val: programmedRodTavg(0.30), Unit: u.Fahrenheit},
+			0.30, 0.30, 0)
 	}
 	assert.Equal(t, 0.30, held.DemandInsertion,
 		"deadband must leave a balanced lineup untouched")

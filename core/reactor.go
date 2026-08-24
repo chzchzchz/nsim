@@ -154,8 +154,15 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 	rcpFlowFrac := float64(rcpSpeed) / float64(RCPRatedSpeed)
 	rcpFlowFrac = max(rcpFlowFrac, 0)
 	if rcpFlowFrac > 0 {
-		blend := CoreInletBlendFraction * powerFrac * rcpFlowFrac
-		targetInlet := CoreReferenceInletF*(1-blend) + outletF*blend
+		// Cold-leg program: the loop ΔT lives on the hot-leg rise,
+		// so the inlet holds its own anchor line from the shared
+		// no-load temperature to the rated cold-leg value. Mixing
+		// the inlet toward the outlet instead collapses the loop
+		// ΔT quadratically with load and drags every Tavg-anchored
+		// consumer (rod-control program, CVCS level program, steam
+		// dump reference) off its heat-balance line.
+		targetInlet := RCSNoLoadTavgF + powerFrac*
+			(CoreReferenceInletF-RCSNoLoadTavgF)
 		inletF := ret.Inlet.Float()
 		// Power-scaled like the outlet: no produced heat means no
 		// forcing toward the full-load cold-leg reference.
@@ -797,11 +804,6 @@ const (
 	// PrimaryPressureTimeConstant is the rate at which the RPV
 	// pressure tracks its design pressure in this simplified model.
 	PrimaryPressureTimeConstant float64 = 300
-
-	// CoreInletBlendFraction is the fraction of the power level
-	// that contributes to the inlet mixing model; at zero power the
-	// inlet is effectively decoupled from the outlet.
-	CoreInletBlendFraction float64 = 0.8
 
 	// CoreDopplerPcmPerDegF is the PWR net temperature coefficient
 	// of reactivity (combined Doppler + moderator temperature

@@ -61,6 +61,34 @@ const (
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:148-150
 	RodCtrlProgramSlewPerSec = 0.05 / 60.0
 
+	// RodCtrlTavgTrimSpanF is the measured-Tavg residual (°F) that
+	// commands the trim's full authority. Derived magnitude: sized
+	// above the program deadband so ordinary tracking noise never
+	// saturates it, and small enough that a real secondary-line
+	// offset reaches full trim.
+	RodCtrlTavgTrimSpanF = 5.0
+
+	// RodCtrlTavgTrimAuthorityFrac is the measured-Tavg trim's
+	// maximum pull on the power target (fraction of rated). Derived:
+	// a trim, not an override - the load-demand loop owns the
+	// operating point and the measured temperature corrects its
+	// residual against the actual heat balance.
+	// "The needed control rod movement is based on the reactor
+	//  coolant temperature needed to meet the turbine power demand
+	//  [...] and the measured reactor coolant temperature."
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:68-76
+	RodCtrlTavgTrimAuthorityFrac = 0.05
+
+	// RodCtrlTavgTrimParkBand is the power-error width over which
+	// the measured-Tavg trim fades in. Derived alongside the
+	// authority: while the program walks, the thermal lag guarantees
+	// a large same-sign temperature residual and the power error
+	// already owns the correction - giving the trim authority there
+	// double-counts the lag and sinks the descent through the
+	// low-steamline setpoint. Near the park the walk is done and a
+	// residual is genuine line offset.
+	RodCtrlTavgTrimParkBand = 0.05
+
 	// CoreShutdownBankWorthShare is the shutdown banks' share of
 	// the full rod-bank worth; the control banks carry the rest.
 	// Derived convention: the sources name the bank sequence but no
@@ -173,13 +201,16 @@ func programPowerFraction(programTavgF float64) float64 {
 // program point (programPowerFraction inverts the primary temperature
 // map) maps to a negative reactivity target, i.e. insertion, and the
 // chain drifts down at a rate proportional to how far off it sits.
-// The inner loop slews rod demand until net reactivity tracks that
-// setpoint; because the setpoint goes to zero exactly when power
-// reaches target, the plant parks at balance with no residual
-// reactivity to decay it further. Callers gate this on AutoControl
-// and an unlatched trip; while tripped, Insertion is forced to 1
-// regardless of demand and integrating would pre-spin withdrawal for
-// a post-trip reset.
+// The measured Tavg folds into that target as a bounded trim: a hot
+// atmosphere means the heat balance sits above the program even with
+// power on target, so the controller trims power down until the
+// temperature residual closes. The inner loop slews rod demand until
+// net reactivity tracks the setpoint; because the setpoint goes to
+// zero exactly when power reaches target, the plant parks at balance
+// with no residual reactivity to decay it further. Callers gate this
+// on AutoControl and an unlatched trip; while tripped, Insertion is
+// forced to 1 regardless of demand and integrating would pre-spin
+// withdrawal for a post-trip reset.
 func (c *ControlRods) applyAutoControl(
 	tavg Temperature,
 	loadFraction float64,
@@ -196,6 +227,20 @@ func (c *ControlRods) applyAutoControl(
 	c.programTargetFraction += min(max(program-
 		c.programTargetFraction, -maxStep), maxStep)
 	target := c.programTargetFraction
+	// Measured-Tavg trim: a hot residual trims the power target
+	// down, a cold one up, bounded so the demand loop keeps the
+	// operating point. The trim fades in only near the park: mid-
+	// maneuver the thermal lag produces a large same-sign residual
+	// that the power error already corrects.
+	parkErr := c.programTargetFraction - powerFraction
+	if parkErr < 0 {
+		parkErr = -parkErr
+	}
+	parkBand := 1 - min(parkErr/RodCtrlTavgTrimParkBand, 1)
+	tavgTrimFrac := -(tavg.Float() - c.ProgrammedTavg) /
+		RodCtrlTavgTrimSpanF * RodCtrlTavgTrimAuthorityFrac * parkBand
+	target += min(max(tavgTrimFrac, -RodCtrlTavgTrimAuthorityFrac),
+		RodCtrlTavgTrimAuthorityFrac)
 	errFrac := target - powerFraction
 
 	rhoSetpoint := RodCtrlRhoSetpointPerFrac * errFrac

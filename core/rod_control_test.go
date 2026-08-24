@@ -263,6 +263,11 @@ func TestRodAutoControlDailyLoadFollowArc(t *testing.T) {
 	rpv := &p.ReactorBuilding.ReactorPressureVessel
 	rpv.ControlRods.AutoControl = true
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoBoronControl = true
+	// Coherent dispatch: auto control follows the turbine demand, so
+	// a settled-at-rated start needs the demand standing at rated.
+	// Leaving the MakePlant zero-demand seed makes the controller
+	// correctly walk power down and the precondition reads as a bug.
+	p.TurbineBuilding.Turbine.Setpoint = 1.0
 
 	fissionFrac := func() float64 {
 		return float64(rpv.FissionPower) / float64(CoreRatedThermalPower)

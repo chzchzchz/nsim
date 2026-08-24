@@ -351,3 +351,73 @@ func TestBridge_LeadLagModeAcceptsEnumWords(t *testing.T) {
 	assert.Equal(t, ReactorLead, p.PlantOperation.LeadLagMode,
 		"the numeric form stays accepted")
 }
+
+// The part-load secondary line must settle on the Tavg program the
+// rod control, CVCS level, and steam-dump programs all share: with
+// fission pinned at a load fraction and the pumps at rated speed, the
+// converged (inlet+outlet)/2 sits on programmedRodTavg. Regression:
+// blending the cold leg toward the hot leg collapsed the loop ΔT
+// quadratically with load and parked Tavg up to tens of F above the
+// program away from full power.
+func TestRPV_PartLoadLineTracksTavgProgram(t *testing.T) {
+	for _, load := range []float64{0.35, 0.5, 0.7, 1.0} {
+		var rpv ReactorPressureVessel
+		p := Watts(load * float64(CoreRatedThermalPower))
+		rpv.SeedSteadyStatePower(p)
+		fissionW := rpv.FissionPower
+		rpv.Inlet = Temperature{Val: RCSNoLoadTavgF, Unit: u.Fahrenheit}
+		rpv.Outlet = Temperature{Val: RCSNoLoadTavgF + load*
+			(CoreReferenceOutletF-RCSNoLoadTavgF), Unit: u.Fahrenheit}
+		for i := 0; i < int(900*time.Second/TimeStep); i++ {
+			rpv = rpv.Step(RCPRatedSpeed, 0)
+			// Pin the neutron population: this test exercises the
+			// thermal program, not the kinetics.
+			rpv.FissionPower = fissionW
+		}
+		tavg := (rpv.Inlet.Float() + rpv.Outlet.Float()) / 2
+		assert.InDelta(t, programmedRodTavg(load), tavg, 2.0,
+			"load %.2f: settled Tavg must sit on the shared program",
+			load)
+	}
+}
+
+// The measured-Tavg input carries real authority in the outer loop: a
+// hot atmosphere trims the power target down (insertion), a cold one
+// trims it up (withdrawal), within the trim's bounded span.
+// "The needed control rod movement is based on the reactor coolant
+//  temperature needed to meet the turbine power demand [...] and the
+//  measured reactor coolant temperature."
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:68-76
+func TestRodControl_MeasuredTavgTrimsPowerTarget(t *testing.T) {
+	newRods := func() ControlRods {
+		return ControlRods{
+			DemandInsertion:       0.4,
+			programPrimed:         true,
+			programTargetFraction: 0.5,
+		}
+	}
+	tavgAt := func(offset float64) Temperature {
+		return Temperature{Val: programmedRodTavg(0.5) + offset,
+			Unit: u.Fahrenheit}
+	}
+	steps := int(30 * time.Second / TimeStep)
+	runCase := func(offset float64) float64 {
+		c := newRods()
+		for i := 0; i < steps; i++ {
+			c.applyAutoControl(tavgAt(offset), 0.5, 0.5, 0)
+		}
+		return c.DemandInsertion
+	}
+	hot := runCase(+RodCtrlTavgTrimSpanF)
+	cold := runCase(-RodCtrlTavgTrimSpanF)
+
+	assert.Greater(t, hot, 0.4,
+		"a hot residual must drive insertion")
+	assert.Less(t, cold, 0.4,
+		"a cold residual must drive withdrawal")
+	// Rate honesty: neither direction may outrun the demand slew cap
+	// over the simulated window (trim acts through the same chain).
+	assert.LessOrEqual(t, absF(hot-0.4),
+		RodCtrlMaxDemandSlewPerSec*30.0+1e-9,
+		"hot trim slew stays inside the demand rate cap")
+}
