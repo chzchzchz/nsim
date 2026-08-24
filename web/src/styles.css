@@ -274,7 +274,8 @@
             color: #777;
             word-break: break-all;
         }
-        .alarm-eyes {
+        .alarm-eyes,
+        .alarm-toggle {
             width: 18px;
             height: 16px;
             line-height: 1;
@@ -283,8 +284,9 @@
             background: none;
             font-size: 11px;
             cursor: pointer;
-            margin-left: 4px;
         }
+        .alarm-eyes { margin-left: 4px; }
+        .alarm-toggle { margin-left: 6px; }
         #console {
             background: white;
             border: 1px solid #ccc;

@@ -29,6 +29,8 @@ const ALARM_COLUMNS = ["Severity", "ID", "Description", "Time (s)"];
 // from the surrounding text so row clicks stay reserved for the
 // detail expansion.
 const ACK_EYES = "👁";
+const TOGGLE_EXPAND = "➕";
+const TOGGLE_COLLAPSE = "➖";
 
 // AlarmRowPair bundles the visible alarm row with its expandable
 // detail sibling; both share the lifecycle of one alarm entry.
@@ -169,11 +171,13 @@ function updateAlarmRow(
     // Acknowledged alarms stay visible but dimmed.
     row.classList.toggle("alarm-acked", a.acknowledged);
 
-    // The row rebuilds on every refresh tick; carry the eyes button
-    // across so it survives into the new cells. Recreating it each
-    // tick would leave clicks landing on a detached node whenever a
-    // rebuild fires mid-press.
+    // The row rebuilds on every refresh tick; carry the eyes and
+    // toggle buttons across so they survive into the new cells.
+    // Recreating them each tick would leave clicks landing on a
+    // detached node whenever a rebuild fires mid-press.
     const prevEyes = row.querySelector<HTMLButtonElement>("button.alarm-eyes");
+    const prevToggle =
+        row.querySelector<HTMLButtonElement>("button.alarm-toggle");
 
     while (row.firstChild) row.removeChild(row.firstChild);
 
@@ -186,10 +190,20 @@ function updateAlarmRow(
 
     const tdId = document.createElement("td");
     tdId.className = "mono";
-    tdId.textContent = a.id;
+
     const eyes = prevEyes ?? makeAckButton(plant, a.id);
     eyes.disabled = a.acknowledged;
-    tdId.appendChild(eyes);
+
+    const label = document.createElement("span");
+    label.className = "alarm-id-label";
+    label.textContent = a.id;
+
+    const toggle = prevToggle ?? makeToggleButton(pair);
+    const open = row.classList.contains("alarm-open");
+    toggle.textContent = open ? TOGGLE_COLLAPSE : TOGGLE_EXPAND;
+    toggle.title = open ? "Collapse details" : "Expand details";
+
+    tdId.append(eyes, label, toggle);
     row.appendChild(tdId);
 
     const tdDesc = document.createElement("td");
@@ -241,6 +255,19 @@ function makeAckButton(
         ev.stopPropagation();
         const err = plant.setControl("Alarms/Reset", id);
         if (err instanceof Error) console.error("ack failed:", err.message);
+    });
+    return btn;
+}
+
+function makeToggleButton(pair: AlarmRowPair): HTMLButtonElement {
+    const btn = document.createElement("button");
+    btn.className = "alarm-toggle";
+    // Stop propagation so a toggle click does not also fire the
+    // row-level expansion handler.
+    btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const open = pair.row.classList.toggle("alarm-open");
+        pair.detail.hidden = !open;
     });
     return btn;
 }
