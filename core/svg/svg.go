@@ -379,6 +379,41 @@ type haloTint struct {
 	blink  bool
 }
 
+// washDef paints state-dependent translucency over a fractional
+// region of a part's drawn footprint: intensity encodings like bed
+// saturation or a heater-glow latch that would otherwise need gauge
+// furniture or text. fx/fy/fw/fh locate the region inside the
+// symbol's bounding box.
+type washDef struct {
+	id             string
+	colour         string
+	fx, fy, fw, fh float64
+	alpha          func(*core.Plant) float64
+}
+
+var symbolWashes = []washDef{
+	{
+		// Resin beds darken as they load up toward replacement.
+		id: "BTRS", colour: "#7a5c33",
+		fx: 0.16, fy: 0.25, fw: 0.68, fh: 0.40,
+		alpha: func(p *core.Plant) float64 {
+			return clampRange(p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSBedSaturation, 0, 1) * 0.55
+		},
+	},
+	{
+		// Heater latch warms the pressurizer's lower band where the
+		// immersion heaters sit in the asset art.
+		id: "Pressurizer", colour: "#ffb84d",
+		fx: 0.12, fy: 0.70, fw: 0.76, fh: 0.22,
+		alpha: func(p *core.Plant) float64 {
+			if p.ReactorBuilding.Pressurizer.HeatersOn {
+				return 0.3
+			}
+			return 0
+		},
+	},
+}
+
 // tintRank orders competing halos on one part: trip over warning,
 // then flashing over acknowledged.
 func tintRank(t haloTint) int {
@@ -770,7 +805,9 @@ func (r *renderer) pipe(p *core.Plant, e core.GraphEdge) string {
 	// Live position is encoded twice: a pie wedge fills the valve
 	// body proportional to open fraction (red while a relief-kind
 	// device is actually lifting), and a native <title> tooltip
-	// carries the exact percentage for hover inspection.
+	// carries the exact percentage for hover inspection. The group
+	// binds to the valve's bridge part so inline valves click like
+	// standalone ones.
 	kind := ValveKindForEdge(p, e)
 	pct := int(math.Round(e.Valve.Open * 100))
 	wedge := valveWedgePath(at, math.Min(vw, vh)*0.45, e.Valve.Open,
@@ -778,8 +815,14 @@ func (r *renderer) pipe(p *core.Plant, e core.GraphEdge) string {
 	use := fmt.Sprintf(
 		`<use href="#%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>`,
 		SymbolForKind(kind), at.X-vw/2, at.Y-vh/2, vw, vh)
+	if ref.part == "" {
+		return pathFrag + fmt.Sprintf(
+			`<g><title>%d%%</title>%s%s</g>`, pct, use, wedge)
+	}
 	return pathFrag + fmt.Sprintf(
-		`<g><title>%d%%</title>%s%s</g>`, pct, use, wedge)
+		`<g data-part="%s" role="img" aria-label="%s" tabindex="0"><title>%d%%</title>%s%s</g>`,
+		html.EscapeString(ref.part), html.EscapeString(partLabel(ref.part)),
+		pct, use, wedge)
 }
 
 // valveWedgePath returns a pie-slice subpath centred on `at` whose
@@ -1115,6 +1158,17 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		if lv, okL := levelAccessors[dp.id]; okL {
 			level, capacity := lv(p)
 			writeLevelGauge(&b, a, sw, sh, volumeFraction(level, capacity))
+		}
+		for _, w := range symbolWashes {
+			if w.id != dp.id {
+				continue
+			}
+			if alpha := w.alpha(p); alpha > 0 {
+				fmt.Fprintf(&b,
+					`<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" fill-opacity="%.2f"/>`+"\n",
+					a.X-sw/2+w.fx*sw, a.Y-sh/2+w.fy*sh,
+					w.fw*sw, w.fh*sh, w.colour, alpha)
+			}
 		}
 	}
 

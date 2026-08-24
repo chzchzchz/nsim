@@ -417,3 +417,43 @@ func TestStatorCoolingAndInvertersRender(t *testing.T) {
 		strings.Count(renderPlant(t, &p), `fill="green"`),
 		"losing inverter power must extinguish its availability dot")
 }
+
+// TestEdgeValvesBindToBridgeRows checks inline (hop) valves render
+// as bound part groups the web UI can click, matching standalone
+// valve treatment.
+func TestEdgeValvesBindToBridgeRows(t *testing.T) {
+	p := core.MakePlant()
+	out := renderPlant(t, &p)
+	for _, part := range []string{
+		"TurbineBuilding/MainFeedwaterControlValve",
+		"ReactorBuilding/SafetyValve",
+		"TurbineBuilding/MakeupValve",
+		"TurbineBuilding/RecirculateValve",
+		"Outside/DieselAFWPump/CSTValve",
+		"Outside/MotorAFWPump/ServiceWaterValve",
+	} {
+		assert.Contains(t, out,
+			fmt.Sprintf(`<g data-part="%s" role="img" aria-label=`, part))
+	}
+}
+
+// TestSymbolWashesTrackState checks intensity encodings appear and
+// disappear with their driving flags.
+func TestSymbolWashesTrackState(t *testing.T) {
+	p := core.MakePlant()
+	base := renderPlant(t, &p)
+	assert.NotContains(t, base, `fill="#7a5c33"`,
+		"fresh resin beds carry no saturation tint")
+	assert.NotContains(t, base, `fill="#7a5c33"`,
+		"fresh resin beds carry no saturation tint")
+
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSBedSaturation = 1
+	assert.Contains(t, renderPlant(t, &p), `fill="#7a5c33"`)
+
+	// The plant builds with heaters latched on; dropping them must
+	// extinguish the glow band.
+	assert.Contains(t, base, `fill="#ffb84d"`,
+		"latched heaters warm the pressurizer band at construction")
+	p.ReactorBuilding.Pressurizer.HeatersOn = false
+	assert.NotContains(t, renderPlant(t, &p), `fill="#ffb84d"`)
+}

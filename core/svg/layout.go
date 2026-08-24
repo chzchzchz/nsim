@@ -355,45 +355,50 @@ func emitEdgeNode(clusters map[string]*strings.Builder, id, cluster, kind string
 
 // edgeHopRef names one inline device node on a subdivided DOT
 // edge, plus the cluster and symbol-table kind it emits under.
-type edgeHopRef struct{ id, cluster, kind string }
+// Valves additionally carry the bridge part path their rendered
+// group binds to, so the web UI can click inline valves the same
+// way it clicks standalone parts.
+type edgeHopRef struct{ id, cluster, kind, part string }
 
 // pumpHopFor maps a pumped edge to its inline pump device.
 func pumpHopFor(e core.GraphEdge) (edgeHopRef, bool) {
 	switch {
 	case e.From == "RPV" && e.To == "SG":
-		return edgeHopRef{"RCP", clusterFor["RPV"], "ReactorCoolantPump"}, true
+		return edgeHopRef{"RCP", clusterFor["RPV"], "ReactorCoolantPump", ""}, true
 	case e.From == "Condenser" && e.To == "HDT":
 		// Suction is from the condenser hotwell
 		// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-46).
-		return edgeHopRef{"CondensatePump", clusterFor["Condenser"], "CondensatePump"}, true
+		return edgeHopRef{"CondensatePump", clusterFor["Condenser"], "CondensatePump", ""}, true
 	case e.From == "HDT" && e.To == "SG":
-		return edgeHopRef{"MainFeedwaterPump", clusterFor["HDT"], "MainFeedwaterPump"}, true
+		return edgeHopRef{"MainFeedwaterPump", clusterFor["HDT"], "MainFeedwaterPump", ""}, true
 	case e.From == "HPHeaterDrain" && e.To == "HDT":
-		return edgeHopRef{"HeaterDrainPump", clusterFor["HPHeaterDrain"], "HeaterDrainPump"}, true
+		return edgeHopRef{"HeaterDrainPump", clusterFor["HPHeaterDrain"], "HeaterDrainPump", ""}, true
 	}
 	return edgeHopRef{}, false
 }
 
-// valveHopFor maps a valved edge to its inline valve device.
+// valveHopFor maps a valved edge to its inline valve device. Part
+// paths mirror the model field owning each valve so rendered groups
+// bind to the same rows the bridge registers (or will register).
 func valveHopFor(e core.GraphEdge) (edgeHopRef, bool) {
 	var r edgeHopRef
 	switch {
 	case e.From == "RPV" && e.To == "Pressurizer":
-		r = edgeHopRef{"SafetyValve", clusterFor["RPV"], "safety"}
+		r = edgeHopRef{"SafetyValve", clusterFor["RPV"], "safety", "ReactorBuilding/SafetyValve"}
 	case e.From == "Pressurizer" && e.To == "RPV":
-		r = edgeHopRef{"ModulatingValve", clusterFor["Pressurizer"], "modulating"}
+		r = edgeHopRef{"ModulatingValve", clusterFor["Pressurizer"], "modulating", "ReactorBuilding/Pressurizer/ModulatingValve"}
 	case e.From == "SG" && e.To == "Condenser":
-		r = edgeHopRef{"MakeupValve", clusterFor["SG"], "modulating"}
+		r = edgeHopRef{"MakeupValve", clusterFor["SG"], "modulating", "TurbineBuilding/MakeupValve"}
 	case e.From == "HDT" && e.To == "SG":
-		r = edgeHopRef{"MainFeedValve", clusterFor["HDT"], "modulating"}
+		r = edgeHopRef{"MainFeedValve", clusterFor["HDT"], "modulating", "TurbineBuilding/MainFeedwaterControlValve"}
 	case e.From == "Condenser" && e.To == "CST":
-		r = edgeHopRef{"RecirculateValve", clusterFor["Condenser"], "stop"}
+		r = edgeHopRef{"RecirculateValve", clusterFor["Condenser"], "stop", "TurbineBuilding/RecirculateValve"}
 	case e.To == "DieselAFWPump" || e.To == "MotorAFWPump" || e.To == "TurbineAFWPump":
-		r = edgeHopRef{"CSTValve", clusterFor["CST"], "gate"}
+		r = edgeHopRef{"CSTValve", clusterFor["CST"], "gate", "Outside/" + e.To + "/CSTValve"}
 	case e.From == "DieselAFWPump" || e.From == "MotorAFWPump" || e.From == "TurbineAFWPump":
-		r = edgeHopRef{"ServiceWaterValve", clusterFor[e.From], "gate"}
+		r = edgeHopRef{"ServiceWaterValve", clusterFor[e.From], "gate", "Outside/" + e.From + "/ServiceWaterValve"}
 	default:
-		r = edgeHopRef{"Valve", clusterFor[e.From], "gate"}
+		r = edgeHopRef{"Valve", clusterFor[e.From], "gate", ""}
 	}
 	return r, true
 }
