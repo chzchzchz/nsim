@@ -1035,6 +1035,24 @@ const (
 	// error; the spec states the balance law but no tuning figure.
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:9-12
 	PzrLevelCtrlGainGalPerSecPerPct float64 = 3.0
+
+	// CVCSAutoBoronLowInsertionFrac is the rod-bank insertion below
+	// which automatic boron trim dilutes: holding the program there
+	// would need positive reactivity the withdrawn bank can no
+	// longer supply. Derived threshold, sized to the cracked-rods
+	// maneuvering window so chemistry relieves over-withdrawal
+	// before it happens ("the control rods are nearly fully
+	// withdrawn during all phases of power operations",
+	// specs/westinghouse_plant_operations/chapter_19/page_012.txt:12-14).
+	CVCSAutoBoronLowInsertionFrac float64 = 0.035
+
+	// CVCSAutoBoronHighInsertionFrac is the rod-bank insertion above
+	// which automatic boron trim borates: slow poison swings after
+	// maneuvers push the bank deeper, and chemistry carries the
+	// deficit so the bank stays near its withdrawal limit and full
+	// reserve capability survives the cycle
+	// (specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:109-123).
+	CVCSAutoBoronHighInsertionFrac float64 = 0.055
 )
 
 // ReactorMakeupDesignFlow is the per-minute volume of makeup
@@ -2162,6 +2180,13 @@ type CVCS struct {
 	// field; when the VCT high-level condition diverts letdown,
 	// the flow lands in BRSHoldupLevel instead of the VCT.
 	LetdownValveOpen bool
+
+	// AutoBoronControl engages the automatic boron trim: when the
+	// rod bank approaches a travel limit, chemistry relieves it
+	// (dilution near full withdrawal, boration under deep
+	// insertion) through the existing BTRS mode and pump paths.
+	// The zero value keeps Mode operator-owned.
+	AutoBoronControl bool
 
 	// LetdownFlow is the flow rate from the RCS letdown tap
 	// through the letdown chiller and demineralizers back to

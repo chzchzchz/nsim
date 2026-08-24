@@ -12,6 +12,7 @@ describe("formatSensorValue", () => {
     it("caps numeric kinds at two decimals", () => {
         expect(formatSensorValue("psig", "2250")).toBe("2250.00");
         expect(formatSensorValue("percent", "12.34567")).toBe("12.35");
+        expect(formatSensorValue("signedpercent", "-4.36")).toBe("-4.36");
         expect(formatSensorValue("fahrenheit", "-1.2")).toBe("-1.20");
     });
 
@@ -37,6 +38,7 @@ describe("unit metadata", () => {
     it("exposes control ranges only where bounded", () => {
         expect(rangeFor("normalized")).toBe("[0, 1]");
         expect(rangeFor("percent")).toBe("[0, 100]");
+        expect(rangeFor("signedpercent")).toBeNull();
         expect(rangeFor("rpm")).toBeNull();
     });
 

@@ -215,3 +215,85 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 		"restoring demand raises power back toward rated")
 	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped)
 }
+
+
+// The scenario 8 reference cycle in miniature under the integrated
+// control lineup: automatic rod control walks power down the Tavg
+// program to the half-load plateau and back while the automatic boron
+// trim carries the slow iodine/xenon swings that would otherwise bury
+// or strand the rod bank, holding the bank near its withdrawal limit
+// (full reserve capability) with the axial offset inside its target
+// band at every checkpoint.
+//
+//   "12 hours at full power, decreasing load to 50-percent power over
+//    a 3 hour period, remaining at 50-percent power for 6 hours and
+//    returning to full power over a 3 hour period"
+//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_230.txt:79-87
+//   "In plants with the Integrated Control System the boron
+//    adjustments are done automatically."
+//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:114-116
+//   "the control system makes boron concentration adjustments whenever
+//    the control rods approach the limits of their AFD target band"
+//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:120-123
+//
+// Windows are shortened to the controller's own timescales (the
+// internal program walks at the spec loading rate, so a half-load
+// drop needs ten minutes regardless of the wall-clock legs of the
+// reference day); multi-hour xenon evolution is covered by the
+// reserve-point and iodine/xenon tests.
+func TestRodAutoControlDailyLoadFollowArc(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	for _, boron := range []*float64{
+		&p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration,
+		&p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration,
+	} {
+		*boron = loadFollowBoron
+	}
+	rpv := &p.ReactorBuilding.ReactorPressureVessel
+	rpv.ControlRods.AutoControl = true
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoBoronControl = true
+
+	fissionFrac := func() float64 {
+		return float64(rpv.FissionPower) / float64(CoreRatedThermalPower)
+	}
+	assertAOInBand := func(when string) {
+		t.Helper()
+		assert.GreaterOrEqual(t, rpv.AxialOffset, -CoreAFDTargetBandPct-0.5,
+			"%s: axial offset below band (small transient margin)", when)
+		assert.LessOrEqual(t, rpv.AxialOffset, CoreAFDTargetBandPct+0.5,
+			"%s: axial offset above band (small transient margin)", when)
+	}
+
+	stepN(&p, int(60*time.Second/TimeStep))
+	require.Greater(t, fissionFrac(), 0.9,
+		"settled start must sit near rated before maneuvering")
+	assertAOInBand("start")
+
+	// Descent leg: the walked program takes ten minutes down.
+	p.TurbineBuilding.Turbine.Setpoint = 0.5
+	stepN(&p, int(660*time.Second/TimeStep))
+	descended := fissionFrac()
+	assert.Greater(t, descended, 0.38, "descent undershoots the plateau")
+	assert.Less(t, descended, 0.62, "descent overshoots the program")
+	assertAOInBand("descent")
+	require.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped)
+
+	// Plateau: the boron trim keeps the rod bank inside its window
+	// against the post-drop xenon rise - reserve stays intact.
+	stepN(&p, int(240*time.Second/TimeStep))
+	assert.Greater(t, fissionFrac(), 0.38, "plateau collapsed")
+	assert.Less(t, fissionFrac(), 0.62, "plateau climbed away")
+	assert.LessOrEqual(t, rpv.ControlRods.Insertion,
+		CVCSAutoBoronHighInsertionFrac+0.01,
+		"boron trim must keep the bank near its withdrawal limit")
+	assertAOInBand("plateau")
+
+	// Ascent leg back toward rated on restored demand.
+	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	stepN(&p, int(480*time.Second/TimeStep))
+	assert.Greater(t, fissionFrac(), descended+0.15,
+		"restored demand climbs back toward rated")
+	assertAOInBand("ascent")
+	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped)
+}

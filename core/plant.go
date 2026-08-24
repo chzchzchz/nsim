@@ -128,6 +128,15 @@ func (r *ReactorBuilding) Step(
 	// CVCS automatic level controller; the program "varies with
 	// RCS average coolant temperature."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
+	// Automatic boron trim: when engaged, rod-bank travel position
+	// selects the BTRS mode so chemistry relieves what the rods no
+	// longer can. Runs before CVCS.Step so the selected mode's
+	// rates apply this step.
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_129.txt:112-115
+	if ret.Aux.ChemicalVolumeControlSystem.AutoBoronControl {
+		ret.Aux.ChemicalVolumeControlSystem.applyAutoBoronControl(
+			ret.ReactorPressureVessel.ControlRods.Insertion)
+	}
 	tavg := Temperature{Val: (ret.ReactorPressureVessel.Inlet.Float() +
 		ret.ReactorPressureVessel.Outlet.Float()) / 2, Unit: u.Fahrenheit}
 	pzrFraction := 0.0

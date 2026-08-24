@@ -24,6 +24,7 @@ export const UNITS: Record<string, UnitInfo> = {
     bool:        { unit: "",     range: null,    numeric: false },
     normalized:  { unit: "",     range: "[0, 1]",   numeric: true },
     percent:     { unit: "%",    range: "[0, 100]", numeric: true },
+    signedpercent: { unit: "%",  range: null,    numeric: true },
     rpm:         { unit: "rpm",  range: null,    numeric: true },
     psig:        { unit: "psig", range: null,    numeric: true },
     fahrenheit:  { unit: "°F",   range: null,    numeric: true },

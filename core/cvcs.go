@@ -283,3 +283,28 @@ func programmedPzrLevel(tavg Temperature) float64 {
 	pct := PzrLevelNoLoadPct + (tavg.Float()-RCSNoLoadTavgF)*slope
 	return min(max(pct, PzrLevelNoLoadPct), PzrLevelFullLoadPct)
 }
+
+// applyAutoBoronControl is the slow third of the Power Control
+// System's actuators: "automatically adjusts the reactor power [...]
+// through control rod motions, boron concentration changes, and
+// control of the moderator temperature"
+// (specs/the_westinghouse_pressurized_water_react/chapter_7/page_129.txt:112-115).
+// Rods are fast and chemistry slow, so when the rod bank approaches a
+// travel limit while holding the program, chemistry relieves it:
+// near full withdrawal the chain needs positive reactivity (dilute),
+// under deep insertion negative (borate). The existing fixed BTRS
+// rates and bed dynamics are the rate limiter. While engaged this
+// owns Mode and the BTRS pump; the latch lives on AutoBoronControl.
+func (c *CVCS) applyAutoBoronControl(rodInsertion float64) {
+	switch {
+	case rodInsertion < CVCSAutoBoronLowInsertionFrac:
+		c.Mode = CVCSDilution
+		c.BTRSRecirculationPumpRunning = true
+	case rodInsertion > CVCSAutoBoronHighInsertionFrac:
+		c.Mode = CVCSBoration
+		c.BTRSRecirculationPumpRunning = true
+	default:
+		c.Mode = CVCSVolumeControl
+		c.BTRSRecirculationPumpRunning = false
+	}
+}

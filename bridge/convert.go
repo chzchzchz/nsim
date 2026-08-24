@@ -94,12 +94,15 @@ func FormatSensorValue(kind string, v any) (string, error) {
 			return "1", nil
 		}
 		return "0", nil
-	case "normalized", "percent", "rpm", "psig", "fahrenheit", "gallon", "watt", "ppm", "volt", "hz", "gpm":
+	case "normalized", "percent", "signedpercent", "rpm", "psig", "fahrenheit", "gallon", "watt", "ppm", "volt", "hz", "gpm":
 		f, err := toFloat(v)
 		if err != nil {
 			return "", err
 		}
-		if kind != "fahrenheit" && f < 0 {
+		// fahrenheit predates the taxonomy and signedpercent exists for
+		// observables measured around zero (axial flux difference);
+		// every other kind is a nonnegative physical magnitude.
+		if kind != "fahrenheit" && kind != "signedpercent" && f < 0 {
 			return "", fmt.Errorf("%s %v negative", kind, f)
 		}
 		return fmt.Sprintf("%v", f), nil

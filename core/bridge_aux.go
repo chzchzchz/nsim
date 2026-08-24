@@ -549,6 +549,29 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// CVCS automatic boron trim engage switch: rod-bank travel
+	// position selects the BTRS mode so chemistry relieves what the
+	// rods no longer can.
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_129.txt:112-115
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/AutoBoronControl"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "AutoBoronControl",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoBoronControl)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoBoronControl = v
+			return nil
+		},
+	}
+
+
 	// CVCS letdown valve-open latch. The CVCS Step reads
 	// LetdownValveOpen to decide LetdownFlow (in conjunction
 	// with the operating mode — CVCSLetdown forces it closed).

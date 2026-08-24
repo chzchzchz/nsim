@@ -26,8 +26,20 @@ import (
 const (
 	loadFollowBoron        = 600.0
 	loadFollowBoronPlateau = 614.17
-	loadFollowRodsFull     = 0.04222222
-	loadFollowRodsHalf     = 0.04362222
+
+	// loadFollowBoronPlateauXenon is the reserve-restoring boron
+	// concentration at the 50-percent plateau once the iodine/xenon
+	// pair is active: half power burns xenon below its rated
+	// equilibrium (worth -2.7 pct dk/k at rated), and the missing
+	// poison must be replaced with soluble boron before the rods can
+	// return to the full-power position. Solved against the
+	// production reactivity block at half-power fission-product
+	// equilibrium; reusing the pre-xenon 614.17 leaves the core
+	// strongly supercritical, asserted below.
+	loadFollowBoronPlateauXenon = 1027.38
+
+	loadFollowRodsFull = 0.04222222
+	loadFollowRodsHalf = 0.04362222
 )
 
 func loadFollowFixture(insertion, boron, outletF float64, seedPower Watts) ReactorPressureVessel {
@@ -102,6 +114,47 @@ func TestLoadFollow_NaiveBorationLeavesCoreSupercritical(t *testing.T) {
 	exact = exact.Step(RCPRatedSpeed, 0)
 	assert.Less(t, float64(exact.Reactivity), 1e-4,
 		"exact boration solve should be critical, rho=%v", exact.Reactivity)
+}
+
+// The reserve-restoring plateau solve with the iodine/xenon pair
+// active. Half power burns xenon below its rated equilibrium, and the
+// missing poison worth must be replaced with soluble boron before the
+// rods can return to the full-power position while staying critical:
+//   "This capability is maintained by automatic adjustment of the
+//    boron concentration to compensate for xenon reactivity changes"
+//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:115-117
+//
+// The pre-xenon plateau value (614.17) leaves the core strongly
+// supercritical; the production-block solve lands at 1027.38 ppm,
+// near the fresh-shim concentration because rated-equilibrium xenon
+// was already carried in the rod/boron calibration. Locks both facts
+// into the repo.
+func TestLoadFollow_XenonActiveReservePointBoration(t *testing.T) {
+	halfT := CoreReferenceInletF + 0.5*(CoreReferenceOutletF-CoreReferenceInletF)
+	mk := func(boron float64) ReactorPressureVessel {
+		r := ReactorPressureVessel{
+			ControlRods: ControlRods{
+				Insertion:          loadFollowRodsFull,
+				DemandInsertion:    loadFollowRodsFull,
+				BoronConcentration: boron,
+			},
+			Inlet:  Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
+			Outlet: Temperature{Val: halfT, Unit: u.Fahrenheit},
+		}
+		r.SeedSteadyStatePower(Watts(0.5 * float64(CoreRatedThermalPower)))
+		return r
+	}
+	exact := mk(loadFollowBoronPlateauXenon)
+	exact = exact.Step(RCPRatedSpeed)
+	assert.InDelta(t, 0.0, float64(exact.Reactivity), 1e-4,
+		"xenon-active reserve solve should be critical, rho=%v",
+		exact.Reactivity)
+
+	naive := mk(loadFollowBoronPlateau)
+	naive = naive.Step(RCPRatedSpeed)
+	assert.Greater(t, float64(naive.Reactivity), 0.05,
+		"pre-xenon plateau boron must leave the core supercritical under "+
+			"active iodine/xenon, rho=%v", naive.Reactivity)
 }
 
 // loadFollowFixedPoint seeds the vessel at the true steady fixed point

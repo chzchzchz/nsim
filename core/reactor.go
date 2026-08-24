@@ -239,8 +239,12 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 	// nominal equilibrium load (operators have diluted against it), so
 	// deviations produce the correct signs, xenon above equilibrium
 	// negative, below positive, without disturbing existing equilibria.
+	// The inventory enters flux-weighted across the two core halves so
+	// an axial skew weights the poison where the flux actually sits;
+	// with zero deviation this reduces to the lumped form exactly.
+	axialFrac := ret.AxialOffset / 100
 	xenonPct := float32(CoreXenonEquilibriumWorthPct *
-		(xenonNormalized(ret.Xenon135) - 1.0))
+		(xenonNormalized(ret.Xenon135+axialFrac*ret.Xenon135AxialDeviation/2) - 1.0))
 	ret.Reactivity = rodPct + dopplerPct + boronPct + xenonPct
 
 	// 5) Thermal power = fission chain power + fission-product
@@ -287,6 +291,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 	ret.DecayHeatFast += Watts((fastTarget - float64(ret.DecayHeatFast)) * dtS / CoreDecayHeatFastTimeConstant.Seconds())
 	ret.DecayHeatSlow += Watts((slowTarget - float64(ret.DecayHeatSlow)) * dtS / CoreDecayHeatTimeConstant.Seconds())
 	ret.advanceXenon(dt)
+	ret.advanceAxialOffset(dt)
 	// RCP shaft-loss heat enters the primary coolant (chapter
 	// 16 temperature balance). The rated cap and the pump
 	// contribution are applied in TotalThermalPower, the number
@@ -549,6 +554,21 @@ type ReactorPressureVessel struct {
 	// steam dump system..."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-111
 	PumpHeatInput Watts
+
+	// AxialOffset is the axial power distribution observable, percent:
+	// top-half power minus bottom-half power over total core power.
+	// Rod insertion drives it negative (rods enter from the top);
+	// xenon skew pulls it back over hours. See core/axial_offset.go.
+	AxialOffset float64
+
+	// Iodine135AxialDeviation and Xenon135AxialDeviation are the
+	// top-minus-bottom half-differences of the fission-product
+	// inventories around their lumped means, on the same scales as
+	// Iodine135 / Xenon135. They reproduce the poison side of the
+	// axial feedback loop; see core/axial_offset.go for the ODEs
+	// and citations.
+	Iodine135AxialDeviation float64
+	Xenon135AxialDeviation  float64
 }
 // Reactor core sizing. The spec gives steam-flow and pressure data
 // (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56,

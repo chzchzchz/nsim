@@ -1129,6 +1129,30 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 	}
 
 
+	// Axial flux difference (the axial offset observable): top-half
+	// power minus bottom-half power over total core power. The
+	// operator holds this inside a target band by adjusting boron
+	// whenever rod motion approaches the band limits.
+	//   "axial offset — A measure of power distribution in the axial
+	//    direction [...]"
+	//   specs/the_westinghouse_pressurized_water_react/glossary.md:22
+	//   "the operator must insure that the indicated axial flux
+	//    difference (AFD) is maintained within the limits"
+	//   specs/westinghouse_plant_operations/chapter_19/page_012.txt:4-6
+	// The offset is signed by definition: rod insertion drives it
+	// negative of the unrodded anchor, so the reading needs the
+	// signed percent kind.
+	m["ReactorBuilding/ReactorPressureVessel/AxialOffset"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "AxialOffset",
+		Kind:  "signedpercent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("signedpercent",
+				p.ReactorBuilding.ReactorPressureVessel.AxialOffset)
+		},
+	}
+
+
 	// Reactor makeup control valve flow (chapter 4 CVCS):
 	// "Because of the influx of makeup water from the reactor
 	// makeup control system [...]"
