@@ -232,35 +232,32 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-// tintFor resolves the worst active alarm touching a diagram part.
-// Alarms() only returns currently-active conditions, already stamped
-// with control-room acknowledgement state.
-func tintFor(p *core.Plant, id string) (haloTint, bool) {
+// tintsByPart resolves the worst active halo per diagram part id in
+// one pass over the alarm list. Alarms() only returns currently-
+// active conditions, already stamped with control-room
+// acknowledgement state.
+func tintsByPart(alarms []core.Alarm) map[string]haloTint {
 	active := map[core.AlarmID]haloTint{}
-	for _, a := range p.Alarms() {
+	for _, a := range alarms {
 		colour := tintAmber
 		if a.Severity == core.SeverityTrip {
 			colour = tintRed
 		}
 		active[a.ID] = haloTint{colour: colour, blink: !a.Acknowledged}
 	}
-	worst, found := haloTint{}, false
+	tints := map[string]haloTint{}
 	for aid, ids := range alarmParts {
 		hint, ok := active[aid]
 		if !ok {
 			continue
 		}
 		for _, pid := range ids {
-			if pid != id {
-				continue
-			}
-			if !found || tintRank(hint) > tintRank(worst) {
-				worst = hint
-				found = true
+			if cur, seen := tints[pid]; !seen || tintRank(hint) > tintRank(cur) {
+				tints[pid] = hint
 			}
 		}
 	}
-	return worst, found
+	return tints
 }
 
 // renderer composes one SVG document against a specific layout,
@@ -649,6 +646,10 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		}
 	}
 
+	// One alarm-list aggregation per render; shared by halos,
+	// rings, and the docked panel below.
+	alarms := p.Alarms()
+	
 	// Pressurizer safety and POR valves sit just above the
 	// pressurizer, per the figure 3-1 schematic.
 	if pzr, ok := r.anchor("Pressurizer"); ok {
@@ -671,6 +672,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// Symbols bound to parts for the live web UI. Pump-backed
 	// parts also get a run-status dot and speed readout so static
 	// exports carry state the web UI otherwise injects.
+	tints := tintsByPart(alarms)
 	for _, dp := range diagramParts {
 		a, ok := r.anchor(dp.id)
 		if !ok {
@@ -679,7 +681,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		}
 		sw, sh := r.size(dp.kind)
 		writePartEl(dp.part, useAt(symbolID(dp.kind), a.X, a.Y, sw, sh))
-		if tint, ok := tintFor(p, dp.id); ok {
+		if tint, ok := tints[dp.id]; ok {
 			class := ""
 			if tint.blink {
 				class = ` class="blink"`
@@ -716,8 +718,9 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	}
 
 	// Live overlays: readouts and alarm rings track their symbols.
-	r.writeLiveOverlays(&b, p)
+	r.writeLiveOverlays(&b, p, alarms)
 
+	writeAlarmPanel(&b, alarms)
 	writeLegend(&b)
 	b.WriteString("</g>\n")
 
@@ -781,6 +784,40 @@ var readouts = []readoutDef{
 		},
 	},
 	{
+		id: "Generator",
+		dy: 28,
+		show: func(p *core.Plant) bool {
+			return p.TurbineBuilding.Generator.BreakerClosed
+		},
+		text: func(p *core.Plant) string {
+			mw := float64(p.TurbineBuilding.Generator.RealPower) / core.WattsPerMW
+			return fmt.Sprintf("%.0f MW", mw)
+		},
+	},
+	{
+		// Pressurizer pressure, the primary-side number operators
+		// watch most. Displayed in psig like the containment
+		// readout; the model stores psia.
+		id: "Pressurizer",
+		dy: 12,
+		text: func(p *core.Plant) string {
+			psig := float64(p.ReactorBuilding.Pressurizer.Pressure - core.AtmosphericPressure)
+			return fmt.Sprintf("PZR %.0f psig", psig)
+		},
+	},
+	{
+		id: "Pressurizer",
+		dy: 26,
+		show: func(p *core.Plant) bool {
+			return p.ReactorBuilding.Pressurizer.Volume.Float() > 0
+		},
+		text: func(p *core.Plant) string {
+			pzr := p.ReactorBuilding.Pressurizer
+			pct := 100.0 * pzr.Water.Float() / pzr.Volume.Float()
+			return fmt.Sprintf("lvl %.0f%%", pct)
+		},
+	},
+	{
 		id: "SG",
 		dy: 14,
 		show: func(p *core.Plant) bool {
@@ -827,7 +864,7 @@ var rings = []ringDef{
 // writeLiveOverlays emits per-part live state as <text> elements
 // plus alarm rings. Every overlay tracks its part's laid-out
 // anchor instead of a fixed position.
-func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant) {
+func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms []core.Alarm) {
 	text := func(a Anchor, dy float64, body string) {
 		fmt.Fprintf(b,
 			`<text x="%.0f" y="%.0f" font-size="10" `+
@@ -866,16 +903,12 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant) {
 		text(cont, -8, fmt.Sprintf("Cont %.1f psig", float64(cp)))
 	}
 
-	hasAlarm := func(id core.AlarmID) bool {
-		for _, a := range p.Alarms() {
-			if a.ID == id {
-				return true
-			}
-		}
-		return false
+	activeAlarms := map[core.AlarmID]bool{}
+	for _, a := range alarms {
+		activeAlarms[a.ID] = true
 	}
 	for _, rd := range rings {
-		active := hasAlarm(rd.alarm)
+		active := activeAlarms[rd.alarm]
 		if rd.running {
 			active = p.AuxiliaryBuilding.DieselGenerator.State == core.DieselRunning
 		}
@@ -887,6 +920,47 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant) {
 			ring(a, (w+h)/2*rd.frac, rd.colour)
 		}
 	}
+}
+
+// writeAlarmPanel docks the live alarm list above the legend so
+// static exports are self-describing: worst severity first, capped
+// with an overflow line so a flood of alarms cannot cover the
+// mimic. Absent entirely when the plant is alarm-free.
+func writeAlarmPanel(b *strings.Builder, alarms []core.Alarm) {
+	const (
+		maxRows = 5
+		lineH   = 13.0
+		baseY   = DocumentHeight - 24
+	)
+	if len(alarms) == 0 {
+		return
+	}
+	sorted := make([]core.Alarm, len(alarms))
+	copy(sorted, alarms)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].Severity != sorted[j].Severity {
+			return sorted[i].Severity > sorted[j].Severity
+		}
+		return sorted[i].ID < sorted[j].ID
+	})
+
+	b.WriteString(`<g id="alarms">` + "\n")
+	for i, a := range sorted {
+		if i == maxRows {
+			fmt.Fprintf(b,
+				`<text x="14" y="%.0f" font-size="10" fill="%s">+%d more</text>`+"\n",
+				baseY-float64(i)*lineH+3, pidText, len(sorted)-maxRows)
+			break
+		}
+		colour := tintAmber
+		if a.Severity == core.SeverityTrip {
+			colour = tintRed
+		}
+		fmt.Fprintf(b,
+			`<text x="14" y="%.0f" font-size="10" fill="%s">%s</text>`+"\n",
+			baseY-float64(i)*lineH+3, colour, html.EscapeString(a.String()))
+	}
+	b.WriteString("</g>\n")
 }
 
 // pipeLegendLabels captions each colour in pipeColours so the

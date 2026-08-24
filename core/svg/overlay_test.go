@@ -96,6 +96,37 @@ func TestOverlay_Coverage(t *testing.T) {
 		sg.Water, sg.Volume = water, volume
 		assert.Regexp(t, `SG \d+%`, renderPlant(t, &p))
 	})
+
+	t.Run("pzr pressure and level readouts", func(t *testing.T) {
+		p := core.MakePlant()
+		out := renderPlant(t, &p)
+		assert.Regexp(t, `PZR \d+ psig`, out)
+		assert.Regexp(t, `lvl \d+%`, out)
+	})
+
+	t.Run("generator mw readout when breaker closed", func(t *testing.T) {
+		p := core.MakePlant()
+		assert.NotRegexp(t, `\d+ MW<`, renderPlant(t, &p))
+		p.TurbineBuilding.Generator.BreakerClosed = true
+		assert.Regexp(t, `\d+(\.\d+)? MW<`, renderPlant(t, &p))
+	})
+
+	t.Run("alarm panel appears only with alarms", func(t *testing.T) {
+		p := core.MakePlant()
+		assert.NotContains(t, renderPlant(t, &p), `<g id="alarms">`)
+
+		p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
+		p.TurbineBuilding.Turbine.OPCAlarm = true
+		out := renderPlant(t, &p)
+		require.Contains(t, out, `<g id="alarms">`)
+		assert.Contains(t, out, "rps.reactor_trip")
+		// Trip severity sorts above the OPC info alarm.
+		tripIdx := strings.Index(out, "[TRIP] rps.reactor_trip")
+		infoIdx := strings.Index(out, "[INFO] turbine.opc_alarm")
+		require.Positive(t, tripIdx)
+		require.Positive(t, infoIdx)
+		assert.Less(t, tripIdx, infoIdx)
+	})
 }
 
 // TestViewportGroupWrapsContent ensures all diagram content sits
