@@ -45,12 +45,16 @@ function zoomAt(
     const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * factor));
     if (next === scale) return;
     const rect = target.getBoundingClientRect();
-    const cx = clientX - rect.left;
-    const cy = clientY - rect.top;
+    // The canvas is laid out centred inside the host, so the scaled
+    // coordinate space starts at the canvas corner, not the host
+    // corner. offsetLeft/offsetTop ignore transforms and therefore
+    // report that true origin.
+    const px = clientX - rect.left - canvas!.offsetLeft;
+    const py = clientY - rect.top - canvas!.offsetTop;
     // Keep the diagram point under the cursor fixed while the
     // scale changes.
-    panX = cx - ((cx - panX) / scale) * next;
-    panY = cy - ((cy - panY) / scale) * next;
+    panX = px - ((px - panX) / scale) * next;
+    panY = py - ((py - panY) / scale) * next;
     scale = next;
     if (scale === MIN_SCALE) {
         panX = 0;
