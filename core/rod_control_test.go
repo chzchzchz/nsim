@@ -188,17 +188,20 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 	assert.Less(t, plateauFrac, 0.65,
 		"power settled onto the partial-plateau band")
 	// Known deviation, recorded rather than absorbed into a band:
-	// settled Tavg sits ~8 F above programmedRodTavg(load) because
-	// the cascade references the walked POWER target only — the
-	// measured-Tavg error term ("the needed control rod movement is
-	// based on the reactor coolant temperature needed to meet the
-	// turbine power demand [...] and the measured reactor coolant
-	// temperature",
+	// settled Tavg sits ~8 F above programmedRodTavg(load) because the
+	// plant's part-load operating line runs nearly flat against the
+	// 32.5 F program slope, so holding measured Tavg on the program
+	// would push fission below the secondary's heat-balance point and
+	// depressurize the header into the low-steamline trip. The
+	// measured-coolant-temperature input ("the needed control rod
+	// movement is based on the reactor coolant temperature needed to
+	// meet the turbine power demand [...] and the measured reactor
+	// coolant temperature",
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:68-76)
-	// is not yet integrated into the reactivity setpoint, so Tavg
-	// parks on the plant's open-loop temperature line instead of the
-	// program line. Power-vs-demand tracking is asserted above; the
-	// Tavg-program identity lands with that feedback term.
+	// was implemented and evaluated; every variant with enough
+	// authority to null the offset trips the plant this way, so the
+	// term waits on the secondary recalibration sliced in
+	// plans/x/gaps.md item 14.
 
 	// The plateau must hold, not glide into collapse.
 	stepN(&p, int(90*time.Second/TimeStep))

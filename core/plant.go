@@ -2882,7 +2882,7 @@ func (p *Plant) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON restores a Plant from JSON. The internal
 // nextPlant pointer is left nil (rebuilt by Step).
 //
-// Two redundancies are reconciled so a plant JSON only has to seed
+// Three redundancies are reconciled so a plant JSON only has to seed
 // one copy of each value:
 //
 //   - ReactorBuilding.Aux aliases the top-level AuxiliaryBuilding
@@ -2896,6 +2896,11 @@ func (p *Plant) MarshalJSON() ([]byte, error) {
 //     propagates the CVCS value every tick, so the ControlRods copy
 //     is refreshed from the master here and a stale divergent copy
 //     cannot silently win.
+//   - Turbine.LastSetpoint is the edge-detector input the dump
+//     controller compares against Setpoint; a recorded state whose
+//     memory disagrees with its setpoint would replay a phantom or
+//     suppressed load-rejection edge. Ingest resumes edge-neutral so
+//     the decision belongs to commands written after the load.
 func (p *Plant) UnmarshalJSON(data []byte) error {
 	type plant Plant
 	var p2 plant
@@ -2909,6 +2914,17 @@ func (p *Plant) UnmarshalJSON(data []byte) error {
 	}
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration =
 		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration
+	// Recorded states are hand-authored or regenerated artifacts, so
+	// the turbine's between-step setpoint memory cannot be trusted to
+	// match its setpoint. The dump controller reads that memory to
+	// detect a sudden load reduction, and a stale value would arm or
+	// suppress the rejection on the first step after ingest instead of
+	// leaving the decision to commands written after the load.
+	//   "These valves open under a sudden reduction in turbine-
+	//    generator load (in excess of 10%) or a turbine trip."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:9-11
+	p.TurbineBuilding.Turbine.LastSetpoint =
+		p.TurbineBuilding.Turbine.Setpoint
 	return nil
 }
 
