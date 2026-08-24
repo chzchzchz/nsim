@@ -34,13 +34,15 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
 
 	// Automatic pressure regulation. The thermostat latches the
 	// heaters on once the pressure sags below the band around the
-	// heater target and releases them at the target; the sag itself
-	// comes from the idle-condensation and surge paths above. Inside
-	// the band the previous latch state holds, so the pair regulates
-	// without chattering.
-	//   "Pressurizer pressure will recover as pressurizer heaters
-	//    automatically energize."
-	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:97-98
+	// regulation target and releases them at the target; the spray
+	// latch is its mirror, condensing steam while the pressure rides
+	// above the far band until it falls back to the target. The sag
+	// itself comes from the idle-condensation and surge paths above.
+	// Inside the band the previous latch state holds, so the pair
+	// regulates without chattering.
+	//   "Pressurizer heater and spray valve control is placed in
+	//    automatic operation."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:57-58
 	heaters := ret.HeatersOn
 	if ret.HeaterAutoControl {
 		target := ret.heaterTarget()
@@ -51,6 +53,12 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
 			ret.AutoHeatersOn = false
 		}
 		heaters = heaters || ret.AutoHeatersOn
+		switch {
+		case ret.Pressure >= target+PressurizerAutoHeaterBand:
+			ret.AutoSprayOn = true
+		case ret.Pressure <= target:
+			ret.AutoSprayOn = false
+		}
 	}
 
 	// Thermal-expansion surge: the loop inventory drains the
@@ -98,9 +106,13 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
 	// "RCS pressure is maintained by adjustment of the pressurizer
 	// heaters and/or pressurizer spray."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:28-29
-	if ret.SprayOpen > 0 || auxSpray > 0 {
+	if ret.SprayOpen > 0 || auxSpray > 0 || ret.AutoSprayOn {
 		bubble := ret.Volume.Float() - ret.Water.Float()
-		psiDrop := (ret.SprayOpen*sprayDrive*float64(PressurizerSprayRate) +
+		sprayDemand := ret.SprayOpen
+		if ret.AutoSprayOn {
+			sprayDemand = max(sprayDemand, 1)
+		}
+		psiDrop := (sprayDemand*sprayDrive*float64(PressurizerSprayRate) +
 			auxSpray*float64(PressurizerAuxSprayRate)) * dt.Seconds()
 		psiDrop = min(psiDrop, float64(ret.Pressure)-satFloor)
 		psiDrop = min(psiDrop, bubble*PressurizerBubbleStiffness)
@@ -140,7 +152,7 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
 	// pressure-temperature limits."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:81-82,
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:94-96
-	if !heaters && ret.SprayOpen == 0 && auxSpray == 0 {
+	if !heaters && ret.SprayOpen == 0 && auxSpray == 0 && !ret.AutoSprayOn {
 		base := satFloor
 		psiDrop := float64(PressurizerAmbientDecay) * dt.Seconds()
 		psiDrop = min(psiDrop, float64(ret.Pressure)-base)
@@ -261,6 +273,16 @@ type Pressurizer struct {
 	// AutoHeatersOn is the derived thermostat latch of the armed
 	// automatic pressure regulation; it is not an operator input.
 	AutoHeatersOn bool
+
+	// AutoSprayOn is the spray mirror of the armed regulation's
+	// heater latch: it engages while pressure rides above the far
+	// band of the regulation target and releases at the target.
+	// Derived; not an operator input. Normal spray authority still
+	// scales with reactor coolant pump flow (page_227.txt:96-98).
+	// "Pressurizer heater and spray valve control is placed in
+	// automatic operation."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:57-58
+	AutoSprayOn bool
 
 	// PressureSetpoint selects the pressure the heater regulation
 	// holds. Staged setpoint writes walk heaters and spray along the

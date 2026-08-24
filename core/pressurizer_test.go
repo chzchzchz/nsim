@@ -359,3 +359,51 @@ func TestPressurizer_SetpointControlRoundTrip(t *testing.T) {
 		p.ReactorBuilding.Pressurizer.PressureSetpoint)
 	assert.Equal(t, "415", c.Get())
 }
+
+// The armed regulation's spray latch is the heater thermostat's
+// mirror: an over-pressure above the far band condenses steam until
+// the pressure falls back to the target, completing the two-sided
+// "heater and spray valve control ... in automatic operation" loop.
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:57-58
+func TestPressurizer_AutoSprayRelievesOvershoot(t *testing.T) {
+	pzr := Pressurizer{
+		Pressure:          Pressure(PressurizerHeaterTarget + 200),
+		Volume:            Volume{Val: 1500, Unit: u.Gallon},
+		Water:             Volume{Val: 900, Unit: u.Gallon},
+		HeaterAutoControl: true,
+	}
+	rcsTemp := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
+
+	latched := false
+	for i := 0; i < int(5*time.Second/TimeStep); i++ {
+		pzr, _ = pzr.Step(rcsTemp, nil, nil, nil, 1, 0)
+		latched = latched || pzr.AutoSprayOn
+	}
+	assert.True(t, latched, "the spray latch must engage on overshoot")
+	assert.LessOrEqual(t, float64(pzr.Pressure),
+		float64(PressurizerHeaterTarget+PressurizerAutoHeaterBand)+1e-6,
+		"automatic spray must pull the pressure back into the band")
+}
+
+// Spray authority scales with reactor coolant pump flow, so with the
+// pumps secured the engaged latch cannot move pressure.
+// "To provide spray flow a RCP must be operating in one of the two
+// loops with spray flow connections."
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:96-98
+func TestPressurizer_AutoSprayNeedsRCPFlow(t *testing.T) {
+	pzr := Pressurizer{
+		Pressure:          Pressure(PressurizerHeaterTarget + 200),
+		Volume:            Volume{Val: 1500, Unit: u.Gallon},
+		Water:             Volume{Val: 900, Unit: u.Gallon},
+		HeaterAutoControl: true,
+	}
+	rcsTemp := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
+
+	before := float64(pzr.Pressure)
+	for i := 0; i < int(2*time.Second/TimeStep); i++ {
+		pzr, _ = pzr.Step(rcsTemp, nil, nil, nil, 0, 0)
+	}
+	assert.True(t, pzr.AutoSprayOn, "the latch arms on overshoot")
+	assert.Equal(t, before, float64(pzr.Pressure),
+		"without pump flow the engaged spray has no authority")
+}
