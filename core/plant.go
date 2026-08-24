@@ -496,10 +496,10 @@ func (t *TurbineBuilding) Step() TurbineBuilding {
 }
 
 // StepWithSteam advances the TurbineBuilding with the upstream steam
-// generator's pressure supplied by the caller. The condenser is
-// stepped first so the turbine reads a fresh back-pressure; the
-// condenser accumulates the turbine's exhaust mass flow via
-// CondensingRate for the next call.
+// generator's pressure and the RCS average temperature supplied by the
+// caller. The condenser is stepped first so the turbine reads a fresh
+// back-pressure; the condenser accumulates the turbine's exhaust mass flow
+// via CondensingRate for the next call.
 //
 // Spec justification for the order (condenser → turbine):
 //   - "The main condenser condenses the exhaust from the main
@@ -512,7 +512,12 @@ func (t *TurbineBuilding) Step() TurbineBuilding {
 //     "These valves open under a sudden reduction in turbine-
 //     generator load (in excess of 10%) or a turbine trip."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:5-11
-func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool) TurbineBuilding {
+func (t *TurbineBuilding) StepWithSteam(
+	sgPressure Pressure,
+	tavg Temperature,
+	cwPumpRunning bool,
+	reactorTripped bool,
+) TurbineBuilding {
 	ret := *t
 
 	cwIn := ret.Condenser.CirculatingWaterIn
@@ -673,22 +678,37 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 	} else if ret.Turbine.DumpHoldTimer > 0 {
 		ret.Turbine.DumpHoldTimer -= dt
 	}
-	// A turbine trip holds the bypass in service by state alone, so
-	// it closes automatically as soon as steam is readmitted to the
-	// restarted turbine; a load rejection holds it for a fixed
-	// ride-through window instead. While the trip latch holds, the
-	// bypass "temporarily replace[s] the turbine as the steam load":
-	// rather than slamming wide and over-drawing the header while
-	// the stepback folds power, it opens on the initial pressure
-	// rise and then modulates around the full-load shell pressure,
-	// passing what production needs.
-	//   "turbine bypass valves open automatically on turbine trip,
-	//    then modulate to pass steam to the condenser and hold
-	//    boiler pressure at the constant setpoint"
-	//   specs/pwr_sim/chapter_3/page_041.txt:37-45
+	// A turbine trip holds the bypass in service while the trip
+	// lasts; a load rejection holds it for a fixed ride-through
+	// window instead. Two trip regimes share the valves:
+	//   - Turbine-trip stepback with the reactor still critical:
+	//     the bypass "temporarily replace[s] the turbine as the
+	//     steam load", opening once on the trip and then modulating
+	//     around the full-load shell pressure to pass what
+	//     production keeps making.
+	//     "turbine bypass valves open automatically on turbine trip,
+	//      then modulate to pass steam to the condenser and hold
+	//      boiler pressure at the constant setpoint"
+	//     specs/pwr_sim/chapter_3/page_041.txt:37-45
+	//   - Reactor trip: fission folds to decay heat, so holding
+	//     boiler pressure at the full-load setpoint would dump far
+	//     more than production and drag the header into protective
+	//     setpoints. The demand follows the RCS average temperature
+	//     excess above no load instead, limited by header headroom
+	//     above an ESFAS-safe floor, and the valves shut as Tavg
+	//     restores.
+	//     "Steam dump is controlled by signals from the RCS
+	//      (essentially reactor coolant average temperature) [...];
+	//      the total quantity of steam dumped is minimized"
+	//     specs/the_westinghouse_pressurized_water_react/chapter_16/
+	//     page_233.txt:70-77
+	//     "The steam dump system will actuate if necessary and
+	//      restore Tavg to the no-load value."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_16/
+	//     page_233.txt:95-96
 	var target float64
 	switch {
-	case tripped:
+	case tripped && !reactorTripped:
 		if !ret.Turbine.DumpBypassKicked {
 			// One-shot opening on the trip itself; the pressure
 			// loop below throttles from there.
@@ -702,6 +722,30 @@ func (t *TurbineBuilding) StepWithSteam(sgPressure Pressure, cwPumpRunning bool)
 		integral = min(max(integral, 0), 1)
 		ret.Turbine.DumpPressureIntegral = integral
 		target = min(max(SteamDumpModulationProportionalGain*errFrac+integral, 0), 1)
+	case tripped && reactorTripped:
+		excessF := tavg.Float() - CoreReferenceInletF - SteamDumpTripDeadbandF
+		tavgTerm := min(max(excessF/SteamDumpTripSpanF, 0), 1)
+		// Headroom limiter: the bypass may only spend pressure the
+		// header holds above the ESFAS-safe floor, so carrying the
+		// Tavg restoration duty can never drag the steamline into
+		// the low-steamline setpoint. The equilibrium sits
+		// proportionally up the floor-to-arm slope while Tavg is
+		// restored, then the valves shut. "The total quantity of
+		// steam dumped is minimized since the steam dump is decreased
+		// as rapidly as conditions permit."
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:73-77
+		floor := float64(SteamDumpTripHeaderFloorFraction) * float64(SteamGeneratorShellPressure)
+		headroom := (float64(sgPressure) - floor) /
+			(float64(SteamDumpPressureModeMargin)*float64(SteamGeneratorShellPressure) - floor)
+		headroom = min(max(headroom, 0), 1)
+		target = min(tavgTerm, headroom)
+		if pressureMode {
+			target = 1.0
+		}
+		// Leave the stepback episode state reset so a later
+		// turbine-only trip kicks its pressure loop cleanly.
+		ret.Turbine.DumpPressureIntegral = 0
+		ret.Turbine.DumpBypassKicked = false
 	case pressureMode || ret.Turbine.DumpHoldTimer > 0:
 		ret.Turbine.DumpPressureIntegral = 0
 		ret.Turbine.DumpBypassKicked = false
@@ -1499,9 +1543,15 @@ func (p *Plant) Step() {
 	// also drops CW flow; the secondary side then has no
 	// heat sink and the turbine can no longer accept steam.
 	cwFlowing := cwPumpRunning && plantDriveReady
+	tavgAfterStep := Temperature{Val: (
+		p.nextPlant.ReactorBuilding.ReactorPressureVessel.Inlet.Float() +
+			p.nextPlant.ReactorBuilding.ReactorPressureVessel.Outlet.Float()) / 2,
+		Unit: u.Fahrenheit}
 	p.nextPlant.TurbineBuilding = p.TurbineBuilding.StepWithSteam(
 		p.nextPlant.ReactorBuilding.SteamGenerator.Pressure,
+		tavgAfterStep,
 		cwFlowing,
+		p.nextPlant.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
 	)
 
 	// Feedwater regulator step. The simplified model collapses

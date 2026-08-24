@@ -115,11 +115,14 @@ func (r *ReactorProtectionSystem) Step(
 	// these variables reach their actuation setpoints
 	// (specs/the_westinghouse_pressurized_water_react/
 	// chapter_16/page_227.txt:108-110).
+	// The manual trigger is the separate manual-safety-injection
+	// pushbutton, not the manual reactor trip.
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:8-14
 	if !ret.SafetyInjectionActuated && !ret.SafetyInjectionBlocked {
 		if containmentPressureGauge > RPSHighContainmentPressureTrip ||
 			steamlinePressure < RPSLowSteamlinePressureTrip ||
 			(tcoldF < RPSLowTcoldTrip && atPowerTripsEnabled) ||
-			ret.ManualTrip {
+			ret.ManualSI {
 			ret.SafetyInjectionActuated = true
 		}
 	}
@@ -131,7 +134,7 @@ func (r *ReactorProtectionSystem) Step(
 		if containmentPressureGauge > RPSHighContainmentPressureTrip ||
 			steamlinePressure < RPSLowSteamlinePressureTrip ||
 			(tcoldF < RPSLowTcoldTrip && atPowerTripsEnabled) ||
-			ret.ManualTrip {
+			ret.ManualSI {
 			ret.SteamlineIsolationActuated = true
 		}
 	}
@@ -146,9 +149,10 @@ func (r *ReactorProtectionSystem) Step(
 	}
 
 	// Containment Isolation Phase A: safety injection or
-	// manual.
+	// manual. No dedicated Phase-A pushbutton is modeled; the
+	// manual-ESFAS input carries its Table 7-1 "Manual" entry.
 	if !ret.ContainmentIsolationPhaseAActuated {
-		if ret.SafetyInjectionActuated || ret.ManualTrip {
+		if ret.SafetyInjectionActuated || ret.ManualSI {
 			ret.ContainmentIsolationPhaseAActuated = true
 		}
 	}
@@ -212,6 +216,7 @@ func (r *ReactorProtectionSystem) Step(
 func (r *ReactorProtectionSystem) Reset() {
 	r.ReactorTripped = false
 	r.ManualTrip = false
+	r.ManualSI = false
 	r.SafetyInjectionActuated = false
 	r.SteamlineIsolationActuated = false
 	r.ContainmentSprayActuated = false

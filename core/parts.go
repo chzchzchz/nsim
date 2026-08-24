@@ -666,6 +666,36 @@ const (
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:73-74
 	SteamDumpHoldTime = 60 * time.Second
 
+	// While the turbine sits tripped, the dump demand modulates on
+	// the RCS average temperature excess above the no-load value
+	// instead of pinning full open: "Steam dump is controlled by
+	// signals from the RCS (essentially reactor coolant average
+	// temperature) [...] the total quantity of steam dumped is
+	// minimized", restoring Tavg to the no-load value.
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:70-77,95-96
+	// The deadband shuts the dump once Tavg is back within it of
+	// no load. The span maps the excess onto valve travel: sized so
+	// the post-trip stored-heat error (tens of F, since the primary
+	// sheds heat at the 50 F/hr program rate) commands roughly the
+	// decay-heat-equivalent bypass fraction of the 70-pct dump
+	// capacity; a full-open demand corresponds to a ~300 F excess
+	// that only a genuine heat-sink loss produces. Derived; the spec
+	// quotes no numbers.
+	SteamDumpTripDeadbandF = 2.0
+	SteamDumpTripSpanF     = 300.0
+
+	// SteamDumpTripHeaderFloorFraction floors the post-trip dump
+	// demand on header pressure: while tripped, the valves throttle
+	// to keep the steamline between this fraction of nominal shell
+	// pressure and the pressure-mode arm point, so the bypass carries
+	// exactly the decay-heat duty ("the total quantity of steam
+	// dumped is minimized") without letting the header sag to the
+	// 500 psia low-steamline ESFAS setpoint. Derived; sized for
+	// comfortable margin above that setpoint.
+	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:73-77
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:8-14
+	SteamDumpTripHeaderFloorFraction = 0.78
+
 	// AtmosphericDumpDesignFraction is the atmospheric relief
 	// capacity as a fraction of rated steam flow. Derived at half
 	// the condenser-dump fraction; the spec gives no number.
@@ -4283,6 +4313,12 @@ type ReactorProtectionSystem struct {
 	// "The RPS provides for manual initiation of reactor trip
 	// by operator action in the control room."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:8-9
+	// It votes the reactor trip only: Table 7-1's ESFAS trigger
+	// lists carry their own manual pushbuttons ("Manual safety
+	// injection" under Safety Injection), and a reactor trip is
+	// described as avoiding unnecessary ESFAS actuation.
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:8-14
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:11-13
 	ManualTrip bool
 
 	// SafetyInjectionBlocked is the operator block on SI
@@ -4296,6 +4332,14 @@ type ReactorProtectionSystem struct {
 	// initiation signals are blocked."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:108-110
 	SafetyInjectionBlocked bool
+
+	// ManualSI is true when the operator has pressed a manual
+	// safety-injection (or manual steamline-isolation / Phase A)
+	// pushbutton; it carries the "manual" entries of the ESFAS
+	// trigger lists, which are separate signals from the manual
+	// reactor trip.
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:8-21
+	ManualSI bool
 
 	// TripSignalCount tracks how many of the redundant trip
 	// channels are demanding a trip. The simplified model

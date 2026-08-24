@@ -57,6 +57,11 @@ func TestCondenser_NoCWDegradesToAtmospheric(t *testing.T) {
 //     the turbine."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:32-33
 func TestCondenser_TripOpensDumpValveAndReclosesOnAdmission(t *testing.T) {
+	// Post-trip stored heat: Tavg well above the no-load value, so
+	// the Tavg-modulated trip dump demands full open.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:70-77
+	hotTavg := Temperature{Val: CoreReferenceInletF +
+		SteamDumpTripDeadbandF + SteamDumpTripSpanF, Unit: u.Fahrenheit}
 	tb := TurbineBuilding{
 		Condenser: Condenser{
 			Pressure:           CondenserDesignVacuum,
@@ -71,7 +76,7 @@ func TestCondenser_TripOpensDumpValveAndReclosesOnAdmission(t *testing.T) {
 		},
 	}
 	for i := 0; i < int(2*time.Second/TimeStep); i++ {
-		tb = tb.StepWithSteam(SteamGeneratorShellPressure, true)
+		tb = tb.StepWithSteam(SteamGeneratorShellPressure, hotTavg, true, false)
 	}
 	assert.Greater(t, tb.Turbine.DumpValve.Open, 0.9,
 		"want DumpValve opened by the trip, got %v", tb.Turbine.DumpValve.Open)
@@ -80,7 +85,7 @@ func TestCondenser_TripOpensDumpValveAndReclosesOnAdmission(t *testing.T) {
 	tb.Turbine.State = TurbineRunning
 	tb.Turbine.StopValve.Open = 1.0
 	for i := 0; i < int(2*time.Second/TimeStep); i++ {
-		tb = tb.StepWithSteam(SteamGeneratorShellPressure, true)
+		tb = tb.StepWithSteam(SteamGeneratorShellPressure, hotTavg, true, false)
 	}
 	assert.Zero(t, tb.Turbine.DumpValve.Open,
 		"want DumpValve closed once steam is admitted, got %v",

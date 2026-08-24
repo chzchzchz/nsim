@@ -407,6 +407,10 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	// "Manual trip signal – Redundant control
 	// board pushbuttons are provided."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:8-9
+	// The write latches the RPS manual-trip input so the trip
+	// declares through normal voting; RPV.Trip is owned by the
+	// RPS (Plant.Step propagates ReactorTripped into it each
+	// step) and is kept here only for direct-state compatibility.
 	m["ReactorBuilding/ReactorPressureVessel/Trip"] = &bridge.Control{
 		Part:  "ReactorBuilding/ReactorPressureVessel",
 		Label: "Trip",
@@ -419,6 +423,9 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			v, err := bridge.StrToBool(s)
 			if err != nil {
 				return err
+			}
+			if v {
+				p.ReactorBuilding.ReactorProtectionSystem.ManualTrip = true
 			}
 			p.ReactorBuilding.ReactorPressureVessel.Trip = v
 			return nil
