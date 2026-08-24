@@ -75,9 +75,9 @@ func addPlantOperationControls(p *Plant, m bridge.ControlMap) {
 		},
 		Set: func(s string) error {
 			switch s {
-			case "0":
+			case "0", "TurbineLead":
 				p.PlantOperation.LeadLagMode = TurbineLead
-			case "1":
+			case "1", "ReactorLead":
 				p.PlantOperation.LeadLagMode = ReactorLead
 			default:
 				return fmt.Errorf(

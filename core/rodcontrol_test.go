@@ -329,3 +329,25 @@ func TestRPC_BridgeControlsAndSensorsRoundTrip(t *testing.T) {
 }
 
 func absF(v float64) float64 { return max(v, -v) }
+
+// The LeadLagMode selector is registered with Kind "enum" whose words
+// are "TurbineLead"/"ReactorLead", so the Set path must accept its own
+// declared vocabulary (and keep accepting the numeric form the
+// RPC tests use). Regression: the word forms errored out, which made
+// the mode unreachable from the web console and command files.
+func TestBridge_LeadLagModeAcceptsEnumWords(t *testing.T) {
+	p := MakePlant()
+	cm := GetControlMap(&p)
+	c := cm["PlantOperation/LeadLagMode"]
+	require.NotNil(t, c, "want LeadLagMode control registered")
+
+	require.NoError(t, c.Set("ReactorLead"))
+	assert.Equal(t, ReactorLead, p.PlantOperation.LeadLagMode,
+		"the declared enum word must select reactor lead")
+	require.NoError(t, c.Set("TurbineLead"))
+	assert.Equal(t, TurbineLead, p.PlantOperation.LeadLagMode,
+		"the declared enum word must select turbine lead")
+	require.NoError(t, c.Set("1"))
+	assert.Equal(t, ReactorLead, p.PlantOperation.LeadLagMode,
+		"the numeric form stays accepted")
+}
