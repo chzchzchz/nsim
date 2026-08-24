@@ -25,6 +25,19 @@
             font-size: 14px;
         }
         header#sim-bar button:hover { background: #4a6178; }
+        header#sim-bar .sim-logo {
+            font-size: 22px;
+            line-height: 1;
+            letter-spacing: 2px;
+            user-select: none;
+        }
+        header#sim-bar .sim-title {
+            font-size: 15px;
+            font-weight: bold;
+            color: #d5e3ef;
+            user-select: none;
+            margin-right: 8px;
+        }
         header#sim-bar button:disabled {
             background: #555;
             cursor: not-allowed;
