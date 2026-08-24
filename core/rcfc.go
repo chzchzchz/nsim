@@ -136,6 +136,26 @@ const (
 	airSpecificGasConst   = 287.0 // J/kg·K
 	containmentAirDensity = 1.2   // kg/m³
 	airCp                = 1005.0 // J/kg·K
+
+	// ContainmentStructuresTempF is the lumped temperature of the
+	// passive heat sink the containment structures and sump form.
+	// Anchored to the MakePlant atmosphere seed so a fresh plant
+	// starts at exactly zero sink draw.
+	ContainmentStructuresTempF = 120.0
+
+	// ContainmentStructureTau is the first-order time constant with
+	// which the structures absorb (or return) heat toward their
+	// lumped temperature. Assumption; the source describes no rate.
+	// Sized so a DBA-class full-steam discharge peaks near the design
+	// basis instead of running past it: the DBA peak pressure IS the
+	// design pressure ("The minimum design pressure and temperature
+	// of the containment are equal to the peak pressure and
+	// temperature occurring as the result of any rupture of the
+	// RCS", chapter_6/page_110.txt:14-21), and at this tau the
+	// equilibrium under a full main-steam-header enthalpy release
+	// lands below the 60 psig design value rather than multiples
+	// beyond it.
+	ContainmentStructureTau = 120.0 // seconds
 )
 
 // Step advances the ContainmentBuilding by one timestep. The
@@ -175,6 +195,15 @@ func (c *ContainmentBuilding) Step(
 	netW := float64(heatIn) - float64(heatOutRCFC)
 	volumeM3 := ret.FreeVolume * ft3ToM3
 	massKg := volumeM3 * containmentAirDensity
+	// Passive structure sink: walls, floors, and internals absorb
+	// and condense steam, returning heat when the atmosphere runs
+	// cooler than the structures. Zero at the seeded state; the
+	// first-order pull bounds any sustained release's equilibrium
+	// instead of letting an unbounded gas heat past the design
+	// basis.
+	structureSinkW := float64(ret.Temperature.Float()-ContainmentStructuresTempF) /
+		ContainmentStructureTau * (massKg * airCp)
+	netW -= structureSinkW
 	deltaK := netW / (massKg * airCp) * dt
 	newTempF := ret.Temperature.Float() + deltaK*9.0/5.0
 	newTempF = max(newTempF, -459.67)

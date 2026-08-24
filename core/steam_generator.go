@@ -352,11 +352,16 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 	if ret.MainSteamLineBreak.Open > 0 && ret.Pressure > 0 {
 		breakFraction = ret.MainSteamLineBreak.Open *
 			SteamLineBreakCapacityFraction
-		ret.BreakFlow = Volume{Val: breakFraction *
-			SteamGeneratorFullLoadSteamFlow.Float()/SecondsPerHour*
-			dt.Seconds(), Unit: u.Gallon}
-		newWater := max(ret.Water.Float()-ret.BreakFlow.Float(), 0)
-		ret.Water = vol(ret.Water, newWater)
+		// The exported discharge is capped at the liquid-equivalent
+		// inventory actually present so BreakFlow and the water
+		// debit close the ledger exactly; near dryout the draw
+		// tapers to what the shell still holds.
+		draw := breakFraction *
+			SteamGeneratorFullLoadSteamFlow.Float() / SecondsPerHour *
+			dt.Seconds()
+		take := min(draw, ret.Water.Float())
+		ret.BreakFlow = Volume{Val: take, Unit: u.Gallon}
+		ret.Water = vol(ret.Water, ret.Water.Float()-take)
 	}
 
 	// Steamline vent draw. The vent bank passes its capacity
