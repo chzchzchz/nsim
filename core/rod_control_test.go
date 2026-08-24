@@ -136,49 +136,25 @@ func TestRodAutoControlFrozenWhileTripped(t *testing.T) {
 // program slews at the spec's 5-percent-per-minute loading rate), not
 // fixed-horizon spot values.
 //
-// Time-step policy, phase by phase. The reactor's reactivity chain is
-// quantized per step rather than integrated across the step width:
-// every call to the pressure-vessel Step multiplies fission power by
-// 1 + rho/100 (the quasi-static power-defect relation, "scales the
-// previous fission power by 1 + rho/100 every step",
+// Time-step policy: uniform 10 ms. This test originally exposed the
+// reactor's step-quantized fission compounding ("scales the previous
+// fission power by 1 + rho/100 every step",
 // specs/the_westinghouse_pressurized_water_react/glossary.md:142 via
-// the ReactorPressureVessel.Step update). At the default 1 ms tick a
-// sustained rho therefore moves power at roughly 10 x rho percent per
-// SIMULATED second; at a 10 ms tick that channel runs ten times
-// slower, at 100 ms a hundred times. Rod auto control steers against
-// exactly this channel, so widening the tick during a maneuver does
-// not merely coarsen the trajectory, it changes the plateau the
-// closed loop settles on. Measured here, not assumed:
-//   - uniform 10 ms tick: descent parks at 0.82 of rated where the
-//     settle band demands < 0.65;
-//   - uniform 100 ms tick: power barely leaves rated (0.99 vs the
-//     < 0.95 x start requirement).
-// Hence the windows are split:
-//   - Pre-maneuver chemistry trim (30 s): the loop only defends the
-//     rated equilibrium, no setpoint moves, so the slowed channel has
-//     no trajectory to distort. 10 ms.
-//   - Descent and settle (150 s + 150 s): the demanded-power program
-//     itself is walking and its landing point IS the test's subject.
-//     DefaultTimeStep.
-//   - Plateau hold (90 s): re-reads an already-settled band.
-//     10 ms.
-//   - Recovery toward rated (250 s): directional assertion
-//     (recovered > held + 0.1), but not marginless in practice:
-//     at 10 ms the slowed channel climbed only +0.06 over the
-//     window against the required +0.1, so this phase splits the
-//     difference at 5 ms where the rise clears its requirement.
-//
-// overrideTimeStep restores the previous tick when the test ends, so
-// the calls below simply switch the active width between phases. Must
-// not run in parallel: the override mutates process-global state.
+// the ReactorPressureVessel.Step update): at a uniform 10 ms tick the
+// descent parked at 0.82 of rated against a < 0.65 band, and at 100 ms
+// power barely left rated, because loop gain scaled with tick count
+// instead of simulated time. That channel is now anchored to
+// DefaultTimeStep and raised to the elapsed tick count, so one 10 ms
+// Step lands where ten 1 ms Steps would (verified by
+// TestReactorFissionPower_WidthInvariance) and the whole maneuver runs
+// wide. Must not run in parallel: the override mutates process-global
+// state.
 //
 // Spec:
 //   "The rod control system automatically adjusts the power level of
 //   the reactor to match the power demanded by the turbine [...]"
 //   specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:68-71
 func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
-	// See the time-step policy note above: passive windows ride the
-	// 10 ms tick, maneuver windows reset to DefaultTimeStep.
 	overrideTimeStep(t, 10*time.Millisecond)
 	p := MakePlant()
 	boron := 500.0
@@ -187,18 +163,10 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.AutoControl = true
 
-	// Chemistry trim rebalance before maneuvering. Auto control
-	// only defends the rated equilibrium here, so the slower
-	// effective power channel at this tick width cannot shift the
-	// baseline this phase feeds forward.
+	// Chemistry trim rebalance before maneuvering.
 	stepN(&p, int(30*time.Second/TimeStep))
 	startPower := float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower)
 
-	// Maneuver begins: the demanded-power program starts walking,
-	// and its trajectory is the subject under test, so the tick
-	// returns to production width for the descent and settle
-	// windows.
-	overrideTimeStep(t, DefaultTimeStep)
 	const load = 0.7
 	p.TurbineBuilding.Turbine.Setpoint = load
 	stepN(&p, int(150*time.Second/TimeStep))
@@ -231,11 +199,7 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 	// program line. Power-vs-demand tracking is asserted above; the
 	// Tavg-program identity lands with that feedback term.
 
-	// The plateau must hold, not glide into collapse. Back on the
-	// 10 ms tick: the band being asserted was established at the
-	// default tick, and holding it only requires the loop to defend
-	// an existing equilibrium, not to track a moving program.
-	overrideTimeStep(t, 10*time.Millisecond)
+	// The plateau must hold, not glide into collapse.
 	stepN(&p, int(90*time.Second/TimeStep))
 	held := float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower) /
 		float64(CoreRatedThermalPower)
@@ -243,11 +207,6 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 	assert.Less(t, held, 0.65, "plateau stable, not climbing away")
 
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
-	// Recovery needs real climb rate, not just a defended state: at
-	// the 10 ms tick the rise covered +0.06 of the required +0.1,
-	// so this window settles on 5 ms as the widest width whose
-	// slowed channel still clears the directional requirement.
-	overrideTimeStep(t, 5 * time.Millisecond)
 	stepN(&p, int(250*time.Second/TimeStep))
 	recovered := float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower) /
 		float64(CoreRatedThermalPower)

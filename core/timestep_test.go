@@ -62,3 +62,28 @@ func TestOverrideTimeStep_RestoresDefaultAfterTest(t *testing.T) {
 	overrideTimeStep(t, 250*time.Millisecond)
 	assert.Equal(t, 250*time.Millisecond, TimeStep)
 }
+
+// The anchored fission compounding makes trajectories a function of
+// simulated time alone: five simulated seconds of a boron-driven fold
+// must land on the same power whether stepped at the default tick or
+// in fifty 100 ms chunks. This is the property that lets long-span
+// tests widen the tick without changing what they observe.
+func TestReactorFissionPower_WidthInvariance(t *testing.T) {
+	run := func(steps int) float64 {
+		var rpv ReactorPressureVessel
+		rpv.SeedSteadyStatePower(CoreRatedThermalPower)
+		rpv.ControlRods.Insertion = 0
+		rpv.ControlRods.BoronConcentration = CVCSInitialBoron + 200
+		for i := 0; i < steps; i++ {
+			rpv = rpv.Step(RCPRatedSpeed, 0)
+		}
+		return float64(rpv.FissionPower)
+	}
+
+	fine := run(5000) // five seconds at the default tick
+	overrideTimeStep(t, 100*time.Millisecond)
+	coarse := run(50) // the same five seconds at 100 ms
+
+	assert.InDelta(t, fine, coarse, fine*1e-9,
+		"equal simulated time must reach equal fission power at any step width")
+}

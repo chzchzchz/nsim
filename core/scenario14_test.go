@@ -47,8 +47,17 @@ func scenario14FullPowerPlant() Plant {
 	return p
 }
 
+// Fidelity note: this glide used to require the default TimeStep.
+// The reactor's per-step reactivity compounding folded power more
+// slowly under a coarser tick against an unchanged setpoint chase, and
+// the growing offtake surplus lifted SG header pressure until the
+// condenser dump left its <=0.20 pressure-modulation band (measured at
+// a uniform 10 ms tick). The compounding is now anchored to
+// DefaultTimeStep (see TestReactorFissionPower_WidthInvariance), so
+// the whole transient runs wide. Must not run in parallel:
+// overrideTimeStep mutates global simulation state.
 func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
-	t.Parallel()
+	overrideTimeStep(t, 10*time.Millisecond)
 	p := scenario14FullPowerPlant()
 
 	// Rods lead: one insertion drive starts the power fold.

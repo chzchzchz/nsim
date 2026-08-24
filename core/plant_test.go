@@ -946,17 +946,17 @@ func TestPlant_TripBypassModulatesAndHoldsHeaderPressure(t *testing.T) {
 	// (880 psia floor, safety-valve ceiling) rather than per-step
 	// shape.
 	//
-	// Fidelity note: this hold cannot ride a widened TimeStep. The
-	// stepback fold follows the reactor's per-step reactivity
-	// compounding, so a coarser tick folds power more slowly against
-	// the tripped turbine's fixed offtake, and the surplus steam
-	// pushes the header peak past the 985 psia safety-valve ceiling:
-	// measured 985.12 psia at a uniform 10 ms tick and 985.04 psia at
-	// 5 ms against an assertion that exists to prove the valve stays
-	// seated. It keeps the default step throughout rather than
-	// overrideTimeStep, and stays parallel because nothing global is
-	// mutated.
-	t.Parallel()
+	// Fidelity note: this hold used to require the default TimeStep.
+	// The stepback fold follows the reactor's per-step reactivity
+	// compounding, so a coarser tick folded power more slowly against
+	// the tripped turbine's fixed offtake and pushed the header peak
+	// past the 985 psia safety-valve ceiling: measured 985.12 psia at
+	// a uniform 10 ms tick and 985.04 psia at 5 ms. That compounding
+	// is now anchored to DefaultTimeStep (see
+	// TestReactorFissionPower_WidthInvariance), so the ride-through
+	// runs wide and the valve stays seated at any width. Must not run
+	// in parallel: overrideTimeStep mutates global simulation state.
+	overrideTimeStep(t, 10*time.Millisecond)
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)

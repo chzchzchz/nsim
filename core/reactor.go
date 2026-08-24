@@ -238,7 +238,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 	//
 	//   - Fission power responds to reactivity: the quasi-static
 	//     power-defect relation scales the previous fission power
-	//     by 1 + rho/100 every step. One equation set governs
+	//     by 1 + rho/100 per reference tick. One equation set governs
 	//     operation and shutdown alike; a scram simply drives rho
 	//     negative via full rod insertion
 	//     (specs/the_westinghouse_pressurized_water_react/glossary.md:142)
@@ -247,10 +247,18 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 	//     proportional to fission power while the inventory drains
 	//     at fixed radioactive decay constants that reactivity
 	//     cannot influence (specs/wiki/Decay_heat.txt).
-	powerCorrection := 1.0 + float64(ret.Reactivity)/100.0
-	if powerCorrection < 0 {
-		powerCorrection = 0
+	//
+	// The compounding is anchored to DefaultTimeStep and raised to
+	// the elapsed tick count, so the trajectory is a function of
+	// simulated time alone: one 10 ms Step lands where ten 1 ms
+	// Steps would. Without this anchoring a widened tick slows every
+	// closed loop that steers against fission power.
+	base := 1.0 + float64(ret.Reactivity)/100.0
+	if base < 0 {
+		base = 0
 	}
+	powerCorrection := math.Exp(math.Log(base) *
+		(dt.Seconds() / DefaultTimeStep.Seconds()))
 	ret.FissionPower = Watts(float64(ret.FissionPower) * powerCorrection)
 	// The startup neutron sources keep a minimal fission population
 	// alive even deep in subcritical conditions; without this floor
