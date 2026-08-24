@@ -124,6 +124,13 @@ var diagramParts = []diagramPart{
 	{"VCT", "AuxiliaryBuilding/ChemicalVolumeControlSystem/VCT", "VolumeControlTank", "VCT"},
 	{"ChgPump", "AuxiliaryBuilding/ChemicalVolumeControlSystem", "ChargingPump", "Chg Pump"},
 	{"MSR", "TurbineBuilding/MoistureSeparatorReheater", "MoistureSeparatorReheater", "MSR"},
+	{"EAMD", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPump", "EmergencyFeedwaterPumpMD", "EFWS A MD"},
+	{"EATD", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump", "EmergencyFeedwaterPumpTD", "EFWS A TD"},
+	{"EBMD", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/MotorPump", "EmergencyFeedwaterPumpMD", "EFWS B MD"},
+	{"EBTD", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump", "EmergencyFeedwaterPumpTD", "EFWS B TD"},
+	{"CIS", "ReactorBuilding/ContainmentIsolationSystem", "ContainmentIsolation", "CIS"},
+	{"HDS", "ReactorBuilding/HydrogenDetectionSuppression", "HydrogenRecombiner", "HDS"},
+	{"EXCITER", "TurbineBuilding/Generator/ExcitationSystem", "BrushlessExciter", "Exciter"},
 }
 
 // buildingLabels captions the cluster outlines drawn behind symbols.
@@ -222,6 +229,24 @@ var runAccessors = map[string]func(*core.Plant) bool{
 	"ChgPump": func(p *core.Plant) bool {
 		return p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning
 	},
+	"EAMD": func(p *core.Plant) bool {
+		return p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.Pump.Running
+	},
+	"EATD": func(p *core.Plant) bool {
+		return p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.Pump.Running
+	},
+	"EBMD": func(p *core.Plant) bool {
+		return p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPump.Pump.Running
+	},
+	"EBTD": func(p *core.Plant) bool {
+		return p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.Pump.Running
+	},
+	"HDS": func(p *core.Plant) bool {
+		return p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.RecombinerActive
+	},
+	"EXCITER": func(p *core.Plant) bool {
+		return p.TurbineBuilding.Generator.GeneratorExcitationSystem.ExciterActive
+	},
 }
 
 // levelAccessors maps tank-backed diagram parts to their live
@@ -319,6 +344,8 @@ var alarmParts = map[core.AlarmID][]string{
 	core.AlarmIDSIActuated:            {"SISAccumulators"},
 	core.AlarmIDAFWStart:              {"DieselAFWPump", "MotorAFWPump", "TurbineAFWPump"},
 	core.AlarmIDFeedwaterIsolation:    {"MainFeedValve"},
+	core.AlarmIDContainmentIsolA:      {"CIS"},
+	core.AlarmIDContainmentIsolB:      {"CIS"},
 }
 
 // haloTint is the resolved overlay state for one part: halo colour

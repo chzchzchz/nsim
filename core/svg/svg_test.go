@@ -334,3 +334,30 @@ func TestElectricalTiesShowBreakerState(t *testing.T) {
 	assert.Equal(t, allOpen-1, strings.Count(closed, `fill="#aaa"`),
 		"closing a bus breaker must turn exactly one contact green")
 }
+
+// TestSafeguardSystemsRender checks the EFWS subsystem pumps, the
+// containment isolation block, hydrogen recombiner, and exciter
+// resolve against the embedded layout with their live dots and
+// alarm halos.
+func TestSafeguardSystemsRender(t *testing.T) {
+	p := core.MakePlant()
+	out := renderPlant(t, &p)
+	for _, label := range []string{
+		"EFWS A MD", "EFWS A TD", "EFWS B MD", "EFWS B TD",
+		"CIS", "HDS", "Exciter",
+	} {
+		assert.Contains(t, out, ">"+label+"<")
+	}
+	assert.NotContains(t, out, "anchors missing")
+
+	base := strings.Count(out, `fill="green"`)
+	p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.Pump.Running = true
+	p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.RecombinerActive = true
+	p.TurbineBuilding.Generator.GeneratorExcitationSystem.ExciterActive = true
+	assert.Greater(t, strings.Count(renderPlant(t, &p), `fill="green"`),
+		base+2, "EFWS/recombiner/exciter activity must draw green dots")
+
+	p.ReactorBuilding.ReactorProtectionSystem.ContainmentIsolationPhaseAActuated = true
+	assert.Positive(t, strings.Count(renderPlant(t, &p), `stroke="#e02020"`),
+		"a Phase A isolation (trip severity) must halo the CIS block")
+}

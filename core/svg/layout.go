@@ -90,6 +90,24 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	// (specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt).
 	{"PRTSPRAY", "cluster_containment", "modulating"},
 
+	// EFWS subsystem pumps: one motor- and one turbine-driven
+	// pump per subsystem, on diverse power sources
+	// (specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:61-69).
+	{"EAMD", "cluster_auxiliary", "EmergencyFeedwaterPumpMD"},
+	{"EATD", "cluster_auxiliary", "EmergencyFeedwaterPumpTD"},
+	{"EBMD", "cluster_auxiliary", "EmergencyFeedwaterPumpMD"},
+	{"EBTD", "cluster_auxiliary", "EmergencyFeedwaterPumpTD"},
+
+	// Containment isolation penetrations and the post-LOCA
+	// hydrogen recombiner
+	// (specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:19-26).
+	{"CIS", "cluster_containment", "ContainmentIsolation"},
+	{"HDS", "cluster_containment", "HydrogenRecombiner"},
+
+	// Brushless exciter on the generator shaft
+	// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:23-24).
+	{"EXCITER", "cluster_turbine", "BrushlessExciter"},
+
 	// Moisture separator reheater between the HP/LP turbine
 	// sections (chapter_15 figure 15.3-1 steam path).
 	{"MSR", "cluster_turbine", "MoistureSeparatorReheater"},
