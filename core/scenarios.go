@@ -835,6 +835,25 @@ var scenarioCatalog = []Scenario{
 				Value:      strconv.FormatFloat(CoreRatedCriticalBoronPpm, 'f', -1, 64)},
 		},
 	},
+	{
+		ID:       "ccw-train-lineup",
+		Number:   33,
+		Category: "Auxiliary system operations",
+		Title:    "Component cooling water train lineup",
+		StartState: "Full-power lineup with the lumped CCW loop " +
+			"holding its design 105 F inlet, service water " +
+			"flowing at design, and the cooling pump lined up " +
+			"to auto-start on the energised ESF bus.",
+		Objective: "Keep the component cooling barrier alive " +
+			"across regimes: confirm the design inlet at " +
+			"power, lose the ultimate heat sink and watch " +
+			"the inlet soak toward - never past - the 120 F " +
+			"cooldown ceiling, then restore service water " +
+			"and ride the recovery lag back toward 105 F.",
+		Apply: func(p *Plant) {
+			*p = fullPowerLineup()
+		},
+	},
 }
 
 // CheckResult reports whether an evolution's end-state bounds hold on
@@ -1337,6 +1356,14 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 			"volume control tank kept inside its normal band")
 		c.require(!p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
 			"no trip through the evolution")
+		return c.result()
+	},
+	"ccw-train-lineup": func(p *Plant) CheckResult {
+		var c checkBounds
+		ccw := &p.AuxiliaryBuilding.ComponentCoolingWaterSystem
+		c.require(ccw.PumpRunning, "component cooling pump in service")
+		c.require(math.Abs(ccw.InletTemp.Float()-CCWSInletSteadyStateTemp) <= 1,
+			"CCW inlet holding the design 105 F value")
 		return c.result()
 	},
 }
