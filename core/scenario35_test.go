@@ -168,6 +168,51 @@ func TestScenario35_StarvedTrainDrawsRecirculatedInventoryFirst(t *testing.T) {
 		"released distillate goes straight back to the storage tank")
 }
 
+// The feed-flow sensor must read delivered behavior, not intent: a
+// train whose available inventory covers less than one step's draw
+// reports the throttled rate it actually achieved.
+func TestScenario35_StarvingTrainReportsThrottledFeedFlow(t *testing.T) {
+	brs := BoronRecycleSystem{
+		FeedPumpRunning: true,
+		Recirculating:   Volume{Val: 0.002, Unit: u.Gallon},
+	}
+	out := brs.Step(0)
+
+	fullDraw := BRSSEvaporatorDutyGPM * TimeStep.Seconds()
+	require.Less(t, 0.002, fullDraw,
+		"fixture must starve the train below one step's draw")
+	assert.InDelta(t, 0.002/TimeStep.Seconds(), out.FeedFlow, 1e-9,
+		"FeedFlow must report the rate actually processed")
+	assert.Less(t, out.FeedFlow, BRSSEvaporatorDutyGPM,
+		"a starving train must not read its duty figure")
+	assert.Zero(t, out.HoldupDrawn.Float())
+}
+
+// The storage-tank monitor sits in the distillate line, so a latched
+// carryover cannot drive its signal while no distillate is being
+// produced; the trip becomes reachable only once the train runs.
+func TestScenario35_MonitorNeedsProductionToReachItsTrip(t *testing.T) {
+	idle := BoronRecycleSystem{Carryover: true}
+	for i := 0; i < 400; i++ {
+		idle = idle.Step(500)
+	}
+	assert.Zero(t, idle.DistillateRadiation,
+		"carryover without production must not climb the monitor")
+	assert.False(t, idle.DistillateDiverted)
+
+	running := BoronRecycleSystem{
+		FeedPumpRunning: true,
+		Carryover:       true,
+	}
+	latched := false
+	for i := 0; i < 200000 && !latched; i++ {
+		running = running.Step(500)
+		latched = running.DistillateDiverted
+	}
+	assert.True(t, latched,
+		"production flow must carry the monitor to its high signal")
+}
+
 // While the auto-divert holds, returned distillate loops through the
 // train and the only inventory leaving is 4 wt% concentrate: the
 // holdup draw collapses to the concentrate rate.

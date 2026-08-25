@@ -48,11 +48,60 @@ func (s *BoronRecycleSystem) Step(holdupGal float64) BoronRecycleSystem {
 	ret := *s
 	dt := TimeStep.Seconds()
 
+	// Processing runs first so the radiation monitor samples this
+	// step's actual distillate flow: the scintillation counter sits in
+	// the line leading into the storage tank, so it only sees
+	// contamination in distillate the train is producing.
+	// "a scintillation counter is located in the line leading into the
+	// tank."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:26-28
+	ret.FeedFlow = 0
+	ret.HoldupDrawn = Volume{}
+	producing := false
+	if ret.FeedPumpRunning {
+		available := holdupGal + ret.Recirculating.Float()
+		draw := min(BRSSEvaporatorDutyGPM*dt, available)
+		if draw > 0 {
+			producing = true
+			// Honest rate: an availability-limited draw reports a
+			// proportional feed flow instead of the duty figure.
+			ret.FeedFlow = draw / dt
+
+			// The 4 wt% product grade fixes the mass split for holdup
+			// liquid at the rated-critical boron concentration:
+			// everything not left in the concentrate leaves as clean
+			// distillate.
+			concentrateFrac := CoreRatedCriticalBoronPpm /
+				BRSSProductWeightPercentPpm
+			concentrate := draw * concentrateFrac
+			distillate := draw - concentrate
+
+			// Recirculated distillate is already inside the train; it
+			// feeds the draw before new holdup inventory does.
+			fromRecirc := min(ret.Recirculating.Float(), draw)
+			ret.Recirculating = vol(ret.Recirculating,
+				ret.Recirculating.Float()-fromRecirc)
+			ret.HoldupDrawn = Volume{Val: draw - fromRecirc, Unit: u.Gallon}
+
+			ret.BoricAcidProduced = vol(ret.BoricAcidProduced,
+				s.BoricAcidProduced.Float()+concentrate)
+			if ret.DistillateDiverted {
+				// Returned distillate rejoins the train upstream of the
+				// feed demineralizer for reprocessing.
+				ret.Recirculating = vol(ret.Recirculating,
+					ret.Recirculating.Float()+distillate)
+			} else {
+				ret.DistillateDelivered = vol(ret.DistillateDelivered,
+					s.DistillateDelivered.Float()+distillate)
+			}
+		}
+	}
+
 	// Radiation monitor response: first-order lag toward the carryover
-	// state. The signal decays whether or not the train runs, since
-	// stopped production stops fresh contamination.
+	// state, driven only while contaminated distillate is actually
+	// flowing. The signal decays whether or not the train runs.
 	target := 0.0
-	if ret.Carryover {
+	if ret.Carryover && producing {
 		target = 1
 	}
 	alpha := dt / BRSSRadiationTauSec
@@ -70,46 +119,6 @@ func (s *BoronRecycleSystem) Step(holdupGal float64) BoronRecycleSystem {
 	}
 	if !ret.Carryover && ret.DistillateRadiation < BRSSRadiationReleaseFrac {
 		ret.DistillateDiverted = false
-	}
-
-	ret.FeedFlow = 0
-	ret.HoldupDrawn = Volume{}
-	if !ret.FeedPumpRunning {
-		return ret
-	}
-
-	available := holdupGal + ret.Recirculating.Float()
-	draw := min(BRSSEvaporatorDutyGPM*TimeStep.Seconds(), available)
-	if draw <= 0 {
-		return ret
-	}
-	ret.FeedFlow = BRSSEvaporatorDutyGPM
-
-	// The 4 wt% product grade fixes the mass split for holdup liquid
-	// at the rated-critical boron concentration: everything not left
-	// in the concentrate leaves as clean distillate.
-	concentrateFrac := CoreRatedCriticalBoronPpm /
-		BRSSProductWeightPercentPpm
-	concentrate := draw * concentrateFrac
-	distillate := draw - concentrate
-
-	// Recirculated distillate is already inside the train; it feeds
-	// the draw before new holdup inventory does.
-	fromRecirc := min(ret.Recirculating.Float(), draw)
-	ret.Recirculating = vol(ret.Recirculating,
-		ret.Recirculating.Float()-fromRecirc)
-	ret.HoldupDrawn = Volume{Val: draw - fromRecirc, Unit: u.Gallon}
-
-	ret.BoricAcidProduced = vol(ret.BoricAcidProduced,
-		s.BoricAcidProduced.Float()+concentrate)
-	if ret.DistillateDiverted {
-		// Returned distillate rejoins the train upstream of the feed
-		// demineralizer for reprocessing.
-		ret.Recirculating = vol(ret.Recirculating,
-			ret.Recirculating.Float()+distillate)
-	} else {
-		ret.DistillateDelivered = vol(ret.DistillateDelivered,
-			s.DistillateDelivered.Float()+distillate)
 	}
 
 	return ret
