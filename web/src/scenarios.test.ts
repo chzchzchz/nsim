@@ -64,4 +64,10 @@ describe("objectiveStatusText", () => {
     it("confirms completion without detail noise", () => {
         expect(objectiveStatusText(true, "ignored")).toBe("✓ objective met");
     });
+
+    it("reports the latched met time when provided", () => {
+        expect(objectiveStatusText(true, "ignored", 34107)).toBe(
+            "✓ objective met @ 34.1 s simulated",
+        );
+    });
 });

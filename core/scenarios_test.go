@@ -5,6 +5,7 @@ import (
 	"time"
 
 	u "github.com/bcicen/go-units"
+	"github.com/chzchzchz/nsim/bridge"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -330,4 +331,56 @@ func TestRunProgressMilestoneGating(t *testing.T) {
 	assert.True(t, res.Done,
 		"exercised lever plus satisfied bounds complete the run")
 	assert.Contains(t, res.Detail, "met at 2 s simulated")
+}
+
+// The safeguards evolutions resolve once the operator performs their
+// scripted real-world actions: lining a diesel onto the SI signal for
+// recirculation switchover, and swapping spray suction at the CSST
+// Lo-Lo setpoint. Both run through legitimate operator controls only.
+func TestOperatorActionScenariosResolve(t *testing.T) {
+	cases := []struct {
+		id     string
+		budget time.Duration
+		act    func(t *testing.T, p *Plant, cm bridge.ControlMap, i int)
+	}{
+		{"si-recirculation", 2 * time.Hour,
+			func(t *testing.T, p *Plant, cm bridge.ControlMap, i int) {
+				t.Helper()
+				if i == 100 { // 20 s in
+					require.NoError(t, cm["ReactorBuilding/ReactorProtectionSystem/ManualSI"].Set("1"))
+					require.NoError(t, cm["AuxiliaryBuilding/DieselGenerator/StartSignal"].Set("2"))
+				}
+			}},
+		{"containment-spray", 8 * time.Hour,
+			func(t *testing.T, p *Plant, cm bridge.ControlMap, i int) {
+				t.Helper()
+				if i <= 100 {
+					return
+				}
+				css := &p.AuxiliaryBuilding.ContainmentSpraySystem
+				if css.CSSTLevel.Float() <= css.CSSTLowLevelSetpoint.Float() &&
+					!css.SuctionSump {
+					require.NoError(t, cm["AuxiliaryBuilding/ContainmentSpraySystem/SuctionSump"].Set("true"))
+				}
+			}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.id, func(t *testing.T) {
+			overrideTimeStep(t, 200*time.Millisecond)
+			s, ok := ScenarioByID(tc.id)
+			require.True(t, ok)
+			p := MakePlant()
+			s.Apply(&p)
+			cm := GetControlMap(&p)
+			steps := int(tc.budget / TimeStep)
+			done := false
+			for i := 0; i < steps && !done; i++ {
+				tc.act(t, &p, cm, i)
+				p.Step()
+				p.Update()
+				done = s.Check(&p).Done
+			}
+			assert.True(t, done, "%s must resolve within %v", tc.id, tc.budget)
+		})
+	}
 }
