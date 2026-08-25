@@ -544,3 +544,14 @@
     border-left-color: #2e8b57;
 }
 #objective.met .objective-status { color: #2e8b57; font-weight: bold; }
+
+#objective .objective-again {
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    background: #2e8b57;
+    color: white;
+    border: 1px solid #247046;
+    border-radius: 4px;
+}
+#objective .objective-again:hover { background: #3aa06a; }

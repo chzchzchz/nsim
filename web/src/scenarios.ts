@@ -51,19 +51,31 @@ export interface ScenarioPicker {
     close(): void;
 }
 
-// ObjectiveStatus mirrors the wasm objectiveJSON snapshot.
+// ObjectiveStatus mirrors the wasm objectiveJSON snapshot. MetMs
+// carries the simulated time completion first latched.
 export interface ObjectiveStatus {
     active: boolean;
     id?: string;
     title?: string;
     done: boolean;
+    metMs?: number;
     detail: string;
 }
 
 // objectiveStatusText renders the completion line for the live
-// banner: the unmet bounds while pending, a confirmation when done.
-export function objectiveStatusText(done: boolean, detail: string): string {
-    return done ? "✓ objective met" : `pending — ${detail}`;
+// banner: the unmet bounds while pending, a confirmation with the
+// met time once latched.
+export function objectiveStatusText(
+    done: boolean,
+    detail: string,
+    metMs?: number,
+): string {
+    if (!done) {
+        return `pending — ${detail}`;
+    }
+    return metMs !== undefined
+        ? `✓ objective met @ ${(metMs / 1000).toFixed(1)} s simulated`
+        : "✓ objective met";
 }
 
 // renderScenarioPicker mounts a modal overlay listing every catalog

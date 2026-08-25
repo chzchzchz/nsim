@@ -232,3 +232,102 @@ func TestScenarioChecksFlipDoneAtTheirEndStates(t *testing.T) {
 		})
 	}
 }
+
+// The scripted malfunctions resolve through automatic protection
+// dynamics alone; this locks completability in against future model
+// changes. Operator-action evolutions are excluded on purpose: their
+// bounds only hold once the operator performs the procedure.
+func TestScriptedScenariosResolveWithoutOperatorAction(t *testing.T) {
+	cases := []struct {
+		id     string
+		budget time.Duration
+		tick   time.Duration
+	}{
+		{"load-rejection", 2 * time.Minute, 20 * time.Millisecond},
+		{"loss-of-offsite-power", 5 * time.Minute, 20 * time.Millisecond},
+		{"rcp-trip", 5 * time.Minute, 20 * time.Millisecond},
+		{"dropped-rod-bank", 30 * time.Minute, 50 * time.Millisecond},
+		{"steam-line-break", 30 * time.Minute, 50 * time.Millisecond},
+	}
+	for _, tc := range cases {
+		t.Run(tc.id, func(t *testing.T) {
+			overrideTimeStep(t, tc.tick)
+			s, ok := ScenarioByID(tc.id)
+			require.True(t, ok)
+			p := MakePlant()
+			s.Apply(&p)
+			script := append([]ScriptCommand{}, s.Script...)
+			cm := GetControlMap(&p)
+			steps := int(tc.budget / TimeStep)
+			done := false
+			for i := 0; i < steps && !done; i++ {
+				nowNs := int64(i) * int64(TimeStep)
+				ApplyScript(&script, nowNs, cm)
+				p.Step()
+				p.Update()
+				if nowNs >= scenarioTriggerDelayMs*int64(time.Millisecond) &&
+					s.Check(&p).Done {
+					done = true
+				}
+			}
+			assert.True(t, done,
+				"%s must resolve within %v of simulated time", tc.id, tc.budget)
+		})
+	}
+}
+
+// RunProgress latches completion and gates it behind milestones.
+func TestRunProgressLatchesAndGates(t *testing.T) {
+	s, ok := ScenarioByID("grid-synchronization")
+	require.True(t, ok)
+	p := MakePlant()
+	s.Apply(&p)
+	progress := NewRunProgress(s, 0)
+
+	// Nothing done yet.
+	progress.Observe(&p, 0)
+	assert.False(t, progress.Result(&p).Done)
+
+	// Satisfy the end-state bounds; completion latches with met time.
+	p.TurbineBuilding.Generator.BreakerClosed = true
+	p.TurbineBuilding.Generator.RealPower = 1e6
+	p.TurbineBuilding.Turbine.State = TurbineRunning
+	p.TurbineBuilding.Turbine.Velocity = TurbineRatedSpeed
+	const metMs = 4500
+	progress.Observe(&p, metMs*int64(time.Millisecond))
+	res := progress.Result(&p)
+	assert.True(t, res.Done)
+	assert.Contains(t, res.Detail, "met at 4 s simulated")
+
+	// Overshoot afterwards does not un-meet the objective.
+	p.ReactorBuilding.ReactorProtectionSystem.ManualTrip = true
+	p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
+	res = progress.Result(&p)
+	assert.True(t, res.Done, "completion must latch")
+}
+
+// A milestone-gated scenario stays pending until the operator has
+// exercised its lever, even with the end-state bounds satisfied.
+func TestRunProgressMilestoneGating(t *testing.T) {
+	s, ok := ScenarioByID("load-follow")
+	require.True(t, ok)
+	p := MakePlant()
+	s.Apply(&p)
+	progress := NewRunProgress(s, 0)
+
+	// Toggle rod control auto so the bounds alone would pass.
+	p.PlantOperation.RodControlAuto = true
+	p.PlantOperation.Mode = PowerOperation
+	progress.Observe(&p, 1000*int64(time.Millisecond))
+	assert.False(t, progress.Result(&p).Done,
+		"no demand excursion yet: milestone must gate completion")
+
+	// Exercise the demand lever past the rejection threshold; with
+	// power already back at rated the objective then completes.
+	p.TurbineBuilding.Turbine.Setpoint = 1 - LoadRejectDetectFraction - 0.01
+	progress.Observe(&p, 2000*int64(time.Millisecond))
+	res := progress.Result(&p)
+	assert.True(t, res.Done,
+		"exercised lever plus satisfied bounds complete the run")
+	assert.Contains(t, res.Detail, "met at 2 s simulated")
+}

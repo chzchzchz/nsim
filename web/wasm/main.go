@@ -30,6 +30,7 @@ type plantHandle struct {
 	simTimeNs  int64
 	createdAt  time.Time
 	script     []core.ScriptCommand
+	progress   *core.RunProgress
 	queue      *cmdfile.Queue
 	journal    *cmdfile.Journal
 	controls   bridge.ControlMap
@@ -39,6 +40,7 @@ type plantHandle struct {
 func newPlantHandle(scenarioID string) (*plantHandle, error) {
 	p := core.MakePlant()
 	var script []core.ScriptCommand
+	var progress *core.RunProgress
 	if scenarioID != "" {
 		sc, ok := core.ScenarioByID(scenarioID)
 		if !ok {
@@ -46,12 +48,14 @@ func newPlantHandle(scenarioID string) (*plantHandle, error) {
 		}
 		sc.Apply(&p)
 		script = append(script, sc.Script...)
+		progress = core.NewRunProgress(sc, 0)
 	}
 	return &plantHandle{
 		p:          &p,
 		scenarioID: scenarioID,
 		createdAt:  time.Now(),
 		script:     script,
+		progress:   progress,
 		queue:      &cmdfile.Queue{},
 		journal:    &cmdfile.Journal{},
 		controls:   p.GetControlMap(),
@@ -76,6 +80,9 @@ func (h *plantHandle) step(ticks int) {
 		h.p.Step()
 		h.p.Update()
 		h.simTimeNs = next
+		if h.progress != nil {
+			h.progress.Observe(h.p, h.simTimeNs)
+		}
 	}
 }
 
@@ -254,14 +261,25 @@ func (h *plantHandle) commandQueueJSON() (string, error) {
 	return string(b), nil
 }
 
-// commandLogJSON renders every journaled control command as a
-// JSON command file loadable via `nsimrun -cmd *.json`.
+// commandLogJSON renders every journaled control command as the
+// console-export envelope loadable via `nsimrun -cmd *.json`. The
+// Scenario field names the active evolution so a replay rebuilds the
+// same starting state without a separate flag.
+type consoleExport struct {
+	Scenario string            `json:"scenario,omitempty"`
+	Commands []cmdfile.Command `json:"commands"`
+}
+
 func (h *plantHandle) commandLogJSON() (string, error) {
-	var buf bytes.Buffer
-	if err := cmdfile.WriteJSON(&buf, h.journal.CommandsFrom(0)); err != nil {
+	out := consoleExport{
+		Scenario: h.scenarioID,
+		Commands: h.journal.CommandsFrom(0),
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
 		return "", err
 	}
-	return buf.String(), nil
+	return string(b), nil
 }
 
 func (h *plantHandle) getSvg() (string, error) {
@@ -285,24 +303,29 @@ func (h *plantHandle) plantJSON() (string, error) {
 	return string(b), nil
 }
 
-// objectiveStatus reports the active scenario's end-state bounds
-// against the live plant so the UI can show completion progress.
+// objectiveStatus reports the active scenario's completion against
+// the live plant. Done latches once met; MetMs carries the simulated
+// time it first held.
 type objectiveStatus struct {
 	Active bool   `json:"active"`
 	ID     string `json:"id,omitempty"`
 	Title  string `json:"title,omitempty"`
 	Done   bool   `json:"done"`
+	MetMs  int64  `json:"metMs,omitempty"`
 	Detail string `json:"detail"`
 }
 
 func (h *plantHandle) objectiveJSON() (string, error) {
 	out := objectiveStatus{}
 	if sc, ok := core.ScenarioByID(h.scenarioID); ok {
-		res := sc.Check(h.p)
+		res := h.progress.Result(h.p)
 		out.Active = true
 		out.ID = sc.ID
 		out.Title = sc.Title
 		out.Done = res.Done
+		if m := h.progress.MetMs(); m >= 0 {
+			out.MetMs = m
+		}
 		out.Detail = res.Detail
 	}
 	b, err := json.Marshal(out)

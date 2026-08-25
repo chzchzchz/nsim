@@ -161,8 +161,11 @@ The dashboard has these regions:
 
 6. **Scenario banner** (below the header, only when a scenario is
    active) — names the active evolution and its objective, and lists
-   which end-state bounds are still unmet. It turns green once
-   `Scenario.Check` reports every bound satisfied.
+   which end-state bounds are still unmet. Completion latches: once
+   every bound (and any milestone) holds the banner turns green,
+   reports the simulated met time, and offers **Choose next**.
+   Switching scenarios pauses the clock so exercises never blur
+   together.
 
 ## Scenarios
 
@@ -180,8 +183,9 @@ runs the default full-power plant.
 Malfunction evolutions open on their healthy lineup and schedule the
 trigger 30 simulated seconds in (`Scenario.Script`), so the operator
 watches the steady plant first; scripted actions are journaled like
-operator input, keeping exported command logs replayable via
-`nsimrun -cmd` with `-scenario` (see cmd/nsimrun/README.md).
+operator input, and the console export embeds the scenario id, so
+`nsimrun -cmd session.json` alone rebuilds the same starting state
+(see cmd/nsimrun/README.md).
    Reset clears the queue and journal together with the old plant.
 
 ## Wiring new controls / sensors

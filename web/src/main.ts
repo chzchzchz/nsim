@@ -174,6 +174,9 @@ async function main(): Promise<void> {
         scenarioBtn.disabled = true;
     }
     function applyScenarioChoice(id: string | null): void {
+        // Switching lineups mid-run would conflate two exercises, so
+        // the switch pauses the clock; Start resumes the new scenario.
+        sim.running = false;
         currentScenarioId = id ?? "";
         const title = id
             ? scenarios.find((s) => s.id === id)?.title ?? ""
@@ -215,7 +218,18 @@ async function main(): Promise<void> {
             titleEl.textContent = `${status.title}: ${objectiveText}`;
         }
         if (statusEl2) {
-            statusEl2.textContent = objectiveStatusText(status.done, status.detail);
+            statusEl2.textContent = objectiveStatusText(
+                status.done, status.detail, status.metMs);
+            let again = objectiveEl.querySelector(".objective-again");
+            if (status.done && !again) {
+                again = document.createElement("button");
+                again.className = "objective-again";
+                again.textContent = "Choose next";
+                again.addEventListener("click", openScenarioPicker);
+                objectiveEl.appendChild(again);
+            } else if (!status.done && again) {
+                again.remove();
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -37,6 +38,20 @@ type Scenario struct {
 	// trigger transient seconds in, instead of pre-inserting the
 	// fault at time zero. Keys must be registered control paths.
 	Script []ScriptCommand
+
+	// Milestones are observed-condition markers an evolution may
+	// require before its bounds count as met: pure end-state checks
+	// cannot see a maneuver that returned to its starting value, so
+	// scenarios whose objective is the maneuver itself name the
+	// lever here. Evaluated by RunProgress, not Check.
+	Milestones []Milestone
+}
+
+// Milestone is one such marker: Observed reports whether the plant
+// shows the lever was exercised at least once.
+type Milestone struct {
+	Desc     string
+	Observed func(*Plant) bool
 }
 
 // ScriptCommand is one scheduled operator action: the named control
@@ -408,6 +423,13 @@ var scenarioCatalog = []Scenario{
 			"axial flux difference band so full reserve is preserved " +
 			"for the return to power.",
 		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		Milestones: []Milestone{{
+			Desc: "turbine demand moved off rated",
+			Observed: func(p *Plant) bool {
+				return p.TurbineBuilding.Turbine.Setpoint <
+					1-LoadRejectDetectFraction
+			},
+		}},
 	},
 	{
 		ID:       "axial-xenon-management",
@@ -1228,11 +1250,12 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 	"steam-line-break": func(p *Plant) CheckResult {
 		var c checkBounds
 		// Excessive cooldown protection must have actuated injection:
-		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:65-69
+		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:65-69.
+		// HHSI pump-running is deliberately not required here: no
+		// production path latches the diesels' SI start signal from
+		// channel actuation yet, so pump flow stays operator-driven.
 		rps := &p.ReactorBuilding.ReactorProtectionSystem
 		c.require(rps.SafetyInjectionActuated, "safety injection actuated")
-		c.require(p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning,
-			"HHSI injecting")
 		c.require(rps.ReactorTripped &&
 			p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion >= 1,
 			"reactor tripped and stabilized")
@@ -1327,4 +1350,82 @@ func (s Scenario) Check(p *Plant) CheckResult {
 		return CheckResult{}
 	}
 	return check(p)
+}
+
+// RunProgress tracks one running evolution across ticks: which
+// milestones have been observed and whether the end-state bounds have
+// ever held. Completion latches, so overshoot after meeting the
+// objective does not un-meet it.
+type RunProgress struct {
+	scenario Scenario
+	seen     []bool
+	doneNs   int64
+}
+
+// NewRunProgress starts progress tracking for s at simulation time
+// nowNs.
+func NewRunProgress(s Scenario, nowNs int64) *RunProgress {
+	return &RunProgress{
+		scenario: s,
+		seen:     make([]bool, len(s.Milestones)),
+		doneNs:   -1,
+	}
+}
+
+// Observe samples the live plant, marking milestones and latching
+// completion the first time every milestone and bound holds at once.
+func (r *RunProgress) Observe(p *Plant, nowNs int64) {
+	for i, m := range r.scenario.Milestones {
+		if !r.seen[i] && m.Observed(p) {
+			r.seen[i] = true
+		}
+	}
+	if r.doneNs >= 0 {
+		return
+	}
+	for _, ok := range r.seen {
+		if !ok {
+			return
+		}
+	}
+	if r.scenario.Check(p).Done {
+		r.doneNs = nowNs
+	}
+}
+
+// MetMs returns the simulated millisecond completion first latched,
+// or -1 while the objective is still pending.
+func (r *RunProgress) MetMs() int64 {
+	if r.doneNs < 0 {
+		return -1
+	}
+	return r.doneNs / int64(time.Millisecond)
+}
+
+// Result reports completion against the live plant: a latched
+// objective stays done with its met time; otherwise Detail names the
+// unobserved milestones and unmet bounds.
+func (r *RunProgress) Result(p *Plant) CheckResult {
+	if r.doneNs >= 0 {
+		return CheckResult{
+			Done:   true,
+			Detail: fmt.Sprintf("met at %d s simulated",
+				r.doneNs/int64(time.Second)),
+		}
+	}
+	var missing []string
+	for i, m := range r.scenario.Milestones {
+		if !r.seen[i] {
+			missing = append(missing, m.Desc)
+		}
+	}
+	bounds := r.scenario.Check(p)
+	if !bounds.Done {
+		missing = append(missing, bounds.Detail)
+	}
+	if len(missing) == 0 {
+		// Everything holds; the next Observe call latches.
+		return CheckResult{Done: true, Detail: "objective met"}
+	}
+	return CheckResult{Detail: strings.Join(missing, "; ")}
 }

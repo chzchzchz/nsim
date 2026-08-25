@@ -41,23 +41,31 @@ func TestLoadCommands(t *testing.T) {
 	t.Run("json envelope", func(t *testing.T) {
 		path := writeTemp(t, "cmds.json",
 			`{"commands":[{"offsetMs":500,"control":"Part/Label","value":"1"}]}`)
-		cmds, err := loadCommands(path)
+		cmds, _, err := loadCommands(path)
 		require.NoError(t, err)
 		require.Len(t, cmds, 1)
 		assert.Equal(t, int64(500), cmds[0].TimeOffsetMs)
 		assert.Equal(t, "Part/Label", cmds[0].ControlKey)
 	})
 
+	t.Run("json envelope names its scenario", func(t *testing.T) {
+		path := writeTemp(t, "session.json",
+			`{"scenario":"rcp-trip","commands":[]}`)
+		_, scenario, err := loadCommands(path)
+		require.NoError(t, err)
+		assert.Equal(t, "rcp-trip", scenario)
+	})
+
 	t.Run("json extension is case insensitive", func(t *testing.T) {
 		path := writeTemp(t, "cmds.JSON", `{"commands":[]}`)
-		cmds, err := loadCommands(path)
+		cmds, _, err := loadCommands(path)
 		require.NoError(t, err)
 		assert.Empty(t, cmds)
 	})
 
 	t.Run("text lines", func(t *testing.T) {
 		path := writeTemp(t, "cmds.txt", "100 Part.Label 1\n")
-		cmds, err := loadCommands(path)
+		cmds, _, err := loadCommands(path)
 		require.NoError(t, err)
 		require.Len(t, cmds, 1)
 		assert.Equal(t, int64(100), cmds[0].TimeOffsetMs)
@@ -65,7 +73,7 @@ func TestLoadCommands(t *testing.T) {
 	})
 
 	t.Run("missing file", func(t *testing.T) {
-		_, err := loadCommands(filepath.Join(t.TempDir(), "nope.txt"))
+		_, _, err := loadCommands(filepath.Join(t.TempDir(), "nope.txt"))
 		require.Error(t, err)
 	})
 }
@@ -126,16 +134,18 @@ func TestNSimRunCommandIntegration(t *testing.T) {
 // opening script; -plant stays exclusive with -scenario.
 func TestBuildInitialPlant(t *testing.T) {
 	t.Run("default plant without flags", func(t *testing.T) {
-		p, script, err := buildInitialPlant("", "")
+		p, script, sc, err := buildInitialPlant("", "")
 		require.NoError(t, err)
+		assert.Nil(t, sc, "no flag means free play")
 		assert.Equal(t, core.MakePlant().ReactorBuilding.ReactorPressureVessel.Inlet,
 			p.ReactorBuilding.ReactorPressureVessel.Inlet)
 		assert.Empty(t, script)
 	})
 
 	t.Run("scenario applies its lineup and script", func(t *testing.T) {
-		p, script, err := buildInitialPlant("rcp-trip", "")
+		p, script, sc, err := buildInitialPlant("rcp-trip", "")
 		require.NoError(t, err)
+		require.NotNil(t, sc)
 		// The at-power lineup opens synchronized; the loop-A trip
 		// rides the script instead of the initial state.
 		assert.True(t,
@@ -151,7 +161,7 @@ func TestBuildInitialPlant(t *testing.T) {
 	})
 
 	t.Run("mutually exclusive flags are rejected", func(t *testing.T) {
-		_, _, err := buildInitialPlant("rcp-trip", "whatever.json")
+		_, _, _, err := buildInitialPlant("rcp-trip", "whatever.json")
 		require.ErrorContains(t, err, "mutually exclusive")
 	})
 }
