@@ -1,9 +1,13 @@
 // grid.ts — drag-to-swap rearrangement for the tile grid. Pressing
-// the mouse on a tile heading (the prefix line) arms a gesture:
-// dragging past SWAP_THRESHOLD_PX along one axis marks the
-// neighbouring tile in that direction as the pending swap, falling
-// back inside the band clears it again, and releasing the button
-// applies whatever swap is still pending.
+// on a tile heading (the prefix line) arms a gesture: dragging past
+// SWAP_THRESHOLD_PX along one axis marks the neighbouring tile in
+// that direction as the pending swap, falling back inside the band
+// clears it again, and releasing applies whatever swap is still
+// pending.
+//
+// Pointer events (not mouse events) drive the gesture so it works
+// for touch and pen as well; the heading carries touch-action: none
+// so drags are not hijacked by page scrolling.
 
 const SWAP_THRESHOLD_PX = 100;
 
@@ -16,7 +20,7 @@ interface DragState {
     target: HTMLElement | null;
 }
 
-// enablePanelSwaps installs one delegated mousedown listener on the
+// enablePanelSwaps installs one delegated pointerdown listener on the
 // grid container, so tiles created later (e.g. by a reset rebuild)
 // are draggable without re-wiring.
 export function enablePanelSwaps(grid: HTMLElement): void {
@@ -33,7 +37,7 @@ export function enablePanelSwaps(grid: HTMLElement): void {
         drag.target = null;
     }
 
-    function onMove(ev: MouseEvent): void {
+    function onMove(ev: PointerEvent): void {
         if (!drag) {
             return;
         }
@@ -57,8 +61,9 @@ export function enablePanelSwaps(grid: HTMLElement): void {
     }
 
     function onUp(): void {
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
         if (!drag) {
             return;
         }
@@ -75,7 +80,7 @@ export function enablePanelSwaps(grid: HTMLElement): void {
         }
     }
 
-    grid.addEventListener("mousedown", (ev: MouseEvent) => {
+    grid.addEventListener("pointerdown", (ev: PointerEvent) => {
         if (ev.button !== 0 || drag) {
             return;
         }
@@ -95,8 +100,9 @@ export function enablePanelSwaps(grid: HTMLElement): void {
         ev.preventDefault();
         drag = { tile, startX: ev.clientX, startY: ev.clientY, target: null };
         tile.classList.add("tile-grabbing");
-        window.addEventListener("mousemove", onMove);
-        window.addEventListener("mouseup", onUp);
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onUp);
     });
 }
 

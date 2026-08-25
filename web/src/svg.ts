@@ -114,6 +114,23 @@ function applyTransform(): void {
         `translate(${panX}px, ${panY}px) scale(${scale})`;
 }
 
+// anchoredPan computes the pan offsets that keep the diagram point
+// under (px, py) fixed while the scale moves from prevScale to
+// nextScale. Pure so the anchor invariant is unit-testable.
+export function anchoredPan(
+    px: number,
+    py: number,
+    prevScale: number,
+    nextScale: number,
+    prevPanX: number,
+    prevPanY: number,
+): { x: number; y: number } {
+    return {
+        x: px - ((px - prevPanX) / prevScale) * nextScale,
+        y: py - ((py - prevPanY) / prevScale) * nextScale,
+    };
+}
+
 function zoomAt(
     target: HTMLElement,
     clientX: number,
@@ -129,10 +146,7 @@ function zoomAt(
     // report that true origin.
     const px = clientX - rect.left - canvas!.offsetLeft;
     const py = clientY - rect.top - canvas!.offsetTop;
-    // Keep the diagram point under the cursor fixed while the
-    // scale changes.
-    panX = px - ((px - panX) / scale) * next;
-    panY = py - ((py - panY) / scale) * next;
+    ({ x: panX, y: panY } = anchoredPan(px, py, scale, next, panX, panY));
     scale = next;
     if (scale === MIN_SCALE) {
         panX = 0;

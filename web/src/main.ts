@@ -35,6 +35,8 @@ const MAX_CATCHUP_S = 1;
 // Throughput accounting: the measured side counts real plant
 // steps over a one-second window.
 const SPS_WINDOW_MS = 1000;
+// The alarm panel's source sensor inside the batched snapshot.
+const ALARM_SENSOR_ID = "Plant/Alarms";
 
 async function main(): Promise<void> {
     await loadWasm();
@@ -107,7 +109,7 @@ async function main(): Promise<void> {
     let alarmPanel: AlarmPanel | null = null;
     function initAlarms(): void {
         alarmsEl.innerHTML = "";
-        const raw = sim.plant.sensorJSON("Plant/Alarms");
+        const raw = sim.plant.sensorJSON(ALARM_SENSOR_ID);
         const initial: AlarmEntry[] =
             typeof raw === "string"
                 ? (JSON.parse(raw) as AlarmEntry[])
@@ -265,12 +267,13 @@ async function main(): Promise<void> {
             if (simMs !== lastRefreshedMs && (uiDue || !sim.running)) {
                 lastUiRefreshMs = nowMs;
                 lastRefreshedMs = simMs;
-                refreshSensors(sensorRows, sim.plant);
+                const snap = refreshSensors(sensorRows, sim.plant);
                 // Refresh the command console list from the wasm queue.
                 consolePanel?.refresh();
-                // Refresh alarm panel from the structured sensor JSON.
-                const alarmJson = sim.plant.sensorJSON("Plant/Alarms");
-                if (typeof alarmJson === "string") {
+                // Refresh the alarm panel from the same batched
+                // snapshot; no separate crossing for Plant/Alarms.
+                const alarmJson = snap?.values[ALARM_SENSOR_ID];
+                if (alarmJson !== undefined) {
                     alarmPanel?.refresh(alarmJson);
                 }
                 refreshObjective();

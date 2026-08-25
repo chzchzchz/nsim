@@ -11,8 +11,7 @@ SVG alongside the bridge sensors and controls.
 web/
 ├── wasm/main.go              syscall/js entrypoint (//go:build js)
 ├── public/                   static assets served by Vite / any host
-│   ├── nsim.wasm             compiled simulator
-│   └── wasm_exec.js          Go runtime polyfill
+│   └── nsim.wasm             compiled simulator
 ├── src/                      TypeScript sources
 │   ├── main.ts               bootstrap + tick loop
 │   ├── plant.ts              wasm handle wrapper
@@ -27,7 +26,8 @@ web/
 │   ├── wasm.ts               loadWasm()
 │   ├── styles.css            shared stylesheet (linked from index.html)
 │   ├── vite-env.d.ts         Vite client types (import.meta.env)
-│   └── wasm_exec.js          (copied from $(go env GOROOT)/lib/wasm)
+│   └── wasm_exec.js          Go runtime polyfill, bundled by Vite
+│                             (copied from $(go env GOROOT)/lib/wasm)
 ├── index.html                dashboard skeleton
 ├── package.json              vite + typescript dev deps
 ├── tsconfig.json             ES2020, strict
@@ -52,17 +52,19 @@ builds. The host (`go build ./...`) skips it.
 
 ```sh
 cd web
-make build         # wasm + tsc; copies wasm_exec.js into public/ and src/
+make build         # wasm + tsc; copies wasm_exec.js into src/
 ```
 
 `make build` is just three commands:
 
 ```sh
 GOOS=js GOARCH=wasm go build -o public/nsim.wasm ./wasm
-cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" public/wasm_exec.js
 cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" src/wasm_exec.js
 npx tsc
 ```
+
+The polyfill is bundled into the JavaScript chunk by `import
+"./wasm_exec.js"` in `src/wasm.ts`; nothing else loads it.
 
 ## Deploy bundle
 
@@ -103,8 +105,9 @@ npx serve .        # serves index.html, public/, src/
 ```
 
 The only requirement is that `nsim.wasm` is reachable at the
-same origin as `wasm_exec.js` so the `fetch()` inside
-`src/wasm.ts` succeeds.
+deploy base's URL (Vite's `base` option, honored by the
+`fetch()` inside `src/wasm.ts`); the polyfill ships inside the
+JavaScript bundle.
 
 ## UI
 

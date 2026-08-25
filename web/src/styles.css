@@ -153,6 +153,9 @@
         .tile.minimized .tile-body { display: none; }
         .tile.minimized > h2 { border-bottom-style: dashed; }
         .tile > h2 { cursor: grab; user-select: none; }
+        /* Heading drags swap panels on touch too; without this the
+           browser turns vertical drags into page scrolling. */
+        .tile > h2 { touch-action: none; }
         .tile.tile-grabbing > h2 { cursor: grabbing; }
         .tile.swap-source { outline: 2px solid #3498db; }
         .tile.swap-target {

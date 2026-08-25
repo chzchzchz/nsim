@@ -2,8 +2,9 @@
 #
 # Targets:
 #   make build   — compile wasm, copy polyfill, run tsc
-#   make wasm    — compile wasm + copy wasm_exec.js into public/
-#   make wasm-exec — copy $(go env GOROOT)/lib/wasm/wasm_exec.js into public/ and src/
+#   make wasm    — compile wasm; the polyfill copy lives in wasm-exec
+#   make wasm-exec — copy $(go env GOROOT)/lib/wasm/wasm_exec.js into src/
+#                  (the Vite-bundled polyfill source)
 #   make typecheck — tsc --noEmit
 #   make test    — vitest run (pure-logic unit tests)
 #   make descriptions — rebuild public/descriptions.json from
@@ -25,7 +26,6 @@ GO ?= go
 GOROOT := $(shell $(GO) env GOROOT)
 WASM_SRC := wasm
 WASM_OUT := public/nsim.wasm
-WASM_EXEC_DST_PUBLIC := public/wasm_exec.js
 WASM_EXEC_DST_SRC := src/wasm_exec.js
 BUNDLE_DIR := nsim-web
 BUNDLE_TGZ := web.tgz
@@ -53,10 +53,7 @@ wasm: $(WASM_OUT)
 $(WASM_OUT): $(WASM_SRC)/main.go ../core ../bridge ../core/svg
 	GOOS=js GOARCH=wasm $(GO) build -o $(WASM_OUT) ./$(WASM_SRC)
 	@echo "wrote $(WASM_OUT)"
-wasm-exec: $(WASM_EXEC_DST_PUBLIC) $(WASM_EXEC_DST_SRC)
-
-$(WASM_EXEC_DST_PUBLIC): $(WASM_EXEC_DST_SRC)
-	cp $(WASM_EXEC_DST_SRC) $(WASM_EXEC_DST_PUBLIC)
+wasm-exec: $(WASM_EXEC_DST_SRC)
 
 $(WASM_EXEC_DST_SRC):
 	cp $(GOROOT)/lib/wasm/wasm_exec.js $(WASM_EXEC_DST_SRC)
@@ -98,7 +95,7 @@ dev: $(NODE_STAMP) descriptions
 # Target-specific variables drive both variants through one recipe:
 # vite build is not file-trackable per output, so the tarballs just
 # depend directly on every front-end source and the wasm blob.
-web.tgz web-debug.tgz: $(NODE_STAMP) $(WASM_EXEC_DST_PUBLIC) $(WASM_OUT) $(DESC_JSON) $(BUNDLE_DEPS)
+web.tgz web-debug.tgz: $(NODE_STAMP) $(WASM_OUT) $(DESC_JSON) $(BUNDLE_DEPS)
 	npx vite build $(VITE_FLAGS) --outDir $(DIST_DIR)
 	rm -rf .bundle && mkdir -p .bundle/$(BUNDLE_DIR)
 	cp -r $(DIST_DIR)/. .bundle/$(BUNDLE_DIR)/
@@ -122,5 +119,5 @@ bundle-release: web.tgz
 bundle-debug: web-debug.tgz
 
 clean:
-	rm -f $(WASM_OUT) $(WASM_EXEC_DST_PUBLIC) $(WASM_EXEC_DST_SRC) $(DESC_JSON) $(BUNDLE_TGZ) $(BUNDLE_DEBUG_TGZ)
+	rm -f $(WASM_OUT) $(WASM_EXEC_DST_SRC) $(DESC_JSON) $(BUNDLE_TGZ) $(BUNDLE_DEBUG_TGZ)
 	rm -rf dist dist-debug .bundle

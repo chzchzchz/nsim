@@ -24,6 +24,7 @@ export interface SensorRow {
 // and the per-cell writes entirely, and a rebuild (new row array)
 // invalidates it so fresh placeholder cells always get filled.
 const lastRawByRows = new WeakMap<SensorRow[], string>();
+const lastSnapByRows = new WeakMap<SensorRow[], SensorSnapshot>();
 
 export function renderReadout(
     host: HTMLElement,
@@ -103,25 +104,30 @@ interface SensorSnapshot {
 }
 
 // refreshSensors updates every value cell from one batched wasm
-// call. On a failed or malformed batch the previous frame's cells
-// are left untouched rather than blanking the read-out. A payload
-// identical to the previous frame skips parsing and writing, and
-// cells whose formatted text did not change skip the write so idle
-// rows do not invalidate layout.
-export function refreshSensors(rows: SensorRow[], plant: PlantHandle): void {
+// call and returns the parsed snapshot so callers can reuse other
+// readings in it (e.g. the alarm list) without a second crossing.
+// On a failed or malformed batch the previous frame's cells are
+// left untouched rather than blanking the read-out, and null is
+// returned. A payload identical to the previous frame skips
+// parsing and writing, and cells whose formatted text did not
+// change skip the write so idle rows do not invalidate layout.
+export function refreshSensors(
+    rows: SensorRow[],
+    plant: PlantHandle,
+): SensorSnapshot | null {
     const raw = plant.sensorValuesJSON();
     if (typeof raw !== "string") {
-        return;
+        return null;
     }
     if (lastRawByRows.get(rows) === raw) {
-        return;
+        return lastSnapByRows.get(rows) ?? null;
     }
     let snap: SensorSnapshot;
     try {
         snap = JSON.parse(raw) as SensorSnapshot;
     } catch {
         console.error("bad sensor snapshot:", raw);
-        return;
+        return null;
     }
     for (const r of rows) {
         let out: string;
@@ -145,4 +151,6 @@ export function refreshSensors(rows: SensorRow[], plant: PlantHandle): void {
         }
     }
     lastRawByRows.set(rows, raw);
+    lastSnapByRows.set(rows, snap);
+    return snap;
 }

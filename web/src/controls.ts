@@ -8,6 +8,9 @@ import type { PlantHandle } from "./plant";
 import { helpFor } from "./descriptions";
 import { rangeFor, unitFor } from "./units";
 
+// Rejection flash duration, matching the reference-flash cadence.
+const CTL_ERROR_FLASH_MS = 1500;
+
 export function renderPanel(
     host: HTMLElement,
     bindings: PartBinding[],
@@ -223,5 +226,8 @@ function writeControl(
     }
     console.error(`${id}: ${err.message}`);
     widget.classList.add("ctl-error");
-    setTimeout(() => widget.classList.remove("ctl-error"), 1500);
+    setTimeout(
+        () => widget.classList.remove("ctl-error"),
+        CTL_ERROR_FLASH_MS,
+    );
 }
