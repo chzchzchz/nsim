@@ -168,11 +168,12 @@ func (d *DieselGenerator) Step(swFlowGPM float64) DieselGenerator {
 	//
 	// Voltage and Frequency ramp from 0 to DieselRatedVoltage /
 	// DieselRatedFrequency over DieselFieldFlashingTime. BreakerClosed
-	// latches once ReadyToLoad is true (i.e. once the diesel can carry
-	// load, per
-	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:50).
-	// RealPower follows the
-	// mechanical RunningFraction scaled by DieselRatedkW.
+	// is owned by the plant-level automatic synchronizer
+	// (core/plant.go), which closes it against a live auxiliary source
+	// only once synchronized
+	// (specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:65-68),
+	// so this step only ramps the measured quantities. RealPower
+	// follows the mechanical RunningFraction scaled by DieselRatedkW.
 	switch ret.State {
 	case DieselRunning:
 		ret.Generator.Voltage += DieselRatedVoltage * (dt.Seconds() / DieselFieldFlashingTime.Seconds())
@@ -180,9 +181,6 @@ func (d *DieselGenerator) Step(swFlowGPM float64) DieselGenerator {
 		ret.Generator.Frequency += DieselRatedFrequency * (dt.Seconds() / DieselFieldFlashingTime.Seconds())
 		ret.Generator.Frequency = min(ret.Generator.Frequency, DieselRatedFrequency)
 		ret.Generator.RealPower = Watts(float64(DieselRatedkW) * float64(ret.RunningFraction))
-		if ret.ReadyToLoad && !ret.Generator.BreakerClosed {
-			ret.Generator.BreakerClosed = true
-		}
 	default:
 		ret.Generator.Voltage -= DieselRatedVoltage * (dt.Seconds() / DieselFieldFlashingTime.Seconds())
 		ret.Generator.Voltage = max(ret.Generator.Voltage, 0)

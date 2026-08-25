@@ -1005,6 +1005,27 @@ var scenarioCatalog = []Scenario{
 				Value:      "1"},
 		},
 	},
+	{
+		ID:       "edg-test-run",
+		Number:   36,
+		Category: "Electrical surveillance",
+		Title:    "Diesel generator test run",
+		StartState: "Full-power lineup with both ESF buses fed " +
+			"from the offsite system auxiliary transformers and " +
+			"diesel A standby with a full day tank.",
+		Objective: "Demonstrate the emergency diesel's fast start " +
+			"and endurance: initiate the exercising start, watch " +
+			"the automatic synchronizer parallel the generator " +
+			"with the normal auxiliary source inside its timing " +
+			"deadlines, exercise governor load pickup, then " +
+			"terminate without disturbing the buses.",
+		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		Script: []ScriptCommand{
+			{AtMs: scenarioTriggerDelayMs,
+				ControlKey: "AuxiliaryBuilding/DieselGenerator/StartSignal",
+				Value:      "4"},
+		},
+	},
 }
 
 // CheckResult reports whether an evolution's end-state bounds hold on
@@ -1546,6 +1567,20 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 			a.SuctionValves[1].Open == 1, "train A suction path open")
 		c.require(p.ReactorBuilding.ReactorPressureVessel.Outlet.Float() <=
 			RHRSTempThreshold, "cooled to the RHR entry temperature")
+		return c.result()
+	},
+	"edg-test-run": func(p *Plant) CheckResult {
+		var c checkBounds
+		d := &p.AuxiliaryBuilding.DieselGenerator
+		c.require(d.State == DieselRunning && d.ReadyToLoad,
+			"test start carrying rated load past the 10 s deadline")
+		c.require(d.Generator.BreakerClosed,
+			"automatic synchronizer has closed the generator breaker")
+		c.require(d.Generator.RealPower > 0,
+			"the diesel is delivering real power in parallel")
+		bus := &p.Electrical.ESFBusA
+		c.require(bus.Energized && !bus.OnDiesel,
+			"ESF bus A still served by its normal auxiliary source")
 		return c.result()
 	},
 	"cvcs-charging-letdown": func(p *Plant) CheckResult {

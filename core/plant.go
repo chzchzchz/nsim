@@ -2053,6 +2053,7 @@ func (p *Plant) Step() {
 			gen.BreakerClosed = false
 		}
 	}
+	p.closeDieselBreakersInSync()
 
 	// Cross-building DriveReady wiring for the AFW pumps. The fluid
 	// graph (see simulateFluidFlow) treats `Running && DriveReady` as
@@ -2160,6 +2161,53 @@ func (p *Plant) Step() {
 	// Graph nodes hold pointers into nextPlant; the mutations land in
 	// nextPlant directly so Update() copies them into p.
 	simulateFluidFlow(p.BuildGraphFor(p.nextPlant), TimeStep)
+}
+
+// closeDieselBreakersInSync applies each standby diesel's automatic
+// synchronizer after the parts have stepped. Against a dark ESF bus the
+// breaker closes dead-bus the moment the engine is ready to load,
+// preserving the loss-of-offsite-power transfer; against a live bus - the
+// paralleled test run - it closes only once terminal voltage and
+// frequency match the system nominal, and a closed breaker held out of
+// sync pops, mirroring the main-generator out-of-step check above.
+//
+// The synchronism reference is DieselRatedVoltage / DieselRatedFrequency
+// because the lumped model holds every serving source at nominal:
+// 6600-V ESF buses
+// (specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:72-74)
+// at system frequency. Tolerances reuse the main-generator synchronizer
+// band; the spec gives no diesel-specific values.
+//
+// Spec justification:
+//   - "Automatic synchronizing equipment is provided to permit parallel
+//     operation of each diesel with the normal auxiliary power source
+//     during testing and exercising periods."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:65-68
+//   - Dead-bus emergency close keeps the safe-shutdown transfer: "auxiliary
+//     power required for safe shutdown will be supplied from physically and
+//     electrically independent diesel generators located on the site."
+//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:26-29
+func (p *Plant) closeDieselBreakersInSync() {
+	trains := []struct {
+		diesel *DieselGenerator
+		bus    *ESFBus
+	}{
+		{&p.nextPlant.AuxiliaryBuilding.DieselGenerator, &p.nextPlant.Electrical.ESFBusA},
+		{&p.nextPlant.AuxiliaryBuilding.DieselGeneratorB, &p.nextPlant.Electrical.ESFBusB},
+	}
+	for _, t := range trains {
+		d := t.diesel
+		if d.State != DieselRunning || !d.ReadyToLoad {
+			continue
+		}
+		inSync := math.Abs(d.Generator.Frequency-DieselRatedFrequency) <= SyncFreqToleranceHz &&
+			math.Abs(d.Generator.Voltage-DieselRatedVoltage) <= SyncVoltageTolFraction*DieselRatedVoltage
+		if !t.bus.Energized || inSync {
+			d.Generator.BreakerClosed = true
+		} else {
+			d.Generator.BreakerClosed = false
+		}
+	}
 }
 
 // mirrorOffsiteAvailability applies the declared offsite-power state

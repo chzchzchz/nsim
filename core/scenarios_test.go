@@ -12,7 +12,7 @@ import (
 
 // The scenario catalog feeds the web selection screen, so its
 // identifiers must be unique and the numbering must track
-// plans/x/scenarios.txt items 1-35 in order.
+// plans/x/scenarios.txt items 1-36 in order.
 func TestScenarioCatalogIdentifiers(t *testing.T) {
 	seen := make(map[string]bool)
 	for i, s := range Scenarios() {
@@ -24,7 +24,7 @@ func TestScenarioCatalogIdentifiers(t *testing.T) {
 		assert.NotEmpty(t, s.StartState)
 		assert.NotEmpty(t, s.Objective)
 	}
-	assert.Len(t, Scenarios(), 35)
+	assert.Len(t, Scenarios(), 36)
 
 	s, ok := ScenarioByID("porv-stuck-open")
 	require.True(t, ok)
