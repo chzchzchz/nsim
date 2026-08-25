@@ -28,7 +28,6 @@ var (
 	valveSymRe   = regexp.MustCompile(`(?s)<symbol id="(valve-[\w-]+)"([^>]*)>(.*?)</symbol>`)
 	viewBoxRe    = regexp.MustCompile(`viewBox="([^"]+)"`)
 	elementRe    = regexp.MustCompile(`<(polygon|polyline|line|rect|circle|text|path)\b[^>]*>?`)
-	attrNumPairs = regexp.MustCompile(`(?:x|y|cx|cy|x1|y1|x2|y2|r)="(-?\d+(?:\.\d+)?)"`)
 	pointsAttrRe = regexp.MustCompile(`points="([^"]+)"`)
 	pathDAttrRe  = regexp.MustCompile(`\bd="([^"]+)"`)
 	numberRe     = regexp.MustCompile(`-?\d+(?:\.\d+)?`)

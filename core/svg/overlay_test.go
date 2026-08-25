@@ -290,19 +290,27 @@ func TestLegendRemovalIsIntentional(t *testing.T) {
 }
 
 var (
-	partGroupRe    = regexp.MustCompile(`<g data-part="[^"]+" role="img" aria-label="[^"]+" tabindex="0">`)
-	dataPartCountR = regexp.MustCompile(`<g data-part="`)
+	partGroupTagRe = regexp.MustCompile(`<g [^>]*data-part="[^"]+"[^>]*>`)
 )
 
 // TestPartGroupsAreAccessible checks every bound part group is
-// announced to assistive tech and tab-focusable.
+// announced to assistive tech and tab-focusable, independent of
+// attribute order (valve groups append a transform).
 func TestPartGroupsAreAccessible(t *testing.T) {
 	p := core.MakePlant()
 	out := renderPlant(t, &p)
-	total := len(dataPartCountR.FindAllString(out, -1))
-	labelled := len(partGroupRe.FindAllString(out, -1))
-	require.Positive(t, total)
-	assert.Equal(t, total, labelled,
+	tags := partGroupTagRe.FindAllString(out, -1)
+	require.NotEmpty(t, tags)
+	labelled := 0
+	for _, tag := range tags {
+		if !assert.Contains(t, tag, `role="img"`) ||
+			!assert.Regexp(t, `aria-label="[^"]+"`, tag) ||
+			!assert.Contains(t, tag, `tabindex="0"`) {
+			continue
+		}
+		labelled++
+	}
+	assert.Equal(t, len(tags), labelled,
 		"every data-part group needs role, aria-label, and tabindex")
 }
 

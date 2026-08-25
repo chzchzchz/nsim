@@ -2,6 +2,7 @@ package svg
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/chzchzchz/nsim/core"
@@ -101,10 +102,16 @@ func DrawPipePath(pts []Anchor, colour string) string {
 // fraction) divides flowDashScale for the raw period, clamped
 // between minFlowDurSec and maxFlowDurSec.
 const (
-	flowDashScale  = 900.0
-	minFlowDurSec  = 0.6
-	maxFlowDurSec  = 10.0
+	flowDashScale = 900.0
+	minFlowDurSec = 0.6
+	maxFlowDurSec = 10.0
 )
+
+// nominalDrivenVelocity stands in for pump speed when a pipe
+// streams on pressure differential alone (e.g. main steam into the
+// condenser): it tunes the dash period only and carries no model
+// meaning.
+const nominalDrivenVelocity = 1200.0
 
 // flowDurationSec maps pump speed times throttle position to the
 // dash-streaming period: faster flow streams faster, and a
@@ -137,24 +144,77 @@ func DrawPipePathIdle(pts []Anchor, colour string) string {
 }
 
 // DrawPipePathDead renders a routed polyline whose flow state is
-// positively known to be zero - a secured pump upstream or a shut
-// inline valve. Black is the unassigned-pipe colour, so the leg
-// reads as a dead line rather than a dimmed hint of its former
-// self; arrows stay on for direction.
+// positively known to be zero - a shut valve blocking the path.
+// Black is the unassigned-pipe colour, so the leg reads as a dead
+// line rather than a dimmed hint of its former self; arrows stay
+// on for direction.
 func DrawPipePathDead(pts []Anchor) string {
 	base := DrawPipePath(pts, "black")
 	return strings.Replace(base, `/>`, ` class="idle"/>`, 1)
 }
 
-// DrawPipePathWithValve renders a routed pipe plus a valve symbol
-// anchored at `at`: the hop node's laid-out position when known,
-// otherwise the path midpoint. vw/vh give the drawn valve size so
-// it scales with the layout.
-func DrawPipePathWithValve(pts []Anchor, colour, valveKind string, at Anchor, vw, vh float64) string {
-	pipe := DrawPipePath(pts, colour)
-	return pipe + fmt.Sprintf(
-		`<use href="#%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>`,
-		SymbolForKind(valveKind), at.X-vw/2, at.Y-vh/2, vw, vh)
+// routeLen sums the segment lengths of a polyline.
+func routeLen(pts []Anchor) float64 {
+	total := 0.0
+	for i := 1; i < len(pts); i++ {
+		dx, dy := pts[i].X-pts[i-1].X, pts[i].Y-pts[i-1].Y
+		total += math.Hypot(dx, dy)
+	}
+	return total
+}
+
+// routePointAt returns the point at arc distance d along the
+// polyline plus the local segment angle in degrees (screen
+// coordinates, folded into (-90, 90] so glyphs never render
+// upside-down).
+func routePointAt(pts []Anchor, d float64) (Anchor, float64) {
+	walked := 0.0
+	for i := 1; i < len(pts); i++ {
+		ax, ay := pts[i-1].X, pts[i-1].Y
+		dx, dy := pts[i].X-ax, pts[i].Y-ay
+		seg := math.Hypot(dx, dy)
+		if walked+seg >= d || i == len(pts)-1 {
+			t := 0.0
+			if seg > 0 {
+				t = clampRange((d-walked)/seg, 0, 1)
+			}
+			deg := math.Atan2(dy, dx)*180/math.Pi
+			for deg > 90 {
+				deg -= 180
+			}
+			for deg <= -90 {
+				deg += 180
+			}
+			return Anchor{X: ax + dx*t, Y: ay + dy*t}, deg
+		}
+		walked += seg
+	}
+	return pts[len(pts)-1], 0
+}
+
+// projectAnchorDist returns the arc distance along the polyline of
+// the point nearest to a - where a glyph bound near that anchor
+// should sit.
+func projectAnchorDist(pts []Anchor, a Anchor) float64 {
+	best, bestD := 0.0, math.Inf(1)
+	walked := 0.0
+	for i := 1; i < len(pts); i++ {
+		ax, ay := pts[i-1].X, pts[i-1].Y
+		bx, by := pts[i].X, pts[i].Y
+		vx, vy := bx-ax, by-ay
+		l2 := vx*vx + vy*vy
+		t := 0.0
+		if l2 > 0 {
+			t = clampRange(((a.X-ax)*vx+(a.Y-ay)*vy)/l2, 0, 1)
+		}
+		px, py := ax+vx*t, ay+vy*t
+		if d := math.Hypot(a.X-px, a.Y-py); d < bestD {
+			bestD = d
+			best = walked + t*math.Sqrt(l2)
+		}
+		walked += math.Sqrt(l2)
+	}
+	return best
 }
 
 // ColourForEdge returns the pipe colour for an edge between the

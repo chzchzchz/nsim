@@ -51,21 +51,6 @@ func TestDrawPipePath(t *testing.T) {
 	assert.True(t, strings.HasPrefix(out, `<polyline `))
 }
 
-// TestDrawPipePathWithValve checks the valve <use> rides on the
-// path fragment, centred on the given anchor with the kind's
-// symbol id.
-func TestDrawPipePathWithValve(t *testing.T) {
-	pts := []Anchor{{X: 0, Y: 0}, {X: 10, Y: 10}}
-	at := Anchor{X: 5, Y: 5}
-	vw, vh := 24.0, 20.0
-
-	out := DrawPipePathWithValve(pts, "blue", "modulating", at, vw, vh)
-
-	assert.Contains(t, out, `<use href="#valve-modulating"`)
-	assert.Contains(t, out, `x="-7.0" y="-5.0"`) // at minus half size
-	assert.Contains(t, out, `width="24.0" height="20.0"`)
-}
-
 // TestPipeArrowMarkers defines one marker per pipe colour.
 func TestPipeArrowMarkers(t *testing.T) {
 	out := PipeArrowMarkers()

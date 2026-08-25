@@ -27,6 +27,19 @@ type GraphNode struct {
 	Ref  interface{}
 }
 
+// FluidState exposes a node's water inventory and pressure to
+// presentation consumers such as the SVG pipe classifier, letting
+// the picture show what the per-edge integrator actually moves.
+// ok is false for parts carrying no fluid, e.g. the reactor
+// pressure vessel (see the RPV note above).
+func (n GraphNode) FluidState() (level Volume, pressure Pressure, ok bool) {
+	fn, ok := n.Ref.(fluidNode)
+	if !ok {
+		return Volume{}, 0, false
+	}
+	return fn.level(), fn.pressure(), true
+}
+
 // GraphEdge is one directed fluid connection between two nodes. The
 // optional Valve modulates the driving pressure delta; the optional Pump
 // adds head when running.

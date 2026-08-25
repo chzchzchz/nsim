@@ -561,6 +561,41 @@ var standaloneValves = []struct {
 		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.PRTSprayValve }},
 }
 
+// valvePlacement seats a standalone valve onto the drawn polyline
+// of a pipe even though no fluid-graph edge models that line: from
+// and to name the edge, near biases placement toward that
+// endpoint's laid-out anchor, and shift slides the glyph along the
+// route as a fraction of its length (negative toward from).
+// Every binding cites its spec passage; valves without a citable
+// line keep their own anchors.
+var valvePlacements = map[string]struct {
+	from, to, near string
+	shift          float64
+}{
+	// "The main steam lines are provided with a stop valve and a
+	// check valve in each line just outside the containment."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:71-76
+	"SGMSIV": {from: "SG", to: "Condenser", near: "SG", shift: 0.08},
+	// The overspeed trip closes "the main steam stop and governing
+	// valves" feeding the turbine.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:40-43
+	"TSTOP": {from: "SG", to: "Condenser", near: "Turbine", shift: -0.06},
+	"TGOV":  {from: "SG", to: "Condenser", near: "Turbine", shift: -0.02},
+	// "dumping the steam to the condenser"; during cooldown "steam
+	// is dumped to the condensers".
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:104-118
+	"TDUMP": {from: "SG", to: "Condenser", near: "Condenser", shift: -0.05},
+	// "low-pressure feedwater heaters are cascaded back to the
+	// condenser." The sentence starts at the bottom of page 220;
+	// page_221 truncates it after "Drains from the four".
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:76-77
+	"LPDV": {from: "LPHeaterDrain", to: "Condenser", near: "LPHeaterDrain", shift: 0.12},
+	// "Drains from the high-pressure feedwater heaters are routed
+	// to the deaerator"; HDT stands in for that deaerator tank.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:13-14
+	"HPDV": {from: "HPHeaterDrain", to: "HDT", near: "HPHeaterDrain", shift: 0.12},
+}
+
 // scalarValves binds valve-shaped model fields that are plain 0..1
 // floats rather than core.Valve structs (CVCS throttle valves), so
 // they share the wedge/tooltip encoding without wrapper plumbing.
@@ -792,11 +827,11 @@ func clipToward(center, toward Anchor, w, h float64) Anchor {
 	return Anchor{X: center.X + dx*s, Y: center.Y + dy*s}
 }
 
-// pipe renders one graph edge as dot's routed polyline (or a plain
-// straight line when no route was computed), trimmed so the ends
-// meet the endpoint symbols' boundaries, plus an inline valve
-// anchored at its hop node when the edge carries one.
-func (r *renderer) pipe(p *core.Plant, e core.GraphEdge) string {
+// routeFor returns the drawn polyline for an edge: dot's routed
+// path when the layout computed one (already terminating at node
+// borders), otherwise a straight line clipped to the endpoint
+// symbols' boundaries.
+func (r *renderer) routeFor(e core.GraphEdge) ([]Anchor, bool) {
 	from, okF := r.anchor(e.From)
 	to, okT := r.anchor(e.To)
 	if !okF || !okT {
@@ -805,44 +840,92 @@ func (r *renderer) pipe(p *core.Plant, e core.GraphEdge) string {
 				r.missing[id] = true
 			}
 		}
+		return nil, false
+	}
+	if route, ok := r.l.Routes[e.From+">"+e.To]; ok && len(route) >= 2 {
+		return route, true
+	}
+	fw, fh := r.size(r.kindOf(e.From))
+	tw, th := r.size(r.kindOf(e.To))
+	return []Anchor{clipToward(from, to, fw, fh), clipToward(to, from, tw, th)}, true
+}
+
+// pipeWater is the visual state of one drawn pipe, decided from
+// the same quantities the per-edge flow integrator uses - endpoint
+// water and pressure plus pump head and valve position; see the
+// deltaP rule and chapter_5 citations in core/graph.go.
+type pipeWater int
+
+const (
+	pipeEmpty   pipeWater = iota // no water at either endpoint: dim line
+	pipeWet                      // water present, nothing driving it: solid fluid colour
+	pipeFlowing                  // a running pump or positive deltaP moves water: animated dashes
+	pipeBlocked                  // a shut valve blocks the path: black dead line
+)
+
+// classifyPipe decides the visual state. The rule follows the
+// operator-facing reading of the integrator: water shows unless a
+// valve blocks the path, and only a running pump or positive
+// pressure differential animates it. Nodes without fluid (the RPV)
+// leave their side unreadable; readable wet endpoints keep such
+// legs solid instead of dim, and a present open valve still shows
+// intent.
+func classifyPipe(g *core.PlantGraph, e core.GraphEdge) pipeWater {
+	if e.Valve != nil && e.Valve.Open <= 0 {
+		return pipeBlocked
+	}
+	if e.Pump != nil && e.Pump.Running && e.Pump.Velocity > 0 {
+		return pipeFlowing
+	}
+	fLevel, fPress, fOK := g.Nodes[e.From].FluidState()
+	tLevel, tPress, tOK := g.Nodes[e.To].FluidState()
+	if !fOK || !tOK {
+		if e.Valve != nil && e.Valve.Open > 0 {
+			return pipeFlowing
+		}
+		if (fOK && fLevel.Val > 0) || (tOK && tLevel.Val > 0) {
+			return pipeWet
+		}
+		return pipeEmpty
+	}
+	if fLevel.Val <= 0 && tLevel.Val <= 0 {
+		return pipeEmpty
+	}
+	if float64(fPress-tPress) > 0 {
+		return pipeFlowing
+	}
+	return pipeWet
+}
+
+// pipe renders one graph edge as dot's routed polyline (or a plain
+// straight line when no route was computed), trimmed so the ends
+// meet the endpoint symbols' boundaries, styled by its water state
+// (see classifyPipe), plus an inline valve anchored at its hop
+// node - rotated to the local segment angle - when the edge
+// carries one.
+func (r *renderer) pipe(p *core.Plant, g *core.PlantGraph, e core.GraphEdge) string {
+	pts, ok := r.routeFor(e)
+	if !ok {
 		return ""
 	}
-
-	var pts []Anchor
-	if route, ok := r.l.Routes[e.From+">"+e.To]; ok && len(route) >= 2 {
-		// dot already terminates routed polylines at node borders.
-		pts = route
-	} else {
-		pts = []Anchor{from, to}
-		fw, fh := r.size(r.kindOf(e.From))
-		tw, th := r.size(r.kindOf(e.To))
-		pts[0] = clipToward(from, to, fw, fh)
-		pts[1] = clipToward(to, from, tw, th)
-	}
-
 	colour := ColourForEdge(e.From, e.To)
-	// Flow encoding has three states. A leg streams dashes only
-	// when its pump runs and its inline valve, if any, passes
-	// water (period inversely proportional to effective flow; the
-	// root --phase keeps remounts mid-cycle). A leg whose drive is
-	// secured or whose valve is shut is known dead and renders
-	// black. Passive legs with no pump or valve at all (cold leg,
-	// surge line, drain cascades) stay dimmed fluid colour: the
-	// model cannot observe them, so black would mislabel live
-	// natural paths as dead.
 	var pathFrag string
-	switch {
-	case e.Pump != nil && e.Pump.Running && e.Pump.Velocity > 0 &&
-		(e.Valve == nil || e.Valve.Open > 0):
+	switch classifyPipe(g, e) {
+	case pipeBlocked:
+		pathFrag = DrawPipePathDead(pts)
+	case pipeFlowing:
 		open := 1.0
 		if e.Valve != nil {
 			open = e.Valve.Open
 		}
-		dur := flowDurationSec(float64(e.Pump.Velocity), open)
-		pathFrag = DrawPipePathAnimated(pts, colour, dur)
-	case (e.Pump != nil && (!e.Pump.Running || e.Pump.Velocity <= 0)) ||
-		(e.Valve != nil && e.Valve.Open <= 0):
-		pathFrag = DrawPipePathDead(pts)
+		velocity := nominalDrivenVelocity
+		if e.Pump != nil && e.Pump.Running {
+			velocity = float64(e.Pump.Velocity)
+		}
+		pathFrag = DrawPipePathAnimated(pts, colour,
+			flowDurationSec(velocity, open))
+	case pipeWet:
+		pathFrag = DrawPipePath(pts, colour)
 	default:
 		pathFrag = DrawPipePathIdle(pts, colour)
 	}
@@ -850,33 +933,42 @@ func (r *renderer) pipe(p *core.Plant, e core.GraphEdge) string {
 		return pathFrag
 	}
 	ref, _ := valveHopFor(e)
-	vw, vh := r.size(ref.kind)
 	at, okA := r.anchor(ref.id)
 	if !okA {
 		r.missing[ref.id] = true
 		at = pts[len(pts)/2]
 	}
-	// Live position is encoded twice: a pie wedge fills the valve
-	// body proportional to open fraction (red while a relief-kind
-	// device is actually lifting), and a native <title> tooltip
-	// carries the exact percentage for hover inspection. The group
-	// binds to the valve's bridge part so inline valves click like
-	// standalone ones.
+	_, deg := routePointAt(pts, projectAnchorDist(pts, at))
 	kind := ValveKindForEdge(p, e)
-	pct := int(math.Round(e.Valve.Open * 100))
-	wedge := valveWedgePath(at, math.Min(vw, vh)*0.45, e.Valve.Open,
-		valveWedgeFill(kind, e.Valve.Open))
+	return pathFrag + r.valvePartHTML(ref.part, at, deg, kind, e.Valve.Open)
+}
+
+// valvePartHTML renders one valve glyph centred on at and rotated
+// by deg around its centre: the <use> body plus the open-fraction
+// wedge, titled with the percentage. A non-empty part binds the
+// group to the bridge part so inline and standalone valves click
+// alike; an empty part keeps a bare tooltip group for layout hop
+// valves that exist only to shape routing.
+func (r *renderer) valvePartHTML(part string, at Anchor, deg float64, kind string, open float64) string {
+	vw, vh := r.size(kind)
+	pct := int(math.Round(open * 100))
+	wedge := valveWedgePath(Anchor{X: 0, Y: 0}, math.Min(vw, vh)*0.45, open,
+		valveWedgeFill(kind, open))
 	use := fmt.Sprintf(
 		`<use href="#%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>`,
-		SymbolForKind(kind), at.X-vw/2, at.Y-vh/2, vw, vh)
-	if ref.part == "" {
-		return pathFrag + fmt.Sprintf(
-			`<g><title>%d%%</title>%s%s</g>`, pct, use, wedge)
+		SymbolForKind(kind), -vw/2, -vh/2, vw, vh)
+	transform := fmt.Sprintf(` transform="translate(%.2f %.2f)"`, at.X, at.Y)
+	if deg != 0 {
+		transform = fmt.Sprintf(` transform="translate(%.2f %.2f) rotate(%.1f)"`, at.X, at.Y, deg)
 	}
-	return pathFrag + fmt.Sprintf(
-		`<g data-part="%s" role="img" aria-label="%s" tabindex="0"><title>%d%%</title>%s%s</g>`,
-		html.EscapeString(ref.part), html.EscapeString(partLabel(ref.part)),
-		pct, use, wedge)
+	title := fmt.Sprintf(`<title>%d%%</title>`, pct)
+	if part == "" {
+		return `<g` + transform + `>` + title + use + wedge + `</g>`
+	}
+	return fmt.Sprintf(
+		`<g data-part="%s" role="img" aria-label="%s" tabindex="0"%s>%s%s%s</g>`,
+		html.EscapeString(part), html.EscapeString(partLabel(part)),
+		transform, title, use, wedge)
 }
 
 // valveWedgePath returns a pie-slice subpath centred on `at` whose
@@ -902,10 +994,10 @@ func valveWedgePath(at Anchor, r, open float64, fill string) string {
 		large = 1
 	}
 	if open >= 1 {
-		return fmt.Sprintf(`M %.1f,%.1f A %.1f,%.1f 0 1 1 %.1f,%.1f A %.1f,%.1f 0 1 1 %.1f,%.1f Z%s`,
+		return fmt.Sprintf(`<path d="M %.1f,%.1f A %.1f,%.1f 0 1 1 %.1f,%.1f A %.1f,%.1f 0 1 1 %.1f,%.1f Z"%s/>`,
 			at.X-r, at.Y, r, r, at.X+r, at.Y, r, r, at.X-r, at.Y, fillAttr)
 	}
-	return fmt.Sprintf(`M %.1f,%.1f L %.1f,%.1f A %.1f,%.1f 0 %d 1 %.1f,%.1f Z%s`,
+	return fmt.Sprintf(`<path d="M %.1f,%.1f L %.1f,%.1f A %.1f,%.1f 0 %d 1 %.1f,%.1f Z"%s/>`,
 		at.X, at.Y, x0, y0, r, r, large, x1, y1, fillAttr)
 }
 
@@ -1171,7 +1263,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// Pipes first so symbols render on top of their process lines.
 	g := p.BuildGraphFor(p)
 	for _, e := range g.Edges {
-		if frag := r.pipe(p, e); frag != "" {
+		if frag := r.pipe(p, g, e); frag != "" {
 			b.WriteString(frag)
 			b.WriteString("\n")
 		}
@@ -1247,24 +1339,31 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 
 	// Standalone valves: same wedge/tooltip encoding as the edge
 	// valves, anchored where dot placed each extra node.
-	writeValveBody := func(part string, a Anchor, kind string, open float64) {
-		vw, vh := r.size(kind)
-		pct := int(math.Round(open * 100))
-		wedge := valveWedgePath(a, math.Min(vw, vh)*0.45, open,
-			valveWedgeFill(kind, open))
-		use := fmt.Sprintf(
-			`<use href="#%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>`,
-			SymbolForKind(kind), a.X-vw/2, a.Y-vh/2, vw, vh)
-		writePartEl(part, "",
-			fmt.Sprintf(`<g><title>%d%%</title>%s%s</g>`, pct, use, wedge))
+	writeValveBody := func(part string, at Anchor, deg float64, kind string, open float64) {
+		b.WriteString(r.valvePartHTML(part, at, deg, kind, open))
+		b.WriteString("\n")
 	}
 	for _, sv := range standaloneValves {
+		open := sv.valve(p).Open
+		if pl, okP := valvePlacements[sv.id]; okP {
+			if pts, okR := r.routeFor(core.GraphEdge{From: pl.from, To: pl.to}); okR {
+				total := routeLen(pts)
+				dist := 0.5 * total
+				if a, okA := r.anchor(pl.near); okA {
+					dist = projectAnchorDist(pts, a)
+				}
+				dist = clampRange(dist+pl.shift*total, 0.04*total, 0.96*total)
+				at, deg := routePointAt(pts, dist)
+				writeValveBody(sv.part, at, deg, sv.kind, open)
+				continue
+			}
+		}
 		a, ok := r.anchor(sv.id)
 		if !ok {
 			r.missing[sv.id] = true
 			continue
 		}
-		writeValveBody(sv.part, a, sv.kind, sv.valve(p).Open)
+		writeValveBody(sv.part, a, 0, sv.kind, open)
 	}
 	for _, sv := range scalarValves {
 		a, ok := r.anchor(sv.id)
@@ -1272,7 +1371,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			r.missing[sv.id] = true
 			continue
 		}
-		writeValveBody(sv.part, a, sv.kind, sv.open(p))
+		writeValveBody(sv.part, a, 0, sv.kind, sv.open(p))
 	}
 
 	// Live overlays: readouts and alarm rings track their symbols.

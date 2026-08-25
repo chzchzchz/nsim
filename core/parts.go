@@ -1453,7 +1453,9 @@ type Polisher struct{}
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:26-35
 //   - Drain cascade: "Drains from the four low-pressure feedwater
 //     heaters are cascaded back to the condenser."
-//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:13-15
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:76-77
+//     (the sentence starts at the bottom of page 220; page_221.txt
+//     truncates it after "Drains from the four")
 type LowPressureHeater struct {
 	Part
 
