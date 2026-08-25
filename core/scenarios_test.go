@@ -219,6 +219,22 @@ func TestScenarioChecksFlipDoneAtTheirEndStates(t *testing.T) {
 			css.SuctionSump = true
 			css.Running = true
 		}},
+		{"ccw-train-lineup", func(p *Plant) {
+			stepN(p, 1)
+		}},
+		{"cvcs-charging-letdown", func(p *Plant) {
+			pzr := &p.ReactorBuilding.Pressurizer
+			pzr.Water = Volume{Val: 600, Unit: u.Gallon}
+			pzr.SteamBubble = Volume{Val: 900, Unit: u.Gallon}
+			pzr.Pressure = 2250
+			cvcs := &p.AuxiliaryBuilding.ChemicalVolumeControlSystem
+			cvcs.AutoLevelControl = true
+			cvcs.ChargingPumpRunning = true
+			cvcs.LetdownValveOpen = true
+			cvcs.ProgrammedLevel = 40
+			cvcs.BoronTargetConcentration = scenarioCVCSDilutionTargetPpm
+			cvcs.BoronConcentration = scenarioCVCSDilutionTargetPpm
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.id, func(t *testing.T) {

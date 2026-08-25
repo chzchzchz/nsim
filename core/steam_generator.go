@@ -190,11 +190,6 @@ const (
 	// Assumption; sized comparable to the atmospheric dump bank.
 	SteamGeneratorSafetyValveReliefFraction = 0.5
 
-	// SteamGallonWaterM3 is the liquid-water volume (m^3) the SG
-	// inventory loses per gallon of steam drawn off, matching the
-	// ~1 kg/L convention used by the boil-rate integration.
-	SteamGallonWaterM3 = 3.785 / 1000.0
-
 	// SteamlineVentCapacityFraction is the fraction of rated
 	// full-load steam flow the vent bank passes at full open.
 	// Assumption; the spec describes the vents' duty during heatup

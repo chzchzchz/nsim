@@ -69,6 +69,11 @@ type ScriptCommand struct {
 // the hot-lineup fixtures at 44 MW slow / 2 MW fast.
 const (
 	scenarioColdLoopF    = 140.0
+	// scenarioCVCSDilutionTargetPpm is the dilution target the CVCS
+	// charging/letdown evolution drives toward: just below the lineup's
+	// rated-critical starting concentration so the setpoint drive has
+	// real distance to cover (invented modeling value).
+	scenarioCVCSDilutionTargetPpm = 940.0
 	scenarioWarmLoopF    = 220.0
 	scenarioColdPsia     = 415.0
 	scenarioDayOldDecayW = 0.004 * float64(CoreRatedThermalPower)
@@ -823,6 +828,11 @@ var scenarioCatalog = []Scenario{
 			q.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = false
 			*p = q
 		},
+		Script: []ScriptCommand{
+			{AtMs: 900000,
+				ControlKey: "ReactorBuilding/ReactorPressureVessel/ControlRods/BoronSetpoint",
+				Value:      strconv.FormatFloat(scenarioCVCSDilutionTargetPpm, 'f', -1, 64)},
+		},
 	},
 	{
 		ID:       "btrs-boron-cycling",
@@ -1422,6 +1432,19 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 			"pressurizer level tracking the Tavg program")
 		c.require(!p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
 			"no trip through the evolution")
+		vct := cvcs.VCTLevel.Float()
+		c.require(vct >= VCTLowLevel && vct <= VCTHighLevel,
+			"volume control tank kept inside its normal band")
+		c.require(cvcs.BRSHoldupLevel.Float() == 0,
+			"no liquid effluent sent to the Boron Recycle System")
+		// The dilution leg completes only when the scripted target has
+		// landed with tracking released; a bare concentration threshold
+		// reads as met on a zero-seeded chemistry field.
+		c.require(cvcs.BoronTargetConcentration == scenarioCVCSDilutionTargetPpm &&
+			!cvcs.BoronSetpointTracking &&
+			math.Abs(cvcs.BoronConcentration-scenarioCVCSDilutionTargetPpm) <=
+				CVCSBoronSetpointTolerancePpm,
+			"coolant diluted onto the scripted target")
 		return c.result()
 	},
 }
