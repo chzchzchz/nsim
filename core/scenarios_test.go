@@ -11,25 +11,20 @@ import (
 )
 
 // The scenario catalog feeds the web selection screen, so its
-// identifiers must be unique and its numbers must track the
-// plans/x/scenarios.txt item they implement, rising strictly with
-// catalog position. Item 32 has no simulator support yet, so 33
-// follows 31.
+// identifiers must be unique and the numbering must track
+// plans/x/scenarios.txt items 1-33 in order.
 func TestScenarioCatalogIdentifiers(t *testing.T) {
 	seen := make(map[string]bool)
-	prev := 0
-	for _, s := range Scenarios() {
+	for i, s := range Scenarios() {
 		require.False(t, seen[s.ID], "duplicate scenario id %q", s.ID)
 		seen[s.ID] = true
-		assert.Greater(t, s.Number, prev,
-			"catalog order must match item numbers")
-		prev = s.Number
+		assert.Equal(t, i+1, s.Number, "catalog order must match item numbers")
 		assert.NotEmpty(t, s.Title)
 		assert.NotEmpty(t, s.Category)
 		assert.NotEmpty(t, s.StartState)
 		assert.NotEmpty(t, s.Objective)
 	}
-	assert.Len(t, Scenarios(), 32)
+	assert.Len(t, Scenarios(), 33)
 
 	s, ok := ScenarioByID("porv-stuck-open")
 	require.True(t, ok)

@@ -878,6 +878,33 @@ var scenarioCatalog = []Scenario{
 		},
 	},
 	{
+		ID:       "rhrs-loop-takeover",
+		Number:   32,
+		Category: "Auxiliary system operations",
+		Title:    "Residual heat removal loop takeover and realignment",
+		StartState: "Post-trip plant cooled by the atmospheric dump " +
+			"to just above the RHR entry line: loops at 365 F and " +
+			"300 psia, one reactor coolant pump running, RHRS idle.",
+		Objective: "Take the RHR loop through its spec sequence: " +
+			"miniflow warmup before the suction valves open, takeover " +
+			"once heat is rejected to component cooling water, " +
+			"throttle-controlled cooldown below 350 F, then the " +
+			"reverse leg - stop pumps while aligned, re-form the " +
+			"bubble, isolate.",
+		Apply: func(p *Plant) {
+			q := postTripLineup()
+			rpv := &q.ReactorBuilding.ReactorPressureVessel
+			rpv.Inlet = Temperature{Val: 365, Unit: u.Fahrenheit}
+			rpv.Outlet = Temperature{Val: 365, Unit: u.Fahrenheit}
+			rpv.Pressure = 300
+			for i, pu := range q.ReactorBuilding.ReactorCoolantPumps.All() {
+				pu.Running = i == 0
+			}
+			q.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open = 1
+			*p = q
+		},
+	},
+	{
 		ID:       "ccw-train-lineup",
 		Number:   33,
 		Category: "Auxiliary system operations",
@@ -1406,6 +1433,22 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 		c.require(ccw.PumpRunning, "component cooling pump in service")
 		c.require(math.Abs(ccw.InletTemp.Float()-CCWSInletSteadyStateTemp) <= 1,
 			"CCW inlet holding the design 105 F value")
+		return c.result()
+	},
+	"rhrs-loop-takeover": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Takeover at the entry line and hand-off from steam dump:
+		// "At this point the reactor cooling function has been taken
+		// over by the RHRS, and the steam dump system may be shutdown"
+		// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:35-37
+		rhr := &p.AuxiliaryBuilding.ResidualHeatRemovalSystem
+		c.require(rhr.Running && rhr.HasTakenOver,
+			"RHRS in operation and rejecting decay heat")
+		a := &rhr.TrainA
+		c.require(a.SuctionValves[0].Open == 1 &&
+			a.SuctionValves[1].Open == 1, "train A suction path open")
+		c.require(p.ReactorBuilding.ReactorPressureVessel.Outlet.Float() <=
+			RHRSTempThreshold, "cooled to the RHR entry temperature")
 		return c.result()
 	},
 	"cvcs-charging-letdown": func(p *Plant) CheckResult {
