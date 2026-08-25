@@ -406,11 +406,29 @@ func programmedPzrLevel(tavg Temperature) float64 {
 // Rods are fast and chemistry slow, so when the rod bank approaches a
 // travel limit while holding the program, chemistry relieves it:
 // near full withdrawal the chain needs positive reactivity (dilute),
-// under deep insertion negative (borate). The existing fixed BTRS
-// rates and bed dynamics are the rate limiter. While engaged this
-// owns Mode and the BTRS pump; the latch lives on AutoBoronControl.
-func (c *CVCS) applyAutoBoronControl(rodInsertion float64) {
+// under deep insertion negative (borate).
+//
+// Chemistry also owns the axial-flux duty: "the control system makes
+// boron concentration adjustments whenever the control rods approach
+// the limits of their AFD target band"
+// (specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:120-123).
+// The equilibrium insertion that holds the program is set by the total
+// reactivity balance, so boration (negative chemistry) lets the loop
+// withdraw the bank, which lifts a bottom-skewed axial offset back
+// toward the band; dilution does the opposite. Band excursions take
+// precedence over travel-limit relief because a running spatial-xenon
+// oscillation is the active instability this chemistry exists to damp.
+// The existing fixed BTRS rates and bed dynamics are the rate limiter.
+// While engaged this owns Mode and the BTRS pump; the latch lives on
+// AutoBoronControl.
+func (c *CVCS) applyAutoBoronControl(rodInsertion float64, axialOffsetPct float64) {
 	switch {
+	case axialOffsetPct < -CoreAFDTargetBandPct:
+		c.Mode = CVCSBoration
+		c.BTRSRecirculationPumpRunning = true
+	case axialOffsetPct > CoreAFDTargetBandPct:
+		c.Mode = CVCSDilution
+		c.BTRSRecirculationPumpRunning = true
 	case rodInsertion < CVCSAutoBoronLowInsertionFrac:
 		c.Mode = CVCSDilution
 		c.BTRSRecirculationPumpRunning = true

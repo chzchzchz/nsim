@@ -17,14 +17,14 @@ import (
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_129.txt:112-115
 func TestCVCSAutoBoronSelectsModeFromRodTravel(t *testing.T) {
 	low := CVCS{AutoBoronControl: true}
-	low.applyAutoBoronControl(CVCSAutoBoronLowInsertionFrac / 2)
+	low.applyAutoBoronControl(CVCSAutoBoronLowInsertionFrac/2, 0)
 	assert.Equal(t, CVCSDilution, low.Mode,
 		"bank out of travel dilutes")
 	assert.True(t, low.BTRSRecirculationPumpRunning,
 		"dilution needs the BTRS pump")
 
 	high := CVCS{AutoBoronControl: true}
-	high.applyAutoBoronControl(CVCSAutoBoronHighInsertionFrac * 2)
+	high.applyAutoBoronControl(CVCSAutoBoronHighInsertionFrac*2, 0)
 	assert.Equal(t, CVCSBoration, high.Mode,
 		"buried bank borates")
 }
@@ -38,9 +38,37 @@ func TestCVCSAutoBoronNeutralMidBand(t *testing.T) {
 		AutoBoronControl:             true,
 	}
 	mid.applyAutoBoronControl(
-		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2)
+		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2, 0)
 	assert.Equal(t, CVCSVolumeControl, mid.Mode)
 	assert.False(t, mid.BTRSRecirculationPumpRunning)
+}
+
+// A bottom-skewed axial offset past the target band borates: negative
+// chemistry lets the power loop withdraw the bank, and the withdrawn
+// bank lifts the offset back toward the band. A top-skewed offset
+// mirrors as dilution. Band excursions outrank travel position.
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:120-123
+func TestCVCSAutoBoronAnswersAxialOffsetBand(t *testing.T) {
+	bottomSkew := CVCS{AutoBoronControl: true}
+	bottomSkew.applyAutoBoronControl(
+		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2,
+		-CoreAFDTargetBandPct-1)
+	assert.Equal(t, CVCSBoration, bottomSkew.Mode,
+		"bottom-skewed offset borates")
+
+	topSkew := CVCS{AutoBoronControl: true}
+	topSkew.applyAutoBoronControl(
+		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2,
+		CoreAFDTargetBandPct+1)
+	assert.Equal(t, CVCSDilution, topSkew.Mode,
+		"top-skewed offset dilutes")
+
+	insideBand := CVCS{AutoBoronControl: true}
+	insideBand.applyAutoBoronControl(
+		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2,
+		-CoreAFDTargetBandPct/2)
+	assert.Equal(t, CVCSVolumeControl, insideBand.Mode,
+		"in-band offset stays neutral")
 }
 
 // With the latch off, operator-selected mode and pump state are never
@@ -79,9 +107,6 @@ func TestCVCSAutoBoronManualOverride(t *testing.T) {
 // the reactor power [...]"
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_129.txt:112-115
 func TestCVCSAutoBoronUnlocksDeepPlateau(t *testing.T) {
-	t.Skip("recalibration pending under the split temperature feedback " +
-		"(plans/x/gaps.md item 15): part-load arc bands were tuned against " +
-		"the old combined-coefficient dynamics")
 	// Width note: the descent is a program walk over the anchored
 	// fission update (verified by
 	// TestReactorFissionPower_WidthInvariance) plus fixed-rate boron

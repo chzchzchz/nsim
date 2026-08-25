@@ -28,12 +28,15 @@ const (
 
 	// RodCtrlRhoSetpointPerFrac converts reactor-power fraction
 	// error into the reactivity setpoint the chain should carry
-	// (percent delta-k per unit power fraction). Derived: a
-	// full-scale error commands ~7 pcm, i.e. about 0.7
-	// percent-per-second of controlled drift toward the program,
-	// fast against the 90 s thermal lag and slow enough that
-	// pcm-level residuals never dominate.
-	RodCtrlRhoSetpointPerFrac = 0.0067
+	// (percent delta-k per unit power fraction). Recalibrated
+	// against measured trajectories under the split temperature
+	// feedback (plans/x/gaps.md item 15): the compounding fission
+	// update folds power on pcm-scale reactivity residuals within a
+	// few percent per minute, so a part-load error of several
+	// percent must command tens of pcm for the integral inner loop
+	// to outpace the fold; the earlier 0.0067 let half-load plateaus
+	// sink to the protection floor before the error grew authority.
+	RodCtrlRhoSetpointPerFrac = 0.03
 
 	// RodCtrlRhoMaxSetpointPct clamps the reactivity setpoint
 	// (percent delta-k). Derived alongside the setpoint gain.

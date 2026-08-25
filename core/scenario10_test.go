@@ -23,6 +23,12 @@ func scenario10FullPowerPlant() Plant {
 	p.PlantOperation.Mode = PowerOperation
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(
 		CoreRatedThermalPower)
+	// MakePlant now ships the hot-standby idle lineup (pumps secured,
+	// breaker open), so a rated fixture must restore the forced-flow
+	// and electrical lineups its operating point assumes.
+	for _, pu := range p.ReactorBuilding.ReactorCoolantPumps.All() {
+		pu.Running = true
+	}
 	p.ReactorBuilding.ReactorCoolantPump.Running = true
 	p.TurbineBuilding.Turbine.State = TurbineRunning
 	p.TurbineBuilding.Turbine.Velocity = TurbineRatedSpeed

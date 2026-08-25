@@ -40,10 +40,14 @@ func rpcReactorLeadPlant() Plant {
 	// chapter_15/page_219.txt:68-76).
 	p.TurbineBuilding.MainFeedwaterPump.Running = true
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = true
+	// 550 ppm parks the shadow integrator exactly at rated: above it
+	// the settled power sags below the park the descent math assumes.
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 600
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = 600
-	p.ReactorBuilding.ReactorPressureVessel.Insertion = 0.042222
-	p.ReactorBuilding.ReactorPressureVessel.DemandInsertion = 0.042222
+	// Rod position stays at the MakePlant rated-consistent default: a
+	// hand-tuned insertion went stale when the fresh-plant seed moved
+	// to the hot-standby idle lineup, and the mismatch folded the core
+	// on the first steps.
 	return p
 }
 
@@ -87,9 +91,11 @@ func TestRPC_RateClampOnOperatorEntry(t *testing.T) {
 // rods near their critical position (xenon compensation emerges from
 // the closed loop).
 func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
-	t.Skip("recalibration pending under the split temperature feedback " +
-		"(plans/x/gaps.md item 15): part-load arc bands were tuned against " +
-		"the old combined-coefficient dynamics")
+	t.Skip("reactor-lead walk unstable under the split feedback: with " +
+		"turbine demand tracking achieved power, the strong negative " +
+		"combined coefficient makes any pf dip depressure steam flow " +
+		"and fold power further (positive loop gain); needs a " +
+		"chemistry-follows-demand slice before the walk can hold")
 	// The descent ramps at the entered 0.02 %/s over ten minutes
 	// under the demanded-setpoint rate limit
 	// (specs/pwr_sim/chapter_2/page_024.txt:3-12), and the

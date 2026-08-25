@@ -51,9 +51,6 @@ func newScenario1Plant(t *testing.T) Plant {
 }
 
 func TestScenario1_PrecriticalLineupReplay(t *testing.T) {
-	t.Skip("recalibration pending under the split temperature feedback " +
-		"(plans/x/gaps.md item 15): part-load arc bands were tuned against " +
-		"the old combined-coefficient dynamics")
 	p := newScenario1Plant(t)
 
 	require.True(t, p.Electrical.ESFBusA.BreakerClosed,
@@ -160,9 +157,10 @@ func TestScenario1_PrecriticalLineupReplay(t *testing.T) {
 	assert.True(t, letdownHeld,
 		"letdown flow must track the pressure-scaled design while open")
 	// E5: checks neither borate nor dilute.
-	assert.InDelta(t, CVCSInitialBoron,
+	assert.InDelta(t, CoreRatedCriticalBoronPpm,
 		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration, 2,
-		"want boron concentration unchanged during checks")
+		"want boron concentration unchanged during checks (the "+
+			"construction seed is the rated-critical chemistry)")
 	assert.Equal(t, CVCSVolumeControl,
 		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode,
 		"want no boration/dilution mode entered")
