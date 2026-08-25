@@ -127,20 +127,6 @@ func (h *plantHandle) sensorKeys() []string {
 	return keys
 }
 
-// lookupControl and lookupSensor look up an entry by id in the
-// corresponding map. They return (nil, false) when the id is
-// absent, which jsMeta uses to fall through to the other map and
-// ultimately to an error.
-func (h *plantHandle) lookupControl(id string) (*bridge.Control, bool) {
-	c, ok := h.controls[id]
-	return c, ok
-}
-
-func (h *plantHandle) lookupSensor(id string) (*bridge.Sensor, bool) {
-	s, ok := h.sensors[id]
-	return s, ok
-}
-
 // setControl applies a UI control change and journals it at the
 // current simulated time so sessions can be exported and
 // replayed with nsimrun.
@@ -374,20 +360,47 @@ func jsStringSlice(s []string) js.Value {
 	return arr
 }
 
+// jsError boxes a Go error as a JavaScript Error value, the
+// convention every handle method uses for failures.
+func jsError(err error) js.Value {
+	return js.Global().Get("Error").New(err.Error())
+}
+
+// jsStringMethod boxes a () -> (string, error) call as a JS method
+// returning the string, or a JS Error on failure.
+func jsStringMethod(fn func() (string, error)) js.Func {
+	return js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		s, err := fn()
+		if err != nil {
+			return jsError(err)
+		}
+		return s
+	})
+}
+
+// jsStringArgMethod boxes a (string) -> error call as a JS method.
+func jsStringArgMethod(fn func(string) error) js.Func {
+	return js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if err := fn(args[0].String()); err != nil {
+			return jsError(err)
+		}
+		return nil
+	})
+}
+
 // jsMeta returns {part, label, kind, enum?} for the given
 // bridge entry, or an Error if the id is unknown. The
 // TypeScript UI uses this to label, group, and unit-tag
 // controls and sensors instead of reverse-engineering the id
-// string. The two closures extract Part/Label/Kind from the
-// bridge.Control and bridge.Sensor structs, which differ in
-// map type but share these fields. Enum is only set for
+// string. The two maps are probed in turn; an id absent from
+// both is unknown. Enum is only set for
 // controls that populate the optional bridge.Control.Enum
 // slice; nil slices are skipped so the TS side can use a
 // presence test.
 func jsMeta(
 	id string,
-	getControl func(string) (*bridge.Control, bool),
-	getSensor func(string) (*bridge.Sensor, bool),
+	controls bridge.ControlMap,
+	sensors bridge.SensorMap,
 ) js.Value {
 	meta := func(part, label, kind string, enumVals []string) js.Value {
 		obj := js.Global().Get("Object").New()
@@ -399,10 +412,10 @@ func jsMeta(
 		}
 		return obj
 	}
-	if c, ok := getControl(id); ok {
+	if c, ok := controls[id]; ok {
 		return meta(c.Part, c.Label, c.Kind, c.Enum)
 	}
-	if s, ok := getSensor(id); ok {
+	if s, ok := sensors[id]; ok {
 		return meta(s.Part, s.Label, s.Kind, nil)
 	}
 	return js.Global().Get("Error").New(fmt.Sprintf("unknown id %q", id))
@@ -413,8 +426,7 @@ func jsMeta(
 func jsHandle(h *plantHandle) js.Value {
 	obj := js.Global().Get("Object").New()
 	obj.Set("step", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		ticks := args[0].Int()
-		h.step(ticks)
+		h.step(args[0].Int())
 		return nil
 	}))
 	obj.Set("controlKeys", js.FuncOf(func(_ js.Value, _ []js.Value) any {
@@ -424,82 +436,35 @@ func jsHandle(h *plantHandle) js.Value {
 		return jsStringSlice(h.sensorKeys())
 	}))
 	obj.Set("getMeta", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		return jsMeta(args[0].String(), h.lookupControl, h.lookupSensor)
+		return jsMeta(args[0].String(), h.controls, h.sensors)
 	}))
 	obj.Set("setControl", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if err := h.setControl(args[0].String(), args[1].String()); err != nil {
-			return js.Global().Get("Error").New(err.Error())
+			return jsError(err)
 		}
 		return nil
 	}))
-	obj.Set("controlValuesJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		s, err := h.controlValuesJSON()
-		if err != nil {
-			return js.Global().Get("Error").New(err.Error())
-		}
-		return s
-	}))
+	obj.Set("controlValuesJSON", jsStringMethod(h.controlValuesJSON))
 	obj.Set("sensorJSON", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		v, err := h.sensorJSON(args[0].String())
 		if err != nil {
-			return js.Global().Get("Error").New(err.Error())
+			return jsError(err)
 		}
 		return v
 	}))
-	obj.Set("sensorValuesJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		s, err := h.sensorValuesJSON()
-		if err != nil {
-			return js.Global().Get("Error").New(err.Error())
-		}
-		return s
-	}))
-	obj.Set("submitCommands", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if err := h.submitCommands(args[0].String()); err != nil {
-			return js.Global().Get("Error").New(err.Error())
-		}
-		return nil
-	}))
+	obj.Set("sensorValuesJSON", jsStringMethod(h.sensorValuesJSON))
+	obj.Set("submitCommands", jsStringArgMethod(h.submitCommands))
 	obj.Set("commandQueueRev", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		return h.commandQueueRev()
 	}))
-	obj.Set("commandQueueJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		s, err := h.commandQueueJSON()
-		if err != nil {
-			return js.Global().Get("Error").New(err.Error())
-		}
-		return s
-	}))
-	obj.Set("commandLogJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		s, err := h.commandLogJSON()
-		if err != nil {
-			return js.Global().Get("Error").New(err.Error())
-		}
-		return s
-	}))
-	obj.Set("getSvg", js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		s, err := h.getSvg()
-		if err != nil {
-			return js.Global().Get("Error").New(err.Error())
-		}
-		return s
-	}))
+	obj.Set("commandQueueJSON", jsStringMethod(h.commandQueueJSON))
+	obj.Set("commandLogJSON", jsStringMethod(h.commandLogJSON))
+	obj.Set("getSvg", jsStringMethod(h.getSvg))
 	obj.Set("simTimeMs", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		return h.simTimeMs()
 	}))
-	obj.Set("toJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		s, err := h.plantJSON()
-		if err != nil {
-			return js.Global().Get("Error").New(err.Error())
-		}
-		return s
-	}))
-	obj.Set("objectiveJSON", js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		s, err := h.objectiveJSON()
-		if err != nil {
-			return js.Global().Get("Error").New(err.Error())
-		}
-		return s
-	}))
+	obj.Set("toJSON", jsStringMethod(h.plantJSON))
+	obj.Set("objectiveJSON", jsStringMethod(h.objectiveJSON))
 	return obj
 }
 
@@ -517,14 +482,14 @@ func main() {
 		}
 		h, err := newPlantHandle(scenarioID)
 		if err != nil {
-			return js.Global().Get("Error").New(err.Error())
+			return jsError(err)
 		}
 		return jsHandle(h)
 	}))
 	js.Global().Set("nsimScenarios", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		s, err := scenariosJSON()
 		if err != nil {
-			return js.Global().Get("Error").New(err.Error())
+			return jsError(err)
 		}
 		return s
 	}))

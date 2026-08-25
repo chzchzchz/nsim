@@ -5,7 +5,7 @@
 import { marked } from "marked";
 
 import { makeTile } from "./tile";
-import { revealElement } from "./bindings";
+import { crossReferenceHref, revealElement } from "./bindings";
 import { helpFor } from "./descriptions";
 
 export interface AlarmEntry {
@@ -34,9 +34,13 @@ const TOGGLE_COLLAPSE = "➖";
 
 // AlarmRowPair bundles the visible alarm row with its expandable
 // detail sibling; both share the lifecycle of one alarm entry.
+// lastJSON is the serialized entry behind the current cells, so a
+// refresh that carries an identical snapshot skips the DOM rewrite
+// instead of rebuilding stable rows every frame.
 interface AlarmRowPair {
     row: HTMLTableRowElement;
     detail: HTMLTableRowElement;
+    lastJSON?: string;
 }
 
 export function renderAlarms(
@@ -81,6 +85,7 @@ export function renderAlarms(
     const rowMap = new Map<string, AlarmRowPair>();
     for (const a of initialAlarms) {
         const pair = buildAlarmRow(plant, a);
+        pair.lastJSON = JSON.stringify(a);
         tbody.append(pair.row, pair.detail);
         rowMap.set(a.id, pair);
     }
@@ -98,14 +103,20 @@ export function renderAlarms(
         const seen = new Set<string>();
         for (const a of list) {
             seen.add(a.id);
+            const snapshot = JSON.stringify(a);
             const pair = rowMap.get(a.id);
-            if (pair) {
-                updateAlarmRow(plant, pair, a);
-            } else {
+            if (!pair) {
                 const built = buildAlarmRow(plant, a);
+                built.lastJSON = snapshot;
                 tbody.append(built.row, built.detail);
                 rowMap.set(a.id, built);
+                continue;
             }
+            if (pair.lastJSON === snapshot) {
+                continue;
+            }
+            pair.lastJSON = snapshot;
+            updateAlarmRow(plant, pair, a);
         }
         for (const [id, pair] of rowMap) {
             if (!seen.has(id)) {
@@ -138,11 +149,10 @@ function buildAlarmRow(
     // instead of navigating away; ids without a rendered row are
     // ignored.
     detailBody.addEventListener("click", (ev) => {
-        const anchor = (ev.target as HTMLElement | null)?.closest("a");
-        const href = anchor?.getAttribute("href") ?? "";
-        if (href === "") return;
-        ev.preventDefault();
-        revealElement(href);
+        const href = crossReferenceHref(ev);
+        if (href !== "") {
+            revealElement(href);
+        }
     });
 
     updateAlarmRow(plant, { row, detail }, a);

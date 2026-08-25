@@ -116,6 +116,18 @@ export function makeHelpButton(text: string): HTMLButtonElement {
     return btn;
 }
 
+// crossReferenceHref returns the bridge id targeted by an anchor
+// click inside rendered markdown, or "" for ordinary clicks;
+// reference links get their default navigation suppressed.
+export function crossReferenceHref(ev: Event): string {
+    const anchor = (ev.target as HTMLElement | null)?.closest("a");
+    const href = anchor?.getAttribute("href") ?? "";
+    if (href !== "") {
+        ev.preventDefault();
+    }
+    return href;
+}
+
 // openTip renders one description next to its button. Markdown
 // links whose href is another bridge id are references: clicking
 // one closes this popup, scrolls that element's row into view, and
@@ -127,10 +139,8 @@ function openTip(btn: HTMLButtonElement, text: string): void {
     tip.className = "help-text md";
     tip.innerHTML = marked.parse(text, { async: false });
     tip.addEventListener("click", (ev) => {
-        const anchor = (ev.target as HTMLElement | null)?.closest("a");
-        const href = anchor?.getAttribute("href") ?? "";
+        const href = crossReferenceHref(ev);
         if (href === "") return;
-        ev.preventDefault();
         btn.nextElementSibling?.remove();
         if (!revealElement(href)) {
             const target = helpFor(href);
@@ -254,6 +264,15 @@ export function sortBindings(bindings: PartBinding[]): PartBinding[] {
 
 export function buildBindings(plant: PlantHandle): PartBinding[] {
     const byPart = new Map<string, PartBinding>();
+    const bucketFor = (part: string): PartBinding => {
+        const b = byPart.get(part);
+        if (b) {
+            return b;
+        }
+        const fresh: PartBinding = { part, controls: [], sensors: [] };
+        byPart.set(part, fresh);
+        return fresh;
+    };
     const unknownKinds = new Set<string>();
     const noteKind = (meta: BridgeMeta): void => {
         if (!knownKind(meta.kind)) {
@@ -262,23 +281,11 @@ export function buildBindings(plant: PlantHandle): PartBinding[] {
     };
     for (const e of fetchMeta(plant, plant.controlKeys())) {
         noteKind(e.meta);
-        const b = byPart.get(e.meta.part) ?? {
-            part: e.meta.part,
-            controls: [],
-            sensors: [],
-        };
-        b.controls.push(e);
-        byPart.set(e.meta.part, b);
+        bucketFor(e.meta.part).controls.push(e);
     }
     for (const e of fetchMeta(plant, plant.sensorKeys())) {
         noteKind(e.meta);
-        const b = byPart.get(e.meta.part) ?? {
-            part: e.meta.part,
-            controls: [],
-            sensors: [],
-        };
-        b.sensors.push(e);
-        byPart.set(e.meta.part, b);
+        bucketFor(e.meta.part).sensors.push(e);
     }
     if (unknownKinds.size > 0) {
         console.warn(

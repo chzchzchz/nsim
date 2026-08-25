@@ -51,6 +51,9 @@ export function initConsole(
     h.textContent = "Command Console";
     header.appendChild(h);
 
+    const errorLine = document.createElement("div");
+    errorLine.id = "cmd-error";
+
     // Downloads the journaled commands as a JSON file for
     // nsimrun replay; distinct from the top-bar clipboard button,
     // which copies the plant state JSON.
@@ -108,8 +111,6 @@ export function initConsole(
     submitBtn.textContent = "Submit";
     inputRow.appendChild(submitBtn);
 
-    const errorLine = document.createElement("div");
-    errorLine.id = "cmd-error";
     hostEl.appendChild(errorLine);
 
     let lastRev = -1;

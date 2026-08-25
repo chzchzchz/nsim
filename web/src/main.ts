@@ -1,7 +1,7 @@
 // main.ts — bootstrap, tick loop, and panel wiring.
 
 import { loadWasm } from "./wasm";
-import { newPlant } from "./plant";
+import { newPlant, type PlantHandle } from "./plant";
 import { loadDescriptions } from "./descriptions";
 import { mountPlant } from "./svg";
 import { renderPanel } from "./controls";
@@ -71,11 +71,7 @@ async function main(): Promise<void> {
 
     // Initial SVG mount + tiles. Each top-level prefix gets its
     // own tile; the tile splits into Controls | Sensors columns.
-    const initialSvg = sim.plant.getSvg();
-    if (typeof initialSvg !== "string") {
-        throw new Error(`failed to render initial svg: ${(initialSvg as Error).message}`);
-    }
-    mountPlant(pidEl, initialSvg);
+    const initialSvg = mountSvg(pidEl, sim.plant);
     let lastSvgHtml = initialSvg;
 
     let sensorRows: SensorRow[] = [];
@@ -149,12 +145,7 @@ async function main(): Promise<void> {
         status: statusEl,
         pidEl,
         onReset: () => {
-            const svg = sim.plant.getSvg();
-            if (typeof svg !== "string") {
-                throw new Error(`failed to render svg on reset: ${(svg as Error).message}`);
-            }
-            mountPlant(pidEl, svg);
-            lastSvgHtml = svg;
+            lastSvgHtml = mountSvg(pidEl, sim.plant);
             rebuildTiles();
             initAlarms();
             initConsolePanel();
@@ -355,13 +346,25 @@ function persistTileLayout(tilesEl: HTMLElement): void {
     });
 }
 
+// mountSvg renders the current diagram into the mimic host or
+// throws: a failed getSvg leaves the diagram silently stale, which
+// is worse than surfacing the error.
+function mountSvg(pidEl: HTMLElement, plant: PlantHandle): string {
+    const svg = plant.getSvg();
+    if (typeof svg !== "string") {
+        throw new Error(`failed to render svg: ${(svg as Error).message}`);
+    }
+    mountPlant(pidEl, svg);
+    return svg;
+}
+
 // renderTile assembles one tile (one top-level prefix) with a
 // Controls column and a Sensors column. New rows for the global
 // refresh loop are pushed into the shared sensorRows accumulator.
 function renderTile(
     prefix: string,
     bindings: PartBinding[],
-    plant: import("./plant").PlantHandle,
+    plant: PlantHandle,
     sensorRows: SensorRow[],
 ): HTMLElement {
     const { root: tile, body } = makeTile(prefix || "(other)");

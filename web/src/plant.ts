@@ -39,7 +39,14 @@ export interface PlantHandle {
 
 declare global {
     interface Window {
-        Go: any;
+        // Go is the wasm_exec.js polyfill class; only the members
+        // used by loadWasm() are declared.
+        Go: {
+            new (): {
+                importObject: WebAssembly.Imports;
+                run(instance: WebAssembly.Instance): Promise<void>;
+            };
+        };
         // nsimNewPlant is the only plant factory wasm export. The
         // optional scenario id selects a catalog starting state
         // (see scenarios.ts); omitting it yields the default

@@ -140,27 +140,13 @@ function renderControl(
                 row.appendChild(sel);
             }
         } else {
-            const inp = document.createElement("input");
-            inp.type = "text";
-            inp.size = 8;
-            inp.value = initial;
-            inp.addEventListener("change", () => {
-                writeControl(plant, e.id, inp.value, inp);
-            });
-            row.appendChild(inp);
+            row.appendChild(makeTextInput(plant, e.id, initial));
         }
         return row;
     }
 
     if (kind === "string") {
-        const inp = document.createElement("input");
-        inp.type = "text";
-        inp.size = 8;
-        inp.value = initial;
-        inp.addEventListener("change", () => {
-            writeControl(plant, e.id, inp.value, inp);
-        });
-        row.appendChild(inp);
+        row.appendChild(makeTextInput(plant, e.id, initial));
         return row;
     }
 
@@ -203,6 +189,23 @@ function renderControl(
         row.appendChild(hint);
     }
     return row;
+}
+
+// makeTextInput builds the free-text widget shared by unannotated
+// enum controls and string-kind controls.
+function makeTextInput(
+    plant: PlantHandle,
+    id: string,
+    initial: string,
+): HTMLInputElement {
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.size = 8;
+    inp.value = initial;
+    inp.addEventListener("change", () => {
+        writeControl(plant, id, inp.value, inp);
+    });
+    return inp;
 }
 
 // writeControl applies a widget change and surfaces rejections:
