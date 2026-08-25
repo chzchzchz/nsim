@@ -805,6 +805,26 @@ var scenarioCatalog = []Scenario{
 		},
 	},
 	{
+		ID:       "cvcs-charging-letdown",
+		Number:   30,
+		Category: "Auxiliary system operations",
+		Title:    "CVCS charging and letdown control",
+		StartState: "Water-solid cold shutdown: loops at 135 F, " +
+			"pressurizer solid at 300 psia with heaters off, CVCS secured.",
+		Objective: "Run the CVCS lineup through the operating cycle: " +
+			"establish charging and letdown, grow the pressurizer bubble on " +
+			"the heaters and hand pressure over to their regulation, engage " +
+			"the automatic level program, purify through the demineralizers, " +
+			"and dilute toward the target concentration.",
+		Apply: func(p *Plant) {
+			q := coldWaterSolidLineup()
+			// The recorded opening secures the CVCS; the operator's
+			// first actions line the pump and valve up (A1/A2).
+			q.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = false
+			*p = q
+		},
+	},
+	{
 		ID:       "btrs-boron-cycling",
 		Number:   31,
 		Category: "Auxiliary system operations",
@@ -1376,6 +1396,32 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 		c.require(ccw.PumpRunning, "component cooling pump in service")
 		c.require(math.Abs(ccw.InletTemp.Float()-CCWSInletSteadyStateTemp) <= 1,
 			"CCW inlet holding the design 105 F value")
+		return c.result()
+	},
+	"cvcs-charging-letdown": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Bubble grown under the heaters and pressure handed over to
+		// heater regulation: "The pressurizer heaters are kept energized
+		// to raise the pressurizer liquid temperature to a level where
+		// the resultant saturation pressure in the pressurizer is
+		// adequate to support operations"
+		// specs/the_westinghouse_pressurized_water_react/chapter_4/page_076.txt:78-82;
+		// band per plan E5 (PressurizerHeaterTarget regulation).
+		pzr := &p.ReactorBuilding.Pressurizer
+		c.require(pzr.SteamBubble.Float() > 0,
+			"pressurizer steam bubble established")
+		c.require(pzr.Pressure >= 2100,
+			"heater regulation holding no-load pressure")
+		// Automatic level program engaged and tracking:
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-39
+		cvcs := &p.AuxiliaryBuilding.ChemicalVolumeControlSystem
+		c.require(cvcs.AutoLevelControl,
+			"automatic level program engaged")
+		level := 100 * pzr.Water.Float() / pzr.Volume.Float()
+		c.require(math.Abs(level-cvcs.ProgrammedLevel) <= 5,
+			"pressurizer level tracking the Tavg program")
+		c.require(!p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+			"no trip through the evolution")
 		return c.result()
 	},
 }

@@ -13,8 +13,8 @@ import (
 // The scenario catalog feeds the web selection screen, so its
 // identifiers must be unique and its numbers must track the
 // plans/x/scenarios.txt item they implement, rising strictly with
-// catalog position. Item 30 (CVCS lineup) has no simulator support
-// yet, so 31 follows 29.
+// catalog position. Item 32 has no simulator support yet, so 33
+// follows 31.
 func TestScenarioCatalogIdentifiers(t *testing.T) {
 	seen := make(map[string]bool)
 	prev := 0
@@ -29,7 +29,7 @@ func TestScenarioCatalogIdentifiers(t *testing.T) {
 		assert.NotEmpty(t, s.StartState)
 		assert.NotEmpty(t, s.Objective)
 	}
-	assert.Len(t, Scenarios(), 31)
+	assert.Len(t, Scenarios(), 32)
 
 	s, ok := ScenarioByID("porv-stuck-open")
 	require.True(t, ok)
