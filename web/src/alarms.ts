@@ -92,7 +92,14 @@ export function renderAlarms(
 
     container.appendChild(root);
 
+    // Raw payload behind the current rows; an identical string from
+    // the wasm side skips the parse and the per-entry diffing.
+    let lastRaw = "";
+
     function refresh(json: string): void {
+        if (json === lastRaw) {
+            return;
+        }
         let list: AlarmEntry[];
         try {
             list = JSON.parse(json) as AlarmEntry[];
@@ -100,6 +107,7 @@ export function renderAlarms(
             console.error("bad alarm JSON:", json);
             return;
         }
+        lastRaw = json;
         const seen = new Set<string>();
         for (const a of list) {
             seen.add(a.id);

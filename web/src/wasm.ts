@@ -2,7 +2,9 @@
 // loadWasm() resolves, window.nsimNewPlant is available and
 // newPlant() will succeed.
 
-import "./wasm_exec.js";  // pulls in the Go runtime polyfill
+// Sole polyfill loader: bundling it keeps window.Go available
+// under any deploy base, unlike a root-absolute script tag.
+import "./wasm_exec.js";
 
 export async function loadWasm(): Promise<void> {
     const go = new window.Go();

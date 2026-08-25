@@ -19,6 +19,12 @@ export interface SensorRow {
     cell: HTMLElement;
 }
 
+// Raw snapshot behind the current cells of each rendered row set,
+// keyed by array identity: an identical payload skips the parse
+// and the per-cell writes entirely, and a rebuild (new row array)
+// invalidates it so fresh placeholder cells always get filled.
+const lastRawByRows = new WeakMap<SensorRow[], string>();
+
 export function renderReadout(
     host: HTMLElement,
     bindings: PartBinding[],
@@ -98,10 +104,16 @@ interface SensorSnapshot {
 
 // refreshSensors updates every value cell from one batched wasm
 // call. On a failed or malformed batch the previous frame's cells
-// are left untouched rather than blanking the read-out.
+// are left untouched rather than blanking the read-out. A payload
+// identical to the previous frame skips parsing and writing, and
+// cells whose formatted text did not change skip the write so idle
+// rows do not invalidate layout.
 export function refreshSensors(rows: SensorRow[], plant: PlantHandle): void {
     const raw = plant.sensorValuesJSON();
     if (typeof raw !== "string") {
+        return;
+    }
+    if (lastRawByRows.get(rows) === raw) {
         return;
     }
     let snap: SensorSnapshot;
@@ -112,22 +124,25 @@ export function refreshSensors(rows: SensorRow[], plant: PlantHandle): void {
         return;
     }
     for (const r of rows) {
+        let out: string;
         const errMsg = snap.errors[r.id];
         if (errMsg !== undefined) {
-            r.cell.textContent = `(error: ${errMsg})`;
-            continue;
+            out = `(error: ${errMsg})`;
+        } else {
+            const v = snap.values[r.id];
+            if (v === undefined) {
+                out = "(unknown)";
+            } else if (r.kind === "bool") {
+                out = v === "true" || v === "1" ? "✅" : "❌";
+            } else {
+                const formatted = formatSensorValue(r.kind, v);
+                const u = unitFor(r.kind);
+                out = u ? `${formatted} ${u}` : formatted;
+            }
         }
-        const v = snap.values[r.id];
-        if (v === undefined) {
-            r.cell.textContent = "(unknown)";
-            continue;
+        if (r.cell.textContent !== out) {
+            r.cell.textContent = out;
         }
-        if (r.kind === "bool") {
-            r.cell.textContent = v === "true" || v === "1" ? "✅" : "❌";
-            continue;
-        }
-        const formatted = formatSensorValue(r.kind, v);
-        const u = unitFor(r.kind);
-        r.cell.textContent = u ? `${formatted} ${u}` : formatted;
     }
+    lastRawByRows.set(rows, raw);
 }

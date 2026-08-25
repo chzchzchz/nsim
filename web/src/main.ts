@@ -37,10 +37,6 @@ const MAX_CATCHUP_S = 1;
 const SPS_WINDOW_MS = 1000;
 
 async function main(): Promise<void> {
-    // Copy wasm_exec.js polyfill into the same origin. We
-    // loaded it from /wasm_exec.js via the <script> tag in
-    // index.html so it lives on window.Go.
-
     await loadWasm();
     await loadDescriptions();
 
@@ -186,13 +182,16 @@ async function main(): Promise<void> {
     }
 
     // Live objective banner: polls the wasm-side end-state bounds so
-    // the operator sees which bounds are still unmet.
+    // the operator sees which bounds are still unmet. An identical
+    // payload from the previous frame skips parse and DOM work.
     const objectiveEl = document.getElementById("objective") as HTMLElement;
+    let lastObjectiveRaw = "";
     function refreshObjective(): void {
         const raw = sim.plant.objectiveJSON();
-        if (typeof raw !== "string") {
+        if (typeof raw !== "string" || raw === lastObjectiveRaw) {
             return;
         }
+        lastObjectiveRaw = raw;
         const status = JSON.parse(raw) as ObjectiveStatus;
         if (!status.active) {
             objectiveEl.hidden = true;
