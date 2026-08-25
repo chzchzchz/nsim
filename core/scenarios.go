@@ -774,8 +774,8 @@ var scenarioCatalog = []Scenario{
 		Number:   28,
 		Category: "Engineered safeguards",
 		Title:    "Safety injection and recirculation",
-		StartState: "At-power lineup; manual safety injection " +
-			"latches 30 seconds in.",
+		StartState: "At-power lineup; a hot-leg LOCA break opens 30 " +
+			"seconds in.",
 		Objective: "Supervise the injection phase: diesels, HHSI, " +
 			"accumulators discharging as pressure falls, then switch " +
 			"over to cold-leg recirculation at RWST low level and later " +
@@ -783,7 +783,7 @@ var scenarioCatalog = []Scenario{
 		Apply: func(p *Plant) { *p = fullPowerLineup() },
 		Script: []ScriptCommand{
 			{AtMs: scenarioTriggerDelayMs,
-				ControlKey: "ReactorBuilding/ReactorProtectionSystem/ManualSI",
+				ControlKey: "ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open",
 				Value:      "1"},
 		},
 	},

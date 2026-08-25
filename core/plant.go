@@ -92,6 +92,14 @@ func (r *ReactorBuilding) Step(
 	ret.Pressurizer, reliefDischarge = ret.Pressurizer.Step(
 		ret.ReactorPressureVessel.Outlet, &ret.PORV, &ret.SafetyValve, &ret.BlockValve,
 		sprayDrive, ret.Aux.ChemicalVolumeControlSystem.AuxSprayDrive)
+	// Hot-leg LOCA discharge: the break debits primary inventory
+	// after the pressurizer's own balance so the blowdown lands on
+	// top of this step's heater/spray/relief state.
+	// "For large pipe ruptures, the RCS would be rapidly
+	//  depressurized and voided of coolant."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:16-17
+	ret.ReactorPressureVessel.applyHotLegBreak(&ret.Pressurizer,
+		ret.ContainmentBuilding.Pressure)
 	// Route the relieved steam-equivalent volume into the PRT
 	// until it fills; a full tank latches the rupture-disc burst
 	// and further relief vents to containment instead.
@@ -1112,6 +1120,27 @@ func (p *Plant) Step() {
 			DieselStartLossOfOffsitePower
 	}
 
+	// Safety-injection auto-start: item 1 of the SI actuation list
+	// starts the diesels whenever the ESFAS output latches, with or
+	// without a loss of offsite power. The committed RPS latch is
+	// read here (this sits before ReactorBuilding.Step in the tick),
+	// so the engines crank the tick after actuation and an operator
+	// standdown sticks immediately.
+	// "The receipt of the safety injection signal initiates the
+	//  following emergency core cooling actions: The onsite emergency
+	//  diesel generators are started."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:109-114
+	if p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionActuated {
+		if p.AuxiliaryBuilding.DieselGenerator.StartSignal == DieselStartNone {
+			p.AuxiliaryBuilding.DieselGenerator.StartSignal =
+				DieselStartSafetyInjection
+		}
+		if p.AuxiliaryBuilding.DieselGeneratorB.StartSignal == DieselStartNone {
+			p.AuxiliaryBuilding.DieselGeneratorB.StartSignal =
+				DieselStartSafetyInjection
+		}
+	}
+
 	p.nextPlant.AuxiliaryBuilding = p.AuxiliaryBuilding.Step(
 		p.Outside.ServiceWaterSystem.InletTemp,
 		p.Outside.ServiceWaterSystem.Flow,
@@ -1255,6 +1284,23 @@ func (p *Plant) Step() {
 			SISSuctionSump {
 			p.nextPlant.ReactorBuilding.SafetyInjectionSystem.HHSISuction =
 				SISSuctionRWST
+		}
+		// The same actuation list starts the RHR pumps; they develop
+		// flow only once the RCS is inside the RHRS entrance
+		// envelope (the pump shutoff head cannot inject into a
+		// pressurized primary), so the latch waits for entry
+		// conditions exactly like an operator line-up would.
+		// "The RHR pumps are started."
+		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:140
+		// "When the reactor coolant temperature has dropped to 350°F
+		//  [...] and the pressure has been reduced to less than
+		//  approximately 400 psig [...]"
+		// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
+		if p.nextPlant.ReactorBuilding.ReactorPressureVessel.Outlet.Float() <= RHRSTempThreshold &&
+			float64(p.nextPlant.ReactorBuilding.Pressurizer.Pressure-AtmosphericPressure) <
+				RHRSPressureThreshold {
+			p.nextPlant.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Running = true
+			p.nextPlant.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.Running = true
 		}
 	}
 
@@ -1503,9 +1549,16 @@ func (p *Plant) Step() {
 	breakGalPerStep := p.nextPlant.ReactorBuilding.SteamGenerator.BreakFlow.Float()
 	steamBreakHeatIn := Watts(breakGalPerStep / TimeStep.Seconds() *
 		KilogramsPerGallon * float64(LatentHeatOfSteamization))
+	// Hot-leg LOCA enthalpy release: the primary discharge flashes
+	// into containment through the same latent-heat convention.
+	// "This break causes a loss of coolant accident (LOCA) event."
+	// specs/pwr_sim/chapter_4/page_053.txt:44-45
+	locaGalPerStep := p.nextPlant.ReactorBuilding.ReactorPressureVessel.BreakFlow.Float()
+	locaHeatIn := Watts(locaGalPerStep / TimeStep.Seconds() *
+		KilogramsPerGallon * float64(LatentHeatOfSteamization))
 	p.nextPlant.ReactorBuilding.ContainmentBuilding =
 		p.nextPlant.ReactorBuilding.ContainmentBuilding.Step(
-			steamBreakHeatIn-cssHeatOut, rcfcHeatOut,
+			steamBreakHeatIn+locaHeatIn-cssHeatOut, rcfcHeatOut,
 		)
 
 	// RPS-driven CIS manual flags. The Reactor Protection

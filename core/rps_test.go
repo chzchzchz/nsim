@@ -306,10 +306,16 @@ func TestPlant_RPSResetReleasesContainmentIsolation(t *testing.T) {
 	// Operator restores conditions (containment back to
 	// atmosphere, steamline at no-load pressure — MakePlant leaves
 	// it at 0 psia, which is itself a live low-steamline SI
-	// trigger) and resets the protection system: the manual flags
-	// clear, then both phases unlatch.
+	// trigger), resets the protection system, and stands down the
+	// ESFAS-initiated emergency-diesel start demand the actuation
+	// latched ("The onsite emergency diesel generators are started",
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:113-114;
+	// clearing the latch stays an explicit operator action). The
+	// manual flags clear, then both phases unlatch.
 	p.ReactorBuilding.ContainmentBuilding.Pressure = AtmosphericPressure
 	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
+	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartNone
+	p.AuxiliaryBuilding.DieselGeneratorB.StartSignal = DieselStartNone
 	p.ReactorBuilding.ReactorProtectionSystem.Reset()
 	for i := 0; i < 10; i++ {
 		p.Step()

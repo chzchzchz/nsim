@@ -644,6 +644,87 @@ type ReactorPressureVessel struct {
 	// and citations.
 	Iodine135AxialDeviation float64
 	Xenon135AxialDeviation  float64
+
+	// HotLegBreak is the malfunction path modeling a LOCA rupture
+	// at the RPV outlet nozzle connecting the upper plenum to a
+	// hot leg. Open is the normalized break size (0 intact, 1
+	// full crack); the discharge debits primary liquid inventory
+	// through BreakFlow and depressurizes the RCS toward
+	// containment pressure as the primary voids.
+	// "This malfunction event causes a 'crack' opening at the
+	//  reactor pressure vessel (RPV) outlet nozzle that connects
+	//  the RPV Upper Plenum and the Hot Leg #1 piping."
+	// specs/pwr_sim/chapter_4/page_053.txt:43-45
+	HotLegBreak Valve
+
+	// BreakFlow is the per-step volume discharged through
+	// HotLegBreak during the most recent Step (gallons per step,
+	// same convention as SteamGenerator.BreakFlow). Plant.Step
+	// converts it into containment enthalpy input; it is lost
+	// from the primary.
+	BreakFlow Volume
+
+	// BreakDischarged is the cumulative liquid-equivalent volume
+	// lost through HotLegBreak since time zero (gal). The blowdown
+	// ends when it reaches RCSDrainableInventoryGal, so a voided
+	// primary cannot keep feeding the break.
+	BreakDischarged Volume
+}
+
+// RCSHotLegBreakGalPerSec is the full-open discharge rate of the
+// hot-leg break (gal/s, liquid-equivalent). The spec quotes no
+// break size; the magnitude is sized so blowdown depressurization
+// outruns pressurizer heater authority (200 psi/s) and drives the
+// primary below the accumulator precharge within seconds.
+// "For large pipe ruptures, the RCS would be rapidly
+// depressurized and voided of coolant."
+// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:16-17
+const RCSHotLegBreakGalPerSec = 120.0
+
+// RCSDrainableInventoryGal is the total liquid-equivalent primary
+// inventory the break can drain, derived once from the same lumped
+// coolant mass the RHRS-takeover heat balance uses. The pressurizer's
+// 1500 gal ledger only carries pressure state; without this bound a
+// voided primary would feed the break forever.
+var RCSDrainableInventoryGal = RCSMassKg / KilogramsPerGallon
+
+// applyHotLegBreak discharges the hot-leg break against the
+// pressurizer inventory ledger: each liquid-equivalent gallon lost
+// drops RCS pressure by PressurizerBubbleStiffness toward floor
+// (containment pressure) as the primary voids, matching the
+// relief-discharge currency convention. The per-step discharged
+// volume lands in BreakFlow for the containment enthalpy routing,
+// and the cumulative draw stops at the drainable primary inventory
+// so an empty primary cannot keep feeding the break.
+//
+// Spec justification:
+//   - "For large pipe ruptures, the RCS would be rapidly
+//     depressurized and voided of coolant."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:16-17
+//   - Break location: specs/pwr_sim/chapter_4/page_053.txt:43-45.
+func (r *ReactorPressureVessel) applyHotLegBreak(pzr *Pressurizer, floor Pressure) {
+	r.BreakFlow = Volume{Val: 0, Unit: u.Gallon}
+	if r.HotLegBreak.Open <= 0 {
+		return
+	}
+	remaining := RCSDrainableInventoryGal - r.BreakDischarged.Float()
+	if remaining <= 0 {
+		return
+	}
+	rate := r.HotLegBreak.Open * RCSHotLegBreakGalPerSec
+	gal := min(rate*TimeStep.Seconds(), remaining)
+	// The liquid-equivalent draw comes out of the loop inventory the
+	// surge line exposes as pressurizer water; level falls first and
+	// the free space grows behind it.
+	water := max(pzr.Water.Float()-gal, 0)
+	pzr.Water = vol(pzr.Water, water)
+	pzr.SteamBubble = vol(pzr.SteamBubble,
+		pzr.Volume.Float()-pzr.Water.Float())
+	psiDrop := gal * PressurizerBubbleStiffness
+	pzr.Pressure = Pressure(max(float64(pzr.Pressure)-psiDrop, float64(floor)))
+	r.BreakDischarged = vol(r.BreakDischarged,
+		r.BreakDischarged.Float()+gal)
+	r.BreakFlow = vol(r.BreakFlow, gal)
 }
 // Reactor core sizing. The spec gives steam-flow and pressure data
 // (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56,

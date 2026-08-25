@@ -2845,6 +2845,16 @@ const (
 	// the above signals are generated."
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:59-60
 	SISRecirculationSwitchoverDelay float64 = 2.0
+
+	// SISHotLegInjectionFraction is the share of the HHSI
+	// discharge redirected to the RCS hot legs once the operator
+	// realigns to simultaneous cold- and hot-leg injection. The
+	// spec asks for "a substantial portion" without a number;
+	// half is the recorded model convention.
+	// "a substantial portion of the flow is directed to the RCS
+	// hot legs."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:131-133
+	SISHotLegInjectionFraction = 0.5
 )
 
 // SISAccumulatorPerTankCapacity is the water capacity of one
@@ -2940,6 +2950,24 @@ type SIS struct {
 	// accumulator is actively discharging (RCS pressure below
 	// the precharge threshold and Level > 0).
 	AccumulatorInjectionFlow Volume
+
+	// HotLegInjection is the manual control-board realignment to
+	// simultaneous cold-leg and hot-leg injection, performed
+	// about 24 hours into the recirculation phase for long-term
+	// core cooling and boron-buildup prevention.
+	// "Approximately 24 hours after the switchover to cold-leg
+	// recirculation, simultaneous flow to the RCS cold legs and
+	// hot legs is established for the purpose of long-term core
+	// cooling. [...] Switchover to this phase is performed
+	// manually from the control board."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:122-138
+	HotLegInjection bool
+
+	// HHSIHotLegFlow is the per-second volume of the HHSI
+	// discharge directed to the RCS hot legs while HotLegInjection
+	// is armed; the remainder of HHSIInjectionFlow continues to
+	// the cold legs.
+	HHSIHotLegFlow Volume
 
 	// SwitchoverTimer is the elapsed time since the RWST
 	// low-level setpoint was reached. It tracks the SISRecirculationSwitchoverDelay

@@ -108,7 +108,7 @@ func TestMalfunctionScenariosScheduleTheirTrigger(t *testing.T) {
 		{"steam-line-break", "ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open", "1"},
 		{"porv-stuck-open", "ReactorBuilding/Pressurizer/PORVStuckOpen", "1"},
 		{"dropped-rod-bank", "ReactorBuilding/ReactorPressureVessel/ControlRods/DroppedBank", "1"},
-		{"si-recirculation", "ReactorBuilding/ReactorProtectionSystem/ManualSI", "1"},
+		{"si-recirculation", "ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open", "1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.id, func(t *testing.T) {

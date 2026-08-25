@@ -70,6 +70,7 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 
 	ret.AccumulatorInjectionFlow = Volume{Val: 0, Unit: u.Gallon}
 	ret.HHSIInjectionFlow = Volume{Val: 0, Unit: u.Gallon}
+	ret.HHSIHotLegFlow = Volume{Val: 0, Unit: u.Gallon}
 
 	// 1) Accumulator discharge.
 	//
@@ -104,18 +105,34 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 	// remainder goes into the RCS cold legs. HHSI pumps
 	// need ESF bus power; DriveReady is wired from
 	// ESFBusA.Energized || ESFBusB.Energized by Plant.Step.
-	if ret.HHSIPumpRunning && ret.HHSIDriveReady && ret.HHSISuction == SISSuctionRWST {
+	if ret.HHSIPumpRunning && ret.HHSIDriveReady {
+		netFlow := SISHHSIDesignFlow.Float() *
+			(1.0 - SISHHSIMiniFlowFraction)
+		ret.HHSIInjectionFlow = Volume{Val: netFlow, Unit: u.Gallon}
+	}
+	if ret.HHSIPumpRunning && ret.HHSIDriveReady &&
+		ret.HHSISuction == SISSuctionRWST {
 		dW := SISHHSIDesignFlow.Float() * dt.Seconds()
-		newRWST := ret.RWSTLevel.Float() - dW
-		newRWST = max(newRWST, 0)
+		newRWST := max(ret.RWSTLevel.Float()-dW, 0)
 		ret.RWSTLevel = Volume{Val: newRWST, Unit: u.Gallon}
-		netFlow := SISHHSIDesignFlow.Float() *
-			(1.0 - SISHHSIMiniFlowFraction)
-		ret.HHSIInjectionFlow = Volume{Val: netFlow, Unit: u.Gallon}
-	} else if ret.HHSIPumpRunning && ret.HHSIDriveReady && ret.HHSISuction == SISSuctionSump {
-		netFlow := SISHHSIDesignFlow.Float() *
-			(1.0 - SISHHSIMiniFlowFraction)
-		ret.HHSIInjectionFlow = Volume{Val: netFlow, Unit: u.Gallon}
+	}
+
+	// 2b) Simultaneous cold- and hot-leg injection.
+	//
+	// Once the operator realigns from the control board, the
+	// SISHotLegInjectionFraction share of the HHSI discharge is
+	// routed to the hot legs while the remainder continues to
+	// serve the cold legs; the total HHSIInjectionFlow is
+	// unchanged so downstream consumers see one number.
+	// "Approximately 24 hours after the switchover to
+	// cold-leg recirculation, simultaneous flow to the RCS cold
+	// legs and hot legs is established for the purpose of
+	// long-term core cooling."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:122-128
+	if ret.HotLegInjection && ret.HHSIInjectionFlow.Float() > 0 {
+		ret.HHSIHotLegFlow = Volume{
+			Val: ret.HHSIInjectionFlow.Float() *
+				SISHotLegInjectionFraction, Unit: u.Gallon}
 	}
 
 	// 3) Recirculation switchover.

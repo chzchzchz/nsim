@@ -113,6 +113,34 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 
+	// Simultaneous cold- and hot-leg injection realignment. The
+	// operator performs this control-board switchover about 24
+	// hours into cold-leg recirculation for long-term core
+	// cooling and boron-buildup prevention.
+	// "Approximately 24 hours after the switchover to cold-leg
+	//  recirculation, simultaneous flow to the RCS cold legs and
+	//  hot legs is established [...]. Switchover to this phase is
+	//  performed manually from the control board."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:122-138
+	m["ReactorBuilding/SafetyInjectionSystem/HotLegInjection"] = &bridge.Control{
+		Part:  "ReactorBuilding/SafetyInjectionSystem",
+		Label: "HotLegInjection",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.SafetyInjectionSystem.HotLegInjection)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SafetyInjectionSystem.HotLegInjection = v
+			return nil
+		},
+	}
+
+
 	// Pressurizer spray valve (chapter 7 pressure control):
 	// "The pressurizer pressure control system ... spray ..."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
@@ -311,6 +339,33 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 				return err
 			}
 			p.ReactorBuilding.SteamGenerator.MainSteamLineBreak.Open = v
+			return nil
+		},
+	}
+
+	// Hot-leg LOCA malfunction (pwr_sim exercise 4.20). Open is
+	// the normalized break size at the RPV outlet nozzle; 1
+	// inserts the full "RC hot leg #1 LOCA break".
+	//   "select the malfunction 'RC hot leg #1 LOCA break'"
+	//   specs/pwr_sim/chapter_4/page_053.txt:55-56
+	m["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorPressureVessel/HotLegBreak",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.ReactorPressureVessel.HotLegBreak.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorPressureVessel.HotLegBreak.Open = v
 			return nil
 		},
 	}
@@ -1677,6 +1732,36 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
 				p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning)
+		},
+	}
+
+
+	// Hot-leg LOCA break discharge. The exercise records the
+	// break flow as the transient develops.
+	// "Record the break flow in Table V."
+	// specs/pwr_sim/chapter_4/page_053.txt:64-65
+	m["ReactorBuilding/ReactorPressureVessel/BreakFlow"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "BreakFlow",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.ReactorBuilding.ReactorPressureVessel.BreakFlow.Float())
+		},
+	}
+
+	// HHSI hot-leg injection split. Non-zero once the operator
+	// realigns to simultaneous cold- and hot-leg injection.
+	// "a substantial portion of the flow is directed to the RCS
+	//  hot legs."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:132-133
+	m["ReactorBuilding/SafetyInjectionSystem/HHSIHotLegFlow"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SafetyInjectionSystem",
+		Label: "HHSIHotLegFlow",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.ReactorBuilding.SafetyInjectionSystem.HHSIHotLegFlow.Float())
 		},
 	}
 
