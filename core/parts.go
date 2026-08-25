@@ -3154,6 +3154,18 @@ type EFWS struct {
 	// valves are operator-positioned from the outset.
 	AutoStartElapsed time.Duration
 
+	// DeliveredFlow is the SG-side feedwater flow integrated by
+	// the most recent Step (gal/s). It equals the tank drawdown
+	// rate, so secondary-side inventory stays conserved between
+	// the primary tanks and the steam generators even when the
+	// flow-modulating valves throttle delivery or a tank runs
+	// dry. The pumps take suction from the primary tanks and
+	// discharge to the SG feed piping; undelivered discharge
+	// recirculates to the tank, so net tank draw is exactly
+	// delivery.
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:12-21
+	DeliveredFlow Volume
+
 	// MotorPumpStartCount and TurbinePumpStartCount are the
 	// cumulative count of times the motor/turbine pumps have
 	// been started in this run. Exposed for operator-display

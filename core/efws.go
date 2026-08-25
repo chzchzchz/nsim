@@ -10,9 +10,10 @@ import (
 // The step function implements four state machines that run in
 // parallel for each of the two subsystems (A and B):
 //
-//   1. Tank depletion: while a pump (motor or turbine) is
-//      running, the subsystem's primary tank level decreases at
-//      the pump's rated discharge flow.
+//   1. Tank depletion: the subsystem's primary tank level
+//      decreases by exactly the flow its pumps deliver to the
+//      steam generators (valve-scaled, gated by Running &&
+//      DriveReady), so secondary-side inventory is conserved.
 //   2. SG feedwater delivery: the total EFWS feedwater flow
 //      equals the sum of all running pumps' rated flows, gated
 //      by each pump's DriveReady.
@@ -80,6 +81,7 @@ func (e *EFWS) Step(
 			ret.SubsystemB.TurbinePump.Running = false
 		ret.Active = false
 		ret.AutoStartElapsed = 0
+		ret.DeliveredFlow = Volume{Val: 0, Unit: u.Gallon}
 		return ret
 	}
 
@@ -92,19 +94,33 @@ func (e *EFWS) Step(
 	// paraphrased per plans/CHECK_SKILL.md citation rule).
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_102.txt:14-18
 
-	// Tank depletion. While a pump is running the tank
-	// discharges at the pump's rated flow. If both pumps are
-	// running in a subsystem, the larger (turbine) pump
-	// dominates the depletion.
+	// Tank depletion. The tank discharges exactly what its
+	// pumps deliver to the SG header this step: rated flow
+	// scaled by each pump's FlowModulatingValve position and
+	// gated by Running && DriveReady, capped by the water left
+	// in the tank. Undelivered pump discharge recirculates to
+	// the tank through the orificed line, so net draw equals
+	// delivery.
 	//
 	// Spec justification:
+	//   - "In operation, the emergency feedwater pumps take
+	//     suction from the primary emergency feedwater tanks and
+	//     discharge the water into the main feedwater piping
+	//     [...]. Each pump is provided with an orificed
+	//     recirculation line leading back to the primary
+	//     emergency feedwater tank."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:12-21
 	//   - "Each tank contains a quantity of condensate quality
 	//     water sufficient to allow the plant to be maintained
 	//     in hot standby for 13 hours then allow a 5-hour
 	//     cooldown of the plant to 350°F (176.7°C)."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:52-56
-	ret.SubsystemA = depleteEFWSSubsystemTank(ret.SubsystemA, dt)
-	ret.SubsystemB = depleteEFWSSubsystemTank(ret.SubsystemB, dt)
+	drawA, subA := drainEFWSTank(ret.SubsystemA, dt)
+	ret.SubsystemA = subA
+	drawB, subB := drainEFWSTank(ret.SubsystemB, dt)
+	ret.SubsystemB = subB
+	ret.DeliveredFlow = Volume{
+		Val: (drawA + drawB) / dt.Seconds(), Unit: u.Gallon}
 
 	if ret.Active {
 		ret.AutoStartElapsed += dt
@@ -157,34 +173,34 @@ func (e *EFWS) ApplyModulatingValveLineup(sgLevelPct float64) {
 	}
 }
 
-// depleteEFWSSubsystemTank decrements the subsystem's primary
-// tank level by the running pump's rated flow. If both pumps
-// are running, the turbine-driven pump's flow dominates the
-// depletion (the motor-driven pump is the standby pump in
-// that case, supplying the same SG header).
+// drainEFWSTank debits the subsystem's primary tank by the flow
+// its pumps actually deliver to the SG header this step: rated
+// discharge scaled by the flow-modulating valve position, gated
+// by Running && DriveReady, and capped by the water remaining in
+// the tank. It returns the volume drawn so the caller can report
+// it as the SG-side delivery rate.
 //
 // Spec justification:
-//   - "Each pump is provided with an orificed recirculation
-//     line leading back to the primary emergency feedwater
-//     tank. This line provides recirculation flow any time the
-//     pumps are operating."
-//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:17-21
-//   - The simplified model omits the orificed recirculation
-//     flow loss and treats all pump discharge as tank drawdown
-//     against the SG header demand.
-func depleteEFWSSubsystemTank(sub EFWSSubsystem, dt time.Duration) EFWSSubsystem {
-	if !sub.MotorPump.Running && !sub.TurbinePump.Running {
-		return sub
+//   - Suction/discharge/recirculation path: "the emergency
+//     feedwater pumps take suction from the primary emergency
+//     feedwater tanks and discharge the water into the main
+//     feedwater piping [...] Each pump is provided with an
+//     orificed recirculation line leading back to the primary
+//     emergency feedwater tank. This line provides recirculation
+//     flow any time the pumps are operating."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:12-21
+//   - Operator-set rates: "the pumps are manually started and
+//     the flowrates are manually [controlled by positioning the
+//     flow modulating valves.]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_102.txt:14-18
+func drainEFWSTank(sub EFWSSubsystem, dt time.Duration) (float64, EFWSSubsystem) {
+	draw := min(sub.EFWSSubsystemFlow()*dt.Seconds(),
+		sub.Tank.Level.Float())
+	if draw > 0 {
+		sub.Tank.Level = Volume{
+			Val: sub.Tank.Level.Float() - draw, Unit: u.Gallon}
 	}
-	flow := EFWSMotorPumpFlow
-	if sub.TurbinePump.Running {
-		flow = EFWSTurbinePumpFlow
-	}
-	dV := flow.Float() * dt.Seconds()
-	newLevel := sub.Tank.Level.Float() - dV
-	newLevel = max(newLevel, 0)
-	sub.Tank.Level = Volume{Val: newLevel, Unit: u.Gallon}
-	return sub
+	return draw, sub
 }
 
 // EFWSSubsystemFlow returns the SG-side feedwater flow rate
@@ -218,12 +234,13 @@ func (sub *EFWSSubsystem) EFWSSubsystemFlow() float64 {
 	return total
 }
 
-// EFWSFeedwaterFlow computes the total SG-side feedwater flow
-// rate from all running EFWS pumps (gal/s). The result is
-// written to ReactorBuilding.EFWSFeedwaterFlow and credited to
-// the SG inventory in ReactorBuilding.Step. Manual operator
-// starts count: only the pump Running + DriveReady states gate
-// the flow, not the autostart latch.
+// EFWSFeedwaterFlow reports the total SG-side feedwater flow
+// rate integrated by the most recent Step (gal/s). The value is
+// the same number that debited the primary tanks, so crediting
+// it to the SG inventory conserves secondary-side mass; a dry
+// tank reports zero. Manual operator starts count: only the
+// pump Running + DriveReady states and the modulating-valve
+// positions gate the flow, not the autostart latch.
 //
 // Spec justification:
 //   - "supply at least the minimum required flow, within one
@@ -231,7 +248,5 @@ func (sub *EFWSSubsystem) EFWSSubsystemFlow() float64 {
 //     steam generators"
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:23-26
 func (e *EFWS) EFWSFeedwaterFlow() Volume {
-	a := e.SubsystemA.EFWSSubsystemFlow()
-	b := e.SubsystemB.EFWSSubsystemFlow()
-	return Volume{Val: a+b, Unit: u.Gallon}
+	return e.DeliveredFlow
 }

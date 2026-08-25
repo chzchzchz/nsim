@@ -107,8 +107,9 @@ func TestEFWS_TurbinePumpsStartOnLowLowSGLevel(t *testing.T) {
 		efws.SubsystemB.TurbinePump.Running)
 }
 
-// While the EFWS is active and pumps are running the primary
-// tank level decreases at the rated pump discharge rate.
+// While the EFWS is active and pumps are running with their
+// discharge valves full open, the primary tank level decreases
+// at the delivered rate (the rated pump discharge flow).
 //
 // Spec justification:
 //   - "Each tank contains a quantity of condensate quality
@@ -126,7 +127,10 @@ func TestEFWS_PrimaryTankDepletesWhilePumpsRunning(t *testing.T) {
 				IsPrimary:  true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
-			MotorPump: (func() EFWSPump { var p EFWSPump; p.Running = true; return p }() ),
+			MotorPump: EFWSPump{
+				AFWPump:             AFWPump{Pump: Pump{Running: true}, DriveReady: true},
+				FlowModulatingValve: Valve{Open: 1},
+			},
 		},
 		SubsystemB: EFWSSubsystem{
 			Tank: EFWSTank{
@@ -135,7 +139,10 @@ func TestEFWS_PrimaryTankDepletesWhilePumpsRunning(t *testing.T) {
 				IsPrimary:  true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
-			MotorPump: (func() EFWSPump { var p EFWSPump; p.Running = true; return p }() ),
+			MotorPump: EFWSPump{
+				AFWPump:             AFWPump{Pump: Pump{Running: true}, DriveReady: true},
+				FlowModulatingValve: Valve{Open: 1},
+			},
 		},
 	}
 	dt := TimeStep.Seconds()
@@ -155,11 +162,10 @@ func TestEFWS_PrimaryTankDepletesWhilePumpsRunning(t *testing.T) {
 }
 
 // When both the motor and turbine pumps in a subsystem are
-// running, the turbine-pump flow dominates tank depletion
-// (the larger of the two rated flows wins). At 200 gpm
-// (turbine) vs 150 gpm (motor), the depletion rate equals
-// EFWSTurbinePumpFlow.
-func TestEFWS_TurbinePumpDominatesTankDepletionWhenBothRunning(t *testing.T) {
+// running ready with full-open discharge valves, both contribute
+// their rated flow to the delivered stream, so the tank loss is
+// the sum of the two contributions.
+func TestEFWS_TankDrawSumsBothRunningPumps(t *testing.T) {
 	e := EFWS{
 		Active: true,
 		SubsystemA: EFWSSubsystem{
@@ -169,18 +175,29 @@ func TestEFWS_TurbinePumpDominatesTankDepletionWhenBothRunning(t *testing.T) {
 				IsPrimary:  true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
-			MotorPump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
-			TurbinePump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
+			MotorPump: EFWSPump{
+				AFWPump:             AFWPump{Pump: Pump{Running: true}, DriveReady: true},
+				FlowModulatingValve: Valve{Open: 1},
+			},
+			TurbinePump: EFWSPump{
+				AFWPump:             AFWPump{Pump: Pump{Running: true}, DriveReady: true},
+				FlowModulatingValve: Valve{Open: 1},
+			},
 		},
 	}
 	dt := TimeStep.Seconds()
-	wantLoss := EFWSTurbinePumpFlow.Float() * dt
+	wantLoss := (EFWSMotorPumpFlow.Float() + EFWSTurbinePumpFlow.Float()) * dt
 	e2 := e.Step(Temperature{Val: EFWSSecureTemp+10, Unit: u.Fahrenheit}, false)
 	assert.InDelta(t, EFWSPrimaryTankCapacity.Float()-wantLoss,
 		e2.SubsystemA.Tank.Level.Float(), 1e-9,
-		"want SubsystemA.Tank.Level=%v (turbine dominates), got %v",
+		"want SubsystemA.Tank.Level=%v (both pumps deliver), got %v",
 		EFWSPrimaryTankCapacity.Float()-wantLoss,
 		e2.SubsystemA.Tank.Level.Float())
+	assert.InDelta(t, EFWSMotorPumpFlow.Float()+EFWSTurbinePumpFlow.Float(),
+		e2.DeliveredFlow.Float(), 1e-9,
+		"want DeliveredFlow=%v, got %v",
+		EFWSMotorPumpFlow.Float()+EFWSTurbinePumpFlow.Float(),
+		e2.DeliveredFlow.Float())
 }
 
 // When the RCS hot-leg temperature has been reduced to
@@ -364,4 +381,141 @@ func TestEFWS_TurbineSteamAdmissionValveOpensWithSGPressure(t *testing.T) {
 	assert.True(t, efws.SubsystemB.TurbinePump.DriveReady,
 		"want SubsystemB.TurbinePump.DriveReady=true, got %v",
 		efws.SubsystemB.TurbinePump.DriveReady)
+}
+
+// A throttled discharge valve scales the tank drawdown (and the
+// reported delivery) by the valve fraction: an operator holding
+// the modulating valves at half open uses the tank inventory at
+// half the rated rate.
+//
+// Spec justification:
+//   - "the pumps are manually started and the flowrates are
+//     manually [controlled by positioning the flow modulating
+//     valves.]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_102.txt:14-18
+func TestEFWS_ThrottledValveScalesTankDrawdown(t *testing.T) {
+	e := EFWS{
+		SubsystemA: EFWSSubsystem{
+			Tank: EFWSTank{
+				Level:      EFWSPrimaryTankCapacity,
+				Capacity:   EFWSPrimaryTankCapacity,
+				IsPrimary:  true,
+				Temperature: EFWSPrimaryTankMaxTemp,
+			},
+			MotorPump: EFWSPump{
+				AFWPump:             AFWPump{Pump: Pump{Running: true}, DriveReady: true},
+				FlowModulatingValve: Valve{Open: 0.25},
+			},
+		},
+	}
+	dt := TimeStep.Seconds()
+	wantLoss := 0.25 * EFWSMotorPumpFlow.Float() * dt
+	e2 := e.Step(Temperature{Val: EFWSSecureTemp+10, Unit: u.Fahrenheit}, false)
+	assert.InDelta(t, EFWSPrimaryTankCapacity.Float()-wantLoss,
+		e2.SubsystemA.Tank.Level.Float(), 1e-9,
+		"want SubsystemA.Tank.Level=%v after one throttled step, got %v",
+		EFWSPrimaryTankCapacity.Float()-wantLoss,
+		e2.SubsystemA.Tank.Level.Float())
+	assert.InDelta(t, 0.25*EFWSMotorPumpFlow.Float(),
+		e2.DeliveredFlow.Float(), 1e-9,
+		"want DeliveredFlow=%v, got %v",
+		0.25*EFWSMotorPumpFlow.Float(), e2.DeliveredFlow.Float())
+}
+
+// A running pump without its drive ready delivers nothing and
+// draws nothing from the tank.
+func TestEFWS_NoDrawdownWithoutDriveReady(t *testing.T) {
+	e := EFWS{
+		SubsystemA: EFWSSubsystem{
+			Tank: EFWSTank{
+				Level:      EFWSPrimaryTankCapacity,
+				Capacity:   EFWSPrimaryTankCapacity,
+				IsPrimary:  true,
+				Temperature: EFWSPrimaryTankMaxTemp,
+			},
+			MotorPump: EFWSPump{
+				AFWPump:             AFWPump{Pump: Pump{Running: true}},
+				FlowModulatingValve: Valve{Open: 1},
+			},
+		},
+	}
+	e2 := e.Step(Temperature{Val: EFWSSecureTemp+10, Unit: u.Fahrenheit}, false)
+	assert.InDelta(t, EFWSPrimaryTankCapacity.Float(),
+		e2.SubsystemA.Tank.Level.Float(), 1e-9,
+		"tank must not drain without a ready drive, got %v",
+		e2.SubsystemA.Tank.Level.Float())
+	assert.Zero(t, e2.DeliveredFlow.Float(),
+		"no delivery without a ready drive, got %v",
+		e2.DeliveredFlow.Float())
+}
+
+// A nearly empty tank caps the step's drawdown at its remaining
+// inventory: that remainder is credited as delivery, and once
+// dry both the tank and the reported flow sit at zero.
+func TestEFWS_DryTankStopsDeliveryAtRemainingInventory(t *testing.T) {
+	dt := TimeStep.Seconds()
+	remaining := 0.5 * EFWSMotorPumpFlow.Float() * dt
+	e := EFWS{
+		SubsystemA: EFWSSubsystem{
+			Tank: EFWSTank{
+				Level:      Volume{Val: remaining, Unit: u.Gallon},
+				Capacity:   EFWSPrimaryTankCapacity,
+				IsPrimary:  true,
+				Temperature: EFWSPrimaryTankMaxTemp,
+			},
+			MotorPump: EFWSPump{
+				AFWPump:             AFWPump{Pump: Pump{Running: true}, DriveReady: true},
+				FlowModulatingValve: Valve{Open: 1},
+			},
+		},
+	}
+	e2 := e.Step(Temperature{Val: EFWSSecureTemp+10, Unit: u.Fahrenheit}, false)
+	assert.Zero(t, e2.SubsystemA.Tank.Level.Float(),
+		"the step should have emptied the tank, got %v",
+		e2.SubsystemA.Tank.Level.Float())
+	assert.InDelta(t, remaining/dt, e2.DeliveredFlow.Float(), 1e-9,
+		"delivery must clamp to the remaining inventory, want %v got %v",
+		remaining/dt, e2.DeliveredFlow.Float())
+
+	e3 := e2.Step(Temperature{Val: EFWSSecureTemp+10, Unit: u.Fahrenheit}, false)
+	assert.Zero(t, e3.DeliveredFlow.Float(),
+		"a dry tank delivers nothing, got %v",
+		e3.DeliveredFlow.Float())
+}
+
+// End-to-end through Plant.Step with a manual half-open lineup:
+// the flow reported to the SG side equals the measured tank
+// drawdown over the window, so secondary-side mass is conserved
+// between the primary tanks and the steam generators even under
+// a throttled lineup.
+//
+// Spec justification:
+//   - "the emergency feedwater pumps take suction from the
+//     primary emergency feedwater tanks and discharge the water
+//     into the main feedwater piping [...]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:12-17
+func TestPlant_EFWSReportedFlowMatchesTankDrawdown(t *testing.T) {
+	p := MakePlant()
+	efws := &p.AuxiliaryBuilding.EmergencyFeedwaterSystem
+	for _, sub := range []*EFWSSubsystem{&efws.SubsystemA, &efws.SubsystemB} {
+		sub.MotorPump = EFWSPump{
+			AFWPump:             AFWPump{Pump: Pump{Running: true}, DriveReady: true},
+			FlowModulatingValve: Valve{Open: 0.5},
+		}
+	}
+	beforeA := efws.SubsystemA.Tank.Level.Float()
+	beforeB := efws.SubsystemB.Tank.Level.Float()
+
+	steps := int(time.Second / TimeStep)
+	stepN(&p, steps)
+
+	after := p.AuxiliaryBuilding.EmergencyFeedwaterSystem
+	drawn := beforeA + beforeB -
+		after.SubsystemA.Tank.Level.Float() -
+		after.SubsystemB.Tank.Level.Float()
+	integrated := p.ReactorBuilding.EFWSFeedwaterFlow.Float() *
+		float64(steps) * TimeStep.Seconds()
+	assert.InDelta(t, drawn, integrated, 1e-6,
+		"reported flow must equal tank drawdown: drawn=%v integrated=%v",
+		drawn, integrated)
 }
