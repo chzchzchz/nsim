@@ -148,6 +148,48 @@ func TestScenario28_BreakDebitsInventoryVoidsAndPressurizesContainment(t *testin
 		"discharge draws the accumulator bank down")
 }
 
+// With the break isolated, ECCS delivery refills the primary ledger
+// and retires the same volume from the cumulative break draw - net
+// extraction, not gross spill, is what the drain budget bounds.
+//
+//   - "All pumps will continue to operate and will deliver water to
+//     the RCS cold legs without interruption."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:175-177
+func TestScenario28_RefloodCreditedAfterBreakIsolation(t *testing.T) {
+	t.Parallel()
+
+	p := MakePlant()
+	cm := GetControlMap(&p)
+	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	for i := 0; i < int(45*time.Second/TimeStep); i++ {
+		p.Step()
+		p.Update()
+	}
+	rpv := &p.ReactorBuilding.ReactorPressureVessel
+	require.Less(t, float64(rpv.Pressure),
+		float64(SISAccumulatorPrechargePressure),
+		"precondition: blowdown must void the primary")
+	require.True(t, p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning,
+		"precondition: HHSI must be delivering")
+
+	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0"))
+	require.NoError(t, cm["ReactorBuilding/Pressurizer/HeatersOn"].Set("0"))
+	water0 := p.ReactorBuilding.Pressurizer.Water.Float()
+	drawn0 := rpv.BreakDischarged.Float()
+	stepN(&p, int(20*time.Second/TimeStep))
+
+	waterGain := p.ReactorBuilding.Pressurizer.Water.Float() - water0
+	netRetired := drawn0 - rpv.BreakDischarged.Float()
+	assert.Greater(t, waterGain, 100.0,
+		"ECCS delivery must refill a voided primary")
+	// The surge line shares the ledger while residual cooldown drift
+	// moves loop water in and out, so allow a few degrees' worth of
+	// surge exchange around the one-for-one retirement.
+	surgeSlack := PZRSurgeGalPerF * 5
+	assert.InDelta(t, netRetired, waterGain, surgeSlack+1e-6,
+		"refilled water retires the break draw one for one")
+}
+
 // The break is a bounded drain, not an infinite source: once the
 // cumulative discharge reaches the drainable primary inventory the
 // per-step BreakFlow must reach zero even with the break wide open.
@@ -188,6 +230,8 @@ func TestScenario28_SwitchoverAtRWSTLowThenHotLegRealignment(t *testing.T) {
 	t.Parallel()
 
 	stepsPerSecond := int(time.Second / TimeStep)
+	// Post-blowdown pressure sits below the HHSI shutoff head, so
+	// injection develops and the switchover logic runs.
 	s := SIS{
 		HHSIPumpRunning: true,
 		HHSIDriveReady:  true,
@@ -195,13 +239,13 @@ func TestScenario28_SwitchoverAtRWSTLowThenHotLegRealignment(t *testing.T) {
 		RWSTLevel:       Volume{Val: SISRWSTLowLevel + 10, Unit: u.Gallon},
 	}
 	for range stepsPerSecond {
-		s = s.Step(float64(RPSLowPressurizerPressureTrip))
+		s = s.Step(float64(SISHHSIShutoffHeadPsia - 100))
 	}
 	assert.False(t, s.SwitchoverComplete,
 		"switchover waits for the RWST low-level signal")
 
 	for range 5 * stepsPerSecond {
-		s = s.Step(float64(RPSLowPressurizerPressureTrip))
+		s = s.Step(float64(SISHHSIShutoffHeadPsia - 100))
 	}
 	assert.True(t, s.SwitchoverComplete,
 		"RWST low level latches the switchover")
@@ -214,7 +258,7 @@ func TestScenario28_SwitchoverAtRWSTLowThenHotLegRealignment(t *testing.T) {
 		"no hot-leg share before the manual realignment")
 
 	s.HotLegInjection = true
-	s = s.Step(float64(RPSLowPressurizerPressureTrip))
+	s = s.Step(float64(SISHHSIShutoffHeadPsia - 100))
 	// Wiring checks: shares recomputed from the same production
 	// constants (design flow minus miniflow, half-split fraction).
 	assert.InDelta(t, net*SISHotLegInjectionFraction, s.HHSIHotLegFlow.Float(),

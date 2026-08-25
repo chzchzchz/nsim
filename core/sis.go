@@ -44,7 +44,7 @@ import (
 //     will be started upon receipt of the actuation signal and
 //     will run on miniflow until the RCS pressure falls below
 //     the respective shutoff heads of the pumps."
-//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:27-30
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:27-31
 //   - RWST suction during injection: "The HHSI and RHR pumps
 //     are aligned to take suction directly from the RWST."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
@@ -105,13 +105,23 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 	// remainder goes into the RCS cold legs. HHSI pumps
 	// need ESF bus power; DriveReady is wired from
 	// ESFBusA.Energized || ESFBusB.Energized by Plant.Step.
-	if ret.HHSIPumpRunning && ret.HHSIDriveReady {
+	// Above the pump shutoff head the delivery develops no net
+	// injection: the pump runs on miniflow only, so the RWST
+	// stops drawing and the RCS sees nothing until pressure
+	// falls below the head.
+	// "The HHSI pumps will be started upon receipt of the
+	//  actuation signal and will run on miniflow until the RCS
+	//  pressure falls below the respective shutoff heads of the
+	//  pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:27-31
+	canInject := ret.HHSIPumpRunning && ret.HHSIDriveReady &&
+		rcsPressure < float64(SISHHSIShutoffHeadPsia)
+	if canInject {
 		netFlow := SISHHSIDesignFlow.Float() *
 			(1.0 - SISHHSIMiniFlowFraction)
 		ret.HHSIInjectionFlow = Volume{Val: netFlow, Unit: u.Gallon}
 	}
-	if ret.HHSIPumpRunning && ret.HHSIDriveReady &&
-		ret.HHSISuction == SISSuctionRWST {
+	if canInject && ret.HHSISuction == SISSuctionRWST {
 		dW := SISHHSIDesignFlow.Float() * dt.Seconds()
 		newRWST := max(ret.RWSTLevel.Float()-dW, 0)
 		ret.RWSTLevel = Volume{Val: newRWST, Unit: u.Gallon}

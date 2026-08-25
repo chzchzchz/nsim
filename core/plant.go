@@ -480,6 +480,15 @@ rcsPressurePsig := float64(ret.Pressurizer.Pressure - AtmosphericPressure)
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
 	rcsPressureSIS := float64(ret.ReactorPressureVessel.Pressure)
 	ret.SafetyInjectionSystem = ret.SafetyInjectionSystem.Step(rcsPressureSIS)
+	// ECCS delivery refills the primary ledger (net accounting
+	// against the break's cumulative draw lives in the RPV method).
+	// "All pumps will continue to operate and will deliver water to
+	//  the RCS cold legs without interruption."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:175-177
+	ret.ReactorPressureVessel.creditSafetyInjection(&ret.Pressurizer,
+		(ret.SafetyInjectionSystem.HHSIInjectionFlow.Float()+
+			ret.SafetyInjectionSystem.AccumulatorInjectionFlow.Float())*
+			dt.Seconds())
 
 	// EFWS: per-step tank depletion and secured-condition
 	// check. The auto-start logic is in Plant.Step (it needs

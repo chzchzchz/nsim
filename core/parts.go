@@ -2772,7 +2772,7 @@ const (
 //   - HHSI shutoff head: "will run on miniflow until the RCS
 //     pressure falls below the respective shutoff heads of the
 //     pumps."
-//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:29-30
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:29-31
 //   - Recirculation switchover: "initiated automatically when the
 //     RWST level channels indicate an RWST level less than a
 //     low-level setpoint in conjunction with the initiation of the
@@ -2797,8 +2797,14 @@ const (
 	// falls below this head.
 	// "run on miniflow until the RCS pressure falls below the
 	// respective shutoff heads of the pumps."
-	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:29-30
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:29-31
 	SISHHSIShutoffHead float64 = 2800.0
+
+	// SISHHSIShutoffHeadPsia converts the shutoff head to a
+	// pressure gate with the fresh-water gradient 0.433 psi/ft.
+	// The spec quotes the head in feet only; the gradient is the
+	// standard cold-water figure (assumption).
+	SISHHSIShutoffHeadPsia = SISHHSIShutoffHead * 0.433
 
 	// SISHHSIMiniFlowFraction is the fraction of design flow
 	// that circulates through the minimum-flow path back to

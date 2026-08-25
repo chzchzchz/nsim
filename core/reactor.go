@@ -726,6 +726,31 @@ func (r *ReactorPressureVessel) applyHotLegBreak(pzr *Pressurizer, floor Pressur
 		r.BreakDischarged.Float()+gal)
 	r.BreakFlow = vol(r.BreakFlow, gal)
 }
+
+// creditSafetyInjection returns this tick's ECCS delivery to the
+// primary inventory ledger: HHSI and accumulator flow reported by the
+// SIS step refills pressurizer water, and the same volume comes back
+// off the cumulative break draw so RCSDrainableInventoryGal bounds the
+// primary's NET loss rather than its gross spill. RWST suction was
+// already debited in SIS.Step; sump suction draws the implicit sump.
+//
+// Spec justification:
+//   - "All pumps will continue to operate and will deliver water to
+//     the RCS cold legs without interruption."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:175-177
+//   - Long-term cooling phase: page_097.txt:122-138.
+func (r *ReactorPressureVessel) creditSafetyInjection(pzr *Pressurizer, gal float64) {
+	if gal <= 0 {
+		return
+	}
+	water := min(pzr.Water.Float()+gal, pzr.Volume.Float())
+	refilled := water - pzr.Water.Float()
+	pzr.Water = vol(pzr.Water, water)
+	pzr.SteamBubble = vol(pzr.SteamBubble,
+		pzr.Volume.Float()-pzr.Water.Float())
+	r.BreakDischarged = vol(r.BreakDischarged,
+		max(r.BreakDischarged.Float()-refilled, 0))
+}
 // Reactor core sizing. The spec gives steam-flow and pressure data
 // (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56,
 // specs/the_westinghouse_pressurized_water_react/chapter_3/page_066.txt:80-82)
