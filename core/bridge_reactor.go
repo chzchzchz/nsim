@@ -792,6 +792,49 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Containment ventilation circulation, routing the atmosphere
+	// to eliminate high-hydrogen pockets after an accident: "A
+	// containment ventilation system that circulates the containment
+	// atmosphere to remove pockets of high hydrogen concentration
+	// after an accident."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_118.txt:15-17
+	m["ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression/Ventilation"] = &bridge.Control{
+		Part:  "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression",
+		Label: "Ventilation",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.ContainmentBuilding.
+					HydrogenDetectionSuppression.VentilationActive)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ContainmentBuilding.
+				HydrogenDetectionSuppression.VentilationActive = v
+			return nil
+		},
+	}
+
+	// High-hydrogen alarm acknowledgement; the annunciator clears on
+	// the operator's action once suppression has restored margin.
+	// "Turned off by operator acknowledgement."
+	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:66-67
+	m["ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression/AlarmReset"] = &bridge.Control{
+		Part:  "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression",
+		Label: "AlarmReset",
+		Kind:  "enum",
+		Enum:  []string{"Reset"},
+		Get:   func() string { return "0" },
+		Set: func(_ string) error {
+			p.ReactorBuilding.ContainmentBuilding.
+				HydrogenDetectionSuppression.HydrogenAlarm = false
+			return nil
+		},
+	}
+
 
 	// Operator block on the SI initiation signals for a planned
 	// cooldown, armed before process variables reach the automatic
@@ -1231,6 +1274,63 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("fahrenheit",
 				p.ReactorBuilding.ContainmentBuilding.Temperature.Float())
+		},
+	}
+
+	// Continuous hydrogen concentration readout: "A hydrogen
+	// detection system that can detect and report in a continuous
+	// manner the hydrogen content in the containment atmosphere."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_118.txt:7-9
+	m["ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression/HydrogenPercent"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression",
+		Label: "HydrogenPercent",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				p.ReactorBuilding.ContainmentBuilding.
+					HydrogenDetectionSuppression.HydrogenVolumePercent)
+		},
+	}
+
+	// High-hydrogen alarm: "Alarms at proper setpoints are provided."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_118.txt:10-11
+	m["ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression/Alarm"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression",
+		Label: "Alarm",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.ContainmentBuilding.
+					HydrogenDetectionSuppression.HydrogenAlarm)
+		},
+	}
+
+	// Recombiner status: "Hydrogen recombiners that burn the free
+	// hydrogen. The hydrogen/oxygen combination results in water."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_118.txt:21-22
+	m["ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression/RecombinerRunning"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression",
+		Label: "RecombinerRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.ContainmentBuilding.
+					HydrogenDetectionSuppression.RecombinerActive)
+		},
+	}
+
+	// Ventilation circulation status: "A containment ventilation
+	// system that circulates the containment atmosphere to remove
+	// pockets of high hydrogen concentration after an accident."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_118.txt:15-17
+	m["ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression/VentilationRunning"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression",
+		Label: "VentilationRunning",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.ContainmentBuilding.
+					HydrogenDetectionSuppression.VentilationActive)
 		},
 	}
 

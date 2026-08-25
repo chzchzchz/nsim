@@ -9,9 +9,11 @@ package core
 //	           - VentilationRemovalRate × bool(VentilationActive)
 //
 // The high-concentration alarm latches when the volume percent
-// crosses HydrogenAlarmSetpoint; recombiners activate once the
-// concentration reaches setpoint + hysteresis and stay active
-// (the simplified model has no recombiner-deactivation path).
+// crosses HydrogenAlarmSetpoint and clears only through the
+// operator's acknowledgement control. Recombiners activate once
+// the concentration reaches setpoint + hysteresis and drop out
+// below setpoint - hysteresis (assumption A-2 in
+// plans/x/scenario/37.txt; the spec is silent on restart logic).
 //
 // Spec justification:
 //   - Hydrogen source: "Under accident conditions, coolant
@@ -67,11 +69,22 @@ func (h *HydrogenDetectionSuppression) Step() HydrogenDetectionSuppression {
 	}
 
 	// Recombiner activation: with hysteresis to prevent
-	// cycling at the setpoint. Once active, recombiners
-	// stay active.
+	// cycling at the setpoint.
 	if ret.HydrogenVolumePercent >=
 		HydrogenAlarmSetpoint+HydrogenRecombinerHysteresis {
 		ret.RecombinerActive = true
+	}
+
+	// Recombiner deactivation mirrors the activation hysteresis:
+	// burning stops once suppression has restored the margin.
+	//
+	// Spec justification:
+	//   - "Hydrogen recombiners that burn the free hydrogen."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_118.txt:21-22
+	if ret.RecombinerActive &&
+		ret.HydrogenVolumePercent <
+			HydrogenAlarmSetpoint-HydrogenRecombinerHysteresis {
+		ret.RecombinerActive = false
 	}
 
 	return ret

@@ -1026,6 +1026,33 @@ var scenarioCatalog = []Scenario{
 				Value:      "4"},
 		},
 	},
+	{
+		ID:       "hydrogen-monitoring-suppression",
+		Number:   37,
+		Category: "Post-accident monitoring",
+		Title:    "Containment hydrogen monitoring and suppression",
+		StartState: "Post-accident lineup with safety injection " +
+			"latched and the containment atmosphere pre-seeded at 2.6 " +
+			"volume percent hydrogen, past the recombiner threshold.",
+		Objective: "Track the containment hydrogen concentration " +
+			"continuously against its alarm, let the recombiners burn free " +
+			"hydrogen into water against ongoing generation, route the " +
+			"atmosphere through containment ventilation to strip " +
+			"high-hydrogen pockets, then acknowledge the alarm once " +
+			"suppression restores margin below the setpoint.",
+		Apply: func(p *Plant) {
+			q := fullPowerLineup()
+			// Hydrogen generation follows the SI-detected event via
+			// the locaSensed wiring in Plant.Step.
+			q.AuxiliaryBuilding.DieselGenerator.StartSignal =
+				DieselStartSafetyInjection
+			// A-1 (plans/x/scenario/37.txt): pre-accumulated
+			// atmosphere; the spec gives no initial concentration.
+			q.ReactorBuilding.ContainmentBuilding.
+				HydrogenDetectionSuppression.HydrogenVolumePercent = 2.6
+			*p = q
+		},
+	},
 }
 
 // CheckResult reports whether an evolution's end-state bounds hold on
@@ -1551,6 +1578,22 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 			"crud burst cleaned from the pool water")
 		c.require(sfpc.PoolTemp.Float() <= SFPCPoolDesignTemp.Float()+5,
 			"pool holding near its design temperature")
+		return c.result()
+	},
+	"hydrogen-monitoring-suppression": func(p *Plant) CheckResult {
+		var c checkBounds
+		hds := &p.ReactorBuilding.ContainmentBuilding.
+			HydrogenDetectionSuppression
+		c.require(hds.VentilationActive,
+			"containment ventilation routed into service")
+		c.require(hds.RecombinerActive ||
+			hds.HydrogenVolumePercent <=
+				HydrogenAlarmSetpoint-HydrogenRecombinerHysteresis,
+			"recombiners have burned free hydrogen")
+		c.require(hds.HydrogenVolumePercent < HydrogenAlarmSetpoint,
+			"concentration suppressed below the alarm setpoint")
+		c.require(!hds.HydrogenAlarm,
+			"high-hydrogen alarm acknowledged and clear")
 		return c.result()
 	},
 	"rhrs-loop-takeover": func(p *Plant) CheckResult {
