@@ -69,6 +69,25 @@ func TestCVCSAutoBoronAnswersAxialOffsetBand(t *testing.T) {
 		-CoreAFDTargetBandPct/2)
 	assert.Equal(t, CVCSVolumeControl, insideBand.Mode,
 		"in-band offset stays neutral")
+
+	// Combined extremes where the inputs DISAGREE: the band wins,
+	// because a running spatial-xenon oscillation is the active
+	// instability while travel-limit relief can wait for it to settle.
+	// Bottom skew with a withdrawn bank: the travel rule would dilute,
+	// the band rule borates - boration is pinned.
+	skewVsBuried := CVCS{AutoBoronControl: true}
+	skewVsBuried.applyAutoBoronControl(
+		CVCSAutoBoronLowInsertionFrac/2, -CoreAFDTargetBandPct-1)
+	assert.Equal(t, CVCSBoration, skewVsBuried.Mode,
+		"bottom skew outranks withdrawal-limit dilution")
+
+	// Top skew with a buried bank: the travel rule would borate, the
+	// band rule dilutes - dilution is pinned.
+	skewVsBuried2 := CVCS{AutoBoronControl: true}
+	skewVsBuried2.applyAutoBoronControl(
+		CVCSAutoBoronHighInsertionFrac*2, CoreAFDTargetBandPct+1)
+	assert.Equal(t, CVCSDilution, skewVsBuried2.Mode,
+		"top skew outranks burial-limit boration")
 }
 
 // With the latch off, operator-selected mode and pump state are never
