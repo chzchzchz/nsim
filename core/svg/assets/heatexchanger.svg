@@ -25,7 +25,7 @@
 <circle id="hx-anchor-shell-out" cx="0" cy="24" r="2" fill="none" stroke="none"/>
 </symbol>
 
-<symbol id="heat-exchanger-vertical" viewBox="-25 -50 50 100">
+<symbol id="heat-exchanger-vertical" viewBox="-25 -52 65 106">
 <title>Vertical U-Tube Heat Exchanger (Feedwater Heater)</title>
 <rect x="-18" y="-44" width="36" height="88" fill="#e6e6e6" stroke="black"/>
 <ellipse cx="0" cy="-44" rx="18" ry="6" fill="#cccccc" stroke="black"/>

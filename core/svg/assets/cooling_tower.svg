@@ -3,7 +3,7 @@
 <title>PWR cooling tower symbols</title>
 <desc>Mechanical-draft counter-flow cooling tower cell. Source-of-truth citations live in plans/svg/cooling_tower.md.</desc>
 
-<symbol id="cooling-tower" viewBox="-70 -95 140 190">
+<symbol id="cooling-tower" viewBox="-72 -97 176 194">
 <title>Mechanical-Draft Cooling Tower</title>
 <!-- casing -->
 <rect x="-55" y="-70" width="110" height="120" fill="#e6e6e6" stroke="black"/>

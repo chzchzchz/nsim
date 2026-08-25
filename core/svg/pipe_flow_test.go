@@ -76,9 +76,6 @@ func TestClassifyPipe(t *testing.T) {
 	}
 }
 
-func gal(v float64) core.Volume {
-	return core.Volume{Val: v, Unit: u.Gallon}
-}
 
 // TestRouteProjection covers the arc-length helpers the visual
 // valve placement uses: midpoints, clamping at the ends, nearest-

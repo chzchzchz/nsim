@@ -5,12 +5,12 @@
 
 <symbol id="tank-vertical" viewBox="-30 -50 60 100">
 <title>Vertical Tank</title>
-<path d="M -25 -40 Q -25 -50 0 -50 Q 25 -50 25 -40" fill="#e6e6e6" stroke="black"/>
+<path d="M -25 -40 Q -25 -48 0 -48 Q 25 -48 25 -40" fill="#e6e6e6" stroke="black"/>
 <rect x="-25" y="-40" width="50" height="80" fill="#e6e6e6" stroke="black"/>
-<path d="M -25 40 Q -25 50 0 50 Q 25 50 25 40" fill="#e6e6e6" stroke="black"/>
-<rect x="-15" y="50" width="30" height="3" fill="#888"/>
-<circle cx="0" cy="-50" r="3" fill="white" stroke="black"/>
-<rect x="25" y="-5" width="10" height="6" fill="#cccccc" stroke="black"/>
+<path d="M -25 40 Q -25 48 0 48 Q 25 48 25 40" fill="#e6e6e6" stroke="black"/>
+<rect x="-15" y="46.5" width="30" height="3" fill="#888"/>
+<circle cx="0" cy="-47" r="2.5" fill="white" stroke="black"/>
+<rect x="24.5" y="-5" width="5" height="6" fill="#cccccc" stroke="black"/>
 <rect id="tank-vertical-level" x="-23" y="-38" width="46" height="76" fill="#aad4ff" fill-opacity="0.5" stroke="none"/>
 <circle id="tank-anchor-top" cx="0" cy="-50" r="2" fill="none" stroke="none"/>
 <circle id="tank-anchor-side" cx="35" cy="-2" r="2" fill="none" stroke="none"/>
@@ -41,12 +41,12 @@
 
 <symbol id="tank-accumulator" viewBox="-24 -55 48 110">
 <title>Accumulator (SI)</title>
-<path d="M -20 -40 Q -20 -55 0 -55 Q 20 -55 20 -40" fill="#e6e6e6" stroke="black"/>
+<path d="M -20 -40 Q -20 -53.5 0 -53.5 Q 20 -53.5 20 -40" fill="#e6e6e6" stroke="black"/>
 <rect x="-20" y="-40" width="40" height="80" fill="#e6e6e6" stroke="black"/>
 <path d="M -20 40 Q -20 55 0 55 Q 20 55 20 40" fill="#e6e6e6" stroke="black"/>
 <rect x="-3" y="-54" width="6" height="4" fill="#cccccc" stroke="black"/>
-<text x="0" y="-58" text-anchor="middle" font-size="6">N₂</text>
-<rect x="-4" y="50" width="8" height="6" fill="#cccccc" stroke="black"/>
+<text x="0" y="-49" text-anchor="middle" font-size="6">N₂</text>
+<rect x="-4" y="50" width="8" height="4.5" fill="#cccccc" stroke="black"/>
 <rect id="tank-accumulator-level" x="-18" y="-38" width="36" height="72" fill="#aad4ff" fill-opacity="0.5" stroke="none"/>
 <circle id="acc-anchor-top" cx="0" cy="-54" r="2" fill="none" stroke="none"/>
 <circle id="acc-anchor-discharge" cx="0" cy="56"  r="2" fill="none" stroke="none"/>

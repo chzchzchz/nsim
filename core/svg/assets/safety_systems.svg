@@ -21,13 +21,13 @@
 <symbol id="efws-pump-md" viewBox="-30 -20 60 40">
 <title>Motor-Driven AFW Pump</title>
 <use href="#pump-horizontal" x="-30" y="-20" width="60" height="40"/>
-<text x="0" y="-22" text-anchor="middle" font-size="6">MD</text>
+<text x="0" y="-16" text-anchor="middle" font-size="6">MD</text>
 </symbol>
 
 <symbol id="efws-pump-td" viewBox="-30 -20 60 40">
 <title>Turbine-Driven AFW Pump</title>
 <use href="#pump-turbine" x="-30" y="-20" width="60" height="40"/>
-<text x="0" y="-22" text-anchor="middle" font-size="6">TD</text>
+<text x="0" y="-16" text-anchor="middle" font-size="6">TD</text>
 </symbol>
 
 <symbol id="ccws-hx" viewBox="-50 -25 100 50">
