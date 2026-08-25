@@ -793,7 +793,7 @@ func TestPlant_TurbineTripStepbackHoldsSixtyPercent(t *testing.T) {
 //   - "The condensate pumps take suction from the condenser hotwell
 //     and pump condensate [...]; the water discharge from the feedwater
 //     pumps flows [...] into the steam generators."
-//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-51
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-52
 func TestPlant_MainFeedwaterReplenishesSGFromHotwell(t *testing.T) {
 	run := func(pumpOn bool) (float64, float64) {
 		p := MakePlant()
@@ -815,6 +815,38 @@ func TestPlant_MainFeedwaterReplenishesSGFromHotwell(t *testing.T) {
 		"running main feedwater should raise SG inventory")
 	assert.InDelta(t, dSG, -dHW, 1.0,
 		"SG gain must come out of the hotwell (ledger closed)")
+}
+
+// A fresh plant seeds the design full-load operating point, so its
+// construction lineup must hold together with no operator action:
+// main feedwater runs from tick one and the three-element regulator
+// walks the seeded shell down to the level program instead of letting
+// the steam offtake drain the generator into its low-level trips and
+// the protection cascade behind them.
+func TestPlant_FreshAtPowerIdlesWithoutSpuriousTrips(t *testing.T) {
+	// Must not run in parallel: overrideTimeStep mutates global
+	// simulation state. The 250 ms step keeps the regulator's
+	// discrete integration honest while covering an hour of idle.
+	overrideTimeStep(t, 250*time.Millisecond)
+	p := MakePlant()
+
+	for range int(time.Hour / (250 * time.Millisecond)) {
+		stepN(&p, 1)
+		rps := &p.ReactorBuilding.ReactorProtectionSystem
+		assert.False(t, rps.ReactorTripped,
+			"the fresh plant must not scram while idling at power")
+		require.False(t, rps.SafetyInjectionActuated,
+			"no safety injection on a healthy lineup")
+		assert.False(t, rps.FeedwaterIsolationActuated,
+			"no feedwater isolation on a healthy lineup")
+		assert.False(t, rps.AuxiliaryFeedPumpsStartActuated,
+			"auxiliary feedwater must stay lined up in standby")
+	}
+
+	level := 100.0 * p.ReactorBuilding.SteamGenerator.Water.Float() /
+		p.ReactorBuilding.SteamGenerator.Volume.Float()
+	assert.InDelta(t, FeedwaterLevelSetpoint, level, 5,
+		"the regulator must settle the shell on its level program")
 }
 
 // Coolant expansion raises pressurizer level through the surge line:

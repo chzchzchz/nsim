@@ -116,6 +116,7 @@ func coldShutdownLineup() Plant {
 	if c, ok := GetControlMap(&p)["ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock"]; ok {
 		_ = c.Set("true")
 	}
+	secureMainFeedwater(&p)
 	return p
 }
 
@@ -146,6 +147,7 @@ func coldWaterSolidLineup() Plant {
 	cvcs.AutoLevelControl = false
 	cvcs.ChargingPumpRunning = true
 	cvcs.LetdownValveOpen = false
+	secureMainFeedwater(&p)
 	return p
 }
 
@@ -185,6 +187,7 @@ func rhrsCooldownLineup() Plant {
 		tr.SuctionValves[1].Open = 1
 	}
 	rhr.TrainA.Pump.Running = true
+	secureMainFeedwater(&p)
 	return p
 }
 
@@ -213,6 +216,7 @@ func hotZeroPowerLineup() Plant {
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:20-23
 	p.TurbineBuilding.Turbine.StopValve.Open = 0
 	p.PlantOperation.Mode = HotStandby
+	secureMainFeedwater(&p)
 	return p
 }
 
@@ -280,12 +284,31 @@ func postTripLineup() Plant {
 	turb.StopValve.Open = 0
 	turb.Setpoint = 0
 	p.TurbineBuilding.Generator.BreakerClosed = false
+	secureMainFeedwater(&p)
 	p.PlantOperation.Mode = HotStandby
 	return p
 }
 
+// secureMainFeedwater takes the main feedwater pump out of service
+// for lineups that predate power operation or sit post-trip with
+// feedwater isolation: auxiliary feedwater carries the steam
+// generators there instead.
+//
+// Spec justification:
+//   - Feedwater isolation triggers: "High steam generator level /
+//     Safety injection / Coincidence of reactor trip and low Tcold"
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:73-76
+//   - Emergency feedwater readiness: "remains in a state of readiness
+//     to provide emergency feedwater to the steam generators in the
+//     event of transient or accident conditions [...] the emergency
+//     feedwater pumps are automatically started"
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:46-52
+func secureMainFeedwater(p *Plant) {
+	p.TurbineBuilding.MainFeedwaterPump.Running = false
+}
+
 // Scenarios returns the operator-evolution catalog in catalog order
-// (plans/x/scenarios.txt items 1-29).
+// (plans/x/scenarios.txt item order).
 func Scenarios() []Scenario { return scenarioCatalog }
 
 // ScenarioByID resolves a catalog entry by its stable identifier.
@@ -368,6 +391,7 @@ var scenarioCatalog = []Scenario{
 			q.TurbineBuilding.Condenser.Pressure = AtmosphericPressure
 			q.TurbineBuilding.Turbine.StopValve.Open = 0
 			q.TurbineBuilding.Turbine.SpeedDemand = 0
+			secureMainFeedwater(&q)
 			*p = q
 		},
 	},

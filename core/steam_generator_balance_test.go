@@ -79,6 +79,10 @@ func TestSteamGenerator_OfftakeDoesNotDebitLiquidStock(t *testing.T) {
 
 func lossOfFeedPlant() Plant {
 	p := scenario10FullPowerPlant()
+	// The fixture's premise is main feed lost, so the pump is
+	// secured explicitly rather than inherited from a construction
+	// default.
+	p.TurbineBuilding.MainFeedwaterPump.Running = false
 	p.ReactorBuilding.SteamGenerator.Water =
 		Volume{Val: 20000, Unit: u.Gallon}
 	return p

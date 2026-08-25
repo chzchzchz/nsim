@@ -2874,9 +2874,13 @@ func MakePlant() Plant {
 
 	// Main Feedwater Control System defaults (plans/p22_1.txt).
 	// At construction the main feedwater control valve is
-	// closed, the regulator is stopped, and the level setpoint
-	// sits at FeedwaterLevelSetpoint. Plant.Step latches the
-	// regulator's Running state from MainFeedwaterPump.Running.
+	// closed and the regulator's demand is zero until the first
+	// Step computes it; the level setpoint sits at FeedwaterLevel-
+	// Setpoint. The seeded lineup is the design full-load operating
+	// point, so the main feedwater pump runs: without it the seeded
+	// steam offtake drains the generators to their low-level trips
+	// inside a quarter hour. Plant.Step latches the regulator's
+	// Running state from MainFeedwaterPump.Running.
 	//
 	// Spec justification:
 	//   - "Feedwater flow to each steam generator is controlled
@@ -2884,6 +2888,13 @@ func MakePlant() Plant {
 	//     regulator is controlled by steam generator level,
 	//     steam flow and feedwater flow."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
+	//   - Feed path in service: "The condensate pumps take suction
+	//     from the condenser hotwell and pump condensate [...]
+	//     The water discharge from the feedwater pumps flows
+	//     through two stages of highpressure heaters then into
+	//     the steam generators."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-52
+	p.TurbineBuilding.MainFeedwaterPump.Running = true
 	p.TurbineBuilding.MainFeedwaterControlValve = Valve{Open: 0}
 	p.TurbineBuilding.FeedwaterRegulator = FeedwaterRegulator{
 		LevelSetpoint: FeedwaterLevelSetpoint,

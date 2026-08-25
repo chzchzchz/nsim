@@ -193,6 +193,10 @@ func TestScenario4_CondensatePumpMovesHotwellToDeaerator(t *testing.T) {
 	rpv.FissionPower = CoreNeutronSourcePower
 	rpv.DecayHeatFast = 0
 	rpv.DecayHeatSlow = 0
+	// The feed pump is secured explicitly so the deaerator ledger
+	// sees only the recirculation and the condensate suction under
+	// test.
+	p.TurbineBuilding.MainFeedwaterPump.Running = false
 	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
 	p.TurbineBuilding.Turbine.StopValve.Open = 0
 	p.TurbineBuilding.Condenser.HotwellLevel =
