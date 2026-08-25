@@ -88,7 +88,11 @@ import (
 //     BTRSRecirculationPump must be running (set by operator);
 //     BorationRate / DilutionRate are populated accordingly and
 //     BTRSBedSaturation advances toward 1, after which boron
-//     changes halt.
+//     changes halt. Thermal regeneration is direction-dependent:
+//     exchange progresses only while the beds sit at the mode's
+//     temperature, and an isolated recirculating pump conditions
+//     the idle beds toward the opposite of the last exchange mode
+//     so the next anticipated mode finds them ready.
 func (c *CVCS) Step(
 	makeupFlow Volume,
 	tavg Temperature,
@@ -222,19 +226,27 @@ func (c *CVCS) Step(
 
 	switch ret.Mode {
 	case CVCSBoration:
-		if ret.BTRSRecirculationPumpRunning && ret.BTRSBedSaturation < 1 {
-			ret.BTRSBedSaturation = min(
-				ret.BTRSBedSaturation+dt.Seconds()/BTRSBedLifeSeconds, 1)
-			ret.BorationRate = CVCSBorationRate
-			ret.BoronConcentration += CVCSBorationRate * dt.Seconds()
+		if ret.BTRSRecirculationPumpRunning {
+			ret.prepareBeds(CVCSBoration, dt.Seconds())
+			if ret.bedAtTarget(CVCSBoration) && ret.BTRSBedSaturation < 1 {
+				ret.BTRSLastExchangeMode = CVCSBoration
+				ret.BTRSBedSaturation = min(
+					ret.BTRSBedSaturation+dt.Seconds()/BTRSBedLifeSeconds, 1)
+				ret.BorationRate = CVCSBorationRate
+				ret.BoronConcentration += CVCSBorationRate * dt.Seconds()
+			}
 		}
 	case CVCSDilution:
-		if ret.BTRSRecirculationPumpRunning && ret.BTRSBedSaturation < 1 {
-			ret.BTRSBedSaturation = min(
-				ret.BTRSBedSaturation+dt.Seconds()/BTRSBedLifeSeconds, 1)
-			ret.DilutionRate = CVCSDilutionRate
-			ret.BoronConcentration -= CVCSDilutionRate * dt.Seconds()
-			ret.BoronConcentration = max(ret.BoronConcentration, 0)
+		if ret.BTRSRecirculationPumpRunning {
+			ret.prepareBeds(CVCSDilution, dt.Seconds())
+			if ret.bedAtTarget(CVCSDilution) && ret.BTRSBedSaturation < 1 {
+				ret.BTRSLastExchangeMode = CVCSDilution
+				ret.BTRSBedSaturation = min(
+					ret.BTRSBedSaturation+dt.Seconds()/BTRSBedLifeSeconds, 1)
+				ret.DilutionRate = CVCSDilutionRate
+				ret.BoronConcentration -= CVCSDilutionRate * dt.Seconds()
+				ret.BoronConcentration = max(ret.BoronConcentration, 0)
+			}
 		}
 	case CVCSLetdown:
 		// Legacy operator-selectable mode; the automatic divert
@@ -244,7 +256,22 @@ func (c *CVCS) Step(
 		// Charging/letdown balance to maintain pressurizer
 		// level; the imbalance is the makeup that reaches the
 		// VCT level controller (already accumulated above).
-		// No boron concentration change.
+		// No boron concentration change. With the loop isolated
+		// but recirculating, the pump conditions the idle beds
+		// toward the opposite of the last exchange mode so the
+		// next anticipated mode finds them ready.
+		// "after completion of a dilution mode, with demineralizers at
+		//  50°F (10°C), the BTRS recirculation pump is used to increase
+		//  the temperature of the demineralizers to 140°F (60°C) for
+		//  the subsequent boration mode"
+		// specs/the_westinghouse_pressurized_water_react/chapter_4/page_081.txt:41-45
+		if ret.BTRSRecirculationPumpRunning && ret.BTRSBedsEstablished {
+			next := CVCSBoration
+			if ret.BTRSLastExchangeMode == CVCSBoration {
+				next = CVCSDilution
+			}
+			ret.prepareBeds(next, dt.Seconds())
+		}
 	}
 
 	// Setpoint arrival: a rate step that lands past the target is
@@ -275,6 +302,45 @@ func (c *CVCS) Step(
 	}
 
 	return ret
+}
+
+// btrsModeBedF is the bed temperature the mode conditions toward:
+// hot beds release stored boron for boration, cold beds store it for
+// dilution.
+// specs/the_westinghouse_pressurized_water_react/chapter_4/page_081.txt:12-31
+func btrsModeBedF(mode CVCSMode) float64 {
+	if mode == CVCSBoration {
+		return BTRSHotBedF
+	}
+	return BTRSColdBedF
+}
+
+// prepareBeds advances the lumped bed temperature toward the mode's
+// temperature at the conditioning rate. The first active use of an
+// unestablished BTRS snaps the beds to that mode's temperature: the
+// beds arrive at whatever the previous campaign left behind, and this
+// campaign's flow defines their state from its first step.
+func (c *CVCS) prepareBeds(mode CVCSMode, seconds float64) {
+	target := btrsModeBedF(mode)
+	if !c.BTRSBedsEstablished {
+		c.BTRSBedTemperatureF = target
+		c.BTRSBedsEstablished = true
+		return
+	}
+	delta := BTRSBedConditioningFPerSec * seconds
+	switch {
+	case c.BTRSBedTemperatureF < target:
+		c.BTRSBedTemperatureF = min(c.BTRSBedTemperatureF+delta, target)
+	case c.BTRSBedTemperatureF > target:
+		c.BTRSBedTemperatureF = max(c.BTRSBedTemperatureF-delta, target)
+	}
+}
+
+// bedAtTarget reports whether the beds sit close enough to the mode's
+// temperature for thermal regeneration to progress in that direction.
+func (c *CVCS) bedAtTarget(mode CVCSMode) bool {
+	return math.Abs(c.BTRSBedTemperatureF-btrsModeBedF(mode)) <=
+		BTRSBedReadyBandF
 }
 
 // letdownAtPressure scales design letdown by the square root of the

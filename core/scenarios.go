@@ -779,26 +779,25 @@ var scenarioCatalog = []Scenario{
 			"level control, the volume control tank mid-band, and the " +
 			"BTRS isolated.",
 		Objective: "Cycle boron without liquid effluent: dilute on the " +
-			"cold regeneration beds to the target concentration, isolate " +
-			"the loop between modes, then borate back to the starting " +
-			"rated-critical value through the setpoint drive while " +
-			"watching VCT level and bed saturation.",
+			"cold regeneration beds to the target concentration, recirculate " +
+			"with the loop isolated to recondition the beds hot, then " +
+			"borate back to the starting rated-critical value through the " +
+			"setpoint drive while watching VCT level and bed saturation.",
 		Apply: func(p *Plant) {
 			q := fullPowerLineup()
 			cvcs := &q.AuxiliaryBuilding.ChemicalVolumeControlSystem
 			cvcs.AutoLevelControl = true
 			cvcs.ChargingPumpRunning = true
 			cvcs.LetdownValveOpen = true
-			cvcs.VCTLevel = Volume{Val: 450, Unit: u.Gallon}
+			cvcs.VCTLevel = Volume{Val: 520, Unit: u.Gallon}
 			q.ReactorBuilding.ReactorMakeupControlValve.Auto = true
 			*p = q
 		},
 		// Procedure-timed offsets from plans/x/scenario/31.txt: each
 		// leg moves 25 ppm at CVCSBorationRate (25 ppm / 0.8 ppm/s =
-		// 31.25 s), behind a core warmup window and a between-mode
-		// isolation interval. The setpoint targets the lineup's own
-		// rated-critical starting concentration. Bed reconditioning
-		// between modes is not modeled (GAP-1 in the plan).
+		// 31.25 s), behind a core warmup window; between legs the pump
+		// stays lined up so the isolation interval reconditions the
+		// beds toward boration temperature before the setpoint write.
 		Script: []ScriptCommand{
 			{AtMs: 15000,
 				ControlKey: "AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode",
@@ -809,10 +808,7 @@ var scenarioCatalog = []Scenario{
 			{AtMs: 46250,
 				ControlKey: "AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode",
 				Value:      "VolumeControl"},
-			{AtMs: 46250,
-				ControlKey: "AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRSPump",
-				Value:      "0"},
-			{AtMs: 58750,
+			{AtMs: 81250,
 				ControlKey: "ReactorBuilding/ReactorPressureVessel/ControlRods/BoronSetpoint",
 				Value: strconv.FormatFloat(CoreRatedCriticalBoronPpm, 'f', -1, 64)},
 		},

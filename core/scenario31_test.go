@@ -11,14 +11,16 @@ import (
 )
 
 // Scenario 31 exercises one full BTRS cycle at power operation: a manual
-// dilution leg, an isolated interval between modes, then a boration leg
-// driven by the operator's boron setpoint through the CVCS tracking drive.
+// dilution leg, a recirculation-only conditioning interval, then a boration
+// leg driven by the operator's boron setpoint through the CVCS tracking
+// drive.
 //
 // Mode directions ("for dilution, a decrease ... for boration, an increase
 // in the boric acid concentration"):
 // specs/the_westinghouse_pressurized_water_react/chapter_4/page_081.txt:12-31
-// Pump provides motive force during both modes; isolation reconditions beds
-// between modes (bed thermal state is GAP-1 in plans/x/scenario/31.txt):
+// The recirculation pump provides motive force during both modes, and with
+// the loop isolated it reconditions the beds toward the next mode's
+// temperature (dilution leaves them at 50 F; boration wants 140 F):
 // specs/the_westinghouse_pressurized_water_react/chapter_4/page_081.txt:33-45
 func scenario31Plant(t *testing.T) Plant {
 	t.Helper()
@@ -32,7 +34,7 @@ func scenario31Plant(t *testing.T) Plant {
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = true
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = true
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel =
-		Volume{Val: 450, Unit: u.Gallon}
+		Volume{Val: 520, Unit: u.Gallon}
 	p.ReactorBuilding.ReactorMakeupControlValve.Auto = true
 	p.PlantOperation.Mode = PowerOperation
 
@@ -52,47 +54,59 @@ func TestScenario31_DilutionLegLowersBoronAtRatedRate(t *testing.T) {
 
 	const leg = 31250 * time.Millisecond // 25 ppm / 0.8 ppm/s
 	start := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration
+	startVct := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
 	stepFor(&p, leg)
 
 	cvcs := p.AuxiliaryBuilding.ChemicalVolumeControlSystem
 	assert.InDelta(t, start-CVCSDilutionRate*leg.Seconds(),
 		cvcs.BoronConcentration, 0.01,
 		"dilution must lower RCS boron at CVCSDilutionRate while the pump runs")
-	assert.InDelta(t, leg.Seconds()/BTRSBedLifeSeconds, cvcs.BTRSBedSaturation,
-		0.001, "bed saturation must advance with pump-running time")
-	assert.InDelta(t, 450-leg.Seconds()*VCTBTRSCirculation,
+	assert.InDelta(t, startVct-leg.Seconds()*VCTBTRSCirculation,
 		cvcs.VCTLevel.Float(), 1.0,
 		"VCT must lose only the recirculation draw plus the level "+
 			"controller's small residual under the auto lineup")
+	assert.InDelta(t, BTRSColdBedF, cvcs.BTRSBedTemperatureF, 0.01,
+		"the first exchange campaign must leave the beds at its own temperature")
+	assert.InDelta(t, leg.Seconds()/BTRSBedLifeSeconds, cvcs.BTRSBedSaturation,
+		0.001, "bed saturation must advance with pump-running time")
 	assert.Zero(t, p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BRSHoldupLevel.Float(),
 		"BTRS cycling must send no liquid to the BRS holdup tanks")
 }
 
-func TestScenario31_IsolationIntervalHoldsChemistry(t *testing.T) {
+// With the loop isolated but recirculating, the pump conditions the idle
+// beds toward the opposite of the last exchange mode without moving boron:
+// "after completion of a dilution mode ... the BTRS recirculation pump is
+// used to increase the temperature of the demineralizers to 140°F for the
+// subsequent boration mode"
+// specs/the_westinghouse_pressurized_water_react/chapter_4/page_081.txt:41-45
+func TestScenario31_IsolationIntervalConditionsWithoutExchanging(t *testing.T) {
 	p := scenario31Plant(t)
 	setControl(t, &p,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode", "Dilution")
 	setControl(t, &p,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRSPump", "1")
 	stepFor(&p, 31250*time.Millisecond)
+
+	// Pump stays lined up; the operator releases the boron mode so the
+	// isolated recirculation doubles as bed reconditioning duty for the
+	// next mode (page_081.txt:41-45).
 	setControl(t, &p,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode", "VolumeControl")
-	setControl(t, &p,
-		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRSPump", "0")
-
 	held := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration
 	sat := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSBedSaturation
-	vct := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
-	stepFor(&p, 12500*time.Millisecond)
+	cold := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSBedTemperatureF
+	stepFor(&p, 35000*time.Millisecond)
 
 	cvcs := p.AuxiliaryBuilding.ChemicalVolumeControlSystem
 	assert.InDelta(t, held, cvcs.BoronConcentration, 0.001,
-		"boron must hold with the BTRS isolated between modes")
+		"conditioning circulation must not change RCS boron")
 	assert.Equal(t, sat, cvcs.BTRSBedSaturation,
-		"saturation must freeze without flow through the demineralizers")
-	assert.InDelta(t, vct, cvcs.VCTLevel.Float(), 1.0,
-		"without the recirculation draw only the level controller's small "+
-			"residual moves the VCT, versus another -25 gal of pumping")
+		"exchange capacity is consumed only by actual boron transfer")
+	assert.Greater(t, cvcs.BTRSBedTemperatureF, cold,
+		"the idle recirculation must heat the beds toward boration readiness")
+	assert.GreaterOrEqual(t, cvcs.BTRSBedTemperatureF,
+		BTRSHotBedF-BTRSBedReadyBandF,
+		"the scripted isolation must leave the beds boration-ready")
 }
 
 func TestScenario31_BorationSetpointRoundTripsAndReleases(t *testing.T) {
@@ -104,8 +118,7 @@ func TestScenario31_BorationSetpointRoundTripsAndReleases(t *testing.T) {
 	stepFor(&p, 31250*time.Millisecond)
 	setControl(t, &p,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode", "VolumeControl")
-	setControl(t, &p,
-		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRSPump", "0")
+	stepFor(&p, 35000*time.Millisecond)
 
 	// The setpoint drive selects Boration + pump on its own and releases
 	// chemistry to volume control inside the arrival tolerance
@@ -142,4 +155,40 @@ func TestScenario31_BorationSetpointRoundTripsAndReleases(t *testing.T) {
 		"released chemistry must be back in volume control")
 	assert.False(t, cvcs.BTRSRecirculationPumpRunning,
 		"release must secure the recirculation pump")
+}
+
+// Thermal regeneration is direction-dependent: switching straight from
+// dilution to boration on cold beds exchanges nothing until the beds
+// reach boration temperature, after which the same running mode picks
+// the exchange back up.
+// specs/the_westinghouse_pressurized_water_react/chapter_4/page_081.txt:41-45
+func TestScenario31_UnconditionedOppositeModeHoldsUntilHot(t *testing.T) {
+	p := scenario31Plant(t)
+	setControl(t, &p,
+		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode", "Dilution")
+	setControl(t, &p,
+		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRSPump", "1")
+	stepFor(&p, 31250*time.Millisecond)
+	setControl(t, &p,
+		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode", "Boration")
+
+	stepFor(&p, 5*time.Second)
+	cvcs := p.AuxiliaryBuilding.ChemicalVolumeControlSystem
+	assert.Zero(t, cvcs.BorationRate,
+		"cold beds must not release boron into the charging stream")
+	assert.Greater(t, cvcs.BTRSBedTemperatureF, BTRSColdBedF,
+		"the active mode's exchangers must still condition the beds")
+
+	for i := 0; i < 40 && !cvcs.bedAtTarget(CVCSBoration); i++ {
+		stepFor(&p, time.Second)
+		cvcs = p.AuxiliaryBuilding.ChemicalVolumeControlSystem
+	}
+	require.True(t, cvcs.bedAtTarget(CVCSBoration),
+		"running the mode must eventually bring the beds to temperature")
+	boronBefore := cvcs.BoronConcentration
+	stepFor(&p, 5*time.Second)
+	assert.Greater(t,
+		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration,
+		boronBefore,
+		"once the beds are hot, boration must raise RCS boron again")
 }

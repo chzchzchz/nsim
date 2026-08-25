@@ -1160,6 +1160,26 @@ const (
 	// but no number.
 	BTRSBedLifeSeconds = 3600.0
 
+	// BTRSHotBedF and BTRSColdBedF are the bed temperatures the
+	// spec attaches to boration and dilution respectively: "sending
+	// the flow from the VCT, at relatively high temperatures (140°F)
+	// (60°C), to the thermal regeneration demineralizers" versus
+	// "at relatively low temperatures (50°F) (10°C)".
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_081.txt:13-14,24-26
+	BTRSHotBedF  float64 = 140.0
+	BTRSColdBedF float64 = 50.0
+
+	// BTRSBedReadyBandF is how close the beds must sit to the active
+	// mode's temperature before exchange progresses. Invented
+	// tolerance; the source states the conditioning requirement but
+	// no readiness band (page_081.txt:41-45).
+	BTRSBedReadyBandF = 10.0
+
+	// BTRSBedConditioningFPerSec is the isolated-recirculation bed
+	// reconditioning rate. Invented; the source gives the 50 F -> 140 F
+	// example but no duration (page_081.txt:41-45).
+	BTRSBedConditioningFPerSec = 3.0
+
 	// SecondsPerHour converts hourly flow figures (e.g.
 	// SteamGeneratorFullLoadSteamFlow, expressed in gal/hr) into
 	// per-second rates.
@@ -2385,6 +2405,31 @@ type CVCS struct {
 	// depleted as indicated by the boron concentration meter."
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:11-13
 	BTRSBedSaturation float64
+
+	// BTRSBedTemperatureF is the lumped demineralizer-bed
+	// temperature. Thermal regeneration makes exchange
+	// direction-dependent: boration releases stored boron only from
+	// hot beds, dilution stores boron only on cold beds.
+	// "sending the flow from the VCT, at relatively high temperatures
+	//  (140°F) ... at relatively low temperatures (50°F)"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_081.txt:12-31
+	BTRSBedTemperatureF float64
+
+	// BTRSBedsEstablished latches once a first exchange mode has set
+	// the bed state; the zero value means the BTRS has never run, so
+	// the first active mode snaps the beds to its own temperature.
+	BTRSBedsEstablished bool
+
+	// BTRSLastExchangeMode records the most recent mode that actually
+	// exchanged boron. With the loop isolated the recirculation pump
+	// conditions the idle beds toward this mode's opposite so the next
+	// anticipated mode finds them ready.
+	// "after completion of a dilution mode, with demineralizers at
+	//  50°F, the BTRS recirculation pump is used to increase the
+	//  temperature of the demineralizers to 140°F for the subsequent
+	//  boration mode"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_081.txt:41-45
+	BTRSLastExchangeMode CVCSMode
 }
 
 // CVCSMode enumerates the CVCS operating modes.
