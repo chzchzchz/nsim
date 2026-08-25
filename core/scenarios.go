@@ -832,7 +832,7 @@ var scenarioCatalog = []Scenario{
 				Value:      "VolumeControl"},
 			{AtMs: 81250,
 				ControlKey: "ReactorBuilding/ReactorPressureVessel/ControlRods/BoronSetpoint",
-				Value: strconv.FormatFloat(CoreRatedCriticalBoronPpm, 'f', -1, 64)},
+				Value:      strconv.FormatFloat(CoreRatedCriticalBoronPpm, 'f', -1, 64)},
 		},
 	},
 }
