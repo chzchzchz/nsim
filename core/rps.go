@@ -102,10 +102,20 @@ func (r *ReactorProtectionSystem) Step(
 	}
 
 	var trips int
-	if sgLevelPct < RPSLowSteamGeneratorLevelTrip {
+	// The SG level channels join low Tcold / low pressurizer
+	// pressure behind the at-power permissive: the cooldown
+	// procedure deliberately fills the SG steam sides to the vents
+	// for wet layup once the reactor coolant reaches 200 F, so a
+	// shell level above the hi-hi setpoint is normal below P-7.
+	// "When the reactor coolant reaches 200°F (93°C), the steam
+	//  sides of the steam generators are filled to the vents for
+	//  wet layup."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_228.txt:53-55
+	// specs/westinghouse_plant_operations/chapter_19/page_018.txt:3-7
+	if sgLevelPct < RPSLowSteamGeneratorLevelTrip && atPowerTripsEnabled {
 		trips++
 	}
-	if sgLevelPct > RPSHighSteamGeneratorLevelTrip {
+	if sgLevelPct > RPSHighSteamGeneratorLevelTrip && atPowerTripsEnabled {
 		trips++
 	}
 	if steamlinePressure < RPSLowSteamlinePressureTrip {
@@ -258,7 +268,9 @@ func (r *ReactorProtectionSystem) Step(
 	}
 
 	// Auxiliary Feed Pumps start: safety injection or low SG
-	// level.
+	// level. The low-level start stays live below the at-power
+	// permissive: auxiliary feedwater carries decay heat removal
+	// in every mode, unlike the at-power protection channels.
 	if !ret.AuxiliaryFeedPumpsStartActuated {
 		if ret.SafetyInjectionActuated ||
 			sgLevelPct < RPSLowSteamGeneratorLevelTrip {
@@ -267,9 +279,13 @@ func (r *ReactorProtectionSystem) Step(
 	}
 
 	// Feedwater Isolation: high SG level, safety injection, or
-	// coincidence of reactor trip and low Tcold.
+	// coincidence of reactor trip and low Tcold. The high-level
+	// trigger sits behind the at-power permissive like its voting
+	// channel: wet layup fills the shells to the vents below it
+	// (specs/the_westinghouse_pressurized_water_react/
+	// chapter_16/page_228.txt:53-55).
 	if !ret.FeedwaterIsolationActuated {
-		if sgLevelPct > RPSHighSteamGeneratorLevelTrip ||
+		if sgLevelPct > RPSHighSteamGeneratorLevelTrip && atPowerTripsEnabled ||
 			ret.SafetyInjectionActuated ||
 			(ret.ReactorTripped && tcoldF < RPSLowTcoldTrip) {
 			ret.FeedwaterIsolationActuated = true
@@ -281,9 +297,11 @@ func (r *ReactorProtectionSystem) Step(
 	// "The RPS initiates a turbine trip signal whenever
 	// reactor trip occurs."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:10-11
+	// The high-level trigger follows its voting channel behind the
+	// at-power permissive for the same wet-layup reason.
 	if !ret.TurbineTripActuated {
 		if ret.ReactorTripped ||
-			sgLevelPct > RPSHighSteamGeneratorLevelTrip ||
+			(sgLevelPct > RPSHighSteamGeneratorLevelTrip && atPowerTripsEnabled) ||
 			ret.SafetyInjectionActuated {
 			ret.TurbineTripActuated = true
 		}

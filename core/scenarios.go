@@ -151,6 +151,63 @@ func coldWaterSolidLineup() Plant {
 	return p
 }
 
+// Maintenance-outage (scenario 38) calibration: bypass throttle
+// positions that balance RHR heat rejection against the day-old decay
+// pool at the 140 F shutdown temperature, shared across both trains at
+// outage open and solo after the reduction to one train. Invented
+// calibration A-2 (plans/x/scenario/38.txt); the spec names no throttle
+// figure, only the reduction requirement.
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_228.txt:78-81
+const (
+	scenarioMaintenanceSharedBypass    = 0.863
+	scenarioMaintenanceSoloBypass      = 0.73
+	scenarioLayupHeaderPsia            = 15.0
+	scenarioMaintenancePzrSetpoint     = 415.0
+	scenarioLayupFilledFrac            = 0.98
+)
+
+// maintenanceOutageLineup builds the between-refuelings preventive
+// maintenance plant: water-solid cold shutdown held by both RHRS trains
+// sharing the decay-heat load, SG shell header quenched pending wet
+// layup, pressurizer heaters secured for their functional test leg.
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_228.txt:78-107
+func maintenanceOutageLineup() Plant {
+	p := coldShutdownLineup()
+	// Heaters stay secured until their test leg; they are operated
+	// manually at cold shutdown ("Pressurizer heaters are operated
+	// manually to maintain the desired pressure").
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_228.txt:1-2
+	p.ReactorBuilding.Pressurizer.HeatersOn = false
+	p.ReactorBuilding.Pressurizer.Pressure = scenarioColdPsia
+
+	sg := &p.ReactorBuilding.SteamGenerator
+	// A-1 (plans/x/scenario/38.txt): residual header pressure after the
+	// cooldown closed its dumps approaching zero psig.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_228.txt:51-55
+	sg.Pressure = scenarioLayupHeaderPsia
+
+	rhr := &p.AuxiliaryBuilding.ResidualHeatRemovalSystem
+	rhr.Running = true
+	rhr.HasTakenOver = true
+	for _, tr := range []*RHRSTrain{&rhr.TrainA, &rhr.TrainB} {
+		tr.WarmupComplete = true
+		tr.SuctionValves[0].Open = 1
+		tr.SuctionValves[1].Open = 1
+		tr.Pump.Running = true
+		tr.BypassValve.Open = scenarioMaintenanceSharedBypass
+	}
+
+	// The outage sits below both shared protection setpoints by
+	// lineup, so the steamline-isolation block stands armed beside
+	// the SI block the cold fixture already latched; an intentional
+	// shutdown lineup legitimately carries the header through them.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:107-110
+	if c, ok := GetControlMap(&p)["ReactorBuilding/ReactorProtectionSystem/SteamlineIsolationBlock"]; ok {
+		_ = c.Set("true")
+	}
+	return p
+}
+
 // rhrsCooldownLineup builds the cold plant riding RHRS cooling at
 // 138 F and 1600 psia with several-hours-old decay pools, poised for
 // the controlled heatup after RHRS handback.
@@ -1053,6 +1110,22 @@ var scenarioCatalog = []Scenario{
 			*p = q
 		},
 	},
+	{
+		ID:       "sg-preventive-maintenance",
+		Number:   38,
+		Category: "Maintenance outage (between refuelings)",
+		Title:    "Steam generator and primary equipment preventive maintenance",
+		StartState: "Water-solid cold shutdown at 140 F and 415 psia held " +
+			"by both RHR trains sharing the decay-heat load, SG shells " +
+			"quenched to vent pressure pending wet layup, heaters secured.",
+		Objective: "Run the outage's plant-side work: reduce RHR equipment " +
+			"to the minimum required to hold temperature, fill the SG steam " +
+			"sides to the vents for wet layup, functionally test the " +
+			"pressurizer heaters against the solid primary, then bleed the " +
+			"test overpressure back through the solid-plant pressure-control " +
+			"valve into automatic regulation at the cold-shutdown setpoint.",
+		Apply: func(p *Plant) { *p = maintenanceOutageLineup() },
+	},
 }
 
 // CheckResult reports whether an evolution's end-state bounds hold on
@@ -1594,6 +1667,22 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 			"concentration suppressed below the alarm setpoint")
 		c.require(!hds.HydrogenAlarm,
 			"high-hydrogen alarm acknowledged and clear")
+		return c.result()
+	},
+	"sg-preventive-maintenance": func(p *Plant) CheckResult {
+		var c checkBounds
+		rhr := &p.AuxiliaryBuilding.ResidualHeatRemovalSystem
+		sg := &p.ReactorBuilding.SteamGenerator
+		pzr := &p.ReactorBuilding.Pressurizer
+		c.require(rhr.Running && !rhr.TrainB.Pump.Running,
+			"RHR reduced to the minimum train holding temperature")
+		c.require(sg.Water.Float() >=
+			sg.Volume.Float()*scenarioLayupFilledFrac,
+			"SG steam sides laid up wet to the vents")
+		c.require(pzr.HeaterAutoControl &&
+			math.Abs(float64(pzr.Pressure-scenarioMaintenancePzrSetpoint)) <=
+				float64(PressurizerAutoHeaterBand),
+			"heaters tested with regulation back in automatic")
 		return c.result()
 	},
 	"rhrs-loop-takeover": func(p *Plant) CheckResult {
