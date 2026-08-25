@@ -197,21 +197,15 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 	// old 0.65 line.
 	assert.Less(t, plateauFrac, 0.68,
 		"power settled onto the partial-plateau band")
-	// Known deviation, recorded rather than absorbed into a band:
-	// settled Tavg sits ~8 F above programmedRodTavg(load) because the
-	// plant's part-load operating line runs nearly flat against the
-	// 32.5 F program slope, so holding measured Tavg on the program
-	// would push fission below the secondary's heat-balance point and
-	// depressurize the header into the low-steamline trip. The
-	// measured-coolant-temperature input ("the needed control rod
+	// Measured-coolant-temperature duty ("the needed control rod
 	// movement is based on the reactor coolant temperature needed to
 	// meet the turbine power demand [...] and the measured reactor
 	// coolant temperature",
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:68-76)
-	// was implemented and evaluated; every variant with enough
-	// authority to null the offset trips the plant this way, so the
-	// term waits on the secondary recalibration sliced in
-	// plans/x/gaps.md item 14.
+	// rides in applyAutoControl as a bounded trim since the cold-leg
+	// anchor recalibration closed plans/x/gaps.md item 14, so the
+	// park no longer carries the part-load line offset that used to
+	// sit here as a recorded deviation.
 
 	// The plateau must hold, not glide into collapse.
 	stepN(&p, int(90*time.Second/TimeStep))
@@ -221,10 +215,9 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 	assert.Less(t, held, 0.68, "plateau stable, not climbing away")
 }
 
-// The ascent leg of the partial-plateau evolution. Still skipped: the
-// dispatched ramp trips on low steamline pressure before power leaves
-// the plateau, which is the flat part-load secondary line owned by
-// plans/x/gaps.md item 14, not the rod loop this file covers.
+// The ascent leg of the partial-plateau evolution, restored once the
+// cold-leg anchor recalibration put the part-load heat-balance line on
+// the Tavg program (plans/x/gaps.md item 14).
 //
 //	"to overcome "power defect" during power ascension"
 //	specs/the_westinghouse_pressurized_water_react/chapter_16/page_232.txt:54-55
