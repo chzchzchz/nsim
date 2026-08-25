@@ -4,7 +4,9 @@ import (
 	"testing"
 	"time"
 
+	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // The boron trim reads rod-bank travel position: near full withdrawal
@@ -17,14 +19,14 @@ import (
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_129.txt:112-115
 func TestCVCSAutoBoronSelectsModeFromRodTravel(t *testing.T) {
 	low := CVCS{AutoBoronControl: true}
-	low.applyAutoBoronControl(CVCSAutoBoronLowInsertionFrac/2, 0)
+	low.applyAutoBoronControl(CVCSAutoBoronLowInsertionFrac/2, 0, 0)
 	assert.Equal(t, CVCSDilution, low.Mode,
 		"bank out of travel dilutes")
 	assert.True(t, low.BTRSRecirculationPumpRunning,
 		"dilution needs the BTRS pump")
 
 	high := CVCS{AutoBoronControl: true}
-	high.applyAutoBoronControl(CVCSAutoBoronHighInsertionFrac*2, 0)
+	high.applyAutoBoronControl(CVCSAutoBoronHighInsertionFrac*2, 0, 0)
 	assert.Equal(t, CVCSBoration, high.Mode,
 		"buried bank borates")
 }
@@ -38,7 +40,7 @@ func TestCVCSAutoBoronNeutralMidBand(t *testing.T) {
 		AutoBoronControl:             true,
 	}
 	mid.applyAutoBoronControl(
-		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2, 0)
+		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2, 0, 0)
 	assert.Equal(t, CVCSVolumeControl, mid.Mode)
 	assert.False(t, mid.BTRSRecirculationPumpRunning)
 }
@@ -52,21 +54,21 @@ func TestCVCSAutoBoronAnswersAxialOffsetBand(t *testing.T) {
 	bottomSkew := CVCS{AutoBoronControl: true}
 	bottomSkew.applyAutoBoronControl(
 		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2,
-		-CoreAFDTargetBandPct-1)
+		-CoreAFDTargetBandPct-1, 0)
 	assert.Equal(t, CVCSBoration, bottomSkew.Mode,
 		"bottom-skewed offset borates")
 
 	topSkew := CVCS{AutoBoronControl: true}
 	topSkew.applyAutoBoronControl(
 		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2,
-		CoreAFDTargetBandPct+1)
+		CoreAFDTargetBandPct+1, 0)
 	assert.Equal(t, CVCSDilution, topSkew.Mode,
 		"top-skewed offset dilutes")
 
 	insideBand := CVCS{AutoBoronControl: true}
 	insideBand.applyAutoBoronControl(
 		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2,
-		-CoreAFDTargetBandPct/2)
+		-CoreAFDTargetBandPct/2, 0)
 	assert.Equal(t, CVCSVolumeControl, insideBand.Mode,
 		"in-band offset stays neutral")
 
@@ -77,7 +79,7 @@ func TestCVCSAutoBoronAnswersAxialOffsetBand(t *testing.T) {
 	// the band rule borates - boration is pinned.
 	skewVsBuried := CVCS{AutoBoronControl: true}
 	skewVsBuried.applyAutoBoronControl(
-		CVCSAutoBoronLowInsertionFrac/2, -CoreAFDTargetBandPct-1)
+		CVCSAutoBoronLowInsertionFrac/2, -CoreAFDTargetBandPct-1, 0)
 	assert.Equal(t, CVCSBoration, skewVsBuried.Mode,
 		"bottom skew outranks withdrawal-limit dilution")
 
@@ -85,7 +87,7 @@ func TestCVCSAutoBoronAnswersAxialOffsetBand(t *testing.T) {
 	// band rule dilutes - dilution is pinned.
 	skewVsBuried2 := CVCS{AutoBoronControl: true}
 	skewVsBuried2.applyAutoBoronControl(
-		CVCSAutoBoronHighInsertionFrac*2, CoreAFDTargetBandPct+1)
+		CVCSAutoBoronHighInsertionFrac*2, CoreAFDTargetBandPct+1, 0)
 	assert.Equal(t, CVCSDilution, skewVsBuried2.Mode,
 		"top skew outranks burial-limit boration")
 }
@@ -165,4 +167,102 @@ func TestCVCSAutoBoronUnlocksDeepPlateau(t *testing.T) {
 		"power followed the program into the deep-partial band")
 	assert.Less(t, p.AuxiliaryBuilding.ChemicalVolumeControlSystem.
 		BoronConcentration, CVCSInitialBoron)
+}
+
+// The demanded-minus-achieved power error adds a selection tier above
+// the position window while the RPC cascade stands engaged: a plant
+// missing its walked target dilutes even with the bank mid-window
+// (where the position rule would stand neutral), an overswinging plant
+// borates, and inside the deadband the old position rules govern.
+//
+// Spec: mode and magnitude of the boron change are "determined by
+// comparison" against a total error; "if this total error is large
+// enough, the BTRS is switched to the proper mode".
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-65
+func TestCVCSAutoBoronAnswersPowerError(t *testing.T) {
+	midInsertion := (CVCSAutoBoronLowInsertionFrac +
+		CVCSAutoBoronHighInsertionFrac) / 2
+
+	underDemand := CVCS{AutoBoronControl: true}
+	underDemand.applyAutoBoronControl(midInsertion, 0,
+		CVCSAutoBoronPowerErrBandFrac*3)
+	assert.Equal(t, CVCSDilution, underDemand.Mode,
+		"a standing deficit dilutes even with the bank mid-window")
+	assert.True(t, underDemand.BTRSRecirculationPumpRunning)
+
+	overSwing := CVCS{AutoBoronControl: true}
+	overSwing.applyAutoBoronControl(midInsertion, 0,
+		-CVCSAutoBoronPowerErrBandFrac*3)
+	assert.Equal(t, CVCSBoration, overSwing.Mode,
+		"an achieved-power overswing borates")
+
+	onTarget := CVCS{AutoBoronControl: true}
+	onTarget.applyAutoBoronControl(midInsertion, 0,
+		CVCSAutoBoronPowerErrBandFrac/2)
+	assert.Equal(t, CVCSVolumeControl, onTarget.Mode,
+		"inside the deadband the mid-band position rule governs")
+
+	// The tier sits below the axial-offset band: a running spatial
+	// instability outranks load-error relief.
+	skewWins := CVCS{AutoBoronControl: true}
+	skewWins.applyAutoBoronControl(midInsertion,
+		CoreAFDTargetBandPct+1, CVCSAutoBoronPowerErrBandFrac*3)
+	assert.Equal(t, CVCSDilution, skewWins.Mode,
+		"band excursion and deficit agree on dilution")
+	skewOpposes := CVCS{AutoBoronControl: true}
+	skewOpposes.applyAutoBoronControl(midInsertion,
+		-CoreAFDTargetBandPct-1, CVCSAutoBoronPowerErrBandFrac*3)
+	assert.Equal(t, CVCSBoration, skewOpposes.Mode,
+		"the axial-offset band outranks the standing deficit")
+}
+
+// The error-driven exchange rate is paced by the error magnitude:
+// linear from zero at the deadband edge to the full design rate at the
+// span, clamped beyond it. Position and axial-offset selections run at
+// full rate. Tier note: the band and span are invented conventions
+// (spec says only "large enough"), so this pins the declared shape of
+// the pacing law, not spec'd numbers.
+func TestCVCSAutoBoronDrivePacesWithError(t *testing.T) {
+	c := CVCS{AutoBoronControl: true}
+	c.applyAutoBoronControl(0.04, 0, CVCSAutoBoronPowerErrBandFrac*1.01)
+	assert.InDelta(t, 0, c.AutoBoronDrive, 1e-2,
+		"errors just past the deadband barely drive")
+
+	c = CVCS{AutoBoronControl: true}
+	c.applyAutoBoronControl(0.04, 0,
+		(CVCSAutoBoronPowerErrBandFrac+CVCSAutoBoronPowerErrSpanFrac)/2)
+	assert.InDelta(t, 0.5, c.AutoBoronDrive, 1e-9,
+		"mid-span error drives half rate")
+
+	c = CVCS{AutoBoronControl: true}
+	c.applyAutoBoronControl(0.04, 0, CVCSAutoBoronPowerErrSpanFrac*4)
+	assert.InDelta(t, 1.0, c.AutoBoronDrive, 1e-9,
+		"errors past the span clamp at full drive")
+
+	positional := CVCS{AutoBoronControl: true}
+	positional.applyAutoBoronControl(
+		CVCSAutoBoronLowInsertionFrac/2, 0, 0)
+	assert.InDelta(t, 1.0, positional.AutoBoronDrive, 1e-9,
+		"position-tier selections keep the design rate")
+}
+
+// Zero-value coherence: with the trim disengaged, a diluted-mode lineup
+// exchanges at the full design rate even though AutoBoronDrive sits at
+// its zero value - operator chemistry never inherits the automatic
+// pacing scalar.
+func TestCVCSDilutionRateFullWithoutAutoTrim(t *testing.T) {
+	overrideTimeStep(t, time.Second)
+	c := MakePlant().AuxiliaryBuilding.ChemicalVolumeControlSystem
+	require.False(t, c.AutoBoronControl)
+	require.Zero(t, c.AutoBoronDrive)
+	c.Mode = CVCSDilution
+	c.BTRSRecirculationPumpRunning = true
+
+	start := c.BoronConcentration
+	c = c.Step(Volume{},
+		Temperature{Val: 580, Unit: u.Fahrenheit}, 0.5, PressurizerHeaterTarget)
+
+	dropped := start - c.BoronConcentration
+	assert.InDelta(t, float64(CVCSDilutionRate), dropped, 1e-6,
+		"disengaged trim dilutes at the design rate")
 }

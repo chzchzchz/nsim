@@ -232,8 +232,12 @@ func (c *CVCS) Step(
 				ret.BTRSLastExchangeMode = CVCSBoration
 				ret.BTRSBedSaturation = min(
 					ret.BTRSBedSaturation+dt.Seconds()/BTRSBedLifeSeconds, 1)
-				ret.BorationRate = CVCSBorationRate
-				ret.BoronConcentration += CVCSBorationRate * dt.Seconds()
+				rateScale := 1.0
+				if ret.AutoBoronControl {
+					rateScale = max(ret.AutoBoronDrive, 0)
+				}
+				ret.BorationRate = CVCSBorationRate * rateScale
+				ret.BoronConcentration += ret.BorationRate * dt.Seconds()
 			}
 		}
 	case CVCSDilution:
@@ -243,8 +247,12 @@ func (c *CVCS) Step(
 				ret.BTRSLastExchangeMode = CVCSDilution
 				ret.BTRSBedSaturation = min(
 					ret.BTRSBedSaturation+dt.Seconds()/BTRSBedLifeSeconds, 1)
-				ret.DilutionRate = CVCSDilutionRate
-				ret.BoronConcentration -= CVCSDilutionRate * dt.Seconds()
+				rateScale := 1.0
+				if ret.AutoBoronControl {
+					rateScale = max(ret.AutoBoronDrive, 0)
+				}
+				ret.DilutionRate = CVCSDilutionRate * rateScale
+				ret.BoronConcentration -= ret.DilutionRate * dt.Seconds()
 				ret.BoronConcentration = max(ret.BoronConcentration, 0)
 			}
 		}
@@ -420,8 +428,17 @@ func programmedPzrLevel(tavg Temperature) float64 {
 // oscillation is the active instability this chemistry exists to damp.
 // The existing fixed BTRS rates and bed dynamics are the rate limiter.
 // While engaged this owns Mode and the BTRS pump; the latch lives on
-// AutoBoronControl.
-func (c *CVCS) applyAutoBoronControl(rodInsertion float64, axialOffsetPct float64) {
+// AutoBoronControl. The demanded-minus-achieved power error adds a tier
+// above the position window: while the RPC integrator stands engaged and
+// the plant misses its walked target beyond the deadband, chemistry
+// carries the deficit in the error's direction at a rate paced by the
+// error magnitude - the spec keys both mode and magnitude of the boron
+// change on such a comparison
+// (specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-65).
+func (c *CVCS) applyAutoBoronControl(
+	rodInsertion float64, axialOffsetPct float64, powerErrorFrac float64,
+) {
+	c.AutoBoronDrive = 1
 	switch {
 	case axialOffsetPct < -CoreAFDTargetBandPct:
 		c.Mode = CVCSBoration
@@ -429,6 +446,14 @@ func (c *CVCS) applyAutoBoronControl(rodInsertion float64, axialOffsetPct float6
 	case axialOffsetPct > CoreAFDTargetBandPct:
 		c.Mode = CVCSDilution
 		c.BTRSRecirculationPumpRunning = true
+	case powerErrorFrac > CVCSAutoBoronPowerErrBandFrac:
+		c.Mode = CVCSDilution
+		c.BTRSRecirculationPumpRunning = true
+		c.AutoBoronDrive = c.pacedAutoBoronDrive(powerErrorFrac)
+	case powerErrorFrac < -CVCSAutoBoronPowerErrBandFrac:
+		c.Mode = CVCSBoration
+		c.BTRSRecirculationPumpRunning = true
+		c.AutoBoronDrive = c.pacedAutoBoronDrive(-powerErrorFrac)
 	case rodInsertion < CVCSAutoBoronLowInsertionFrac:
 		c.Mode = CVCSDilution
 		c.BTRSRecirculationPumpRunning = true
@@ -439,4 +464,11 @@ func (c *CVCS) applyAutoBoronControl(rodInsertion float64, axialOffsetPct float6
 		c.Mode = CVCSVolumeControl
 		c.BTRSRecirculationPumpRunning = false
 	}
+}
+
+// pacedAutoBoronDrive maps a standing power error onto the exchange-rate
+// scale: zero inside the deadband, linear to full rate across the span.
+func (c *CVCS) pacedAutoBoronDrive(errAbs float64) float64 {
+	span := CVCSAutoBoronPowerErrSpanFrac - CVCSAutoBoronPowerErrBandFrac
+	return min(max((errAbs-CVCSAutoBoronPowerErrBandFrac)/span, 0), 1)
 }

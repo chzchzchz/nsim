@@ -1087,6 +1087,21 @@ const (
 	// reserve capability survives the cycle
 	// (specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:109-123).
 	CVCSAutoBoronHighInsertionFrac float64 = 0.055
+
+	// CVCSAutoBoronPowerErrBandFrac is the demanded-minus-achieved
+	// power deadband inside which the error tier of the automatic
+	// boron trim stands down and rod-position rules govern.
+	// Assumption; the spec gates the BTRS mode on a "total error"
+	// being "large enough" without a figure
+	// (specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-65).
+	CVCSAutoBoronPowerErrBandFrac float64 = 0.01
+
+	// CVCSAutoBoronPowerErrSpanFrac is the standing power error that
+	// drives the automatic exchange at full design rate; errors
+	// between band and span pace the rate linearly. Derived so a
+	// 10-point load walk saturates the drive against measured
+	// trajectories (plans/x/gap_reactor_lead_chemistry_follows_demand.md).
+	CVCSAutoBoronPowerErrSpanFrac float64 = 0.05
 )
 
 // ReactorMakeupDesignFlow is the per-minute volume of makeup
@@ -2287,6 +2302,14 @@ type CVCS struct {
 	// delivered last step: the valve position gated by the charging
 	// pump latch. Plant.Step forwards it to the pressurizer.
 	AuxSprayDrive float64
+
+	// AutoBoronDrive scales the armed automatic boron exchange rate
+	// this step (0..1]: applyAutoBoronControl writes it from the
+	// standing demanded-minus-achieved power error, while position
+	// and axial-offset selections run at full rate. CVCS.Step forces
+	// the scale to 1 whenever AutoBoronControl is disengaged so
+	// operator-driven modes keep the design rates.
+	AutoBoronDrive float64
 
 	// LetdownValveOpen is the operator latch on the letdown
 	// isolation valve. The CVCS Step sets LetdownFlow from this
@@ -6632,10 +6655,14 @@ func (po *PlantOperation) StepRPC(rpv *ReactorPressureVessel,
 		po.DemandedPowerSetpoint = min(max(
 			po.DemandedPowerSetpoint+
 				min(max(delta, -maxDelta), maxDelta), 0), 1)
-		// The turbine follows the reactor: load demand tracks
-		// achieved power (chapter_16/page_230.txt:126-129
-		// mirrored).
-		turbine.Setpoint = pf
+		// The turbine follows the reactor's walked demand: the
+		// ACTUAL (load) setpoint equals the accepted reactor power
+		// setpoint target under reactor-leading RPC, so steam draw
+		// tracks the program rather than achieved power - following
+		// pf instead would make every fission dip cut steam flow and
+		// fold the core further.
+		// specs/pwr_sim/chapter_2/page_023.txt:64-71
+		turbine.Setpoint = po.DemandedPowerSetpoint
 	default:
 		// Turbine lead: the demand path is the turbine's own
 		// setpoint, so the integrator shadows measured power.

@@ -59,10 +59,12 @@ func scenario14FullPowerPlant() Plant {
 // the whole transient runs wide. Must not run in parallel:
 // overrideTimeStep mutates global simulation state.
 func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
-	t.Skip("same reactor-lead walk instability as the RPC descent test " +
-		"in rodcontrol_test.go: turbine-follows-achieved couples with the " +
-		"strong split-feedback coefficient into positive loop gain; " +
-		"blocked on a chemistry-follows-demand slice")
+	t.Skip("still blocked after the chemistry-follows-demand slice " +
+		"(plans/x/gap_reactor_lead_chemistry_follows_demand.md): this " +
+		"glide drives setpoints by hand, never engages the RPC " +
+		"integrator, and fails on the condenser dump leaving its " +
+		"<=0.20 pressure-modulation band mid-descent - a dump/secondary " +
+		"recalibration matter, not chemistry")
 	overrideTimeStep(t, 10*time.Millisecond)
 	p := scenario14FullPowerPlant()
 

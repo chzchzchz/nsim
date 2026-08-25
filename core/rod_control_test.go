@@ -229,9 +229,6 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 //	"to overcome "power defect" during power ascension"
 //	specs/the_westinghouse_pressurized_water_react/chapter_16/page_232.txt:54-55
 func TestRodAutoControlPartialPowerPlateauAscent(t *testing.T) {
-	t.Skip("ascent leg blocked by the part-load secondary line " +
-		"(plans/x/gaps.md item 14): the dispatched ramp depressurizes " +
-		"the header into the low-steamline trip before power climbs")
 	overrideTimeStep(t, 25 * time.Millisecond)
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = 500

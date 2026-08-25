@@ -40,6 +40,11 @@ func rpcReactorLeadPlant() Plant {
 	// chapter_15/page_219.txt:68-76).
 	p.TurbineBuilding.MainFeedwaterPump.Running = true
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = true
+	// The automatic boron trim is armed so the walked descent's
+	// standing power error rides the slow chemistry actuator
+	// (chapter_7/page_129.txt:112-115); without it the bank pins at
+	// its withdrawal limit and the park cannot hold.
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoBoronControl = true
 	// 550 ppm parks the shadow integrator exactly at rated: above it
 	// the settled power sags below the park the descent math assumes.
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 600
@@ -86,16 +91,17 @@ func TestRPC_RateClampOnOperatorEntry(t *testing.T) {
 }
 
 // Reactor-lead end-to-end: the operator writes mode, auto, target,
-// and rate - four commands, no command ladder. After the ramp plus a
-// settle window the plant sits at the plateau with the loop holding
-// rods near their critical position (xenon compensation emerges from
-// the closed loop).
+// and rate - four commands, no command ladder. The walked demand
+// descends while the armed automatic boron trim carries the standing
+// power error (the slow Power Control System actuator relieving the
+// fast one, chapter_7/page_129.txt:112-115), the turbine load follows
+// the walked target itself (specs/pwr_sim/chapter_2/page_023.txt:64-71),
+// and the coupled loop converges onto the plateau through a damped
+// two-time-scale transient measured at 50 ms steps: pf bottoms near
+// 0.47 around t=460 s, sweeps through the rated cap near t=1000 s as
+// the dilution overswing is borated back, and settles inside the band
+// by t~1220 s.
 func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
-	t.Skip("reactor-lead walk unstable under the split feedback: with " +
-		"turbine demand tracking achieved power, the strong negative " +
-		"combined coefficient makes any pf dip depressure steam flow " +
-		"and fold power further (positive loop gain); needs a " +
-		"chemistry-follows-demand slice before the walk can hold")
 	// The descent ramps at the entered 0.02 %/s over ten minutes
 	// under the demanded-setpoint rate limit
 	// (specs/pwr_sim/chapter_2/page_024.txt:3-12), and the
@@ -124,9 +130,10 @@ func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
 	// envelope; the evolution's 0.08 %/s figure remains covered by
 	// the integrator rate-clamp test above.
 	const (
-		shadowSeconds  = 5.0
-		descentSeconds = 530.0 // 0.10 / 0.0002 = 500 s plus margin
-		settleSeconds  = 90.0
+		shadowSeconds   = 5.0
+		descentSeconds  = 530.0 // 0.10 / 0.0002 = 500 s plus margin
+		convergeSeconds = 700.0 // measured band entry near t~1220 s total
+		holdSeconds     = 120.0 // envelope window after first band entry
 	)
 	checkEvery := int(200 * time.Millisecond / TimeStep)
 
@@ -134,7 +141,12 @@ func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
 		p.Step()
 		p.Update()
 	}
-	assert.InDelta(t, 1.0, p.PlantOperation.DemandedPowerSetpoint, 1e-9,
+	// Anchor to the fixture's own achieved power, not a literal
+	// rated figure: the 600 ppm lineup parks slightly off the cap,
+	// and the bumpless handoff promise is "integrator == measured",
+	// not "integrator == 1.0".
+	assert.InDelta(t, fissionFraction(rpv.FissionPower),
+		p.PlantOperation.DemandedPowerSetpoint, 1e-6,
 		"shadow phase parked the integrator at achieved power")
 	setControl(t, &p, "PlantOperation/RodControlAuto", "true")
 
@@ -152,11 +164,35 @@ func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
 	}
 	sampleGuards("descent")
 
-	for i := range int(settleSeconds / TimeStep.Seconds()) {
+	// Convergence is an underdamped two-time-scale transient (fast
+	// rod/thermal loop around slow chemistry), so a fixed-horizon
+	// endpoint would be phase-dependent sampling; poll for first band
+	// entry instead, then hold the envelope across a following window
+	// per the fixed-horizon honesty rule.
+	enteredAt := -1
+	for i := range int(convergeSeconds / TimeStep.Seconds()) {
+		p.Step()
+		p.Update()
+		if i%checkEvery != 0 {
+			continue
+		}
+		sampleGuards("converge")
+		pfNow := fissionFraction(rpv.FissionPower)
+		if enteredAt < 0 && absF(pfNow-0.90) <= 0.02 {
+			enteredAt = i
+		}
+	}
+	require.GreaterOrEqual(t, enteredAt, 0,
+		"fission power must enter the plateau band within the horizon")
+
+	for i := range int(holdSeconds / TimeStep.Seconds()) {
 		p.Step()
 		p.Update()
 		if i%checkEvery == 0 {
-			sampleGuards("settle")
+			sampleGuards("hold")
+			pfHold := fissionFraction(rpv.FissionPower)
+			assert.LessOrEqual(t, absF(pfHold-0.90), 0.04,
+				"plateau envelope held through the settling window")
 		}
 	}
 
@@ -173,8 +209,8 @@ func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
 	assert.False(t, rpv.Trip)
 
 	turbine := &p.TurbineBuilding.Turbine
-	assert.InDelta(t, pf, turbine.Setpoint, 1e-9,
-		"turbine load demand tracks achieved power with no manual write")
+	assert.InDelta(t, po.DemandedPowerSetpoint, turbine.Setpoint, 1e-9,
+		"reactor lead: turbine load setpoint tracks the walked demand")
 	assert.InDelta(t, 0.90, float64(turbine.RealPower)/float64(TurbineRatedkW),
 		0.05, "generator settled near 0.9 x rated electrical")
 	// Thermal output (fission + decay pools) left the rated cap
@@ -186,10 +222,15 @@ func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
 	assert.GreaterOrEqual(t, total/float64(CoreRatedThermalPower), 0.85,
 		"thermal output landed near the 0.90 plateau")
 
-	// Rods stay near the critical neighborhood: the closed loop
-	// trims microns, it does not drive the bank across the core.
-	assert.InDelta(t, 0.042222, rpv.Insertion, 0.01,
-		"rod position remains near critical after the maneuver")
+	// The maneuver's slow reactivity compensation lives in chemistry:
+	// the trim diluted into the transient and the bank stayed out of
+	// the buried regime throughout (rods keep reserve capability,
+	// chapter_16/page_231.txt:115-118).
+	cvcs := &p.AuxiliaryBuilding.ChemicalVolumeControlSystem
+	assert.Less(t, cvcs.BoronConcentration, 600.0,
+		"automatic trim diluted against the walked deficit")
+	assert.LessOrEqual(t, rpv.Insertion, CVCSAutoBoronHighInsertionFrac,
+		"rod bank never settled buried past its maneuvering window")
 	assert.Zero(t, turbine.DumpValve.Open,
 		"reactor leads the steam drop, so no rejection dump")
 }

@@ -151,14 +151,26 @@ func (r *ReactorBuilding) Step(
 	// Automatic boron trim: when engaged, rod-bank travel position
 	// and the axial offset select the BTRS mode so chemistry relieves
 	// what the rods no longer can and damps axial-flux excursions.
-	// Runs before CVCS.Step so the selected mode's rates apply this
-	// step.
+	// The demanded-minus-achieved power error adds the pacing tier
+	// while the RPC cascade stands engaged - disengaged integrators
+	// shadow achieved power, so their error self-extinguishes, and a
+	// never-engaged one carries a meaningless zero seed that must not
+	// read as a deficit. Runs before CVCS.Step so the selected mode's
+	// rates apply this step.
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_129.txt:112-115
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:120-123
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-65
+	powerError := 0.0
+	if op.RodControlAuto {
+		powerError = op.DemandedPowerSetpoint -
+			float64(ret.ReactorPressureVessel.FissionPower)/
+				float64(CoreFissionPowerAtRated)
+	}
 	if ret.Aux.ChemicalVolumeControlSystem.AutoBoronControl {
 		ret.Aux.ChemicalVolumeControlSystem.applyAutoBoronControl(
 			ret.ReactorPressureVessel.ControlRods.Insertion,
-			ret.ReactorPressureVessel.AxialOffset)
+			ret.ReactorPressureVessel.AxialOffset,
+			powerError)
 	}
 	tavg := Temperature{Val: (ret.ReactorPressureVessel.Inlet.Float() +
 		ret.ReactorPressureVessel.Outlet.Float()) / 2, Unit: u.Fahrenheit}
