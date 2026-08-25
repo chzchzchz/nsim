@@ -20,6 +20,16 @@ import (
 	"github.com/chzchzchz/nsim/core/svg"
 )
 
+// genCache memoizes one derived string (sensor batch, objective
+// banner, P&ID SVG) alongside the stateGen it was computed at, so
+// repeated JS crossings within a single simulation state reuse the
+// work instead of re-rendering or re-marshaling per frame.
+type genCache struct {
+	gen int64
+	val string
+	err error
+}
+
 // plantHandle is the JavaScript-visible wrapper around a
 // *core.Plant. JavaScript holds a reference to the wrapper; the
 // wrapper keeps the plant pointer. Step / GetSvg / SetControl
@@ -35,6 +45,12 @@ type plantHandle struct {
 	journal    *cmdfile.Journal
 	controls   bridge.ControlMap
 	sensors    bridge.SensorMap
+	// stateGen bumps on every plant or control mutation; caches are
+	// valid only while their gen matches.
+	stateGen     int64
+	sensorCache  genCache
+	objectiveCch genCache
+	svgCache     genCache
 }
 
 func newPlantHandle(scenarioID string) (*plantHandle, error) {
@@ -60,7 +76,31 @@ func newPlantHandle(scenarioID string) (*plantHandle, error) {
 		journal:    &cmdfile.Journal{},
 		controls:   p.GetControlMap(),
 		sensors:    p.GetSensorMap(),
+		// Zero-value caches carry gen 0; starting at 1 forces the
+		// first accessor of each to compute.
+		stateGen: 1,
 	}, nil
+}
+
+// bumpState invalidates every derived cache. Script and queue
+// commands mutate control state inside step, so one bump after the
+// tick loop covers them; operator sets bump directly.
+func (h *plantHandle) bumpState() {
+	h.stateGen++
+}
+
+// cached returns gc when it matches the current generation,
+// otherwise computes, stores, and returns fresh values.
+func (h *plantHandle) cached(
+	gc *genCache,
+	compute func() (string, error),
+) (string, error) {
+	if gc.gen == h.stateGen {
+		return gc.val, gc.err
+	}
+	gc.gen = h.stateGen
+	gc.val, gc.err = compute()
+	return gc.val, gc.err
 }
 
 // step advances the plant by ticks `Step()`/`Update()` cycles.
@@ -84,6 +124,7 @@ func (h *plantHandle) step(ticks int) {
 			h.progress.Observe(h.p, h.simTimeNs)
 		}
 	}
+	h.bumpState()
 }
 
 // fireDueScript applies the script prefix that has come due at nowNs,
@@ -139,6 +180,7 @@ func (h *plantHandle) setControl(id, value string) error {
 	if err := c.Set(value); err != nil {
 		return err
 	}
+	h.bumpState()
 	h.journal.Add(cmdfile.Command{ControlKey: key, Value: value}, h.simTimeNs)
 	return nil
 }
@@ -171,8 +213,13 @@ func (h *plantHandle) sensorJSON(id string) (string, error) {
 
 // sensorValuesJSON returns {"values":{id:value},"errors":{id:msg}}
 // for every sensor so the UI polls all readings with a single
-// JS<->Go crossing per frame.
+// JS<->Go crossing per frame. The batch is memoized per simulation
+// state; idle frames re-cross at string-copy cost.
 func (h *plantHandle) sensorValuesJSON() (string, error) {
+	return h.cached(&h.sensorCache, h.computeSensorValuesJSON)
+}
+
+func (h *plantHandle) computeSensorValuesJSON() (string, error) {
 	values := make(map[string]string, len(h.sensors))
 	errs := make(map[string]string)
 	for id, s := range h.sensors {
@@ -268,7 +315,14 @@ func (h *plantHandle) commandLogJSON() (string, error) {
 	return string(b), nil
 }
 
+// getSvg renders the P&ID document for the current plant state,
+// memoized per simulation state so the 1 Hz diagram poll is free
+// whenever nothing stepped since the last render.
 func (h *plantHandle) getSvg() (string, error) {
+	return h.cached(&h.svgCache, h.computeSvg)
+}
+
+func (h *plantHandle) computeSvg() (string, error) {
 	var buf bytes.Buffer
 	opts := svg.RenderOptions{PhaseMs: float64(h.simTimeNs) / 1e6}
 	if err := svg.WritePlantSVGWithOptions(&buf, h.p, svg.CurrentLayout(), opts); err != nil {
@@ -302,6 +356,10 @@ type objectiveStatus struct {
 }
 
 func (h *plantHandle) objectiveJSON() (string, error) {
+	return h.cached(&h.objectiveCch, h.computeObjectiveJSON)
+}
+
+func (h *plantHandle) computeObjectiveJSON() (string, error) {
 	out := objectiveStatus{}
 	if sc, ok := core.ScenarioByID(h.scenarioID); ok {
 		res := h.progress.Result(h.p)
