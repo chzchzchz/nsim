@@ -894,6 +894,100 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// SFPCS cooler-loop run command. PumpRunning is the lumped
+	// two-normal-loop flag: "Normal operation requires two pumps with
+	// the third pump serving as a standby."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:43-44
+	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PumpRunning"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
+		Label: "PumpRunning",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PumpRunning)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PumpRunning = v
+			return nil
+		},
+	}
+
+	// SFPCS supply-header leak latch. Instrumentation detects the
+	// leakage and motor-operated valves isolate it:
+	// "Detection of leakage which might affect system operation is
+	// provided by means of installed pressure, temperature, and flow
+	// instrumentation [...] system isolation is provided by means of
+	// motor-operated valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:75-83
+	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/Leakage"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
+		Label: "Leakage",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.Leakage)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.Leakage = v
+			return nil
+		},
+	}
+
+	// Refueling-canal crud burst latch: "to regain refueling canal
+	// water clarity after a crud burst."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:87-90
+	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/CrudBurst"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
+		Label: "CrudBurst",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.CrudBurst)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			sfpc := &p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
+			if v && !sfpc.CrudBurst {
+				sfpc.Turbidity += SFPCCrudBurstTurbidityPercent
+			}
+			sfpc.CrudBurst = v
+			return nil
+		},
+	}
+
+	// Refueling water purification alignment beside the pool
+	// demineralizer: the pump and filter "can be used separately or
+	// in conjunction with the spent fuel pool demineralizer."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:87-94
+	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/RWPUPurifying"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
+		Label: "RWPUPurifying",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.RWPUPurifying)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.RWPUPurifying = v
+			return nil
+		},
+	}
+
 }
 
 // addAuxiliaryBuildingSensors adds Sensor entries keyed by the namespace managed by this file to m.
@@ -1358,6 +1452,46 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("gpm",
 				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PurificationFlow)
+		},
+	}
+
+	// SFPCS supply-header pressure: "The system pressure is maintained
+	// at 55 to 75 psig (4.8 to 6.2 bar) in the main supply header."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:45-47
+	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/HeaderPressure"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
+		Label: "HeaderPressure",
+		Kind:  "psig",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("psig",
+				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.HeaderPressure)
+		},
+	}
+
+	// Spent fuel pool water temperature; decay heat warms an uncooled
+	// pool toward boiling.
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:24-29
+	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PoolTemp"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
+		Label: "PoolTemp",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PoolTemp.Float())
+		},
+	}
+
+	// Pool-water turbidity normalized to the design crud burst;
+	// clarity gates refueling speed because a crud burst robs
+	// operators of visual access to the fuel.
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:87-94
+	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/Turbidity"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
+		Label: "Turbidity",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.Turbidity)
 		},
 	}
 

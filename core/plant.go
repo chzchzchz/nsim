@@ -2714,7 +2714,7 @@ func MakePlant() Plant {
 		PumpRunning:       true,
 		StandbyRunning:    false,
 		HeaderPressure:    SFPCPressureNormalMin,
-		PoolTemp:          Temperature{Val: 100.0, Unit: u.Fahrenheit},
+		PoolTemp:          SFPCPoolDesignTemp,
 		PurificationFlow:  SFPCPurificationFlow,
 	}
 

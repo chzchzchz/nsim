@@ -4228,6 +4228,38 @@ type SpentFuelPoolCoolingSystem struct {
 	// flow through a filter and demineralizer."
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:68-71
 	PurificationFlow float64
+
+	// Leakage is the latched supply-header leak. Pressure
+	// instrumentation detects it and motor-operated valves isolate
+	// it: "Detection of leakage which might affect system operation
+	// is provided by means of installed pressure, temperature, and
+	// flow instrumentation [...] system isolation is provided by
+	// means of motor-operated valves."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:75-83
+	Leakage bool
+
+	// CrudBurst is the latched refueling-canal crud burst that robs
+	// operators of visual access to the stored fuel: "The refueling
+	// water purification pump and filter can be used separately or
+	// in conjunction with the spent fuel pool demineralizer to
+	// regain refueling canal water clarity after a crud burst."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:87-90
+	CrudBurst bool
+
+	// Turbidity is the pool-water clouding normalized to the design
+	// crud burst (0 clear, 100 full slug). Cleanup runs whenever any
+	// purification stream is active; the spec is qualitative, so the
+	// scale is a model convention (assumption A-4 in
+	// plans/x/scenario/34.txt).
+	Turbidity float64
+
+	// RWPUPurifying is the operator alignment of the refueling water
+	// purification pump and filter beside the spent fuel pool
+	// demineralizer: "can be used separately or in conjunction with
+	// the spent fuel pool demineralizer to regain refueling canal
+	// water clarity".
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:87-94
+	RWPUPurifying bool
 }
 
 // Service Water System design constants.
@@ -4299,7 +4331,66 @@ const (
 	// flow through a filter and demineralizer."
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:68-71
 	SFPCPurificationFlow = 100.0 // gpm
+
+	// SFPCPressureTimeConstant is the first-order relaxation time of
+	// the supply header toward the running-pump pressure target.
+	// Assumption (A-5 in plans/x/scenario/34.txt); the spec states
+	// only the maintained band and the auto-start setpoint.
+	SFPCPressureTimeConstant = 30 * time.Second
+
+	// SFPCCoolingTimeConstant is the pool relaxation time toward the
+	// design temperature while cooler loops are running. Assumption
+	// (plans/x/scenario/34.txt A-1 note); mirrors the CCWS
+	// recovery-lag convention.
+	SFPCCoolingTimeConstant = 1 * time.Hour
+
+	// SFPCPoolBoilingTemp is the atmospheric boiling point of the
+	// pool water (°F); an uncooled pool approaches it but never
+	// exceeds it. "would eventually boil" motivation per
+	// plans/x/scenarios.txt item 34 and page_171.txt:24-29.
+	SFPCPoolBoilingTemp = 212.0 // °F
+
+	// SFPStoredFuelDecayHeat is the assumed decay-heat load of the
+	// stored fuel assembly inventory (W). The spec gives no pool
+	// heat-load figure; anchored between a day-old full core
+	// (~0.4% of rated, specs/wiki/Decay_heat.txt) and older stored
+	// batches (assumption A-1 in plans/x/scenario/34.txt).
+	SFPStoredFuelDecayHeat Watts = 10_000_000
+
+	// SFPCLeakPressureDrop is the header depression while a leak is
+	// latched (psig). Sized to pull the two-pump header below the
+	// 50 psig standby auto-start yet keep the leaked three-pump
+	// header pressurized (assumption A-2 in
+	// plans/x/scenario/34.txt).
+	SFPCLeakPressureDrop = 25.0 // psig
+
+	// SFPCPressureStandbyTarget is the three-running-pump header
+	// target (psig), the midpoint of the maintained band.
+	SFPCPressureStandbyTarget = (SFPCPressureNormalMin +
+		SFPCPressureNormalMax) / 2.0
+
+	// SFPCPurificationCleanupTimeConstant is the turbidity e-folding
+	// time for one design purification sidestream; cleanup scales
+	// linearly with total active purification flow. Assumption A-3
+	// in plans/x/scenario/34.txt.
+	SFPCPurificationCleanupTimeConstant = 30 * time.Minute
+
+	// SFPCCrudBurstTurbidityPercent is the turbidity slug a crud
+	// burst injects, normalized to the design burst (percent).
+	// Model convention, assumption A-4 in plans/x/scenario/34.txt.
+	SFPCCrudBurstTurbidityPercent = 100.0
+
+	// SFPRWPUPurificationFlow is the refueling water purification
+	// pump flow while aligned beside the demineralizer (gpm).
+	// Assumption; the spec gives the RWPU duty but no flow figure
+	// (specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:87-94).
+	SFPRWPUPurificationFlow = 100.0 // gpm
 )
+
+// SFPCPoolDesignTemp is the spent fuel pool water temperature held
+// by the cooling loops (°F). Model seed convention; the spec names
+// no pool temperature.
+var SFPCPoolDesignTemp = Temperature{Val: 100.0, Unit: u.Fahrenheit}
 
 // SFPCPoolVolume is the spent fuel pool water volume (gal).
 // The spec does not state a numeric value; 500,000 gal is sized

@@ -1,6 +1,8 @@
 package core
 
 import (
+	"math"
+
 	u "github.com/bcicen/go-units"
 )
 
@@ -80,20 +82,23 @@ func (s *ServiceWaterSystem) Step(
 }
 
 // Step advances the Spent Fuel Pool Cooling System by one
-// timestep. The step function implements three state
-// machines:
+// timestep. The step function implements four state machines:
 //
-//   1. Header pressure. With two pumps running the header
-//      pressure is in the 55-75 psig normal range. The
-//      simplified model holds the header pressure constant
-//      at SFPCPressureNormalMin during normal operation.
-//   2. Standby pump auto-start. When the header pressure drops
-//      below SFPCStandbyStartPressure (50 psig), the standby
-//      pump starts.
-//   3. Pool temperature. The pool temperature rises with
-//      residual decay heat and drops with SFPCS cooling. The
-//      simplified model holds PoolTemp at the design value
-//      while both pumps are running.
+//   1. Header pressure. The supply header relaxes toward the
+//      running-pump target: the 55 psig band floor with the two
+//      normal pumps running, the 65 psig mid-band with the standby
+//      added, and depressurized with no pumps. A latched leak
+//      depresses the header below the standby auto-start setpoint.
+//   2. Standby pump auto-start. While the normal coolers run, a
+//      header pressure below SFPCStandbyStartPressure (50 psig)
+//      latches the third pump; it stays running.
+//   3. Purification and turbidity. Running loops pass the ~100 gpm
+//      filter/demineralizer sidestream; an aligned refueling water
+//      purification pump adds a parallel stream. Turbidity decays
+//      in proportion to total active purification flow.
+//   4. Pool temperature. Running loops relax the pool toward the
+//      design temperature; without them the stored fuel's decay
+//      heat warms the pool toward boiling.
 //
 // Spec justification:
 //   - "Normal operation requires two pumps with the third pump
@@ -106,6 +111,11 @@ func (s *ServiceWaterSystem) Step(
 //   - "passing approximately 100 gpm (23 m3/hr) of each loop's
 //     flow through a filter and demineralizer."
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:68-71
+//   - Leakage detected through pressure instrumentation and isolated
+//     by motor-operated valves:
+//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:75-83
+//   - Refueling water purification beside the pool demineralizer:
+//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:87-94
 //
 // driveReady is the upstream-power availability signal plumbed
 // in by Plant.Step. When false (480 V MCC de-energised), the
@@ -114,31 +124,83 @@ func (s *ServiceWaterSystem) Step(
 // recovers when power returns. See plans/x/uat_sat_gating.md.
 func (s *SpentFuelPoolCoolingSystem) Step(driveReady bool) SpentFuelPoolCoolingSystem {
 	ret := *s
-
-	if !ret.PumpRunning || !driveReady {
-		ret.StandbyRunning = false
-		ret.PurificationFlow = 0
-		return ret
-	}
+	dt := TimeStep.Seconds()
+	cooling := ret.PumpRunning && driveReady
 
 	// Standby pump auto-start: latch true once header pressure
-	// drops below the standby setpoint.
+	// drops below the standby setpoint while the coolers run.
+	// Securing the coolers clears it; a standby-only lineup cannot
+	// persist because PumpRunning is the lumped normal-loops flag.
 	//
 	// Spec justification:
 	//   - "the third pump automatically starts at a header
 	//     pressure of 50 psig (4.5 bar)"
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:47-48
-	if ret.HeaderPressure < SFPCStandbyStartPressure {
-		ret.StandbyRunning = true
+	if cooling {
+		if ret.HeaderPressure < SFPCStandbyStartPressure {
+			ret.StandbyRunning = true
+		}
+	} else {
+		ret.StandbyRunning = false
 	}
 
-	// Purification flow: ~100 gpm through filter + demineralizer.
-	//
-	// Spec justification:
-	//   - "passing approximately 100 gpm (23 m3/hr) of each
-	//     loop's flow through a filter and demineralizer."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:68-71
-	ret.PurificationFlow = SFPCPurificationFlow
+	pumps := 0
+	if cooling {
+		pumps += 2
+	}
+	if ret.StandbyRunning {
+		pumps++
+	}
+	target := 0.0
+	switch pumps {
+	case 3:
+		target = SFPCPressureStandbyTarget
+	case 2:
+		target = SFPCPressureNormalMin
+	}
+	if ret.Leakage && pumps > 0 {
+		target -= SFPCLeakPressureDrop
+	}
+	tau := max(SFPCPressureTimeConstant.Seconds(), 1)
+	ret.HeaderPressure += (target - ret.HeaderPressure) *
+		(1.0 - math.Exp(-dt/tau))
+
+	// Purification streams. The loop sidestream rides on cooler
+	// operation; the refueling water purification pump works
+	// separately, so it only needs its drive power.
+	sfpcFlow := 0.0
+	if cooling {
+		sfpcFlow = SFPCPurificationFlow
+	}
+	rwpuFlow := 0.0
+	if ret.RWPUPurifying && driveReady {
+		rwpuFlow = SFPRWPUPurificationFlow
+	}
+	ret.PurificationFlow = sfpcFlow
+
+	// Turbidity cleanup scales with total active purification flow;
+	// with no stream running the water just stays cloudy.
+	cleanupTau := SFPCPurificationCleanupTimeConstant.Seconds() *
+		SFPCPurificationFlow / (sfpcFlow + rwpuFlow)
+	ret.Turbidity *= math.Exp(-dt / cleanupTau)
+
+	// Pool heat balance: cooled loops relax toward the design
+	// temperature, otherwise stored-fuel decay heat soaks the pool
+	// up to the atmospheric boiling point but never past it.
+	if cooling {
+		coolTau := SFPCCoolingTimeConstant.Seconds()
+		gap := SFPCPoolDesignTemp.Float() - ret.PoolTemp.Float()
+		ret.PoolTemp = Temperature{Val: ret.PoolTemp.Float() +
+			gap*(1.0-math.Exp(-dt/coolTau)), Unit: u.Fahrenheit}
+	} else {
+		massKg := SFPCPoolVolume.Float() * KilogramsPerGallon
+		riseF := float64(SFPStoredFuelDecayHeat) /
+			(massKg * SpecificHeatWater) * dt * 9.0 / 5.0
+		ret.PoolTemp = Temperature{
+			Val: min(ret.PoolTemp.Float()+riseF, SFPCPoolBoilingTemp),
+			Unit: u.Fahrenheit,
+		}
+	}
 
 	return ret
 }

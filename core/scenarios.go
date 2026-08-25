@@ -923,6 +923,23 @@ var scenarioCatalog = []Scenario{
 			*p = fullPowerLineup()
 		},
 	},
+	{
+		ID:       "spent-fuel-pool-cooling",
+		Number:   34,
+		Category: "Auxiliary system operations",
+		Title:    "Spent fuel pool cooling and purification",
+		StartState: "Full-power lineup with both spent fuel pool " +
+			"cooling loops running at the 55 psig header floor, the " +
+			"pool holding its 100 F design temperature, and clear water.",
+		Objective: "Run the pool cooling and purification lineup: hold " +
+			"the header band with the 100 gpm cleanup sidestream, answer a " +
+			"supply-header leak with the standby auto-start and isolate it, " +
+			"then clean up a crud burst by realigning the refueling water " +
+			"purification pump beside the demineralizer.",
+		Apply: func(p *Plant) {
+			*p = fullPowerLineup()
+		},
+	},
 }
 
 // CheckResult reports whether an evolution's end-state bounds hold on
@@ -1433,6 +1450,21 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 		c.require(ccw.PumpRunning, "component cooling pump in service")
 		c.require(math.Abs(ccw.InletTemp.Float()-CCWSInletSteadyStateTemp) <= 1,
 			"CCW inlet holding the design 105 F value")
+		return c.result()
+	},
+	"spent-fuel-pool-cooling": func(p *Plant) CheckResult {
+		var c checkBounds
+		sfpc := &p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
+		c.require(sfpc.PumpRunning, "cooler loops in service")
+		c.require(sfpc.HeaderPressure >= SFPCPressureNormalMin &&
+			sfpc.HeaderPressure <= SFPCPressureNormalMax,
+			"header pressure inside the maintained band")
+		c.require(sfpc.StandbyRunning,
+			"standby pump exercised and running")
+		c.require(sfpc.Turbidity < 5,
+			"crud burst cleaned from the pool water")
+		c.require(sfpc.PoolTemp.Float() <= SFPCPoolDesignTemp.Float()+5,
+			"pool holding near its design temperature")
 		return c.result()
 	},
 	"rhrs-loop-takeover": func(p *Plant) CheckResult {
