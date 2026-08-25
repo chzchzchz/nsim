@@ -333,7 +333,8 @@ func TestRunProgressMilestoneGating(t *testing.T) {
 	assert.Contains(t, res.Detail, "met at 2 s simulated")
 }
 
-// The safeguards evolutions resolve once the operator performs their
+// The safeguards evolutions resolve once their initiating malfunction
+// plays out on the scripted schedule and the operator performs the
 // scripted real-world actions: lining a diesel onto the SI signal for
 // recirculation switchover, and swapping spray suction at the CSST
 // Lo-Lo setpoint. Both run through legitimate operator controls only.
@@ -376,6 +377,7 @@ func TestOperatorActionScenariosResolve(t *testing.T) {
 			done := false
 			for i := 0; i < steps && !done; i++ {
 				tc.act(t, &p, cm, i)
+				ApplyScript(&s.Script, int64(i)*int64(TimeStep), cm)
 				p.Step()
 				p.Update()
 				done = s.Check(&p).Done
