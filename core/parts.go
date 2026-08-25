@@ -4404,6 +4404,132 @@ var SFPCPoolDesignTemp = Temperature{Val: 100.0, Unit: u.Fahrenheit}
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_170.txt:132-136
 var SFPCPoolVolume Volume = Volume{Val: 500_000, Unit: u.Gallon}
 
+// Boron Recycle System constants.
+//
+// Spec justification:
+//   - Evaporator duty: "use of the BTRS reduces the average
+//     evaporator duty from approximately 10 gpm (38 l/m) to less
+//     than 2 gpm (8 l/m) per unit."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:71-74
+const (
+	// BRSSEvaporatorDutyGPM is the reclaim-train processing rate
+	// (gpm), the without-BTRS average evaporator duty. The scenario
+	// that exercises reclamation runs precisely when boron changes
+	// exceed BTRS capacity, so the higher figure applies. Like the
+	// CVCS design flows it integrates per second of simulated time
+	// (see VCTBTRSCirculation for the same convention).
+	BRSSEvaporatorDutyGPM = 10.0
+
+	// BRSSProductWeightPercentPpm is the evaporator concentrate grade
+	// in ppm by mass (4 weight percent).
+	// "The evaporative process produces a batch of
+	// 4-weight-percent boric acid solution."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:6-7
+	BRSSProductWeightPercentPpm = 40000.0
+
+	// BRSSRadiationTauSec is the first-order response time of the
+	// lumped distillate radiation monitor to evaporator carryover.
+	// The spec describes the monitor's function, not its response;
+	// modeled value.
+	BRSSRadiationTauSec = 30.0
+
+	// BRSSRadiationTripFrac is the normalized monitor level that
+	// constitutes a high radiation signal; DistillateRadiation reads
+	// against it.
+	BRSSRadiationTripFrac = 0.95
+
+	// BRSSRadiationReleaseFrac is the decayed monitor level below
+	// which the auto-divert releases once the carryover source has
+	// cleared; the hysteresis gap prevents divert chatter.
+	BRSSRadiationReleaseFrac = 0.05
+)
+
+// BoronRecycleSystem models the Boron Recycle System — the subsystem
+// that collects borated reactor coolant effluent (CVCS letdown diverted
+// by makeup-control boron changes and heatup overflow) and reclaims it,
+// by demineralization, gas stripping, and evaporation, into 4-weight-
+// percent boric acid plus clean distillate for the reactor makeup water
+// storage tank. The lumped model tracks the panel start latch, the feed
+// draw from the CVCS holdup tanks, product accounting, and the distillate
+// radiation monitor with its auto-divert.
+//
+// Spec justification:
+//   - Purpose: "The BRS provides a means of recycling borated reactor
+//     coolant so as to minimize activity releases."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:16-18
+//   - Reclaim means: "The BRS, by means of demineralization, gas
+//     stripping, and evaporation, reclaims the boric acid and the
+//     primary water."
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:49-51
+//   - Feed train: letdown coolant passes through the recycle evaporator
+//     feed demineralizers where lithium and fission products are removed
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:76-80;
+//     hydrogen and residual fission gases leave in the stripping column
+//     specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:3-5.
+type BoronRecycleSystem struct {
+	Part
+
+	// FeedPumpRunning is the operator latch on the recycle evaporator
+	// feed pump(s) from the boron recycle panel; it is the motive
+	// force moving holdup-tank liquid through the demineralizers,
+	// stripping column, and evaporator shell.
+	// "borated liquid is then pumped to the recycle evaporator package
+	// by one of the recycle evaporator feed pumps"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:1-3
+	FeedPumpRunning bool
+
+	// Carryover is the latched evaporator-carryover condition that
+	// contaminates the distillate with radioactivity. The spec does
+	// not name a cause for high distillate activity; the monitor's
+	// existence implies one ("To provide that the reactor makeup water
+	// storage tank will not become contaminated"), so this is the
+	// modeling device exercising that protection.
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:25-28
+	Carryover bool
+
+	// FeedFlow is the last-step processing rate (gpm) drawn from the
+	// holdup tanks (plus recirculated distillate) into the evaporator
+	// package.
+	FeedFlow float64
+
+	// HoldupDrawn is the holdup-tank volume consumed last step. The
+	// plant step debits CVCS.BRSHoldupLevel by this amount so the
+	// holdup tanks keep a single writer.
+	HoldupDrawn Volume
+
+	// DistillateRadiation is the lumped scintillation-counter signal
+	// normalized against the trip level (BRSSRadiationTripFrac).
+	DistillateRadiation float64
+
+	// DistillateDiverted is true while the high-radiation signal has
+	// the distillate routed back to the feed demineralizer instead of
+	// the reactor makeup water storage tank.
+	// "A high radiation level signal at the monitor directs distillate
+	// back to the recycle evaporator feed demineralizer."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:28-30
+	DistillateDiverted bool
+
+	// Recirculating is the distillate inventory returned to the train
+	// for reprocessing while Diverted is latched.
+	Recirculating Volume
+
+	// BoricAcidProduced accumulates the 4 wt% concentrate delivered to
+	// the boric acid tanks through the concentrates filter.
+	// "Concentrates at 4-weight-percent boric acid are normally pumped
+	// to the boric acid tanks through the recycle evaporator
+	// concentrates filter."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:53-55
+	BoricAcidProduced Volume
+
+	// DistillateDelivered accumulates the clean distillate pumped to
+	// the reactor makeup water storage tank.
+	// "Distillate from the evaporator is pumped to the evaporator
+	// condensate demineralizer and then to the reactor makeup water
+	// storage tank."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:20-22
+	DistillateDelivered Volume
+}
+
 // RefuelingOperations models the refueling operation cycle for
 // the plant. The simplified model tracks cavity flooding depth,
 // spent fuel pit water level and boron concentration, fuel

@@ -953,6 +953,34 @@ var scenarioCatalog = []Scenario{
 			*p = fullPowerLineup()
 		},
 	},
+	{
+		ID:       "boron-recycle-reclamation",
+		Number:   35,
+		Category: "Auxiliary system operations",
+		Title:    "Boron recycle effluent reclamation",
+		StartState: "Full-condition lineup with the CVCS idle, " +
+			"BRS holdup tanks empty, and the recycle evaporator " +
+			"train secured at its panel.",
+		Objective: "Reclaim borated effluent: run a backup " +
+			"makeup-and-bleed campaign until letdown diverts into " +
+			"the BRS holdup tanks, start the reclaim train from the " +
+			"boron recycle panel so 4-weight-percent boric acid and " +
+			"clean distillate accumulate, exercise the storage-tank " +
+			"radiation auto-divert with an evaporator carryover, and " +
+			"secure the train once the products are banked.",
+		Apply: func(p *Plant) {
+			*p = MakePlant()
+		},
+		// The storage-tank protection transient arrives mid-evolution
+		// so a paced operator first has the train running and delivery
+		// flowing when the scintillation counter drives its high
+		// signal (page_088.txt:25-30).
+		Script: []ScriptCommand{
+			{AtMs: 300000,
+				ControlKey: "AuxiliaryBuilding/BoronRecycleSystem/Carryover",
+				Value:      "1"},
+		},
+	},
 }
 
 // CheckResult reports whether an evolution's end-state bounds hold on
@@ -1533,6 +1561,23 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 			math.Abs(cvcs.BoronConcentration-scenarioCVCSDilutionTargetPpm) <=
 				CVCSBoronSetpointTolerancePpm,
 			"coolant diluted onto the scripted target")
+		return c.result()
+	},
+	"boron-recycle-reclamation": func(p *Plant) CheckResult {
+		var c checkBounds
+		// Products banked prove the reclaim train ran holdup effluent
+		// through the evaporator package: 4 wt% concentrate to the
+		// boric acid tanks (page_088.txt:53-55) and clean distillate
+		// to the reactor makeup water storage tank (20-22).
+		brs := &p.AuxiliaryBuilding.BoronRecycleSystem
+		c.require(brs.BoricAcidProduced.Float() > 0,
+			"4-weight-percent boric acid reclaimed to the boric acid tanks")
+		c.require(brs.DistillateDelivered.Float() > 0,
+			"clean distillate delivered to the reactor makeup water storage tank")
+		// The evolution ends with the train secured from the recycle
+		// panel (page_088.txt:66-68).
+		c.require(!brs.FeedPumpRunning,
+			"reclaim train secured at the boron recycle panel")
 		return c.result()
 	},
 }

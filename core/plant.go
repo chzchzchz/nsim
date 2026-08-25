@@ -1154,6 +1154,7 @@ func (p *Plant) Step() {
 		p.Outside.ServiceWaterSystem.InletTemp,
 		p.Outside.ServiceWaterSystem.Flow,
 		plantDriveReady,
+		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BRSHoldupLevel.Float(),
 	)
 	// Latch the SFPC DriveReady so the bridge can publish it
 	// as a sensor (plans/x/uat_sat_gating.md).
@@ -1211,6 +1212,15 @@ func (p *Plant) Step() {
 		p.nextPlant.PlantOperation,
 		p.TurbineBuilding.Turbine.State == TurbineRunning,
 	)
+	// Debit the holdup tanks for what the reclaim train drew this
+	// step. The CVCS stepped after the BRS and added its own letdown
+	// contribution, so the subtraction lands on top of it without a
+	// second writer inside either subsystem.
+	if drawn := p.nextPlant.AuxiliaryBuilding.BoronRecycleSystem.HoldupDrawn.Float(); drawn > 0 {
+		cv := &p.nextPlant.AuxiliaryBuilding.ChemicalVolumeControlSystem
+		cv.BRSHoldupLevel = vol(cv.BRSHoldupLevel,
+			max(cv.BRSHoldupLevel.Float()-drawn, 0))
+	}
 	// Latch the RCP DriveReady after the ReactorBuilding step so
 	// the assignment above (which copies the prior state) cannot
 	// clobber it. The bridge sensor then reflects the actual
@@ -2718,6 +2728,13 @@ func MakePlant() Plant {
 		PurificationFlow:  SFPCPurificationFlow,
 	}
 
+	// BRS defaults: the reclaim train stands secured until the
+	// operator starts it from the boron recycle panel; holdup tanks
+	// start empty and the monitor reads clean.
+	// "The BRS is manually operated from the boron recycle panel."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:66-68
+	p.AuxiliaryBuilding.BoronRecycleSystem = BoronRecycleSystem{}
+
 	// Refueling operations defaults (plans/p24_1.txt). At
 	// construction the cycle is complete (Phase 5), no cavity
 	// flooding, no head/internals removed, the pit is full of
@@ -2977,6 +2994,7 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	add("RHRS_A", "ResidualHeatRemovalSystem", &target.AuxiliaryBuilding.ResidualHeatRemovalSystem)
 	add("RHRS_B", "ResidualHeatRemovalSystem", &target.AuxiliaryBuilding.ResidualHeatRemovalSystem)
 	add("SFP", "SpentFuelPool", &target.AuxiliaryBuilding.SpentFuelPoolCoolingSystem)
+	add("BRS", "BoronRecycleSystem", &target.AuxiliaryBuilding.BoronRecycleSystem)
 	add("Diesel", "DieselGenerator", &target.AuxiliaryBuilding.DieselGenerator)
 	add("FuelTank", "FuelTank", nil)
 	add("Transformer", "StationTransformer", &target.ReactorBuilding.StationTransformer)

@@ -572,6 +572,56 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// BRS recycle evaporator feed pump: the panel latch that moves
+	// holdup-tank effluent through the demineralizers, stripping
+	// column, and evaporator shell.
+	// "borated liquid is then pumped to the recycle evaporator
+	// package by one of the recycle evaporator feed pumps"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:1-3
+	m["AuxiliaryBuilding/BoronRecycleSystem/FeedPumpRunning"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/BoronRecycleSystem",
+		Label: "FeedPumpRunning",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.BoronRecycleSystem.FeedPumpRunning)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.BoronRecycleSystem.FeedPumpRunning = v
+			return nil
+		},
+	}
+
+	// Evaporator carryover fault latch: contaminates the distillate so
+	// the storage-tank radiation monitor sees a high signal. Modeling
+	// device for the protection the scintillation counter provides.
+	// "To provide that the reactor makeup water storage tank will not
+	// become contaminated, a scintillation counter is located in the
+	// line leading into the tank."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:25-28
+	m["AuxiliaryBuilding/BoronRecycleSystem/Carryover"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/BoronRecycleSystem",
+		Label: "Carryover",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.BoronRecycleSystem.Carryover)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.BoronRecycleSystem.Carryover = v
+			return nil
+		},
+	}
+
+
 
 	// CVCS automatic boron trim engage switch: rod-bank travel
 	// position selects the BTRS mode so chemistry relieves what the
@@ -1492,6 +1542,92 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("percent",
 				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.Turbidity)
+		},
+	}
+
+	// BRS processing rate drawn from the holdup tanks into the
+	// BRS processing rate drawn from the holdup tanks into the
+	// evaporator package.
+	// "use of the BTRS reduces the average evaporator duty from
+	// approximately 10 gpm (38 l/m) to less than 2 gpm (8 l/m) per unit."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:71-74
+	m["AuxiliaryBuilding/BoronRecycleSystem/FeedFlow"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/BoronRecycleSystem",
+		Label: "FeedFlow",
+		Kind:  "gpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gpm",
+				p.AuxiliaryBuilding.BoronRecycleSystem.FeedFlow)
+		},
+	}
+
+	// Distillate radiation monitor, normalized against its trip level.
+	m["AuxiliaryBuilding/BoronRecycleSystem/DistillateRadiation"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/BoronRecycleSystem",
+		Label: "DistillateRadiation",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.AuxiliaryBuilding.BoronRecycleSystem.DistillateRadiation)
+		},
+	}
+
+	// Auto-divert status: distillate routed back to the feed
+	// demineralizer by the high-radiation signal.
+	// "A high radiation level signal at the monitor directs distillate
+	// back to the recycle evaporator feed demineralizer."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:28-30
+	m["AuxiliaryBuilding/BoronRecycleSystem/DistillateDiverted"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/BoronRecycleSystem",
+		Label: "DistillateDiverted",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.BoronRecycleSystem.DistillateDiverted)
+		},
+	}
+
+	// Distillate inventory recirculating inside the train while the
+	// auto-divert is latched.
+	m["AuxiliaryBuilding/BoronRecycleSystem/Recirculating"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/BoronRecycleSystem",
+		Label: "Recirculating",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.AuxiliaryBuilding.BoronRecycleSystem.Recirculating.Float())
+		},
+	}
+
+	// Cumulative 4 wt% boric acid concentrate sent to the boric acid
+	// tanks through the concentrates filter.
+	// "Concentrates at 4-weight-percent boric acid are normally pumped
+	// to the boric acid tanks through the recycle evaporator
+	// concentrates filter."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:53-55
+	m["AuxiliaryBuilding/BoronRecycleSystem/BoricAcidProduced"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/BoronRecycleSystem",
+		Label: "BoricAcidProduced",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.AuxiliaryBuilding.BoronRecycleSystem.BoricAcidProduced.Float())
+		},
+	}
+
+	// Cumulative clean distillate delivered to the reactor makeup water
+	// storage tank.
+	// "Distillate from the evaporator is pumped to the evaporator
+	// condensate demineralizer and then to the reactor makeup water
+	// storage tank."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:20-22
+	m["AuxiliaryBuilding/BoronRecycleSystem/DistillateDelivered"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/BoronRecycleSystem",
+		Label: "DistillateDelivered",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.AuxiliaryBuilding.BoronRecycleSystem.DistillateDelivered.Float())
 		},
 	}
 

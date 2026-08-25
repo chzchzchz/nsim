@@ -100,6 +100,14 @@ type AuxiliaryBuilding struct {
 	// storage of new and spent fuel."
 	// specs/the_westinghouse_pressurized_water_react/chapter_1/page_027.txt:14-17
 	SpentFuelPoolCoolingSystem SpentFuelPoolCoolingSystem
+
+	// BoronRecycleSystem models the BRS reclaim train that
+	// processes the CVCS holdup-tank effluent back into boric
+	// acid and reactor makeup water.
+	// "The BRS provides a means of recycling borated reactor
+	// coolant so as to minimize activity releases."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:16-18
+	BoronRecycleSystem BoronRecycleSystem
 }
 
 // Step advances each subsystem in place. Pure on the input receiver;
@@ -124,16 +132,23 @@ type AuxiliaryBuilding struct {
 // SFPC pump motors (480 V MCC downstream of an ESF bus). It is
 // plumbed in by Plant.Step so this step does not have to reach into
 // the plant electrical model. See plans/x/uat_sat_gating.md.
+//
+// brsHoldupGal is the CVCS holdup-tank inventory available to the
+// reclaim train; the BRS reports its draw through HoldupDrawn, which
+// Plant.Step debits from the CVCS after this step.
 func (a *AuxiliaryBuilding) Step(
 	swSupplyTemp Temperature,
 	swFlowGPM float64,
 	sfpcDriveReady bool,
+	brsHoldupGal float64,
 ) AuxiliaryBuilding {
 	ret := *a
 	ret.ComponentCoolingWaterSystem =
 		ret.ComponentCoolingWaterSystem.Step(swSupplyTemp, swFlowGPM > 0)
 	ret.SpentFuelPoolCoolingSystem =
 		ret.SpentFuelPoolCoolingSystem.Step(sfpcDriveReady)
+	ret.BoronRecycleSystem =
+		ret.BoronRecycleSystem.Step(brsHoldupGal)
 	ret.DieselGenerator = ret.DieselGenerator.Step(swFlowGPM)
 	ret.DieselGeneratorB = ret.DieselGeneratorB.Step(swFlowGPM)
 	return ret
