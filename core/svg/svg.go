@@ -615,6 +615,25 @@ func (r *renderer) size(kind string) (float64, float64) {
 	return wIn * s, hIn * s
 }
 
+// captionMaxUnits is the historical fixed label size; symbol-
+// relative sizing never grows past it, so large components keep
+// their previous look.
+const captionMaxUnits = 10.0
+
+// captionMinUnits keeps shrunken glyphs' labels on the edge of
+// legibility when the viewport is zoomed in.
+const captionMinUnits = 3.5
+
+// scaledFont sizes symbol-relative text proportionally to the drawn
+// symbol height. Under the generated layout's global scale small
+// symbols (a horizontal pump draws about 7 units tall) were dwarfed
+// by the fixed 10-unit font; this shrinks captions and live
+// readouts with their symbol instead.
+func scaledFont(symH float64) float64 {
+	return math.Min(captionMaxUnits,
+		math.Max(captionMinUnits, symH*0.55))
+}
+
 // kindOf returns the symbolTable key bound to a diagram part id.
 func (r *renderer) kindOf(id string) string {
 	return diagramKindByID[id]
@@ -1056,9 +1075,9 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 				`width="%.0f" height="%.0f"/>`,
 			sym, cx-w/2, cy-h/2, w, h)
 	}
-	writeLabel := func(x, y float64, text string) {
-		fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="10" fill="%s" `+
-			`text-anchor="middle">%s</text>`+"\n", x, y, pidText, html.EscapeString(text))
+	writeLabel := func(x, y, fs float64, text string) {
+		fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="%.1f" fill="%s" `+
+			`text-anchor="middle">%s</text>`+"\n", x, y, fs, pidText, html.EscapeString(text))
 	}
 	writePartEl := func(part, label, frag string) {
 		if label == "" {
@@ -1123,12 +1142,12 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 					`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" class="h2-wash" fill="%s" fill-opacity="%.2f"/>`+"\n",
 					bx, by, bw, bh, fill, alpha)
 			}
-			writeLabel(bx+bw/2, by-6, buildingLabels[name])
+			writeLabel(bx+bw/2, by-6, captionMaxUnits, buildingLabels[name])
 		} else {
 			fmt.Fprintf(&b, `<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" `+
 				`fill="%s" stroke="%s" stroke-width="1.5"/>`+"\n",
 				bx, by, bw, bh, pidBackground, pidBuildingEdge)
-			writeLabel(bx+bw/2, by+14, buildingLabels[name])
+			writeLabel(bx+bw/2, by+14, captionMaxUnits, buildingLabels[name])
 		}
 		b.WriteString("</g>\n")
 	}
@@ -1183,7 +1202,8 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 				a.X-sw/2-3, a.Y-sh/2-3, sw+6, sh+6, class, tint.colour)
 		}
 		if dp.label != "" {
-			writeLabel(a.X, a.Y-sh/2-6, dp.label)
+			fs := scaledFont(sh)
+			writeLabel(a.X, a.Y-sh/2-fs*0.75, fs, dp.label)
 		}
 		acc, okP := pumpAccessors[dp.id]
 		if okP {
@@ -1198,8 +1218,9 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 				`<circle cx="%.0f" cy="%.0f" r="%.0f" fill="%s" stroke="%s" stroke-width="1"/>`+"\n",
 				a.X+dx, a.Y+dyDot, dotR, dotColour, pidDotEdge)
 			if pu.Velocity > 0 {
-				writeLabel(a.X+dx, a.Y+dyDot+dotR+9,
-					fmt.Sprintf("%d rpm", int(pu.Velocity)))
+				fs := scaledFont(sh)
+				writeLabel(a.X+dx, a.Y+dyDot+dotR+fs*0.9,
+					fs, fmt.Sprintf("%d rpm", int(pu.Velocity)))
 			}
 		} else if run, okR := runAccessors[dp.id]; okR && run(p) {
 			dotR := math.Max(3, sw*0.06)
@@ -1482,11 +1503,11 @@ var rings = []ringDef{
 // plus alarm rings. Every overlay tracks its part's laid-out
 // anchor instead of a fixed position.
 func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms []core.Alarm) {
-	text := func(a Anchor, dy float64, body string) {
+	text := func(a Anchor, dy, fs float64, body string) {
 		fmt.Fprintf(b,
-			`<text x="%.0f" y="%.0f" font-size="10" `+
+			`<text x="%.0f" y="%.0f" font-size="%.1f" `+
 				`text-anchor="middle">%s</text>`+"\n",
-			a.X, a.Y+dy, body)
+				a.X, a.Y+dy, fs, body)
 	}
 	ring := func(a Anchor, radius float64, colour string) {
 		fmt.Fprintf(b,
@@ -1494,21 +1515,25 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms [
 				`fill="none" stroke="%s" stroke-width="3" vector-effect="non-scaling-stroke"/>`+"\n",
 			a.X, a.Y, radius, colour)
 	}
-	bottom := func(id string) (Anchor, bool) {
+	bottom := func(id string) (Anchor, float64, bool) {
 		a, ok := r.anchor(id)
 		if !ok {
-			return a, false
+			return a, 0, false
 		}
 		_, h := r.size(r.kindOf(id))
-		return Anchor{X: a.X, Y: a.Y + h/2}, true
+		return Anchor{X: a.X, Y: a.Y + h/2}, h, true
 	}
 
 	for _, ro := range readouts {
 		if ro.show != nil && !ro.show(p) {
 			continue
 		}
-		if a, ok := bottom(ro.id); ok {
-			text(a, ro.dy, ro.text(p))
+		if a, h, ok := bottom(ro.id); ok {
+			fs := scaledFont(h)
+			// Readout offsets were tuned for the old 10-unit
+			// font; shrink them with the text so lines hug
+			// small symbols.
+			text(a, ro.dy*fs/captionMaxUnits, fs, ro.text(p))
 		}
 	}
 
@@ -1517,7 +1542,7 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms [
 	// (see the containment-outline pass in writePlantSVG).
 	cp := p.ReactorBuilding.ContainmentPressure - core.AtmosphericPressure
 	if cont, ok := r.containmentTop(); ok {
-		text(cont, -8, fmt.Sprintf("Cont %.1f psig", float64(cp)))
+		text(cont, -8, captionMaxUnits, fmt.Sprintf("Cont %.1f psig", float64(cp)))
 	}
 
 	activeAlarms := map[core.AlarmID]bool{}
