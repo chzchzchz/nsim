@@ -197,6 +197,11 @@ func hotZeroPowerLineup() Plant {
 	rpv.FissionPower = CoreNeutronSourcePower
 	rpv.DecayHeatSlow = Watts(scenarioHoursOldDecaySlowW)
 	rpv.DecayHeatFast = Watts(scenarioHoursOldDecayFastW)
+	// Hot standby keeps the main turbine secured: an open stop valve
+	// on a pressurized header free-admits steam and drags the SG
+	// header below the low-steamline setpoints within a second.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:20-23
+	p.TurbineBuilding.Turbine.StopValve.Open = 0
 	p.PlantOperation.Mode = HotStandby
 	return p
 }
@@ -328,7 +333,8 @@ var scenarioCatalog = []Scenario{
 		Number:   4,
 		Category: "Startup",
 		Title:    "Secondary side spin-up",
-		StartState: "Hot primary with inserted rods; condenser at " +
+		StartState: "Hot primary at the no-load temperature on " +
+			"inserted rods with day-old decay heat; condenser at " +
 			"atmospheric with no vacuum, stop valve shut.",
 		Objective: "Draw steam from the steam generators to warm the " +
 			"secondary plant, pull condenser vacuum with the vacuum " +
@@ -336,6 +342,13 @@ var scenarioCatalog = []Scenario{
 		Apply: func(p *Plant) {
 			q := MakePlant()
 			rpv := &q.ReactorBuilding.ReactorPressureVessel
+			// The spin-up evolution runs above 400 F coolant during
+			// the heatup, so park the loops on the no-load anchor
+			// instead of inheriting full-load temperatures.
+			// specs/the_westinghouse_pressurized_water_react/
+			// chapter_16/page_224.txt:171-177
+			rpv.Inlet = Temperature{Val: scenarioNoLoadTavgF, Unit: u.Fahrenheit}
+			rpv.Outlet = Temperature{Val: scenarioNoLoadTavgF, Unit: u.Fahrenheit}
 			rpv.Insertion = 1
 			rpv.DemandInsertion = 1
 			rpv.FissionPower = CoreNeutronSourcePower
@@ -367,21 +380,20 @@ var scenarioCatalog = []Scenario{
 		Number:   6,
 		Category: "Startup",
 		Title:    "Low-power ascension",
-		StartState: "Just critical at a few percent power on " +
-			"partially withdrawn rods with auxiliary feedwater " +
-			"supplying the steam generators.",
-		Objective: "Take critical data, raise power through the point " +
-			"of adding heat watching Tavg and the steam dumps, then " +
-			"switch the steam generators from auxiliary to main " +
-			"feedwater below about 3.5 percent steam flow and secure " +
-			"AFW.",
+		StartState: "Hot zero power on inserted rods at reference " +
+			"boron with auxiliary feedwater supplying the steam " +
+			"generators.",
+		Objective: "Withdraw banks (or dilute) to criticality, raise " +
+			"power through the point of adding heat watching Tavg and " +
+			"the steam dumps, then switch the steam generators from " +
+			"auxiliary to main feedwater below about 3.5 percent steam " +
+			"flow and secure AFW.",
 		Apply: func(p *Plant) {
-			q := MakePlant()
-			q.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(
-				Watts(0.02 * float64(CoreRatedThermalPower)))
-			q.ReactorBuilding.ReactorPressureVessel.Insertion = 0.35
-			q.ReactorBuilding.ReactorPressureVessel.DemandInsertion = 0.35
-			q.PlantOperation.Mode = HotStandby
+			// The 2-percent seed used previously was not a held
+			// equilibrium: stepping drove power to the rated cap. Hot
+			// zero power is coherent and makes the ascension itself
+			// the operator's work.
+			q := hotZeroPowerLineup()
 			q.PlantOperation.AuxFeedwaterInUse = true
 			*p = q
 		},
