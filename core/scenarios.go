@@ -30,6 +30,11 @@ type Scenario struct {
 	StartState string
 	// Objective tells the operator what the evolution asks of them.
 	Objective string
+	// DurationHint estimates the simulated time to completion where
+	// that is known (measured reachability runs or a quoted spec
+	// figure). Operator-paced evolutions leave it empty rather than
+	// inventing a number.
+	DurationHint string
 
 	Apply func(*Plant)
 
@@ -577,6 +582,7 @@ var scenarioCatalog = []Scenario{
 			"trip: the steam dump absorbs the surplus steam while the " +
 			"machine carries only its own auxiliaries.",
 		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		DurationHint: "~1 min simulated",
 		Script: []ScriptCommand{
 			{AtMs: scenarioTriggerDelayMs,
 				ControlKey: "TurbineBuilding/Turbine/Setpoint",
@@ -611,6 +617,7 @@ var scenarioCatalog = []Scenario{
 		// The diesel trigger is the sensed bus state: with the unit
 		// still feeding its own buses the engines correctly stay idle
 		// (core/plant.go), so the script must strip every supply.
+		DurationHint: "~1 min simulated",
 		Script: []ScriptCommand{
 			{AtMs: scenarioTriggerDelayMs,
 				ControlKey: "Electrical/OffsiteSourceA/BreakerClosed",
@@ -651,6 +658,7 @@ var scenarioCatalog = []Scenario{
 			"alone with no boron adjustment; the ascent is paced by " +
 			"xenon burnout, typically 2-4 hours, trading reserve " +
 			"capability for zero coolant effluent.",
+		DurationHint: "2-4 h simulated",
 		Apply: func(p *Plant) {
 			q := fullPowerLineup()
 			const lateCycleBoron = 500.0
@@ -714,6 +722,7 @@ var scenarioCatalog = []Scenario{
 			"both-pumps-in-one-loop case to challenge the cold-leg " +
 			"temperature margin.",
 		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		DurationHint: "~1 min simulated",
 		Script: []ScriptCommand{
 			{AtMs: scenarioTriggerDelayMs,
 				ControlKey: "ReactorBuilding/ReactorCoolantPumps/A/Running",
@@ -732,6 +741,7 @@ var scenarioCatalog = []Scenario{
 			"verify low compensated steamline pressure actuates safety " +
 			"injection, and stabilize the plant afterward.",
 		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		DurationHint: "a few minutes simulated",
 		Script: []ScriptCommand{
 			{AtMs: scenarioTriggerDelayMs,
 				ControlKey: "ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open",
@@ -768,6 +778,7 @@ var scenarioCatalog = []Scenario{
 			"ride the turbine runback and trip, and manage the xenon " +
 			"buildup that walks power to zero.",
 		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		DurationHint: "~1 min simulated",
 		Script: []ScriptCommand{
 			{AtMs: scenarioTriggerDelayMs,
 				ControlKey: "ReactorBuilding/ReactorPressureVessel/ControlRods/DroppedBank",
@@ -786,6 +797,7 @@ var scenarioCatalog = []Scenario{
 			"over to cold-leg recirculation at RWST low level and later " +
 			"balance hot-leg injection for long-term cooling.",
 		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		DurationHint: "45-50 min simulated",
 		Script: []ScriptCommand{
 			{AtMs: scenarioTriggerDelayMs,
 				ControlKey: "ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open",
@@ -803,6 +815,7 @@ var scenarioCatalog = []Scenario{
 			"open, then at the spray storage tank Lo-Lo setpoint switch " +
 			"the pumps to containment sump recirculation without " +
 			"additive and shift fan coolers to the post-LOCA path.",
+		DurationHint: "about 30 min simulated",
 		Apply: func(p *Plant) {
 			q := fullPowerLineup()
 			q.ReactorBuilding.ReactorProtectionSystem.ContainmentSprayActuated = true

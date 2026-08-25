@@ -339,12 +339,13 @@ func (h *plantHandle) objectiveJSON() (string, error) {
 // the front-end can render the selection screen without one JS<->Go
 // crossing per entry.
 type scenarioInfoJSON struct {
-	ID         string `json:"id"`
-	Number     int    `json:"number"`
-	Category   string `json:"category"`
-	Title      string `json:"title"`
-	StartState string `json:"startState"`
-	Objective  string `json:"objective"`
+	ID           string `json:"id"`
+	Number       int    `json:"number"`
+	Category     string `json:"category"`
+	Title        string `json:"title"`
+	StartState   string `json:"startState"`
+	Objective    string `json:"objective"`
+	DurationHint string `json:"duration,omitempty"`
 }
 
 func scenariosJSON() (string, error) {
@@ -354,6 +355,7 @@ func scenariosJSON() (string, error) {
 		out[i] = scenarioInfoJSON{
 			ID: s.ID, Number: s.Number, Category: s.Category,
 			Title: s.Title, StartState: s.StartState, Objective: s.Objective,
+			DurationHint: s.DurationHint,
 		}
 	}
 	b, err := json.Marshal(out)

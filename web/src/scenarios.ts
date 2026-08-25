@@ -10,6 +10,9 @@ export interface ScenarioInfo {
     title: string;
     startState: string;
     objective: string;
+    // duration is a coarse simulated-time estimate; absent for
+    // operator-paced evolutions.
+    duration?: string;
 }
 
 export interface ScenarioGroup {
@@ -173,6 +176,16 @@ export function renderScenarioPicker(
         task.appendChild(taskLabel);
         task.appendChild(document.createTextNode(s.objective));
         detail.appendChild(task);
+
+        if (s.duration) {
+            const est = document.createElement("p");
+            const estLabel = document.createElement("span");
+            estLabel.className = "label";
+            estLabel.textContent = "Expected duration: ";
+            est.appendChild(estLabel);
+            est.appendChild(document.createTextNode(s.duration));
+            detail.appendChild(est);
+        }
 
         panel.appendChild(detail);
 
