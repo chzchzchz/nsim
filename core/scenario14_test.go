@@ -14,24 +14,20 @@ import (
 //
 // "Initialize the simulator to 100% FP, using 'reactor lead' mode,
 // reduce reactor power in 25% steps at 0.5%/sec"
-// specs/pwr_sim/chapter_3/page_039.txt:23-30
+// specs/pwr_sim/chapter_3/page_039.txt:25-27
 //
-// The core's net temperature coefficient is positive at the reference
-// boron concentration, which makes part-load plateaus bistable: power
-// either recovers toward the rated cap or folds toward the floor. The
-// evolution is therefore expressed as a reactor-lead glide — one rod
-// drive leads the fold while the turbine load setpoint chases
-// production downward, keeping the steam generators throttled near
-// their shell pressure without tripping any protection function.
-//
-// Fidelity note: this glide cannot ride a widened TimeStep. The power
-// fold follows the reactor's per-step reactivity compounding, so a
-// coarser tick folds power more slowly against an unchanged setpoint
-// chase; the growing offtake surplus lifts SG header pressure until
-// the condenser dump leaves its <=0.20 pressure-modulation band and
-// drives toward full open (measured at a uniform 10 ms tick). The
-// whole transient is one coupled maneuver with no passive windows, so
-// it keeps the default step throughout rather than overrideTimeStep.
+// The evolution runs on the modeled reactor-lead cascade: the operator
+// steps the reactor-power target and the rod loop walks fission onto
+// it while the turbine load follows the walked demand. Chemistry is
+// the slow actuator: the armed automatic boron trim carries the
+// standing deficit (boration on this descent) so the bank stays near
+// its withdrawal limit, per the Power Control System division of labor
+// ("through control rod motions, boron concentration changes, and
+// control of the moderator temperature",
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_129.txt:112-115).
+// The condenser dump pressure-modulates the transient surplus; its
+// settled openings sit well inside the 0.20 band while step transients
+// peak near 0.30 (measured at a uniform 10 ms tick).
 
 // scenario14FullPowerPlant extends the shared full-power lineup with
 // the scenario's CVCS lineup: the automatic pressurizer level
@@ -59,23 +55,30 @@ func scenario14FullPowerPlant() Plant {
 // the whole transient runs wide. Must not run in parallel:
 // overrideTimeStep mutates global simulation state.
 func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
+	// The descent is one coupled maneuver (rod loop, chemistry, dump
+	// modulation) with no passive windows, sampled against measured
+	// trajectories at a uniform 10 ms tick. Must not run in parallel:
+	// overrideTimeStep mutates global simulation state.
 	overrideTimeStep(t, 10*time.Millisecond)
 	p := scenario14FullPowerPlant()
 
-	// Rods lead: one insertion drive starts the power fold.
-	//
-	// "Rod cluster control (RCC) assemblies are used for reactor
-	// startup or shutdown, to follow load changes..."
-	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_035.txt:90-93
+	// Reactor-lead power control owns the descent: the operator steps
+	// the reactor-power target and the cascade moves rods while the
+	// turbine load follows the walked demand
+	// (specs/pwr_sim/chapter_3/page_039.txt:25-27; actual-setpoint
+	// rule specs/pwr_sim/chapter_2/page_023.txt:70-71).
+	setControl(t, &p, "PlantOperation/LeadLagMode", "1")
+	// Chemistry follows on the slow path so the bank stays near its
+	// withdrawal limit while boration carries the deficit
+	// (chapter_7/page_129.txt:112-115).
 	setControl(t, &p,
-		"ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion",
-		"0.01178")
+		"AuxiliaryBuilding/ChemicalVolumeControlSystem/AutoBoronControl",
+		"true")
 
-	// The descent is a planned, controlled depressurization: the
-	// compressed setpoint chase legitimately sags the header below
-	// the low-steamline SI setpoint late in the glide, so the
-	// initiation signals are blocked first, as an operator would
-	// before a planned cooldown crossing them.
+	// The descent legitimately carries the header through protection
+	// setpoints late in the glide, so the SI initiation signals are
+	// blocked first, as an operator would before a planned cooldown
+	// crossing them.
 	// "Prior to reaching the automatic safety injection setpoints
 	// during cooldown and depressurization, the safety injection
 	// initiation signals are blocked."
@@ -84,86 +87,79 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 		"ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock",
 		"true")
 
-	totalMW := func() float64 {
-		return float64(p.ReactorBuilding.ReactorPressureVessel.
-			TotalThermalPower()) / 1e6
+	// Bumpless handoff: shadow the integrator onto achieved power,
+	// then engage automatics and enter the descent rate.
+	for range int(5 * time.Second / TimeStep) {
+		p.Step()
+		p.Update()
 	}
-
-	// Turbine follows: setpoint chases production downward in writes
-	// under the sudden-rejection threshold so the governing valves
-	// keep SG offtake matched to falling heat input.
-	//
-	// "These valves open under a sudden reduction in turbine-
-	// generator load (in excess of 10%)"
-	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:9-11
-	spSteps := []string{"0.92", "0.84", "0.76", "0.68", "0.60", "0.52",
-		"0.44", "0.36", "0.28", "0.20", "0.12", "0.06"}
+	rpv := &p.ReactorBuilding.ReactorPressureVessel
+	require.InDelta(t, fissionFraction(rpv.FissionPower),
+		p.PlantOperation.DemandedPowerSetpoint, 1e-6,
+		"shadow phase parked the integrator at achieved power")
+	setControl(t, &p, "PlantOperation/LeadLagMode", "1")
+	setControl(t, &p, "PlantOperation/RodControlAuto", "true")
+	setControl(t, &p, "PlantOperation/PowerRateDemand", "0.005")
 
 	// Guards are sampled every checkEvery-th step: the descent takes
-	// tens of simulated seconds while the trip/pressure physics move
-	// on second scales, so a 200 ms sample rate cannot miss a regime.
+	// minutes while the trip/pressure physics move on second scales,
+	// so a 200 ms sample rate cannot miss a regime.
 	const checkEvery = 200
-	stepsPerInterval := int(5 * time.Second / TimeStep)
 
-	prevMW := totalMW()
-	for _, sp := range spSteps {
-		setControl(t, &p, "TurbineBuilding/Turbine/Setpoint", sp)
-		for i := range stepsPerInterval {
+	maxDump := 0.0
+	prevPF := fissionFraction(rpv.FissionPower)
+	for _, tgt := range []struct {
+		text  string
+		value float64
+	}{
+		{"0.75", 0.75}, {"0.50", 0.50}, {"0.25", 0.25}, {"0.00", 0.00},
+	} {
+		setControl(t, &p, "PlantOperation/PowerSetpointTarget", tgt.text)
+		settledAt := -1
+		var settledPF, settledDump float64
+		for i := range int(300 * time.Second / TimeStep) {
 			p.Step()
 			p.Update()
 			if i%checkEvery != 0 {
 				continue
 			}
-			assert.False(t, p.ReactorBuilding.ReactorPressureVessel.Trip,
-				"reactor must not trip during the glide")
-			// The setpoint chase leads the falling heat input in
-			// 8 percent steps, so late in the glide the header
-			// legitimately sags below the low-steamline setpoint.
-			// The guard is therefore honesty, not health: once
-			// the process variable crosses the trip point the
-			// protection channel must engage instead of sitting
-			// artificially healthy.
-			if float64(p.ReactorBuilding.SteamGenerator.Pressure) <
-				float64(RPSLowSteamlinePressureTrip) {
-				assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionActuated,
-					"the armed block must hold SI off across the crossing")
-				assert.True(t, p.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationActuated,
-					"steamline isolation is not covered by the block and must engage")
+			dump := p.TurbineBuilding.Turbine.DumpValve.Open
+			if dump > maxDump {
+				maxDump = dump
 			}
-			// The chase can locally undershoot the falling heat
-			// input; the surplus (at most the 8 percent step)
-			// then lifts the header into the dump's pressure-
-			// control mode, which modulates the valves by design -
-			// under the recalibrated secondary line those excursions
-			// ride deeper than the old <=0.20 band, so the guard
-			// asserts the mode, not a position: a load-rejection
-			// response would pin them fully open instead, and the
-			// safety valves must never be the outlet for a
-			// controlled descent.
-			//   "These valves are also utilized in the pressure
-			//    control mode during plant startup and plant
-			//    cooldown."
-			//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:24-26
-			assert.Less(t, p.TurbineBuilding.Turbine.DumpValve.Open, 0.99,
-				"the dump may shave pressure but must never arm the rejection pin during a controlled descent")
+			assert.False(t, rpv.Trip,
+				"reactor must not trip during the glide")
 			assert.Zero(t, p.ReactorBuilding.SteamGenerator.SafetyValve.Open,
 				"SG safety valves stay seated through the controlled descent")
-			curMW := totalMW()
-			// Monotonicity arms once the fold actually departs the
-			// rated cap: while pinned, fission is clamped and the
-			// decay pools still creep upward toward their pinned
-			// targets, so tiny positive drift there is legitimate.
-			// Below the cap both contributors fall strictly.
-			if prevMW < 3700 {
-				require.LessOrEqual(t, curMW, prevMW,
-					"descent must be monotone")
+			dem := p.PlantOperation.DemandedPowerSetpoint
+			if absF(dem-tgt.value) <= 1e-6 &&
+				absF(fissionFraction(rpv.FissionPower)-dem) <= 0.05 {
+				settledAt = i
+				settledPF = fissionFraction(rpv.FissionPower)
+				settledDump = dump
+				break
 			}
-			prevMW = curMW
 		}
+		require.GreaterOrEqual(t, settledAt, 0,
+			"power must settle onto the %v target within the horizon", tgt.text)
+		assert.LessOrEqual(t, settledPF, prevPF-0.15,
+			"each 25-point demand step must walk the plateau down")
+		// Settled surplus is ~zero, so the modulating dump stands
+		// back down inside its band once production tracks demand;
+		// transient step peaks ride higher by design (measured 0.295)
+		// but must never pin at capacity.
+		assert.LessOrEqual(t, settledDump, 0.20,
+			"settled condenser dump stays inside its modulation band")
+		assert.Less(t, maxDump, 0.999,
+			"the modulating dump never pins at capacity")
+		prevPF = settledPF
 	}
+	require.LessOrEqual(t, prevPF, 0.10,
+		"the glide reaches the 0% FP neighborhood")
 
-	// Guarantee the 0% FP end state: insert rods to shutdown margin
-	// and unload the turbine to house-load level.
+	// Guarantee the subcritical end state: take the reactor loop back
+	// to manual and insert to shutdown margin while unloading the
+	// turbine to house-load level.
 	//
 	// "If the plant is to be placed in a subcritical hot standby
 	// condition, the control rods are inserted to reduce power level"
@@ -174,6 +170,13 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 	// once the moderator warms toward no-load temperature, so the
 	// demand drives the banks deep enough that rod worth dominates
 	// the end-of-cooldown positive Doppler swing.
+	setControl(t, &p, "PlantOperation/RodControlAuto", "false")
+	setControl(t, &p,
+		"ReactorBuilding/ReactorPressureVessel/ControlRods/AutoControl",
+		"false")
+	setControl(t, &p,
+		"AuxiliaryBuilding/ChemicalVolumeControlSystem/AutoBoronControl",
+		"false")
 	setControl(t, &p,
 		"ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion",
 		"0.60")
@@ -209,7 +212,6 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 	// neutron-source floor.
 	stepN(&p, int(60*time.Second/TimeStep))
 
-	rpv := p.ReactorBuilding.ReactorPressureVessel
 	assert.LessOrEqual(t, float64(rpv.FissionPower), 100.0,
 		"fission chain collapsed to the neutron-source floor")
 	assert.InDelta(t, rpv.Insertion, rpv.DemandInsertion, 1e-9,

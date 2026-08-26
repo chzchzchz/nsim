@@ -1,6 +1,8 @@
 package core
 
 import (
+	"time"
+
 	u "github.com/bcicen/go-units"
 )
 
@@ -478,3 +480,22 @@ const turbineCoastRate = 3.0
 // arithmetic never reaches exactly zero, so a tiny epsilon keeps the
 // Tripped -> Off transition firing reliably.
 const turbineStopThreshold = 1e-3
+
+// dumpModulationDemand holds the header at the shell-pressure setpoint:
+// proportional on the fractional pressure error plus an integral trim
+// that absorbs the residual offset. Tuning assumptions live on the gain
+// constants (full opening at a 5 percent error; integral catching up
+// over a few seconds). The trip-bypass and pressure-control branches of
+// the dump controller share this law; DumpPressureIntegral stays
+// single-writer because those branches are disjoint within one Step.
+func (t *Turbine) dumpModulationDemand(
+	sgPressure Pressure, dt time.Duration,
+) float64 {
+	errFrac := (float64(sgPressure) - float64(SteamGeneratorShellPressure)) /
+		float64(SteamGeneratorShellPressure)
+	integral := t.DumpPressureIntegral +
+		SteamDumpModulationIntegralGain*errFrac*dt.Seconds()
+	t.DumpPressureIntegral = min(max(integral, 0), 1)
+	return min(max(SteamDumpModulationProportionalGain*errFrac+
+		t.DumpPressureIntegral, 0), 1)
+}

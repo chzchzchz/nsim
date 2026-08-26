@@ -821,13 +821,7 @@ func (t *TurbineBuilding) StepWithSteam(
 			ret.Turbine.DumpBypassKicked = true
 			ret.Turbine.DumpPressureIntegral = 1
 		}
-		errFrac := (float64(sgPressure) - float64(SteamGeneratorShellPressure)) /
-			float64(SteamGeneratorShellPressure)
-		integral := ret.Turbine.DumpPressureIntegral +
-			SteamDumpModulationIntegralGain*errFrac*dt.Seconds()
-		integral = min(max(integral, 0), 1)
-		ret.Turbine.DumpPressureIntegral = integral
-		target = min(max(SteamDumpModulationProportionalGain*errFrac+integral, 0), 1)
+		target = ret.Turbine.dumpModulationDemand(sgPressure, dt)
 	case tripped && reactorTripped:
 		excessF := tavg.Float() - CoreReferenceInletF - SteamDumpTripDeadbandF
 		tavgTerm := min(max(excessF/SteamDumpTripSpanF, 0), 1)
@@ -852,10 +846,27 @@ func (t *TurbineBuilding) StepWithSteam(
 		// turbine-only trip kicks its pressure loop cleanly.
 		ret.Turbine.DumpPressureIntegral = 0
 		ret.Turbine.DumpBypassKicked = false
-	case pressureMode || ret.Turbine.DumpHoldTimer > 0:
+	case ret.Turbine.DumpHoldTimer > 0:
+		// Rejection ride-through: the bypass pins fully open for
+		// the hold window as the short-term artificial load.
+		//   "The steam dump serves as a short-term artificial load"
+		//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:27-31
 		ret.Turbine.DumpPressureIntegral = 0
 		ret.Turbine.DumpBypassKicked = false
 		target = 1.0
+	case pressureMode:
+		// Pressure-control mode without a trip (startup, cooldown,
+		// load-chase surplus): modulate to hold the header at the
+		// shell-pressure setpoint instead of slamming full open.
+		//   "These valves are also utilized in the pressure control mode
+		//    during plant startup and plant cooldown."
+		//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:24-26
+		//   "...modulate their opening to pass sufficient steam flow to
+		//    the condenser, in order to maintain boiler pressure at the
+		//    constant setpoint."
+		//   specs/pwr_sim/chapter_3/page_041.txt:40-42
+		ret.Turbine.DumpBypassKicked = false
+		target = ret.Turbine.dumpModulationDemand(sgPressure, dt)
 	default:
 		ret.Turbine.DumpPressureIntegral = 0
 		ret.Turbine.DumpBypassKicked = false
@@ -868,7 +879,7 @@ func (t *TurbineBuilding) StepWithSteam(
 		ret.Turbine.DumpValve.Open = max(ret.Turbine.DumpValve.Open-travel, target)
 	}
 
-	// CondensingRate: the condenser sees the turbine exhaust plus
+// CondensingRate: the condenser sees the turbine exhaust plus
 	// whatever the dump valves route into it. The SG-side draw
 	// (exhaust + dump) is exported so Plant.Step can debit the
 	// steam generator inventory and header pressure.
