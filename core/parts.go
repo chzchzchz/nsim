@@ -803,6 +803,23 @@ const (
 	// capacity as a fraction of rated steam flow. Derived at half
 	// the condenser-dump fraction; the spec gives no number.
 	AtmosphericDumpDesignFraction = 0.35
+
+	// SteamDumpRestorationMaxLoadFrac bounds the untripped deep-band
+	// restoration branch to loads whose governor draw cannot cover
+	// fresh decay-plus-pump heat. Derived from the measured descent:
+	// the pre-fix arc held 925-975 psia through ff 0.14 and sagged
+	// only below that (plans/x/gaps.md item 18), so anything above
+	// ~0.2 keeps a servicable turbine sink.
+	SteamDumpRestorationMaxLoadFrac = 0.20
+
+	// SteamDumpRestorationHeaderFloorFraction floors the untripped
+	// restoration branch on the loading-program band rather than the
+	// ESFAS-safe post-trip floor: while the turbine is admitted the
+	// bypass may only spend header pressure above ~0.985 of nominal,
+	// so carrying park duty can never sag a loading or low-demand
+	// steamline. Derived; ~906 psia against the 920 psia shell
+	// setpoint, keeping the measured >=900 psia loading band clear.
+	SteamDumpRestorationHeaderFloorFraction = 0.985
 )
 
 // Station electrical design constants (plans/p13_1.txt).
@@ -6664,21 +6681,38 @@ func fissionFraction(fissionPower Watts) float64 {
 		float64(CoreFissionPowerAtRated), 0), 1)
 }
 
-// referenceTempF evaluates the Tref-versus-power characteristic at
-// the demanded power setpoint. The anchors are the same full-load
-// coolant temperatures the core thermal model relaxes toward, so
-// the controller's reference is the plant's own temperature program
-// by construction.
+// referenceTempFor evaluates the Tref-versus-power characteristic at
+// an explicit demand. The anchors are the same full-load coolant
+// temperatures the core thermal model relaxes toward, so the
+// controller's reference is the plant's own temperature program by
+// construction.
 //
 //	"From the DEMANDED POWER SETPOINT, a reference reactor coolant
 //	 temperature (TREF) is obtained from the 'Tref versus power'
 //	 characteristic curve."
 //	specs/pwr_sim/chapter_2/page_024.txt:13-14
 //	specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60-61
-func (po *PlantOperation) referenceTempF() float64 {
+func (po *PlantOperation) referenceTempFor(demand float64) float64 {
 	return CoreReferenceInletF +
-		(CoreReferenceOutletF-CoreReferenceInletF)*
-			po.DemandedPowerSetpoint
+		(CoreReferenceOutletF-CoreReferenceInletF)*demand
+}
+
+func (po *PlantOperation) referenceTempF() float64 {
+	return po.referenceTempFor(po.DemandedPowerSetpoint)
+}
+
+// boronDemandPower is the demand the auto-boron comparison keys on:
+// the walked integrator under reactor-leading RPC, otherwise the
+// turbine's own setpoint. The integrator shadows achieved power in
+// turbine lead and would zero the demanded-minus-achieved tier.
+// "The rod control system automatically adjusts the power level of
+// the reactor to match the power demanded by the turbine."
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:69-71
+func (po *PlantOperation) boronDemandPower(turbineSetpoint float64) float64 {
+	if po.LeadLagMode == ReactorLead {
+		return po.DemandedPowerSetpoint
+	}
+	return turbineSetpoint
 }
 
 // StepRPC advances the reactor power control (RPC) layer for one
@@ -6747,7 +6781,16 @@ func (po *PlantOperation) StepRPC(rpv *ReactorPressureVessel,
 		return
 	}
 
-	dT := rpv.Outlet.Float() - po.referenceTempF()
+	// The rod loop's reference keys on the demand the plant actually
+	// has: the walked integrator under reactor lead, otherwise the
+	// turbine's setpoint. Evaluating at the shadowed integrator in
+	// turbine lead would zero dT by construction and leave the rods
+	// inert while chemistry carried the whole load chase.
+	//   "The rod control system automatically adjusts the power level
+	//    of the reactor to match the power demanded by the turbine."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:69-71
+	dT := rpv.Outlet.Float() -
+		po.referenceTempFor(po.boronDemandPower(turbine.Setpoint))
 	bias := min(max(dT/RodControlDeadbandF, -1), 1)
 	rodWorthPctPerInsertion := -float64(CoreRodWorthABCD) * 100
 	target := rpv.ControlRods.DemandInsertion +

@@ -162,17 +162,16 @@ func (r *ReactorBuilding) Step(
 	// and the axial offset select the BTRS mode so chemistry relieves
 	// what the rods no longer can and damps axial-flux excursions.
 	// The demanded-minus-achieved power error adds the pacing tier
-	// while the RPC cascade stands engaged - disengaged integrators
-	// shadow achieved power, so their error self-extinguishes, and a
-	// never-engaged one carries a meaningless zero seed that must not
-	// read as a deficit. Runs before CVCS.Step so the selected mode's
-	// rates apply this step.
+	// while the RPC cascade stands engaged; in turbine lead the demand
+	// is the turbine's own setpoint - the walked integrator shadows
+	// achieved power there and would zero the tier. Runs before CVCS.Step
+	// so the selected mode's rates apply this step.
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_129.txt:112-115
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:120-123
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-65
 	powerError := 0.0
 	if op.RodControlAuto {
-		powerError = op.DemandedPowerSetpoint -
+		powerError = op.boronDemandPower(turbineLoadFraction) -
 			float64(ret.ReactorPressureVessel.FissionPower)/
 				float64(CoreFissionPowerAtRated)
 	}
@@ -651,6 +650,31 @@ func (t *TurbineBuilding) Step() TurbineBuilding {
 //     "These valves open under a sudden reduction in turbine-
 //     generator load (in excess of 10%) or a turbine trip."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:5-11
+// steamDumpRestorationTarget opens the bypass when Tavg rides above
+// its programmed value, limited by header headroom above the
+// ESFAS-safe floor so restoration duty can never drag the steamline
+// into the low-steamline setpoint; the equilibrium sits proportionally
+// up the floor-to-arm slope while Tavg is restored, then the valves
+// shut.
+//   "The total quantity of steam dumped is minimized since the steam
+//    dump is decreased as rapidly as conditions permit."
+//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:75-77
+// programTavgF is CoreReferenceInletF post-trip, where the relaxation
+// target is no load,
+//   "The steam dump system will actuate if necessary and restore
+//    Tavg to the no-load value."
+//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:95-97
+// and the setpoint-programmed Tref while the plant follows load.
+func steamDumpRestorationTarget(programTavgF float64,
+	tavg Temperature, sgPressure Pressure, floorFraction float64) float64 {
+	excessF := tavg.Float() - programTavgF - SteamDumpTripDeadbandF
+	term := min(max(excessF/SteamDumpTripSpanF, 0), 1)
+	floor := floorFraction * float64(SteamGeneratorShellPressure)
+	headroom := (float64(sgPressure) - floor) /
+		(float64(SteamDumpPressureModeMargin)*float64(SteamGeneratorShellPressure) - floor)
+	return min(term, min(max(headroom, 0), 1))
+}
+
 func (t *TurbineBuilding) StepWithSteam(
 	sgPressure Pressure,
 	tavg Temperature,
@@ -891,22 +915,8 @@ func (t *TurbineBuilding) StepWithSteam(
 			target = 0
 			break
 		}
-		excessF := tavg.Float() - CoreReferenceInletF - SteamDumpTripDeadbandF
-		tavgTerm := min(max(excessF/SteamDumpTripSpanF, 0), 1)
-		// Headroom limiter: the bypass may only spend pressure the
-		// header holds above the ESFAS-safe floor, so carrying the
-		// Tavg restoration duty can never drag the steamline into
-		// the low-steamline setpoint. The equilibrium sits
-		// proportionally up the floor-to-arm slope while Tavg is
-		// restored, then the valves shut. "The total quantity of
-		// steam dumped is minimized since the steam dump is decreased
-		// as rapidly as conditions permit."
-		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:73-77
-		floor := float64(SteamDumpTripHeaderFloorFraction) * float64(SteamGeneratorShellPressure)
-		headroom := (float64(sgPressure) - floor) /
-			(float64(SteamDumpPressureModeMargin)*float64(SteamGeneratorShellPressure) - floor)
-		headroom = min(max(headroom, 0), 1)
-		target = min(tavgTerm, headroom)
+		target = steamDumpRestorationTarget(CoreReferenceInletF, tavg, sgPressure,
+		SteamDumpTripHeaderFloorFraction)
 		if pressureMode {
 			target = 1.0
 		}
@@ -926,6 +936,32 @@ func (t *TurbineBuilding) StepWithSteam(
 		ret.Turbine.DumpPressureIntegral = 0
 		ret.Turbine.DumpBypassKicked = false
 		target = 1.0
+	case ret.Turbine.State == TurbineRunning && !reactorTripped &&
+		ret.Turbine.Setpoint <= SteamDumpRestorationMaxLoadFrac:
+		// Deep-band park sink: with both machines untripped and the
+		// turbine admitting, production exceeds the governor draw at
+		// house loads and Tavg would park above its program; the
+		// bypass carries the surplus against the programmed Tref
+		// under the shared headroom limiter. Above the band the
+		// governor draw services production and the dump yields as
+		// the control system reduces power, so tracking lag must not
+		// open it ("[the dump] is reduced as rapidly as the reactor
+		// control system reduces core power",
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:72-74).
+		// The pressure loop only has authority while the header is
+		// above the arm point; below it the loop state resets so a
+		// trip-phase kick cannot leak in as a phantom demand.
+		var pl float64
+		if pressureMode {
+			pl = ret.Turbine.dumpModulationDemand(sgPressure, dt)
+		} else {
+			ret.Turbine.DumpPressureIntegral = 0
+			ret.Turbine.DumpBypassKicked = false
+		}
+		programTavgF := programmedRodTavg(ret.Turbine.Setpoint)
+		target = min(max(pl, steamDumpRestorationTarget(
+			programTavgF, tavg, sgPressure,
+			SteamDumpRestorationHeaderFloorFraction)), 1)
 	case pressureMode:
 		// Pressure-control mode without a trip (startup, cooldown,
 		// load-chase surplus): modulate to hold the header at the

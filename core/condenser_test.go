@@ -81,11 +81,18 @@ func TestCondenser_TripOpensDumpValveAndReclosesOnAdmission(t *testing.T) {
 	assert.Greater(t, tb.Turbine.DumpValve.Open, 0.9,
 		"want DumpValve opened by the trip, got %v", tb.Turbine.DumpValve.Open)
 
-	// Readmit steam: the dump valves ramp closed again.
+	// Readmit steam: the dump valves ramp closed again. With Tavg
+	// back on the load program there is no standing excess for the
+	// untripped restoration branch to carry, so admission alone
+	// closes them.
 	tb.Turbine.State = TurbineRunning
 	tb.Turbine.StopValve.Open = 1.0
+	onProgram := Temperature{
+		Val:  programmedRodTavg(0) + 1,
+		Unit: u.Fahrenheit,
+	}
 	for i := 0; i < int(2*time.Second/TimeStep); i++ {
-		tb = tb.StepWithSteam(SteamGeneratorShellPressure, hotTavg, true, false, 1, 560)
+		tb = tb.StepWithSteam(SteamGeneratorShellPressure, onProgram, true, false, 1, 560)
 	}
 	assert.Zero(t, tb.Turbine.DumpValve.Open,
 		"want DumpValve closed once steam is admitted, got %v",
