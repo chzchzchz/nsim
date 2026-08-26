@@ -600,3 +600,75 @@ func TestGeneratorBreakerControlRegistered(t *testing.T) {
 	require.NoError(t, c.Set("0"))
 	assert.False(t, p.TurbineBuilding.Generator.BreakerClosed)
 }
+
+// The pressure-control modulation law holds the header at the
+// shell-pressure setpoint with a proportional term plus an integral
+// trim: partial opening for small sustained errors, never a pinned
+// full-open demand. Closed-form expectations recomputed from the
+// production gains - a wiring check, marked as such (the gain values
+// themselves are declared tunings, specs/pwr_sim/chapter_3/
+// page_041.txt:40-42).
+func TestTurbine_DumpModulationDemandClosedForm(t *testing.T) {
+	turb := Turbine{}
+	err := (960.0 - float64(SteamGeneratorShellPressure)) /
+		float64(SteamGeneratorShellPressure)
+	dt := 10 * time.Millisecond
+
+	got := turb.dumpModulationDemand(960, dt)
+	want := SteamDumpModulationProportionalGain*err +
+		SteamDumpModulationIntegralGain*err*dt.Seconds()
+	assert.InDelta(t, want, got, 1e-9,
+		"first demand equals the proportional plus integral terms")
+
+	// A second identical error step accumulates the integral: the
+	// demand grows but stays inside the valve's travel range.
+	got2 := turb.dumpModulationDemand(960, dt)
+	assert.Greater(t, got2, got,
+		"a sustained error winds the integral upward")
+	assert.LessOrEqual(t, got2, 1.0, "demand clamps at full open")
+
+	// At or below the shell setpoint the law commands nothing.
+	fresh := Turbine{}
+	shut := fresh.dumpModulationDemand(
+		SteamGeneratorShellPressure, dt)
+	assert.InDelta(t, 0.0, shut, 1e-12,
+		"zero header error commands a closed dump")
+}
+
+// The integral never winds outside [0,1] no matter how long the error
+// persists - a saturated actuator demand must recover in one step once
+// the error flips sign, which is what keeps the modulating dump from
+// hysteresis around its own windup.
+func TestTurbine_DumpModulationIntegralClamps(t *testing.T) {
+	turb := Turbine{}
+	for range 10000 {
+		turb.dumpModulationDemand(SteamGeneratorShellPressure*2, time.Second)
+	}
+	assert.InDelta(t, 1.0, turb.DumpPressureIntegral, 1e-9,
+		"integral clamps at full")
+	recovered := turb.dumpModulationDemand(
+		SteamGeneratorShellPressure-50, time.Second)
+	assert.Less(t, recovered, 0.5,
+		"negative error unwinds the saturated integral immediately")
+}
+
+// Plant-level discriminator for the pressure-control branch: with the
+// header forced to a sustained above-margin pressure, the modulating
+// law settles on a partial opening while the pre-fix bang-bang branch
+// pinned the demand - and therefore the valve - at full travel
+// (measured Open=1.00 under the same forcing before the fix).
+func TestSteamDump_PressureModeModulatesInsteadOfPinning(t *testing.T) {
+	p := MakePlant()
+	for i := 0; i < 200; i++ {
+		// Re-arm the mode each tick: the forcing is a stand-in for
+		// the sustained surplus a load chase produces.
+		p.ReactorBuilding.SteamGenerator.Pressure = 940
+		p.Step()
+		p.Update()
+	}
+	open := p.TurbineBuilding.Turbine.DumpValve.Open
+	assert.Greater(t, open, 0.05,
+		"an above-margin header must open the dump")
+	assert.Less(t, open, 0.90,
+		"a constant small surplus must modulate, not pin full travel")
+}
