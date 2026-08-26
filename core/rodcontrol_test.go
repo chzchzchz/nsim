@@ -521,3 +521,24 @@ func TestDemandedPowerSetpointSensor_ReadsTurbineDemandInTurbineLead(t *testing.
 	assert.InDelta(t, 0.05, demand, 1e-9,
 		"turbine lead must display the turbine demand, got %v", demand)
 }
+
+// The Tref panel must show the demand-programmed reference the rod
+// loop steers by - under turbine lead that keys on the turbine's own
+// setpoint, not the shadowed integrator. specs/pwr_sim/chapter_2/
+// page_024.txt:13-16.
+func TestTrefSensor_ReadsDemandProgrammedReferenceInTurbineLead(t *testing.T) {
+	p := fullPowerLineup()
+	p.PlantOperation.LeadLagMode = TurbineLead
+	p.TurbineBuilding.Turbine.Setpoint = 0.05
+	sm := p.GetSensorMap()
+
+	val, err := sm["PlantOperation/Tref"].Get()
+	require.NoError(t, err)
+	tref, err := strconv.ParseFloat(val, 64)
+	require.NoError(t, err)
+
+	want := CoreReferenceInletF +
+		(CoreReferenceOutletF-CoreReferenceInletF)*0.05
+	assert.InDelta(t, want, tref, 1e-6,
+		"Tref must read the demand-programmed value %v, got %v", want, tref)
+}

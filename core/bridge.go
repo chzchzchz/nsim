@@ -241,8 +241,13 @@ func addPlantOperationSensors(p *Plant, m bridge.SensorMap) {
 		Label: "Tref",
 		Kind:  "fahrenheit",
 		Get: func() (string, error) {
+			// The reference the rod loop actually steers by:
+			// evaluated at the shared demand source so the panel
+			// matches the steering input in both lead modes.
 			return bridge.FormatSensorValue("fahrenheit",
-				p.PlantOperation.referenceTempF())
+				p.PlantOperation.referenceTempFor(
+					p.PlantOperation.boronDemandPower(
+						p.TurbineBuilding.Turbine.Setpoint)))
 		},
 	}
 
