@@ -130,10 +130,10 @@ export function crossReferenceHref(ev: Event): string {
 
 // openTip renders one description next to its button. Markdown
 // links whose href is another bridge id are references: clicking
-// one closes this popup, scrolls that element's row into view, and
-// highlights it briefly. Ids with no rendered row (for example
-// alarm controls, which live only in the alarm panel) fall back to
-// swapping the popup to the referenced description.
+// one scrolls that element's row into view (or swaps the popup
+// to the referenced description if no rendered row exists). The
+// popup stays open unless the user explicitly closes it by
+// clicking the "?" button again.
 function openTip(btn: HTMLButtonElement, text: string): void {
     const tip = document.createElement("span");
     tip.className = "help-text md";
@@ -141,12 +141,12 @@ function openTip(btn: HTMLButtonElement, text: string): void {
     tip.addEventListener("click", (ev) => {
         const href = crossReferenceHref(ev);
         if (href === "") return;
-        btn.nextElementSibling?.remove();
-        if (!revealElement(href)) {
-            const target = helpFor(href);
-            if (target !== undefined) {
-                openTip(btn, target);
-            }
+        const target = helpFor(href);
+        if (target !== undefined) {
+            btn.nextElementSibling?.remove();
+            openTip(btn, target);
+        } else if (!revealElement(href)) {
+            // keep popup open
         }
     });
     btn.insertAdjacentElement("afterend", tip);
