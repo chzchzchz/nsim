@@ -779,6 +779,43 @@ func (r *ReactorPressureVessel) applyFaultOvercool(faultExcess Watts,
 	r.Outlet = Temperature{
 		Val: max(r.Outlet.Float()+deltaTF, floorF), Unit: u.Fahrenheit}
 }
+
+// BlowdownFlashTau is the first-order relaxation time constant
+// (seconds) for coolant temperature toward the saturation temperature
+// of the falling RCS pressure while the hot-leg break discharges.
+// Assumption; the sources are silent about the flashing rate. Sized so
+// the bulk of the thermal drop lands inside the multi-second
+// depressurization the pressure model already produces.
+const BlowdownFlashTau = 10.0
+
+// applyBlowdownCooling tracks the coolant toward the saturation
+// temperature of the current RCS pressure while the hot-leg break is
+// actually discharging this tick: flashing cools the residual liquid to
+// the reduced pressure's saturation point, which is what makes the LOCA
+// transient rapid instead of paced like a planned cooldown. A drained,
+// isolated, or absent break leaves the outlet untouched, and a target
+// above the outlet never heats the coolant.
+//
+// Spec justification:
+//   - "For large pipe ruptures, the RCS would be rapidly
+//     depressurized and voided of coolant."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:16-17
+//   - "Both the vapor and the residual liquid are cooled to the
+//     saturation temperature of the liquid at the reduced pressure."
+//     specs/wiki/Flash_evaporation.txt:651
+func (r *ReactorPressureVessel) applyBlowdownCooling(rcsP Pressure) {
+	if r.BreakFlow.Float() <= 0 {
+		return
+	}
+	targetF := PressurizerSatTemperatureF(float64(rcsP))
+	outletF := r.Outlet.Float()
+	if targetF >= outletF {
+		return
+	}
+	r.Outlet = Temperature{Val: outletF +
+		(targetF-outletF)*(TimeStep.Seconds()/BlowdownFlashTau),
+		Unit: u.Fahrenheit}
+}
 // Reactor core sizing. The spec gives steam-flow and pressure data
 // (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56,
 // specs/the_westinghouse_pressurized_water_react/chapter_3/page_066.txt:80-82)

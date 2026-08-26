@@ -322,6 +322,10 @@ func (r *ReactorBuilding) Step(
 	ret.ReactorPressureVessel = rpv
 	ret.ReactorPressureVessel.applyFaultOvercool(faultExcess,
 		ret.SteamGenerator.Pressure)
+	// Blowdown flash: while the hot-leg break discharges this tick,
+	// the coolant follows the saturation temperature of the pressure
+	// applyHotLegBreak just produced (plans/p35_1.txt).
+	ret.ReactorPressureVessel.applyBlowdownCooling(ret.Pressurizer.Pressure)
 	// Surge-line coupling: the pressurizer is hydraulically common
 	// with the loop, so its state is THE RCS pressure the vessel
 	// reports. Carrying an independent relaxation here let the two

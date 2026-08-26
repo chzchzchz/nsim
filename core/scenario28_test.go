@@ -266,3 +266,78 @@ func TestScenario28_SwitchoverAtRWSTLowThenHotLegRealignment(t *testing.T) {
 	assert.InDelta(t, net, s.HHSIInjectionFlow.Float(), net*1e-9,
 		"total HHSI delivery is unchanged by the realignment")
 }
+
+// While the break discharges, flashing cools the residual liquid toward
+// the saturation temperature of the reduced RCS pressure - the
+// mechanism that makes a LOCA transient rapid instead of paced like a
+// planned cooldown. With no discharge this tick the writer is inert,
+// and a target above the outlet never heats the coolant.
+//
+//   - "For large pipe ruptures, the RCS would be rapidly
+//     depressurized and voided of coolant."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:16-17
+//   - "Both the vapor and the residual liquid are cooled to the
+//     saturation temperature of the liquid at the reduced pressure."
+//     specs/wiki/Flash_evaporation.txt:651
+func TestRPV_BlowdownCoolingTracksSaturationWhileDischarging(t *testing.T) {
+	r := &ReactorPressureVessel{}
+	r.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
+	r.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
+
+	before := r.Outlet.Float()
+	r.applyBlowdownCooling(Pressure(300))
+	assert.Equal(t, before, r.Outlet.Float(),
+		"no discharge this tick, no flash cooling")
+
+	r.BreakFlow = vol(r.BreakFlow, 100)
+	target := PressurizerSatTemperatureF(300)
+	const window = 30 * time.Second
+	for i := 0; i < int(window/TimeStep); i++ {
+		r.applyBlowdownCooling(Pressure(300))
+	}
+	drop := before - r.Outlet.Float()
+	envelope := OpHeatupRateLimit * window.Seconds()
+	assert.Greater(t, drop, envelope*10,
+		"flashing cooled %v F in %v; the program envelope allows only %v F",
+		drop, window, envelope)
+	assert.GreaterOrEqual(t, r.Outlet.Float(), target-1e-9,
+		"flash cooling relaxes toward saturation without crossing it")
+
+	r.BreakFlow = vol(r.BreakFlow, 50)
+	parked := r.Outlet.Float()
+	r.applyBlowdownCooling(RPVDesignPressure)
+	assert.Equal(t, parked, r.Outlet.Float(),
+		"a saturation target above the outlet must never heat")
+}
+
+// Full-plant acceptance: during the blowdown the outlet follows the
+// collapsing RCS pressure down by orders more than the operational
+// envelope permits in the same window (pre-fix code rode the clamp).
+func TestScenario28_BlowdownCoolsCoolantPastProgramEnvelope(t *testing.T) {
+	t.Parallel()
+
+	p := MakePlant()
+	cm := GetControlMap(&p)
+	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	startF := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+
+	const window = 45 * time.Second
+	for i := 0; i < int(window/TimeStep); i++ {
+		p.Step()
+		p.Update()
+	}
+	rpv := p.ReactorBuilding.ReactorPressureVessel
+	endF := rpv.Outlet.Float()
+
+	drop := startF - endF
+	envelope := OpHeatupRateLimit * window.Seconds()
+	satEnd := PressurizerSatTemperatureF(float64(p.ReactorBuilding.Pressurizer.Pressure))
+	t.Logf("measured: outlet %.1f -> %.1f F (%.1f F drop, envelope %.2f F), final sat target %.1f F",
+		startF, endF, drop, envelope, satEnd)
+	assert.Greater(t, drop, envelope*20,
+		"the blowdown thermal response must outrun the planned-cooldown pace (pre-fix code rides at 1x)")
+	assert.Greater(t, drop, 20.0,
+		"the coolant must meaningfully follow the depressurization down")
+	assert.GreaterOrEqual(t, endF, satEnd-2.0,
+		"the outlet relaxes toward, never below, the current saturation point")
+}
