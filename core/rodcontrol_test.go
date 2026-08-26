@@ -504,3 +504,22 @@ func TestRodControl_MeasuredTavgTrimsPowerTarget(t *testing.T) {
 		RodCtrlMaxDemandSlewPerSec*30.0+1e-9,
 		"hot trim slew stays inside the demand rate cap")
 }
+
+// The DemandedPowerSetpoint panel must show the demand in both lead
+// modes: under turbine lead that is the turbine's own setpoint, not
+// the shadowed integrator (which equals achieved power and would hide
+// any commanded change). specs/the_westinghouse_pressurized_water_react/
+// chapter_7/page_130.txt:69-71.
+func TestDemandedPowerSetpointSensor_ReadsTurbineDemandInTurbineLead(t *testing.T) {
+	p := fullPowerLineup()
+	p.PlantOperation.LeadLagMode = TurbineLead
+	p.TurbineBuilding.Turbine.Setpoint = 0.05
+	sm := p.GetSensorMap()
+
+	val, err := sm["PlantOperation/DemandedPowerSetpoint"].Get()
+	require.NoError(t, err)
+	demand, err := strconv.ParseFloat(val, 64)
+	require.NoError(t, err)
+	assert.InDelta(t, 0.05, demand, 1e-9,
+		"turbine lead must display the turbine demand, got %v", demand)
+}

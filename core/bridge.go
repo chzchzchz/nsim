@@ -247,8 +247,14 @@ func addPlantOperationSensors(p *Plant, m bridge.SensorMap) {
 		Label: "DemandedPowerSetpoint",
 		Kind:  "normalized",
 		Get: func() (string, error) {
+			// Both lead modes through one demand source: the walked
+			// integrator under reactor lead, the turbine's setpoint
+			// under turbine lead (where the integrator shadows
+			// achieved power and would display nothing useful).
+			// chapter_7/page_130.txt:69-71.
 			return bridge.FormatSensorValue("normalized",
-				p.PlantOperation.DemandedPowerSetpoint)
+				p.PlantOperation.boronDemandPower(
+					p.TurbineBuilding.Turbine.Setpoint))
 		},
 	}
 
