@@ -102,9 +102,9 @@ var diagramParts = []diagramPart{
 	{"Diesel", "AuxiliaryBuilding/DieselGenerator", "DieselGenerator", "Diesel"},
 	{"FuelTank", "AuxiliaryBuilding/DieselGenerator", "FuelTank", ""},
 	{"Transformer", "AuxiliaryBuilding/Transformer", "StationTransformer", "Xformer"},
-	{"ESF_A", "Outside/ESFBus", "ESFBus", "ESF Bus A"},
-	{"ESF_B", "Outside/ESFBus", "ESFBus", "ESF Bus B"},
-	{"Grid", "Outside/Grid", "OffsiteGrid", "Grid"},
+	{"ESF_A", "Electrical/ESFBusA", "ESFBus", "ESF Bus A"},
+	{"ESF_B", "Electrical/ESFBusB", "ESFBus", "ESF Bus B"},
+	{"Grid", "Electrical/OffsiteSourceA", "OffsiteGrid", "Grid"},
 	{"RCFC_A", "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem", "RCFCUnit", "RCFC A"},
 	{"RCFC_B", "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem", "RCFCUnit", "RCFC B"},
 	{"RCFC_C", "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem", "RCFCUnit", "RCFC C"},
@@ -489,9 +489,9 @@ var standaloneValves = []struct {
 		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve }},
 	{"SGSSV", "ReactorBuilding/SteamGenerator/SafetyValve", "safety",
 		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.SafetyValve }},
-	{"PZRBLK", "ReactorBuilding/Pressurizer/BlockValve", "stop",
+	{"PZRBLK", "ReactorBuilding/BlockValve", "stop",
 		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.BlockValve }},
-	{"PZRPORV", "ReactorBuilding/Pressurizer/PORV", "porv",
+	{"PZRPORV", "ReactorBuilding/PORV", "porv",
 		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.PORV }},
 	{"TSTOP", "TurbineBuilding/Turbine/StopValve", "stop",
 		func(p *core.Plant) *core.Valve { return &p.TurbineBuilding.Turbine.StopValve }},
@@ -561,16 +561,41 @@ var standaloneValves = []struct {
 		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.PRTSprayValve }},
 }
 
-// valvePlacement seats a standalone valve onto the drawn polyline
-// of a pipe even though no fluid-graph edge models that line: from
-// and to name the edge, near biases placement toward that
-// endpoint's laid-out anchor, and shift slides the glyph along the
-// route as a fraction of its length (negative toward from).
-// Every binding cites its spec passage; valves without a citable
-// line keep their own anchors.
+// visualPipe draws a connection the fluid graph does not model so
+// the picture shows hardware whose flow the integrator never
+// moves. It renders dim and streams while its flow open fraction
+// is positive.
+type visualPipe struct {
+	id       string
+	from, to string
+	colour   string
+	flow     func(*core.Plant) float64
+}
+
+// visualPipes lists those spec-cited connections. The pressurizer
+// relief path carries the PORV and its isolating stop valve out to
+// the relief tank: "The pressurizer also has power operated relief
+// valves which operate automatically to prevent overpressure.
+// Remotely operated stop valves are provided to isolate these
+// relief valves should excessive leakage occur."
+// specs/the_westinghouse_pressurized_water_react/chapter_3/page_071.txt:115-124
+var visualPipes = []visualPipe{
+	{
+		id: "PZRREL", from: "Pressurizer", to: "PRT", colour: "red",
+		flow: func(p *core.Plant) float64 { return p.ReactorBuilding.PORV.Open },
+	},
+}
+
+// valvePlacement seats a standalone valve onto a drawn polyline:
+// either a fluid-graph edge (from/to) or a named visualPipe. near
+// biases placement toward that endpoint's laid-out anchor, and
+// shift slides the glyph along the route as a fraction of its
+// length (negative toward from). Every binding cites its spec
+// passage; valves without a citable line keep their own anchors.
 var valvePlacements = map[string]struct {
-	from, to, near string
-	shift          float64
+	pipe            string
+	from, to, near  string
+	shift           float64
 }{
 	// "The main steam lines are provided with a stop valve and a
 	// check valve in each line just outside the containment."
@@ -585,6 +610,11 @@ var valvePlacements = map[string]struct {
 	// is dumped to the condensers".
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:104-118
 	"TDUMP": {from: "SG", to: "Condenser", near: "Condenser", shift: -0.05},
+	// PORV and its isolating stop valve seat on the pressurizer
+	// relief line drawn to the relief tank; see the visualPipes
+	// citation (chapter_3/page_071.txt:115-124).
+	"PZRPORV": {pipe: "PZRREL", shift: 0.30},
+	"PZRBLK":  {pipe: "PZRREL", shift: 0.62},
 	// "low-pressure feedwater heaters are cascaded back to the
 	// condenser." The sentence starts at the bottom of page 220;
 	// page_221 truncates it after "Drains from the four".
@@ -1269,6 +1299,34 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		}
 	}
 
+	// Visual pipes: spec-cited connections the fluid graph does not
+	// model. They render as dim lines and stream while their flow
+	// open fraction is positive; seated valves read their polyline.
+	visRoutes := map[string][]Anchor{}
+	for _, vp := range visualPipes {
+		fa, okF := r.anchor(vp.from)
+		ta, okT := r.anchor(vp.to)
+		if !okF || !okT {
+			r.missing[vp.from] = r.missing[vp.from] || !okF
+			r.missing[vp.to] = r.missing[vp.to] || !okT
+			continue
+		}
+		fw, fh := r.size(r.kindOf(vp.from))
+		tw, th := r.size(r.kindOf(vp.to))
+		pts := []Anchor{clipToward(fa, ta, fw, fh), clipToward(ta, fa, tw, th)}
+		visRoutes[vp.id] = pts
+		var frag string
+		if vp.flow != nil && vp.flow(p) > 0 {
+			frag = DrawPipePathAnimated(pts, vp.colour,
+				flowDurationSec(nominalDrivenVelocity,
+					clampRange(vp.flow(p), 0.05, 1)))
+		} else {
+			frag = DrawPipePathIdle(pts, vp.colour)
+		}
+		b.WriteString(frag)
+		b.WriteString("\n")
+	}
+
 	// Symbols bound to parts for the live web UI. Pump-backed
 	// parts also get a run-status dot and speed readout so static
 	// exports carry state the web UI otherwise injects.
@@ -1346,7 +1404,13 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	for _, sv := range standaloneValves {
 		open := sv.valve(p).Open
 		if pl, okP := valvePlacements[sv.id]; okP {
-			if pts, okR := r.routeFor(core.GraphEdge{From: pl.from, To: pl.to}); okR {
+			pts, okR := ([]Anchor)(nil), false
+			if pl.pipe != "" {
+				pts, okR = visRoutes[pl.pipe], true
+			} else if route, routed := r.routeFor(core.GraphEdge{From: pl.from, To: pl.to}); routed {
+				pts, okR = route, true
+			}
+			if okR {
 				total := routeLen(pts)
 				dist := 0.5 * total
 				if a, okA := r.anchor(pl.near); okA {
@@ -1566,6 +1630,20 @@ var readouts = []readoutDef{
 		text: func(p *core.Plant) string {
 			return fmt.Sprintf("CT %.0f°F",
 				p.Outside.CoolingTower.ColdBasinTemp.Float())
+		},
+	},
+	{
+		// Rupture-disc latch: invisible until it matters, then the
+		// only line on the tank. "A rupture disc vents the tank to
+		// the containment if design pressure is exceeded."
+		// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:37-38
+		id: "PRT",
+		dy: 26,
+		show: func(p *core.Plant) bool {
+			return p.ReactorBuilding.PRTRuptureDiscBurst
+		},
+		text: func(p *core.Plant) string {
+			return "PRT disc BURST"
 		},
 	},
 }

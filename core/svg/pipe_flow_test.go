@@ -2,6 +2,8 @@ package svg
 
 import (
 	"math"
+	"regexp"
+	"strconv"
 	"testing"
 
 	u "github.com/bcicen/go-units"
@@ -101,4 +103,70 @@ func TestRouteProjection(t *testing.T) {
 	elbow := []Anchor{{X: 0, Y: 0}, {X: 100, Y: 0}, {X: 100, Y: 100}}
 	assert.InDelta(t, 120, projectAnchorDist(elbow, Anchor{X: 100, Y: 20}), 1e-6)
 	assert.InDelta(t, 0, projectAnchorDist(elbow, Anchor{X: -30, Y: 0}), 1e-6)
+}
+
+var polylineNumRe = regexp.MustCompile(`-?\d+(?:\.\d+)?`)
+
+// TestReliefPipeSeatsValves codifies the visual relief path: the
+// pressurizer-to-PRT line renders, and the PORV plus its block
+// valve sit on it (centre within a glyph height of the polyline)
+// instead of floating at their own anchors.
+func TestReliefPipeSeatsValves(t *testing.T) {
+	p := core.MakePlant()
+	out := renderPlant(t, &p)
+
+	var segs [][2][2]float64
+	for _, m := range regexp.MustCompile(`<polyline points="([^"]+)"`).FindAllStringSubmatch(out, -1) {
+		n := polylineNumRe.FindAllString(m[1], -1)
+		var pts [][2]float64
+		for i := 0; i+1 < len(n); i += 2 {
+			x, _ := strconv.ParseFloat(n[i], 64)
+			y, _ := strconv.ParseFloat(n[i+1], 64)
+			pts = append(pts, [2]float64{x, y})
+		}
+		for i := 1; i < len(pts); i++ {
+			segs = append(segs, [2][2]float64{pts[i-1], pts[i]})
+		}
+	}
+	assert.NotEmpty(t, segs)
+
+	distToPipe := func(cx, cy float64) float64 {
+		best := math.Inf(1)
+		for _, s := range segs {
+			ax, ay := s[0][0], s[0][1]
+			bx, by := s[1][0], s[1][1]
+			vx, vy := bx-ax, by-ay
+			l2 := vx*vx + vy*vy
+			tt := 0.0
+			if l2 > 0 {
+				tt = ((cx-ax)*vx + (cy-ay)*vy) / l2
+				if tt < 0 {
+					tt = 0
+				}
+				if tt > 1 {
+					tt = 1
+				}
+			}
+			d := math.Hypot(cx-(ax+vx*tt), cy-(ay+vy*tt))
+			if d < best {
+				best = d
+			}
+		}
+		return best
+	}
+
+	for id, part := range map[string]string{
+		"PZRPORV": "ReactorBuilding/PORV",
+		"PZRBLK":  "ReactorBuilding/BlockValve",
+	} {
+		tagRe := regexp.MustCompile(`<g data-part="` + regexp.QuoteMeta(part) + `"[^>]*transform="translate\((-?[\d.]+) (-?[\d.]+)\)"`)
+		m := tagRe.FindStringSubmatch(out)
+		if !assert.NotNilf(t, m, "%s group rendered", id) {
+			continue
+		}
+		cx, _ := strconv.ParseFloat(m[1], 64)
+		cy, _ := strconv.ParseFloat(m[2], 64)
+		assert.LessOrEqualf(t, distToPipe(cx, cy), 3.0,
+			"%s must sit on the relief pipe", id)
+	}
 }
