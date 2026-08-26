@@ -147,9 +147,10 @@ func TestCSS_SumpPHAdjustedLatchesBelowLoLo(t *testing.T) {
 		c2.SumpPHAdjusted)
 }
 
-// When CSSTLevel drops below the Lo-Lo setpoint the operator
-// switches to sump recirculation mode (SuctionSump latches true)
-// and the CSST stops draining.
+// The recirculation switchover is an operator action performed on the
+// Lo-Lo cue: injection continues (CSST still draining, additive still
+// flowing) until the operator sets SuctionSump; afterwards the CSST
+// stops draining. The model deliberately does not automate it.
 //
 // Spec justification:
 //   - "when the CSST is drained to the "Lo-Lo" setpoint, the spray
@@ -166,16 +167,21 @@ func TestCSS_SwitchoverToSumpStopsCSSTDrain(t *testing.T) {
 		CSSTLevel:       Volume{Val: CSSLowLevelSetpoint-10, Unit: u.Gallon},
 		SATLevel:        Volume{Val: 100, Unit: u.Gallon},
 	}
+	// Below Lo-Lo but before the operator acts: still injecting.
 	c2 := c.Step()
-	assert.True(t, c2.SuctionSump,
-		"want SuctionSump=true after Lo-Lo, got %v",
-		c2.SuctionSump)
-	// Once SuctionSump is latched true, subsequent steps must not
-	// drain the CSST further.
+	assert.False(t, c2.SuctionSump,
+		"the model must not perform the operator's switchover")
+	assert.True(t, c2.SumpPHAdjusted,
+		"the Lo-Lo cue still latches the passive pH consequence")
+	levelBefore := c2.CSSTLevel.Float()
+
+	// Operator performs the switchover through the control.
+	c2.SuctionSump = true
 	c3 := c2.Step()
-	assert.InDelta(t, c2.CSSTLevel.Float(), c3.CSSTLevel.Float(), 1e-9,
-		"want CSSTLevel frozen after switchover, got %v → %v",
-		c2.CSSTLevel.Float(), c3.CSSTLevel.Float())
+	assert.True(t, c3.SuctionSump)
+	assert.InDelta(t, levelBefore, c3.CSSTLevel.Float(), 1e-9,
+		"want CSSTLevel frozen after the manual switchover, got %v → %v",
+		levelBefore, c3.CSSTLevel.Float())
 }
 
 // SprayFlow tracks CSSDesignFlow when the spray header is open,

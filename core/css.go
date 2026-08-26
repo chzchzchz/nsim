@@ -111,27 +111,13 @@ func (c *ContainmentSpraySystem) Step() ContainmentSpraySystem {
 		if ret.CSSTLevel.Float() < CSSLowLevelSetpoint {
 			ret.SumpPHAdjusted = true
 		}
-
-		// Manual switchover to recirculation mode. The spec
-		// describes this as an operator action; the simplified
-		// model fires it once CSSTLevel drops below the Lo-Lo
-		// setpoint.
-		//
-		// Spec justification:
-		//   - "when the CSST is drained to the "Lo-Lo" setpoint,
-		//     the spray pumps are manually switched to the
-		//     recirculation mode of spray operation."
-		//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:18-21
-		//   - "The recirculation mode of the CSS will be
-		//     initiated manually by the operator. To accomplish
-		//     this, the sump isolation valves "C" are opened,
-		//     and the spray pump suction isolation valves "D"
-		//     are closed. Spray additive is not injected during
-		//     this mode."
-		//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:63-70
-		if ret.CSSTLevel.Float() < CSSLowLevelSetpoint {
-			ret.SuctionSump = true
-		}
+		// Recirculation switchover is deliberately NOT automatic:
+		// "the spray pumps are manually switched to the recirculation
+		// mode of spray operation" (chapter_6/page_115.txt:18-21),
+		// via sump isolation valves C open and suction isolation
+		// valves D closed (page_115.txt:63-70). The operator performs
+		// it through the SuctionSump control once the Lo-Lo cue
+		// arrives; injection continues until then.
 	}
 
 	// SprayFlow tracks the per-second delivery rate for
