@@ -438,6 +438,20 @@ func PressurizerSatPressure(tempF float64) Pressure {
 	return Pressure(max(pPsi, PressurizerMinSatFloor))
 }
 
+// PressurizerSatTemperatureF inverts PressurizerSatPressure: the
+// saturation temperature (°F) of water at psia. It bounds fault-regime
+// primary cooling, which cannot push the coolant below the boiling
+// secondary's saturation point through the steam-generator tubes.
+// Same Antoine constants and atmospheric floor as the forward
+// correlation; the floor already sits at the high range's 100 °C seam,
+// so only the 100-374 °C coefficients are reachable.
+//
+// specs/wiki/Vapor_pressure_of_water.txt:793-795
+func PressurizerSatTemperatureF(psia float64) float64 {
+	pMmHg := max(psia, PressurizerMinSatFloor) * mmHgPerPsi
+	return (antoineB2/(antoineA2-math.Log10(pMmHg)) - antoineC2) * 1.8 + 32
+}
+
 const (
 	// PressurizerReliefDischargeGalPerSec is the lumped steam-
 	// equivalent relief capacity per open relief path (gal/s).

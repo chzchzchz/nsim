@@ -129,3 +129,100 @@ func TestSteamLineBreak_ProtectionResponse(t *testing.T) {
 		p.TurbineBuilding.Turbine.RealPower > 0.1*TurbineRatedkW*1000,
 		"a synchronized machine must not keep exporting rated power into the break")
 }
+
+// The sink-draw imbalance splits into its two regimes: the paced share
+// (turbine offtake + atmospheric dump) stays under the operational rate
+// envelope inside ReactorPressureVessel.Step, while the break discharge
+// is the fault regime that bypasses it. With no break open the fault
+// share must be zero so every planned-evolution trajectory is
+// unchanged (plans/p34_1.txt).
+func TestSecondaryExcessDraw_SplitsFaultFromPacedPath(t *testing.T) {
+	p := MakePlant()
+	p.Step()
+	p.Update()
+	rb := &p.ReactorBuilding
+	op := PlantOperation{Mode: HotStandby}
+	sg := &rb.SteamGenerator
+	sg.HeatInput = 0
+
+	reset := func() {
+		rb.SecondaryImbalanceFiltered = 0
+		sg.AtmosphericDumpValve.Open = 0
+		sg.MainSteamLineBreak.Open = 0
+	}
+
+	reset()
+	paced, fault := rb.secondaryExcessDrawW(0, false, op, TimeStep)
+	assert.Zero(t, paced, "an intact header draws nothing")
+	assert.Zero(t, fault)
+
+	reset()
+	sg.AtmosphericDumpValve.Open = 0.5
+	paced, fault = rb.secondaryExcessDrawW(0, false, op, TimeStep)
+	assert.Greater(t, float64(paced), 0.0,
+		"the atmospheric dump is operator-paced draw")
+	assert.Zero(t, fault, "a commanded dump is not a fault")
+
+	reset()
+	sg.MainSteamLineBreak.Open = 1
+	paced, fault = rb.secondaryExcessDrawW(0, false, op, TimeStep)
+	assert.Zero(t, paced)
+	assert.Greater(t, float64(fault), 0.0,
+		"the break discharge carries the whole excess as fault draw")
+
+	reset()
+	sg.AtmosphericDumpValve.Open = 0.5
+	sg.MainSteamLineBreak.Open = 1
+	paced, fault = rb.secondaryExcessDrawW(0, false, op, TimeStep)
+	assert.Greater(t, float64(paced), 0.0)
+	assert.Greater(t, float64(fault), 0.0,
+		"both regimes draw at once when both paths are open")
+}
+
+// Full-plant acceptance: after the break trips the plant, the primary
+// cools measurably past anything the 50 F/hr envelope permits in the
+// same window (the old clamp rode exactly the program pace).
+//
+// "Therefore, coolant temperature and pressure will drop."
+// specs/pwr_sim/chapter_4/page_053.txt:11
+func TestPlant_SteamLineBreakOvercoolsPastProgramEnvelope(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
+	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	synchronizeAndCloseBreaker(&p)
+	stepN(&p, int(2*time.Second/TimeStep))
+
+	ctrl, ok := p.GetControlMap()["ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open"]
+	require.True(t, ok, "break control must be registered")
+	require.NoError(t, ctrl.Set("1"))
+
+	startF := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+	trippedAt := -1
+	maxCoolFps := 0.0
+	const window = 60 * time.Second
+	for i := 0; i < int(window/TimeStep); i++ {
+		pre := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+		p.Step()
+		p.Update()
+		post := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+		if trippedAt < 0 {
+			if p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped {
+				trippedAt = i
+			}
+			continue
+		}
+		maxCoolFps = max(maxCoolFps, (pre-post)/TimeStep.Seconds())
+	}
+	require.GreaterOrEqual(t, trippedAt, 0, "the break must trip the reactor")
+	endF := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+
+	drop := startF - endF
+	programDrop := OpHeatupRateLimit * window.Seconds()
+	t.Logf("measured: drop %.2f F in %v (program allows %.2f F), max cooling %.3f F/s (envelope %.4f F/s)",
+		drop, window, programDrop, maxCoolFps, OpHeatupRateLimit)
+	assert.Greater(t, drop, programDrop*5,
+		"the fault overcool must outrun the planned-cooldown pace (pre-fix code rides at 1x)")
+	assert.Greater(t, maxCoolFps, OpHeatupRateLimit*5,
+		"instantaneous cooling must exceed what pacing physics permits")
+}

@@ -23,15 +23,18 @@ import (
 // the previous turbine step; the atmospheric valves draw from the
 // same header and are read directly.
 //
-// "Steam dumps are adjusted to start a 50°F/hr (28°C/hr) cooldown
-// rate." "As steam generator steam pressure decreases during the
-// cooldown, the steam dump must be re-adjusted to maintain a 50°F
-// (28°C) per hour cooldown rate."
+// The return splits the rectified imbalance into its two regimes:
+// paced (turbine offtake + atmospheric dump), which the RPV integrates
+// under the operational rate envelope ("Steam dumps are adjusted to
+// start a 50°F/hr (28°C/hr) cooldown rate."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:73-74,
-// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:124-127
-func (r *ReactorBuilding) secondaryExcessDrawW(offtakeFraction float64, turbineAdmitting bool, op PlantOperation, dt time.Duration) Watts {
+// re-adjusted as the header falls at page_227.txt:124-127), and fault
+// (main-steam-line break discharge, plans/p34_1.txt), which the RPV
+// integrates against physics alone. With no break open the fault share
+// is zero and every planned-evolution trajectory is unchanged.
+func (r *ReactorBuilding) secondaryExcessDrawW(offtakeFraction float64, turbineAdmitting bool, op PlantOperation, dt time.Duration) (Watts, Watts) {
 	if r.Aux != nil && r.Aux.ResidualHeatRemovalSystem.HasTakenOver {
-		return 0
+		return 0, 0
 	}
 	// With the turbine admitted, draw and boiler duty reconcile
 	// through header-pressure regulation and governor demand; their
@@ -43,7 +46,7 @@ func (r *ReactorBuilding) secondaryExcessDrawW(offtakeFraction float64, turbineA
 	// operation reconciles draw through header-pressure regulation
 	// without spending primary stored heat.
 	if turbineAdmitting || op.Mode == PowerOperation {
-		return 0
+		return 0, 0
 	}
 	advFrac := r.SteamGenerator.AtmosphericDumpValve.Open * AtmosphericDumpFraction
 	// The break path draws from the same header with the same
@@ -67,7 +70,13 @@ func (r *ReactorBuilding) secondaryExcessDrawW(offtakeFraction float64, turbineA
 	filt := float64(r.SecondaryImbalanceFiltered)*(1-alpha) +
 		(drawnW-float64(r.SteamGenerator.HeatInput))*alpha
 	r.SecondaryImbalanceFiltered = Watts(filt)
-	return Watts(max(0, filt))
+	net := max(0, filt)
+	if drawnW <= 0 {
+		return 0, 0
+	}
+	pacedW := (offtakeFraction + advFrac) * float64(SteamGeneratorFullLoadHeatInput)
+	faultW := brkFrac * float64(SteamGeneratorFullLoadHeatInput)
+	return Watts(net * pacedW / drawnW), Watts(net * faultW / drawnW)
 }
 
 func (r *ReactorBuilding) Step(
@@ -306,9 +315,13 @@ func (r *ReactorBuilding) Step(
 	// system", specs/the_westinghouse_pressurized_water_react/chapter_16/
 	// page_224.txt:109-111).
 	rpvOutletPreStepF := ret.ReactorPressureVessel.Outlet.Float()
+	pacedExcess, faultExcess := ret.secondaryExcessDrawW(
+		sgSteamOutflowFraction, turbineAdmitting, op, dt)
 	rpv := ret.ReactorPressureVessel.Step(ret.ReactorCoolantPump.Velocity,
-		ret.secondaryExcessDrawW(sgSteamOutflowFraction, turbineAdmitting, op, dt))
+		pacedExcess)
 	ret.ReactorPressureVessel = rpv
+	ret.ReactorPressureVessel.applyFaultOvercool(faultExcess,
+		ret.SteamGenerator.Pressure)
 	// Surge-line coupling: the pressurizer is hydraulically common
 	// with the loop, so its state is THE RCS pressure the vessel
 	// reports. Carrying an independent relaxation here let the two

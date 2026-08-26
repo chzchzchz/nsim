@@ -388,6 +388,49 @@ func TestReactor_OutletProgramRateLimited(t *testing.T) {
 		rise, window)
 }
 
+// A fault-regime secondary draw (main steam line break) cools the
+// primary at the m*cp rate the discharge demands, not at the
+// operational program envelope: the ±50 F/hr clamp is operator pacing
+// discipline for planned evolutions, and protection exists precisely
+// because a break outruns it.
+//
+// "The pipe break also results in increase in steam flow from the
+//  steam generators, leading to increase in heat removal from the
+//  reactor coolant system. Therefore, coolant temperature and pressure
+//  will drop."
+// specs/pwr_sim/chapter_4/page_053.txt:9-11
+func TestReactor_FaultOvercoolBypassesProgramEnvelope(t *testing.T) {
+	hot := ReactorPressureVessel{}
+	hot.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
+	hot.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
+	// Subcritical: with the rods out the source population would
+	// regrow to rated and the fault draw would fight fission heat.
+	hot.Insertion = 1
+	hot.DemandInsertion = 1
+
+	const window = 10 * time.Second
+	start := hot.Outlet.Float()
+	for i := 0; i < int(window/TimeStep); i++ {
+		hot = hot.Step(0, 0)
+		hot.applyFaultOvercool(Watts(SteamGeneratorFullLoadHeatInput),
+			SteamGeneratorShellPressure)
+	}
+	drop := start - hot.Outlet.Float()
+	programDrop := OpHeatupRateLimit * window.Seconds()
+	assert.Greater(t, drop, programDrop*10,
+		"a full-break draw cooled %v F in %v; the program envelope allows only %v F",
+		drop, window, programDrop)
+	floorF := PressurizerSatTemperatureF(float64(SteamGeneratorShellPressure))
+	assert.GreaterOrEqual(t, hot.Outlet.Float(), floorF-1e-9,
+		"tube heat transfer cannot push the primary below the boiling header")
+
+	// One-writer discipline: no fault draw, no fault cooling.
+	before := hot.Outlet.Float()
+	hot.applyFaultOvercool(0, SteamGeneratorShellPressure)
+	assert.Equal(t, before, hot.Outlet.Float(),
+		"an absent fault path must leave the outlet untouched")
+}
+
 // A cold, zero-power primary holds its operator-maintained pressure:
 // nothing passive raises it toward the design point. Regression for
 // the unconditional design-pressure relaxation, which dragged a

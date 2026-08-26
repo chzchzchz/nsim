@@ -135,7 +135,7 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:140-141
 	// "Steam dumps are adjusted to start a 50°F/hr (28°C/hr)
 	// cooldown rate."
-	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:157-158
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:153-154
 	relax := dt.Seconds() / PrimaryThermalTimeConstant * retained
 	if targetOutlet > outletF {
 		relax *= powerFrac
@@ -750,6 +750,34 @@ func (r *ReactorPressureVessel) creditSafetyInjection(pzr *Pressurizer, gal floa
 		pzr.Volume.Float()-pzr.Water.Float())
 	r.BreakDischarged = vol(r.BreakDischarged,
 		max(r.BreakDischarged.Float()-refilled, 0))
+}
+
+// applyFaultOvercool integrates a fault-regime secondary draw into the
+// primary energy balance without the operational program envelope: the
+// ±50 F/hr clamp is operator pacing discipline for planned evolutions,
+// while a break removes heat at the m·cp rate the discharge actually
+// demands. The coolant cannot fall below the steam-generator shell's
+// saturation temperature through the tubes, so the header pressure sets
+// the floor; the draw itself vanishes once the header is empty.
+// ReactorBuilding.Step owns the regime split and reports zero here
+// whenever no fault path is open.
+//
+// Spec justification:
+//   - "The pipe break also results in increase in steam flow from the
+//     steam generators, leading to increase in heat removal from the
+//     reactor coolant system. Therefore, coolant temperature and
+//     pressure will drop."
+//     specs/pwr_sim/chapter_4/page_053.txt:9-11
+func (r *ReactorPressureVessel) applyFaultOvercool(faultExcess Watts,
+	sgHeader Pressure) {
+	if faultExcess <= 0 {
+		return
+	}
+	deltaTF := -float64(faultExcess) / (RCSMassKg * SpecificHeatWater) *
+		TimeStep.Seconds() * 9.0 / 5.0
+	floorF := PressurizerSatTemperatureF(float64(sgHeader))
+	r.Outlet = Temperature{
+		Val: max(r.Outlet.Float()+deltaTF, floorF), Unit: u.Fahrenheit}
 }
 // Reactor core sizing. The spec gives steam-flow and pressure data
 // (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56,

@@ -407,3 +407,23 @@ func TestPressurizer_AutoSprayNeedsRCPFlow(t *testing.T) {
 	assert.Equal(t, before, float64(pzr.Pressure),
 		"without pump flow the engaged spray has no authority")
 }
+
+// The inverse saturation correlation anchors to steam-table points and
+// round-trips against the forward correlation the spray and relief
+// paths already trust.
+//
+// specs/wiki/Vapor_pressure_of_water.txt:793-795
+func TestPressurizerSatTemperatureF_SteamTableAnchors(t *testing.T) {
+	assert.InDelta(t, 212.0, PressurizerSatTemperatureF(14.7), 1.5,
+		"atmospheric boiling point")
+	assert.InDelta(t, 533.0, PressurizerSatTemperatureF(920), 5,
+		"full-load SG shell saturation temperature")
+	assert.Greater(t, PressurizerSatTemperatureF(2250),
+		PressurizerSatTemperatureF(920),
+		"saturation temperature must rise with pressure")
+	for _, psia := range []float64{14.7, 300, 920, 1500, 2250} {
+		got := float64(PressurizerSatPressure(PressurizerSatTemperatureF(psia)))
+		assert.InDelta(t, psia, got, psia*0.02,
+			"forward(inverse(%v psia)) must round-trip", psia)
+	}
+}
