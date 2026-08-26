@@ -122,12 +122,20 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 	if ret.HHSISuction == SISSuctionSump && ret.Sump.Float() <= 0 {
 		canInject = false
 	}
+	// The same contract binds the injection phase: an empty RWST
+	// starves the pump instead of reporting delivery from a dry tank
+	// while the switchover timer runs (plans/p40_1.txt).
+	if ret.HHSISuction == SISSuctionRWST && ret.RWSTLevel.Float() <= 0 {
+		canInject = false
+	}
 	netFlow := SISHHSIDesignFlow.Float() * (1.0 - SISHHSIMiniFlowFraction)
 	if canInject {
 		ret.HHSIInjectionFlow = Volume{Val: netFlow, Unit: u.Gallon}
 	}
 	if canInject && ret.HHSISuction == SISSuctionRWST {
-		dW := SISHHSIDesignFlow.Float() * dt.Seconds()
+		// The tank loses only what is injected: the miniflow share
+		// recirculates back into it (chapter_5/page_096.txt:26-30).
+		dW := netFlow * dt.Seconds()
 		newRWST := max(ret.RWSTLevel.Float()-dW, 0)
 		ret.RWSTLevel = Volume{Val: newRWST, Unit: u.Gallon}
 	}

@@ -104,11 +104,11 @@ func TestSIS_AccumulatorDischargesBelowPrecharge(t *testing.T) {
 		s.AccumulatorInjectionFlow.Float())
 }
 
-// HHSI pumps draw from the RWST during the injection phase. With
-// HHSIPumpRunning=true and HHSISuction=SISSuctionRWST the RWST
-// level decreases at SISHHSIDesignFlow per second, and the net
-// injection flow into the RCS cold legs equals SISHHSIDesignFlow
-// × (1 − SISHHSIMiniFlowFraction) per second.
+// HHSI pumps draw from the RWST during the injection phase. The pump
+// takes SISHHSIDesignFlow from the tank, but the SISHHSIMiniFlowFraction
+// share recirculates back into it, so the tank loses only the delivered
+// share: net depletion equals the injection flow,
+// SISHHSIDesignFlow × (1 − SISHHSIMiniFlowFraction) per second.
 //
 // Spec justification:
 //   - "The HHSI and RHR pumps are aligned to take suction
@@ -127,7 +127,8 @@ func TestSIS_HHSIPumpDepletesRWST(t *testing.T) {
 		RWSTLevel:       Volume{Val: SISRWSTCapacity, Unit: u.Gallon},
 	}).Step(100)
 	dt := TimeStep.Seconds()
-	wantLoss := SISHHSIDesignFlow.Float() * dt
+	wantLoss := SISHHSIDesignFlow.Float() *
+		(1.0 - SISHHSIMiniFlowFraction) * dt
 	assert.InDelta(t, SISRWSTCapacity-wantLoss, s.RWSTLevel.Float(), 1e-9,
 		"want RWSTLevel=%v after one step, got %v",
 		SISRWSTCapacity-wantLoss, s.RWSTLevel.Float())
@@ -136,6 +137,20 @@ func TestSIS_HHSIPumpDepletesRWST(t *testing.T) {
 	assert.InDelta(t, wantInjection, s.HHSIInjectionFlow.Float(), 1e-9,
 		"want HHSIInjectionFlow=%v, got %v",
 		wantInjection, s.HHSIInjectionFlow.Float())
+}
+
+// An empty RWST starves injection-phase delivery outright: the pumps
+// cannot report flow from a dry tank while the switchover timer runs
+// (plans/p40_1.txt).
+func TestSIS_DryRWSTStarvesInjection(t *testing.T) {
+	s := (&SIS{
+		HHSIPumpRunning: true,
+		HHSIDriveReady:  true,
+		HHSISuction:     SISSuctionRWST,
+		RWSTLevel:       Volume{Val: 0, Unit: u.Gallon},
+	}).Step(float64(SISHHSIShutoffHeadPsia - 100))
+	assert.Zero(t, s.HHSIInjectionFlow.Float(),
+		"a dry RWST must starve injection delivery")
 }
 
 // Once the RWST level drops below SISRWSTLowLevel and the HHSI
