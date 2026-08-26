@@ -270,6 +270,15 @@ func TestRiverAndCVCSVisualsRendered(t *testing.T) {
 	assert.Contains(t, out, `stroke="`+riverColour+`"`)
 	assert.GreaterOrEqual(t,
 		strings.Count(out, `stroke="`+cvcsColour+`"`), 4)
+	assert.GreaterOrEqual(t, strings.Count(out, `stroke="blue"`), 2,
+		"PRT spray and RWST-to-HHSI suction lines both render")
+
+	// The HHSI suction line streams only while its pump runs.
+	p1 := core.MakePlant()
+	p1.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = true
+	assert.Equal(t, strings.Count(out, `class="flow"`)+1,
+		strings.Count(renderPlant(t, &p1), `class="flow"`),
+		"running the HHSI pump adds exactly one streaming visual")
 
 	seated := regexp.MustCompile(
 		`<g data-part="AuxiliaryBuilding/ChemicalVolumeControlSystem"[^>]*transform="translate\(`)

@@ -658,6 +658,17 @@ var visualPipes = []visualPipe{
 			return p.ReactorBuilding.PRTSprayValve.Open
 		},
 	},
+	{
+		// HHSI takes suction directly from the RWST.
+		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
+		id: "SISSUCTION", from: "RWST", to: "HHSI", colour: "blue",
+		flow: func(p *core.Plant) float64 {
+			if p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning {
+				return 1
+			}
+			return 0
+		},
+	},
 }
 
 // valvePlacement seats a standalone valve onto a drawn polyline:
