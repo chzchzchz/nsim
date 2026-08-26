@@ -138,6 +138,7 @@ var diagramParts = []diagramPart{
 	{"INVERTER", "ReactorBuilding/PlantElectricalSystems/Inverters", "InverterBus", "Inverter"},
 	{"BTRS", "AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRS", "BTRSDemineralizer", "BTRS"},
 	{"BTRSPUMP", "AuxiliaryBuilding/ChemicalVolumeControlSystem", "BTRSPump", "BTRS Pump"},
+	{"BRS", "AuxiliaryBuilding/BoronRecycleSystem", "BoronRecycleSystem", "BRS"},
 }
 
 // buildingLabels captions the cluster outlines drawn behind symbols.
@@ -424,6 +425,18 @@ var symbolWashes = []washDef{
 		alpha: func(p *core.Plant) float64 {
 			t := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PoolTemp.Float()
 			return clampRange((t-120)/(200-120), 0, 1) * 0.45
+		},
+	},
+	{
+		// Evaporator carryover contaminates the distillate; wash the
+		// shell so the fault reads without opening the bridge panel.
+		id: "BRS", class: "brs-carryover", colour: tintAmber,
+		fx: 0.20, fy: 0.34, fw: 0.60, fh: 0.52,
+		alpha: func(p *core.Plant) float64 {
+			if p.AuxiliaryBuilding.BoronRecycleSystem.Carryover {
+				return 0.35
+			}
+			return 0
 		},
 	},
 }
@@ -1770,6 +1783,34 @@ var readouts = []readoutDef{
 		},
 		text: func(p *core.Plant) string {
 			return "PRT disc BURST"
+		},
+	},
+	{
+		// Recycle evaporator duty while the feed-pump latch is on.
+		//   "use of the BTRS reduces the average evaporator duty from
+		//    approximately 10 gpm (38 l/m) to less than 2 gpm (8 l/m) per unit."
+		//   specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:71-74
+		id: "BRS",
+		dy: 12,
+		show: func(p *core.Plant) bool {
+			return p.AuxiliaryBuilding.BoronRecycleSystem.FeedPumpRunning
+		},
+		text: func(p *core.Plant) string {
+			return fmt.Sprintf("%.1f gpm",
+				p.AuxiliaryBuilding.BoronRecycleSystem.FeedFlow)
+		},
+	},
+	{
+		// Auto-divert status: a high distillate-radiation signal
+		// routes the distillate back to the feed demineralizer
+		// instead of the reactor makeup water storage tank.
+		id: "BRS",
+		dy: 26,
+		show: func(p *core.Plant) bool {
+			return p.AuxiliaryBuilding.BoronRecycleSystem.DistillateDiverted
+		},
+		text: func(p *core.Plant) string {
+			return "dist divert"
 		},
 	},
 }

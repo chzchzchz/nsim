@@ -89,6 +89,25 @@ func TestOverlay_Coverage(t *testing.T) {
 		assert.Regexp(t, `SG \d+%`, renderPlant(t, &p))
 	})
 
+	t.Run("brs evaporator overlays gate on state", func(t *testing.T) {
+		p := core.MakePlant()
+		out := renderPlant(t, &p)
+		assert.NotContains(t, out, "dist divert")
+		assert.NotContains(t, out, "brs-carryover")
+
+		brs := &p.AuxiliaryBuilding.BoronRecycleSystem
+		brs.FeedPumpRunning = true
+		brs.FeedFlow = 10
+		assert.Regexp(t, `10\.0 gpm`, renderPlant(t, &p),
+			"feed flow reads while the panel latch is on")
+
+		brs.Carryover = true
+		assert.Contains(t, renderPlant(t, &p), `class="brs-carryover"`)
+
+		brs.DistillateDiverted = true
+		assert.Contains(t, renderPlant(t, &p), "dist divert")
+	})
+
 	t.Run("pzr pressure and level readouts", func(t *testing.T) {
 		p := core.MakePlant()
 		out := renderPlant(t, &p)

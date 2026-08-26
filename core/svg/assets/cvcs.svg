@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg">
 <title>PWR CVCS symbols</title>
-<desc>Chemical and volume control system vessels: BTRS demineralizer. Source-of-truth citations live in plans/svg/cvcs.md.</desc>
+<desc>Chemical and volume control system vessels: BTRS demineralizer and BRS recycle evaporator. Source-of-truth citations live in plans/svg/cvcs.md.</desc>
 
 <symbol id="btrs-demineralizer" viewBox="-25 -40 50 80">
 <title>BTRS Demineralizer</title>
@@ -21,6 +21,25 @@
 <rect x="-5" y="-39.5" width="10" height="4" fill="#cccccc" stroke="black"/>
 <circle id="btrs-anchor-inlet" cx="-24" cy="0" r="2" fill="none" stroke="none"/>
 <circle id="btrs-anchor-outlet" cx="0" cy="-44" r="2" fill="none" stroke="none"/>
+</symbol>
+
+<symbol id="boron-recycle" viewBox="-50 -50 100 100">
+<title>BRS Recycle Evaporator</title>
+<!-- evaporator shell, domed bottom -->
+<path d="M -32 -16 L 32 -16 L 32 28 Q 32 44 0 44 Q -32 44 -32 28 Z" fill="#e6e6e6" stroke="black" stroke-width="1.5"/>
+<!-- boiling-band liquid level -->
+<rect x="-30" y="10" width="60" height="32" fill="#cccccc" fill-opacity="0.55" stroke="none"/>
+<!-- stripping column where hydrogen and fission gases leave
+     before the liquid enters the shell -->
+<rect x="-8" y="-46" width="16" height="31" fill="#e6e6e6" stroke="black" stroke-width="1.5"/>
+<line x1="-8" y1="-38" x2="8" y2="-38" stroke="#888" stroke-width="0.6"/>
+<line x1="-8" y1="-30" x2="8" y2="-30" stroke="#888" stroke-width="0.6"/>
+<!-- feed nozzle from the holdup tanks -->
+<rect x="-14" y="-43" width="6" height="6" fill="#cccccc" stroke="black"/>
+<!-- distillate outlet toward the condensate demineralizer -->
+<rect x="32" y="-9" width="12" height="6" fill="#cccccc" stroke="black"/>
+<!-- concentrates outlet to the boric acid tanks -->
+<rect x="11" y="42" width="6" height="6" fill="#cccccc" stroke="black"/>
 </symbol>
 
 </svg>

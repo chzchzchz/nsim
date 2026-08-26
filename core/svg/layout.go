@@ -192,6 +192,7 @@ var clusterFor = map[string]string{
 	"Diesel":      "cluster_auxiliary",
 	"Transformer": "cluster_auxiliary",
 	"FuelTank":    "cluster_auxiliary",
+	"BRS":         "cluster_auxiliary",
 
 	// Electrical / ESF buses and grid.
 	"ESF_A": "cluster_electrical",
