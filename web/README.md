@@ -26,7 +26,7 @@ web/
 │   ├── wasm.ts               loadWasm()
 │   ├── styles.css            shared stylesheet (linked from index.html)
 │   ├── vite-env.d.ts         Vite client types (import.meta.env)
-│   └── wasm_exec.js          Go runtime polyfill, bundled by Vite
+│   └── wasm_exec.js          Go runtime polyfill (copied from GOROOT, lives in js/)
 │                             (copied from $(go env GOROOT)/lib/wasm)
 ├── index.html                dashboard skeleton
 ├── package.json              vite + typescript dev deps
@@ -59,12 +59,12 @@ make build         # wasm + tsc; copies wasm_exec.js into src/
 
 ```sh
 GOOS=js GOARCH=wasm go build -o public/nsim.wasm ./wasm
-cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" src/wasm_exec.js
-npx tsc
+mkdir -p js && cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" js/wasm_exec.js
+npx tsc --noEmit
 ```
 
-The polyfill is bundled into the JavaScript chunk by `import
-"./wasm_exec.js"` in `src/wasm.ts`; nothing else loads it.
+The polyfill is imported by `src/wasm.ts` via `import "../js/wasm_exec.js"`
+and bundled by Vite into the JavaScript chunk; nothing else loads it.
 
 ## Deploy bundle
 
@@ -218,8 +218,8 @@ serves the live `.ts` transpilation.
 
 Quick checks:
 
-- `ls src/*.js | grep -v wasm_exec.js` — any output means stale
-  artifacts exist; delete them.
+- `ls src/*.js` — any output means stale
+  artifacts exist; delete them. (`wasm_exec.js` lives in `js/` now.)
 - `git status --short | grep 'src/.*\.js$'` — untracked `.js` files
   in `src/` are almost always shadows.
 - `grep -o 'fetch("[^"]*")' dist/assets/index-*.js | grep '^fetch("\/'`

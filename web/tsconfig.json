@@ -9,7 +9,8 @@
     "forceConsistentCasingInFileNames": true,
     "lib": ["ES2020", "DOM"],
     "types": [],
-    "outDir": "js"
+    "outDir": "js",
+    "noEmit": true
   },
   "include": ["src/**/*.ts"]
 }
