@@ -270,10 +270,10 @@ func addPlantOperationSensors(p *Plant, m bridge.SensorMap) {
 		Label: "PowerError",
 		Kind:  "string",
 		Get: func() (string, error) {
-			powerError := fissionFraction(
-				p.ReactorBuilding.ReactorPressureVessel.FissionPower) -
-				p.PlantOperation.boronDemandPower(
-					p.TurbineBuilding.Turbine.Setpoint)
+			powerError := p.PlantOperation.boronDemandPower(
+				p.TurbineBuilding.Turbine.Setpoint) -
+				fissionFraction(
+					p.ReactorBuilding.ReactorPressureVessel.FissionPower)
 			return fmt.Sprintf("%+.4f", powerError), nil
 		},
 	}

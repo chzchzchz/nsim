@@ -377,14 +377,38 @@ func TestRPC_BridgeControlsAndSensorsRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	perr, err := strconv.ParseFloat(val, 64)
 	require.NoError(t, err)
-	// Wiring check: expected recomputed from the same production
-	// helper the sensor closure uses, so this pins the bridge
-	// plumbing (formatting/parsing), not the formula.
-	wantErr := fissionFraction(
-		p.ReactorBuilding.ReactorPressureVessel.FissionPower) -
-		p.PlantOperation.DemandedPowerSetpoint
+	// Wiring check: expected recomputed from the control's own
+	// convention (demanded minus achieved, the comparison page_135
+	// keys the boron mode on), independently of the closure's
+	// subtraction order, so the sign is pinned too.
+	wantErr := p.PlantOperation.boronDemandPower(
+		p.TurbineBuilding.Turbine.Setpoint) -
+		fissionFraction(p.ReactorBuilding.ReactorPressureVessel.FissionPower)
 	assert.InDelta(t, wantErr, perr, 5e-5,
-		"power error reads current minus demanded power")
+		"power error reads demanded minus achieved power")
+}
+
+// The displayed PowerError must carry the sign the auto-boron tier
+// acts on: commanding house load against rated fission - turbine lead,
+// so the demand source is the setpoint itself - reads negative, the
+// boration direction. specs/the_westinghouse_pressurized_water_react/
+// chapter_7/page_135.txt:58-62.
+func TestPowerErrorSensor_SignMatchesControlConvention(t *testing.T) {
+	p := fullPowerLineup()
+	p.PlantOperation.LeadLagMode = TurbineLead
+	p.TurbineBuilding.Turbine.Setpoint = 0.05
+	sm := p.GetSensorMap()
+
+	val, err := sm["PlantOperation/PowerError"].Get()
+	require.NoError(t, err)
+	perr, err := strconv.ParseFloat(val, 64)
+	require.NoError(t, err)
+
+	want := p.PlantOperation.boronDemandPower(0.05) -
+		fissionFraction(p.ReactorBuilding.ReactorPressureVessel.FissionPower)
+	assert.Less(t, want, -0.5, "fixture must command a real shortfall")
+	assert.InDelta(t, want, perr, 1e-9,
+		"displayed error must equal demanded minus achieved, got %v", perr)
 }
 
 func absF(v float64) float64 { return max(v, -v) }
