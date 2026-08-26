@@ -76,7 +76,7 @@ func TestCondenser_TripOpensDumpValveAndReclosesOnAdmission(t *testing.T) {
 		},
 	}
 	for i := 0; i < int(2*time.Second/TimeStep); i++ {
-		tb = tb.StepWithSteam(SteamGeneratorShellPressure, hotTavg, true, false, 1)
+		tb = tb.StepWithSteam(SteamGeneratorShellPressure, hotTavg, true, false, 1, 560)
 	}
 	assert.Greater(t, tb.Turbine.DumpValve.Open, 0.9,
 		"want DumpValve opened by the trip, got %v", tb.Turbine.DumpValve.Open)
@@ -85,7 +85,7 @@ func TestCondenser_TripOpensDumpValveAndReclosesOnAdmission(t *testing.T) {
 	tb.Turbine.State = TurbineRunning
 	tb.Turbine.StopValve.Open = 1.0
 	for i := 0; i < int(2*time.Second/TimeStep); i++ {
-		tb = tb.StepWithSteam(SteamGeneratorShellPressure, hotTavg, true, false, 1)
+		tb = tb.StepWithSteam(SteamGeneratorShellPressure, hotTavg, true, false, 1, 560)
 	}
 	assert.Zero(t, tb.Turbine.DumpValve.Open,
 		"want DumpValve closed once steam is admitted, got %v",

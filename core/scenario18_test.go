@@ -101,7 +101,7 @@ func TestTurbineBuilding_TripDumpModulatesOnTavgError(t *testing.T) {
 	for i := 0; i < int(1*time.Second/TimeStep); i++ {
 		hot = hot.StepWithSteam(SteamGeneratorShellPressure,
 			tavgAt(SteamDumpTripDeadbandF+SteamDumpTripSpanF),
-			true, true, 1)
+			true, true, 1, 560)
 	}
 	require.Greater(t, hot.Turbine.DumpValve.Open, 0.9,
 		"the initial stored-heat error demands a wide-open dump")
@@ -117,7 +117,7 @@ func TestTurbineBuilding_TripDumpModulatesOnTavgError(t *testing.T) {
 	for i := 0; i < int(2*time.Second/TimeStep); i++ {
 		mid = mid.StepWithSteam(lowHeader,
 			tavgAt(midExcess),
-			true, true, 1)
+			true, true, 1, 560)
 	}
 	assert.Greater(t, mid.Turbine.DumpValve.Open, 0.05,
 		"residual excess keeps some dump demand")
@@ -128,7 +128,7 @@ func TestTurbineBuilding_TripDumpModulatesOnTavgError(t *testing.T) {
 	for i := 0; i < int(2*time.Second/TimeStep); i++ {
 		restored = restored.StepWithSteam(lowHeader,
 			tavgAt(0),
-			true, true, 1)
+			true, true, 1, 560)
 	}
 	assert.Zero(t, restored.Turbine.DumpValve.Open,
 		"Tavg back at no load recloses the dump")

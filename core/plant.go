@@ -657,6 +657,7 @@ func (t *TurbineBuilding) StepWithSteam(
 	cwPumpRunning bool,
 	reactorTripped bool,
 	msivOpen float64,
+	tcoldF float64,
 ) TurbineBuilding {
 	ret := *t
 
@@ -856,9 +857,28 @@ func (t *TurbineBuilding) StepWithSteam(
 	//      restore Tavg to the no-load value."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_16/
 	//     page_233.txt:95-96
+	// Table 7-1: "Block Steam Dump: Low Tcold". With the cold leg
+	// below the low-Tcold setpoint the automatic dump branches -
+	// trip kick, post-scram restoration, rejection hold - stand
+	// down; the pressure-control branch stays armed because plant
+	// cooldown deliberately dumps to the condensers for its heat
+	// sink.
+	//   "Block Steam Dump: Low Tcold"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:48-49
+	//   "During plant cooldown, steam is dumped to the condensers
+	//    to provide a heat sink rather than to atmosphere through
+	//    the atmospheric dump valves."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:33-37
+	tcoldBlocksDump := tcoldF < RPSLowTcoldTrip
 	var target float64
 	switch {
 	case tripped && !reactorTripped:
+		if tcoldBlocksDump {
+			ret.Turbine.DumpPressureIntegral = 0
+			ret.Turbine.DumpBypassKicked = false
+			target = 0
+			break
+		}
 		if !ret.Turbine.DumpBypassKicked {
 			// One-shot opening on the trip itself; the pressure
 			// loop below throttles from there.
@@ -867,6 +887,10 @@ func (t *TurbineBuilding) StepWithSteam(
 		}
 		target = ret.Turbine.dumpModulationDemand(sgPressure, dt)
 	case tripped && reactorTripped:
+		if tcoldBlocksDump {
+			target = 0
+			break
+		}
 		excessF := tavg.Float() - CoreReferenceInletF - SteamDumpTripDeadbandF
 		tavgTerm := min(max(excessF/SteamDumpTripSpanF, 0), 1)
 		// Headroom limiter: the bypass may only spend pressure the
@@ -895,6 +919,10 @@ func (t *TurbineBuilding) StepWithSteam(
 		// the hold window as the short-term artificial load.
 		//   "The steam dump serves as a short-term artificial load"
 		//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:27-31
+		if tcoldBlocksDump {
+			target = 0
+			break
+		}
 		ret.Turbine.DumpPressureIntegral = 0
 		ret.Turbine.DumpBypassKicked = false
 		target = 1.0
@@ -1894,6 +1922,7 @@ func (p *Plant) Step() {
 		cwFlowing,
 		p.nextPlant.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
 		p.nextPlant.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open,
+		p.nextPlant.ReactorBuilding.ReactorPressureVessel.Inlet.Float(),
 	)
 	// Steamline vent and SG shell drain receipts. Both draws land in
 	// the condenser hotwell: vented steam condenses on the tube

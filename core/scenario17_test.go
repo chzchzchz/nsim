@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -291,4 +292,52 @@ func TestTurbineTripOutputTripsMachineOnHighSGLevel(t *testing.T) {
 	assert.Truef(t,
 		p.ReactorBuilding.ReactorProtectionSystem.FeedwaterIsolationActuated,
 		"feedwater isolation latches as the shared-trigger sibling")
+}
+
+// Table 7-1's Block-Steam-Dump row stands the automatic dump branches
+// down once the cold leg falls below the low-Tcold setpoint - an
+// automatic dump into an already-cold plant can only drive an
+// over-cooldown. The pressure-control branch stays armed: cooldown
+// deliberately dumps to the condensers for its heat sink.
+//
+// Spec: "Block Steam Dump: Low Tcold"
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:48-49
+func TestLowTcoldBlocksAutomaticDumpDemand(t *testing.T) {
+	p := postTripLineup()
+	// Asymmetric post-cooldown state: cold leg below the setpoint,
+	// hot leg high enough that the Tavg restoration term still
+	// demands steam - only the block can hold the valve shut.
+	p.ReactorBuilding.ReactorPressureVessel.Inlet =
+		Temperature{Val: RPSLowTcoldTrip - 5, Unit: u.Fahrenheit}
+	p.ReactorBuilding.ReactorPressureVessel.Outlet =
+		Temperature{Val: 545, Unit: u.Fahrenheit}
+	p.ReactorBuilding.SteamGenerator.Pressure = Pressure(
+		SteamDumpPressureModeMargin*float64(SteamGeneratorShellPressure) + 25)
+
+	stepN(&p, 20)
+	require.LessOrEqualf(t,
+		float64(p.TurbineBuilding.Turbine.DumpValve.Open), 1e-9,
+		"the low-Tcold block must hold the automatic dump shut")
+	assert.Equalf(t, 0.0,
+		float64(p.ReactorBuilding.SteamGenerator.SafetyValve.Open),
+		"the trapped header rides below the safety valves")
+
+	// Warming the cold leg back above the setpoint releases the
+	// block: identical demand, identical header - and the valve
+	// opens while the pressure mode holds, then throttles as the
+	// dump pulls the header back under the arm.
+	p.ReactorBuilding.ReactorPressureVessel.Inlet.Val = float64(RPSLowTcoldTrip) + 5
+	maxOpen := 0.0
+	for i := 0; i < int(time.Second/TimeStep); i++ {
+		stepN(&p, 1)
+		maxOpen = max(maxOpen,
+			float64(p.TurbineBuilding.Turbine.DumpValve.Open))
+	}
+	// The release peak is self-limiting by design - the dump pulls
+	// the header under the arm within a step and the demand
+	// throttles to the small Tavg-excess term - so the assertion is
+	// the existence of a real opening above the settled floor
+	// (~0.02), not a wide-open excursion.
+	assert.Greaterf(t, maxOpen, 0.05,
+		"releasing the block lets the restoration duty open the dump")
 }
