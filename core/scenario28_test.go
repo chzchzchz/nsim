@@ -341,3 +341,88 @@ func TestScenario28_BlowdownCoolsCoolantPastProgramEnvelope(t *testing.T) {
 	assert.GreaterOrEqual(t, endF, satEnd-2.0,
 		"the outlet relaxes toward, never below, the current saturation point")
 }
+
+// ECCS delivery carries storage-temperature enthalpy, not just volume:
+// each delivered gallon joins the lumped loop inventory at storage
+// temperature, so continued safety-injection flow drives coolant
+// temperature toward storage instead of leaving it parked at its
+// blowdown value (plans/p36_1.txt).
+//
+//   - "All pumps will continue to operate and will deliver water to
+//     the RCS cold legs without interruption."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:175-177
+func TestReactor_ECCSInjectionMixesStorageTemperature(t *testing.T) {
+	r := &ReactorPressureVessel{}
+	r.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
+	r.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
+	pzr := &Pressurizer{
+		Volume: Volume{Val: 1500, Unit: u.Gallon},
+		Water:  Volume{Val: 900, Unit: u.Gallon},
+	}
+
+	before := r.Outlet.Float()
+	r.creditSafetyInjection(pzr, 0)
+	assert.Equal(t, before, r.Outlet.Float(),
+		"zero delivery must not move the energy ledger")
+
+	// Wiring check: expectation recomputed from the same production
+	// constants; a tenth of the loop inventory mixes exactly one
+	// mixing-fraction of the way toward storage temperature.
+	tenth := RCSDrainableInventoryGal / 10
+	r.creditSafetyInjection(pzr, tenth)
+	want := before + tenth/RCSDrainableInventoryGal*
+		(ECCSInjectionTempF-before)
+	assert.InDelta(t, want, r.Outlet.Float(), 0.5,
+		"the mix must be the exact mass-weighted convex combination")
+
+	for i := 0; i < int(600*time.Second/TimeStep); i++ {
+		r.creditSafetyInjection(pzr, tenth/1000)
+	}
+	assert.Greater(t, r.Outlet.Float(), ECCSInjectionTempF-1e-9,
+		"mixing converges toward storage temperature without crossing it")
+	assert.Less(t, r.Outlet.Float(), want,
+		"sustained delivery keeps pulling the coolant toward storage")
+}
+
+// Full-plant differential acceptance: twin plants through an identical
+// blowdown and isolated refill differ only in whether their
+// accumulators held injectable inventory, so the end-temperature
+// separation is attributable to the ECCS volume credit arriving at
+// storage temperature instead of as pure volume. The crediting plant
+// must end colder by a strictly positive margin - design-flow mixing
+// is gentle by derivation (~0.2 F per 30 s against ~419400 gal), so
+// the window is sized to accumulate a clear signal. Securing HHSI
+// manually is deliberately inexpressible here: while the actuation
+// signal stands the model re-latches its pumps.
+func TestScenario28_ECCSCreditCoolsRefilledPrimary(t *testing.T) {
+	t.Parallel()
+
+	runLeg := func(seedAccumulators bool) float64 {
+		p := MakePlant()
+		if seedAccumulators {
+			p.ReactorBuilding.SafetyInjectionSystem.Accumulator.Level =
+				Volume{Val: 0, Unit: u.Gallon}
+		}
+		cm := GetControlMap(&p)
+		require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+		for i := 0; i < int(45*time.Second/TimeStep); i++ {
+			p.Step()
+			p.Update()
+		}
+		require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0"))
+		for i := 0; i < int(120*time.Second/TimeStep); i++ {
+			p.Step()
+			p.Update()
+		}
+		return p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
+	}
+
+	creditedF := runLeg(false)
+	dryF := runLeg(true)
+	t.Logf("measured: credited %.3f F vs dry-accumulator %.3f F (separation %.3f F)",
+		creditedF, dryF, dryF-creditedF)
+	assert.Greater(t, dryF-creditedF, 0.3,
+		"the ECCS-crediting plant must end measurably colder")
+	assert.Greater(t, creditedF, ECCSInjectionTempF,
+		"mixing approaches storage temperature asymptotically")
+}

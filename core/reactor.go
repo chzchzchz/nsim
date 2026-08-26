@@ -688,6 +688,14 @@ const RCSHotLegBreakGalPerSec = 120.0
 // voided primary would feed the break forever.
 var RCSDrainableInventoryGal = RCSMassKg / KilogramsPerGallon
 
+// ECCSInjectionTempF is the storage temperature (°F) of borated
+// ECCS water, shared by the accumulators and the RWST. Assumption;
+// the source quotes no storage temperature. Sized to near-ambient
+// borated-water storage, far below any post-blowdown coolant
+// temperature, so the mixing direction is always cooling during a
+// LOCA transient.
+const ECCSInjectionTempF = 100.0
+
 // applyHotLegBreak discharges the hot-leg break against the
 // pressurizer inventory ledger: each liquid-equivalent gallon lost
 // drops RCS pressure by PressurizerBubbleStiffness toward floor
@@ -733,6 +741,10 @@ func (r *ReactorPressureVessel) applyHotLegBreak(pzr *Pressurizer, floor Pressur
 // off the cumulative break draw so RCSDrainableInventoryGal bounds the
 // primary's NET loss rather than its gross spill. RWST suction was
 // already debited in SIS.Step; sump suction draws the implicit sump.
+// The delivered gallonage also joins the lumped loop inventory at
+// storage temperature (plans/p36_1.txt), so continued safety-injection
+// flow drives coolant temperature toward storage instead of leaving it
+// parked at its blowdown value.
 //
 // Spec justification:
 //   - "All pumps will continue to operate and will deliver water to
@@ -750,6 +762,10 @@ func (r *ReactorPressureVessel) creditSafetyInjection(pzr *Pressurizer, gal floa
 		pzr.Volume.Float()-pzr.Water.Float())
 	r.BreakDischarged = vol(r.BreakDischarged,
 		max(r.BreakDischarged.Float()-refilled, 0))
+	outletF := r.Outlet.Float()
+	mixed := outletF + gal/RCSDrainableInventoryGal*
+		(ECCSInjectionTempF-outletF)
+	r.Outlet = Temperature{Val: mixed, Unit: u.Fahrenheit}
 }
 
 // applyFaultOvercool integrates a fault-regime secondary draw into the
