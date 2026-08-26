@@ -656,6 +656,7 @@ func (t *TurbineBuilding) StepWithSteam(
 	tavg Temperature,
 	cwPumpRunning bool,
 	reactorTripped bool,
+	msivOpen float64,
 ) TurbineBuilding {
 	ret := *t
 
@@ -663,7 +664,16 @@ func (t *TurbineBuilding) StepWithSteam(
 	c := ret.Condenser.Step(cwIn, ret.Condenser.VacuumPumpRunning, cwPumpRunning)
 	ret.Condenser = c
 
-	stopOpen := ret.Turbine.StopValve.Open
+	// The MSIV sits between the shell and the header: shut, it
+	// cuts both the turbine admission and the dump delivery while
+	// the atmospheric dumps and any line break - upstream of the
+	// stop valves - keep their own paths.
+	//   "The main steam stop valves automatically close on low
+	//    steam line pressure or on a high-high containment
+	//    pressure signal [...]"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:71-75
+	msivAdmission := min(max(msivOpen, 0), 1)
+	stopOpen := ret.Turbine.StopValve.Open * msivAdmission
 	prevSetpoint := ret.Turbine.LastSetpoint
 	ret.Turbine = ret.Turbine.Step(
 		sgPressure,
@@ -925,7 +935,7 @@ func (t *TurbineBuilding) StepWithSteam(
 	condenseGalPerStep := 0.0
 	turbineFrac := 0.0
 	if ret.Turbine.State == TurbineRunning {
-		condenseGalPerStep = ret.Turbine.SteamDemandGalPerStep()
+		condenseGalPerStep = ret.Turbine.SteamDemandGalPerStep() * msivAdmission
 		if CondenserDesignSteamLoadGalPer > 0 {
 			turbineFrac = condenseGalPerStep / CondenserDesignSteamLoadGalPer
 		}
@@ -934,8 +944,9 @@ func (t *TurbineBuilding) StepWithSteam(
 	// dump valve cannot pass design steam against a depressurised SG.
 	pressureRatio := min(max(float64(sgPressure)/float64(SteamGeneratorShellPressure), 0), 1)
 	dumpedGalPerStep := ret.Turbine.DumpValve.Open * SteamDumpCapacityGalPerStep *
-		pressureRatio
-	dumpFrac := ret.Turbine.DumpValve.Open * SteamDumpDesignFraction * pressureRatio
+		pressureRatio * msivAdmission
+	dumpFrac := ret.Turbine.DumpValve.Open * SteamDumpDesignFraction *
+		pressureRatio * msivAdmission
 	ret.Condenser.CondensingRate = Volume{Val: condenseGalPerStep + dumpedGalPerStep, Unit: u.Gallon}
 	ret.SteamOfftakeFraction = turbineFrac + dumpFrac
 
@@ -1847,11 +1858,23 @@ func (p *Plant) Step() {
 		p.nextPlant.ReactorBuilding.ReactorPressureVessel.Inlet.Float() +
 			p.nextPlant.ReactorBuilding.ReactorPressureVessel.Outlet.Float()) / 2,
 		Unit: u.Fahrenheit}
+	// Steamline isolation forces the main steam stop valves shut
+	// until the operator clears the latch; the atmospheric dump
+	// valves and any line break sit upstream of these valves and
+	// are untouched.
+	//   "The main steam stop valves automatically close on low
+	//    steam line pressure or on a high-high containment
+	//    pressure signal [...]"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:71-75
+	if p.nextPlant.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationActuated {
+		p.nextPlant.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open = 0
+	}
 	p.nextPlant.TurbineBuilding = p.TurbineBuilding.StepWithSteam(
 		p.nextPlant.ReactorBuilding.SteamGenerator.Pressure,
 		tavgAfterStep,
 		cwFlowing,
 		p.nextPlant.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+		p.nextPlant.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open,
 	)
 	// Steamline vent and SG shell drain receipts. Both draws land in
 	// the condenser hotwell: vented steam condenses on the tube
@@ -2330,6 +2353,14 @@ func MakePlant() Plant {
 	// side ... 920 psia (63 bar)".
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_066.txt:36,80
 	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
+	// The main steam stop valves start open: the construction
+	// default is a lineup delivering steam, and a zero-valued valve
+	// would read as isolated.
+	// "During operation, the four steam generators deliver
+	//  saturated steam through four steam lines to the main
+	//  turbine."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:20-23
+	p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open = 1
 
 	// Pressurizer design defaults: 60% liquid, 40% steam
 	// bubble, pressure held by the heaters at

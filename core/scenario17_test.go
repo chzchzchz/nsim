@@ -198,3 +198,48 @@ func TestPlant_HighPressurizerPressureScramsBeforeRelief(t *testing.T) {
 		float64(p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion),
 		1e-6, "rods must be fully inserted after the scram")
 }
+
+// Steamline isolation must isolate: the ESFAS output forces the main
+// steam stop valves shut, the secondary offtake collapses with the
+// turbine dying on its steam-loss deadline, and the upstream paths -
+// the atmospheric dump valves - stay available for post-isolation
+// cooldown. Clearing the latch returns the valve to operator command.
+//
+// Spec: "The main steam stop valves automatically close on low steam
+// line pressure or on a high-high containment pressure signal [...]"
+// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:71-75
+func TestSteamlineIsolationClosesMSIVAndKillsOfftake(t *testing.T) {
+	p := fullPowerLineup()
+	p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open = 0.5
+
+	p.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationActuated = true
+	stepN(&p, 1)
+	require.LessOrEqualf(t,
+		p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open, 1e-6,
+		"isolation must force the MSIV shut within one step")
+	require.LessOrEqualf(t,
+		float64(p.TurbineBuilding.SteamOfftakeFraction), 1e-9,
+		"an isolated shell has no downstream offtake")
+
+	discharging := false
+	for i := 0; i < int(30*time.Second/TimeStep); i++ {
+		stepN(&p, 1)
+		if p.TurbineBuilding.Turbine.State == TurbineTripped {
+			discharging = true
+			break
+		}
+	}
+	assert.Truef(t, discharging,
+		"the admission-less machine must trip on the steam-loss deadline")
+	assert.Equalf(t, 0.5,
+		float64(p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open),
+		"the upstream atmospheric dump stays open through isolation")
+
+	p.ReactorBuilding.ReactorProtectionSystem.Reset()
+	stepN(&p, 1)
+	p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open = 1
+	stepN(&p, 1)
+	require.Equalf(t, 1.0,
+		float64(p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open),
+		"after the reset the operator commands the MSIV again")
+}

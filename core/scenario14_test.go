@@ -218,8 +218,21 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 		"rods seated at the shutdown-margin demand")
 	assert.InDelta(t, 0.04, p.TurbineBuilding.Turbine.Setpoint, 1e-9,
 		"turbine unloaded to house-load level")
-	assert.True(t, p.TurbineBuilding.Generator.BreakerClosed,
-		"breaker stays closed supplying station auxiliaries")
+	// A deep-unload cooldown can carry the header through the
+	// low-steamline setpoint: the stop valves then auto-close and
+	// the admission-less machine dies on its steam-loss deadline,
+	// transferring house loads to the offsite source. Without the
+	// crossing the unit stays synchronized on house load.
+	if p.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationActuated {
+		assert.Equal(t, TurbineTripped, p.TurbineBuilding.Turbine.State,
+			"post-isolation starvation trips the machine")
+		assert.Equal(t, "SAT",
+			p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom,
+			"house loads transfer to the offsite source")
+	} else {
+		assert.True(t, p.TurbineBuilding.Generator.BreakerClosed,
+			"breaker stays closed supplying station auxiliaries")
+	}
 	assert.False(t, p.TurbineBuilding.Turbine.OPCTrip)
 	assert.False(t, p.TurbineBuilding.Turbine.TripByVacuum)
 }
