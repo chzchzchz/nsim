@@ -452,40 +452,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-	// Dispatcher load demand on the unit, in MW against the 1000 MW
-	// machine rating; the wiring normalizes it to the Setpoint
-	// fraction at the model boundary (core/plant.go). The DEHM
-	// latches it as the turbine's load reference each step.
-	//   - "computes signals comparing turbine speed and first-stage
-	//     pressure with reference values established by the
-	//     dispatcher or initiated at the operator's panel."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
-	//   - "The main power system is made up of the plant main
-	//     generator and the associated controls necessary to
-	//     transmit power to the off-site distribution grid."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:17-19
-	m["Electrical/Grid/LoadDemand"] = &bridge.Control{
-		Part:  "Electrical/Grid",
-		Label: "LoadDemand",
-		Kind:  "mw",
-		Get: func() string {
-			return fmt.Sprintf("%v", p.ReactorBuilding.Grid.LoadDemand)
-		},
-		Set: func(s string) error {
-			validated, err := bridge.ConvertControlValue("mw", s)
-			if err != nil {
-				return err
-			}
-			v, err := strconv.ParseFloat(validated, 64)
-			if err != nil {
-				return err
-			}
-			p.ReactorBuilding.Grid.LoadDemand = v
-			return nil
-		},
-	}
-
-
 	// Loss-of-offsite-power declaration (chapter 16 emergency
 	// response): "If conditions occur which result in a loss of
 	// normal electrical power to a safeguards electrical bus,

@@ -205,32 +205,6 @@ func addPlantOperationControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
-	// Dispatcher load demand in MW against the 1000 MW machine
-	// rating; the wiring normalizes it to the Setpoint fraction at
-	// the model boundary (core/plant.go). Reaches the turbine load
-	// reference only while the dispatch permissive above is engaged.
-	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:44-47
-	m["Electrical/Grid/LoadDemand"] = &bridge.Control{
-		Part:  "Electrical/Grid",
-		Label: "LoadDemand",
-		Kind:  "mw",
-		Get: func() string {
-			return fmt.Sprintf("%v", p.ReactorBuilding.Grid.LoadDemand)
-		},
-		Set: func(s string) error {
-			validated, err := bridge.ConvertControlValue("mw", s)
-			if err != nil {
-				return err
-			}
-			v, err := strconv.ParseFloat(validated, 64)
-			if err != nil {
-				return err
-			}
-			p.ReactorBuilding.Grid.LoadDemand = v
-			return nil
-		},
-	}
 }
 
 // addPlantOperationSensors registers the reactor power control
