@@ -2967,6 +2967,16 @@ type SIS struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
 	RWSTLevel Volume
 
+	// Sump is the containment sump inventory (gal): hot-leg break
+	// discharge spills into it, and HHSI delivery draws from it once
+	// suction is aligned to the sump recirculation lines. Zero value
+	// is coherent — an intact plant has spilled nothing.
+	// "both the HHSI and RHR pumps for each subsystem take suction
+	// directly from one of the two containment sump recirculation
+	// lines."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:172-177
+	Sump Volume
+
 	// HHSIInjectionFlow is the per-second volume of borated
 	// water the HHSI pumps deliver into the RCS cold legs
 	// (gal/s). It is derived from HHSIPumpRunning, HHSISuction,

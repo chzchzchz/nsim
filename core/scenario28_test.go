@@ -237,6 +237,7 @@ func TestScenario28_SwitchoverAtRWSTLowThenHotLegRealignment(t *testing.T) {
 		HHSIDriveReady:  true,
 		HHSISuction:     SISSuctionRWST,
 		RWSTLevel:       Volume{Val: SISRWSTLowLevel + 10, Unit: u.Gallon},
+		Sump:            Volume{Val: 5000, Unit: u.Gallon},
 	}
 	for range stepsPerSecond {
 		s = s.Step(float64(SISHHSIShutoffHeadPsia - 100))
@@ -425,4 +426,70 @@ func TestScenario28_ECCSCreditCoolsRefilledPrimary(t *testing.T) {
 		"the ECCS-crediting plant must end measurably colder")
 	assert.Greater(t, creditedF, ECCSInjectionTempF,
 		"mixing approaches storage temperature asymptotically")
+}
+
+// The containment sump is real inventory, not an infinite source: the
+// break's discharge spills into it, recirculation draws from it, and a
+// dry sump starves delivery. The ledger must close — spill minus draw
+// equals level — with no phantom mass on either side (plans/p39_1.txt).
+//
+//   - "both the HHSI and RHR pumps for each subsystem take suction
+//     directly from one of the two containment sump recirculation
+//     lines."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:172-177
+func TestScenario28_SumpSpillsDrawsAndStarves(t *testing.T) {
+	// Unit: an empty sump starves sump-suction delivery outright.
+	dry := SIS{
+		HHSIPumpRunning: true,
+		HHSIDriveReady:  true,
+		HHSISuction:     SISSuctionSump,
+	}
+	dry = dry.Step(float64(SISHHSIShutoffHeadPsia - 100))
+	assert.Zero(t, dry.HHSIInjectionFlow.Float(),
+		"a dry sump must starve recirculation delivery")
+
+	// Unit: a wet sump delivers at design net flow and debits exactly.
+	wet := SIS{
+		HHSIPumpRunning: true,
+		HHSIDriveReady:  true,
+		HHSISuction:     SISSuctionSump,
+		Sump:            Volume{Val: 1000, Unit: u.Gallon},
+	}
+	net := SISHHSIDesignFlow.Float() * (1.0 - SISHHSIMiniFlowFraction)
+	wet = wet.Step(float64(SISHHSIShutoffHeadPsia - 100))
+	assert.InDelta(t, net, wet.HHSIInjectionFlow.Float(), net*1e-9)
+	assert.InDelta(t, 1000-net*TimeStep.Seconds(), wet.Sump.Float(),
+		1e-6, "recirculation draws its delivered volume from the sump")
+
+	// Full plant: spill credits equal the break discharge tick for
+	// tick while it discharges, and freeze at isolation.
+	p := MakePlant()
+	cm := GetControlMap(&p)
+	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	spilled, drawn := 0.0, 0.0
+	for i := 0; i < int(45*time.Second/TimeStep); i++ {
+		p.Step()
+		rpv := &p.ReactorBuilding.ReactorPressureVessel
+		spilled += rpv.BreakFlow.Float()
+		sis := &p.ReactorBuilding.SafetyInjectionSystem
+		if sis.HHSISuction == SISSuctionSump {
+			drawn += sis.HHSIInjectionFlow.Float() * TimeStep.Seconds()
+		}
+		p.Update()
+	}
+	sumpAfterSpill := p.ReactorBuilding.SafetyInjectionSystem.Sump.Float()
+	assert.Greater(t, sumpAfterSpill, 0.0,
+		"the blowdown must have spilled into the sump")
+	assert.InDelta(t, spilled-drawn, sumpAfterSpill, 1.0,
+		"sump level must close against spill minus recirculation draw")
+
+	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0"))
+	for i := 0; i < int(10*time.Second/TimeStep); i++ {
+		p.Step()
+		p.Update()
+	}
+	assert.LessOrEqual(t,
+		p.ReactorBuilding.SafetyInjectionSystem.Sump.Float(),
+		sumpAfterSpill+1e-6,
+		"an isolated break stops crediting the sump")
 }

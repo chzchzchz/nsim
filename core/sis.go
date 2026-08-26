@@ -116,15 +116,28 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:27-31
 	canInject := ret.HHSIPumpRunning && ret.HHSIDriveReady &&
 		rcsPressure < float64(SISHHSIShutoffHeadPsia)
+	// Sump recirculation is a suction alignment, not an entitlement:
+	// a dry sump starves the pump, so delivery requires inventory
+	// once the alignment has switched (plans/p39_1.txt).
+	if ret.HHSISuction == SISSuctionSump && ret.Sump.Float() <= 0 {
+		canInject = false
+	}
+	netFlow := SISHHSIDesignFlow.Float() * (1.0 - SISHHSIMiniFlowFraction)
 	if canInject {
-		netFlow := SISHHSIDesignFlow.Float() *
-			(1.0 - SISHHSIMiniFlowFraction)
 		ret.HHSIInjectionFlow = Volume{Val: netFlow, Unit: u.Gallon}
 	}
 	if canInject && ret.HHSISuction == SISSuctionRWST {
 		dW := SISHHSIDesignFlow.Float() * dt.Seconds()
 		newRWST := max(ret.RWSTLevel.Float()-dW, 0)
 		ret.RWSTLevel = Volume{Val: newRWST, Unit: u.Gallon}
+	}
+	if canInject && ret.HHSISuction == SISSuctionSump {
+		// The sump debits what is actually delivered; the miniflow
+		// share has no return path here (its isolation valves close
+		// at switchover, chapter_5/page_098.txt:61-63).
+		dW := netFlow * dt.Seconds()
+		newSump := max(ret.Sump.Float()-dW, 0)
+		ret.Sump = Volume{Val: newSump, Unit: u.Gallon}
 	}
 
 	// 2b) Simultaneous cold- and hot-leg injection.

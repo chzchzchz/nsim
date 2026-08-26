@@ -526,6 +526,13 @@ rcsPressurePsig := float64(ret.Pressurizer.Pressure - AtmosphericPressure)
 		(ret.SafetyInjectionSystem.HHSIInjectionFlow.Float()+
 			ret.SafetyInjectionSystem.AccumulatorInjectionFlow.Float())*
 			dt.Seconds())
+	// The break's discharge spills into the containment sump, the
+	// source the recirculation alignment later draws from
+	// (plans/p39_1.txt).
+	ret.SafetyInjectionSystem.Sump = vol(
+		ret.SafetyInjectionSystem.Sump,
+		ret.SafetyInjectionSystem.Sump.Float()+
+			ret.ReactorPressureVessel.BreakFlow.Float())
 
 	// EFWS: per-step tank depletion and secured-condition
 	// check. The auto-start logic is in Plant.Step (it needs
