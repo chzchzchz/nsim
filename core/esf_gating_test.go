@@ -194,7 +194,8 @@ func TestESFGating_SFPCSNoFlowWithBusesOff(t *testing.T) {
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false
 	sf := &p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
-	sf.PumpRunning = true
+	sf.LoopAPumpRunning = true
+	sf.LoopBPumpRunning = true
 	stepN(&p, 1)
 	assert.False(t, p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.DriveReady,
 		"want SFPC DriveReady=false with buses off, got true")
@@ -203,8 +204,9 @@ func TestESFGating_SFPCSNoFlowWithBusesOff(t *testing.T) {
 		p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PurificationFlow)
 	assert.False(t, p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.StandbyRunning,
 		"want SFPC StandbyRunning=false with buses off, got true")
-	assert.True(t, p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PumpRunning,
-		"want SFPC PumpRunning latch preserved (operator intent), got false")
+	assert.True(t, p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.LoopAPumpRunning &&
+		p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.LoopBPumpRunning,
+		"want SFPC duty-loop latches preserved (operator intent), got false")
 }
 
 // When power returns (bus re-energised) the CW pump resumes flow

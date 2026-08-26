@@ -2830,7 +2830,8 @@ func MakePlant() Plant {
 	//   - "The system pressure is maintained at 55 to 75 psig"
 	//     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:45-46
 	p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem = SpentFuelPoolCoolingSystem{
-		PumpRunning:       true,
+		LoopAPumpRunning:  true,
+		LoopBPumpRunning:  true,
 		StandbyRunning:    false,
 		HeaderPressure:    SFPCPressureNormalMin,
 		PoolTemp:          SFPCPoolDesignTemp,

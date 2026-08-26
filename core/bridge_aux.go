@@ -944,26 +944,41 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-	// SFPCS cooler-loop run command. PumpRunning is the lumped
-	// two-normal-loop flag: "Normal operation requires two pumps with
-	// the third pump serving as a standby."
+	// SFPCS cooler-loop run commands, one per duty loop: "Two of
+	// three pump-heat-exchanger-filter-demineralizer loops remove
+	// decay heat with ... the third pump serving as a standby."
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:43-44
-	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PumpRunning"] = &bridge.Control{
-		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
-		Label: "PumpRunning",
-		Kind:  "bool",
-		Get: func() string {
-			return bridge.BoolToStr(
-				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PumpRunning)
-		},
-		Set: func(s string) error {
-			v, err := bridge.StrToBool(s)
-			if err != nil {
-				return err
-			}
-			p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PumpRunning = v
-			return nil
-		},
+	sfpcLoopKeys := []struct{ key, field string }{
+		{"AuxiliaryBuilding/SpentFuelPoolCoolingSystem/LoopAPumpRunning", "A"},
+		{"AuxiliaryBuilding/SpentFuelPoolCoolingSystem/LoopBPumpRunning", "B"},
+	}
+	for _, l := range sfpcLoopKeys {
+		l := l
+		m[l.key] = &bridge.Control{
+			Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
+			Label: "Loop" + l.field + "PumpRunning",
+			Kind:  "bool",
+			Get: func() string {
+				sfpc := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
+				if l.field == "A" {
+					return bridge.BoolToStr(sfpc.LoopAPumpRunning)
+				}
+				return bridge.BoolToStr(sfpc.LoopBPumpRunning)
+			},
+			Set: func(s string) error {
+				v, err := bridge.StrToBool(s)
+				if err != nil {
+					return err
+				}
+				sfpc := &p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
+				if l.field == "A" {
+					sfpc.LoopAPumpRunning = v
+				} else {
+					sfpc.LoopBPumpRunning = v
+				}
+				return nil
+			},
+		}
 	}
 
 	// SFPCS supply-header leak latch. Instrumentation detects the
@@ -1404,14 +1419,22 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 	// "Normal operation requires two pumps with the third pump
 	// serving as a standby."
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:43-44
-	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PumpRunning"] = &bridge.Sensor{
-		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
-		Label: "PumpRunning",
-		Kind:  "bool",
-		Get: func() (string, error) {
-			return bridge.FormatSensorValue("bool",
-				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PumpRunning)
-		},
+	for _, field := range []string{"A", "B"} {
+		field := field
+		m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/Loop"+field+"PumpRunning"] = &bridge.Sensor{
+			Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem",
+			Label: "Loop" + field + "PumpRunning",
+			Kind:  "bool",
+			Get: func() (string, error) {
+				sfpc := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
+				if field == "A" {
+					return bridge.FormatSensorValue("bool",
+						sfpc.LoopAPumpRunning)
+				}
+				return bridge.FormatSensorValue("bool",
+					sfpc.LoopBPumpRunning)
+			},
+		}
 	}
 
 	// SFPCS standby pump auto-started at low header pressure.

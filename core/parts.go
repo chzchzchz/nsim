@@ -4234,10 +4234,17 @@ type ServiceWaterSystem struct {
 type SpentFuelPoolCoolingSystem struct {
 	Part
 
-	// PumpRunning is true when at least one SFPCS pump is
-	// running. Normal state is two pumps running; third is
-	// standby.
-	PumpRunning bool
+	// LoopAPumpRunning is the running state of the loop-A duty
+	// cooler pump. Normal state is both duty loops (A and B)
+	// running with the third pump in standby.
+	// "Two of three pump-heat-exchanger-filter-demineralizer
+	// loops remove decay heat"
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:43-44
+	LoopAPumpRunning bool
+
+	// LoopBPumpRunning is the running state of the loop-B duty
+	// cooler pump. See LoopAPumpRunning.
+	LoopBPumpRunning bool
 
 	// DriveReady is true when the 480 V MCC that feeds the SFPC
 	// pump motors is energised. The spec is silent on the SFPC
@@ -4415,6 +4422,13 @@ const (
 	// target (psig), the midpoint of the maintained band.
 	SFPCPressureStandbyTarget = (SFPCPressureNormalMin +
 		SFPCPressureNormalMax) / 2.0
+
+	// SFPCPressureOneLoopTarget is the header target (psig) with a
+	// single duty loop running. Derived/assumption: sized below the
+	// 50 psig standby-start setpoint so losing one duty loop sags
+	// the header through the pickup point and the third pump
+	// recovers the band through real dynamics.
+	SFPCPressureOneLoopTarget = 40.0
 
 	// SFPCPurificationCleanupTimeConstant is the turbidity e-folding
 	// time for one design purification sidestream; cleanup scales

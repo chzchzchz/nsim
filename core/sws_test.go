@@ -73,8 +73,8 @@ func TestSWS_OutletTempRisesWithHeatLoad(t *testing.T) {
 func TestSFPCS_InitialStateHasTwoPumpsRunning(t *testing.T) {
 	p := MakePlant()
 	sf := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
-	assert.True(t, sf.PumpRunning,
-		"want PumpRunning=true at startup, got %v", sf.PumpRunning)
+	assert.True(t, sf.LoopAPumpRunning && sf.LoopBPumpRunning,
+		"want both duty loops running at startup")
 	assert.False(t, sf.StandbyRunning,
 		"want StandbyRunning=false at startup, got %v",
 		sf.StandbyRunning)
@@ -97,9 +97,10 @@ func TestSFPCS_InitialStateHasTwoPumpsRunning(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:47-48
 func TestSFPCS_StandbyStartsBelow50psig(t *testing.T) {
 	s := SpentFuelPoolCoolingSystem{
-		PumpRunning:    true,
-		DriveReady:     true,
-		HeaderPressure: SFPCStandbyStartPressure - 1.0,
+		LoopAPumpRunning: true,
+		LoopBPumpRunning: true,
+		DriveReady:       true,
+		HeaderPressure:   SFPCStandbyStartPressure - 1.0,
 	}
 	s2 := s.Step(true)
 	assert.True(t, s2.StandbyRunning,
@@ -110,9 +111,10 @@ func TestSFPCS_StandbyStartsBelow50psig(t *testing.T) {
 // Header pressure at or above 50 psig leaves the standby off.
 func TestSFPCS_StandbyOffAbove50psig(t *testing.T) {
 	s := SpentFuelPoolCoolingSystem{
-		PumpRunning:    true,
-		DriveReady:     true,
-		HeaderPressure: SFPCStandbyStartPressure + 1.0,
+		LoopAPumpRunning: true,
+		LoopBPumpRunning: true,
+		DriveReady:       true,
+		HeaderPressure:   SFPCStandbyStartPressure + 1.0,
 	}
 	s2 := s.Step(true)
 	assert.False(t, s2.StandbyRunning,
@@ -123,7 +125,6 @@ func TestSFPCS_StandbyOffAbove50psig(t *testing.T) {
 // A stopped SFPCS has no purification flow and the standby off.
 func TestSFPCS_StoppedPumpsZeroPurificationFlow(t *testing.T) {
 	s := SpentFuelPoolCoolingSystem{
-		PumpRunning:      false,
 		PurificationFlow: SFPCPurificationFlow,
 	}
 	s2 := s.Step(true)
@@ -147,9 +148,8 @@ func TestSWS_EndToEndSteadyState(t *testing.T) {
 		sws.PumpRunning)
 	assert.InDelta(t, ServiceWaterDesignFlow, sws.Flow, 1e-9,
 		"want SWS Flow=ServiceWaterDesignFlow, got %v", sws.Flow)
-	assert.True(t, sf.PumpRunning,
-		"want SFPCS PumpRunning=true after stepping, got %v",
-		sf.PumpRunning)
+	assert.True(t, sf.LoopAPumpRunning && sf.LoopBPumpRunning,
+		"want both SFPCS duty loops running after stepping")
 	assert.InDelta(t, SFPCPurificationFlow,
 		sf.PurificationFlow, 1e-9,
 		"want SFPCS PurificationFlow=SFPCPurificationFlow, got %v",

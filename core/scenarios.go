@@ -1641,7 +1641,8 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 	"spent-fuel-pool-cooling": func(p *Plant) CheckResult {
 		var c checkBounds
 		sfpc := &p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
-		c.require(sfpc.PumpRunning, "cooler loops in service")
+		c.require(sfpc.LoopAPumpRunning && sfpc.LoopBPumpRunning,
+				"cooler loops in service")
 		c.require(sfpc.HeaderPressure >= SFPCPressureNormalMin &&
 			sfpc.HeaderPressure <= SFPCPressureNormalMax,
 			"header pressure inside the maintained band")

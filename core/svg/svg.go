@@ -204,7 +204,8 @@ var runAccessors = map[string]func(*core.Plant) bool{
 		return p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning
 	},
 	"SFPPA": func(p *core.Plant) bool {
-		return p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PumpRunning
+		sf := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
+		return sf.LoopAPumpRunning || sf.LoopBPumpRunning
 	},
 	"SFPPB": func(p *core.Plant) bool {
 		return p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.StandbyRunning

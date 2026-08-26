@@ -125,12 +125,20 @@ func (s *ServiceWaterSystem) Step(
 func (s *SpentFuelPoolCoolingSystem) Step(driveReady bool) SpentFuelPoolCoolingSystem {
 	ret := *s
 	dt := TimeStep.Seconds()
-	cooling := ret.PumpRunning && driveReady
+	runningLoops := 0
+	if driveReady {
+		if ret.LoopAPumpRunning {
+			runningLoops++
+		}
+		if ret.LoopBPumpRunning {
+			runningLoops++
+		}
+	}
+	cooling := runningLoops > 0
 
 	// Standby pump auto-start: latch true once header pressure
 	// drops below the standby setpoint while the coolers run.
-	// Securing the coolers clears it; a standby-only lineup cannot
-	// persist because PumpRunning is the lumped normal-loops flag.
+	// Securing the coolers clears it.
 	//
 	// Spec justification:
 	//   - "the third pump automatically starts at a header
@@ -144,10 +152,7 @@ func (s *SpentFuelPoolCoolingSystem) Step(driveReady bool) SpentFuelPoolCoolingS
 		ret.StandbyRunning = false
 	}
 
-	pumps := 0
-	if cooling {
-		pumps += 2
-	}
+	pumps := runningLoops
 	if ret.StandbyRunning {
 		pumps++
 	}
@@ -157,6 +162,8 @@ func (s *SpentFuelPoolCoolingSystem) Step(driveReady bool) SpentFuelPoolCoolingS
 		target = SFPCPressureStandbyTarget
 	case 2:
 		target = SFPCPressureNormalMin
+	case 1:
+		target = SFPCPressureOneLoopTarget
 	}
 	if ret.Leakage && pumps > 0 {
 		target -= SFPCLeakPressureDrop

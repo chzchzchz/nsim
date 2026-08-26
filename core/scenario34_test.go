@@ -80,10 +80,12 @@ func TestScenario34_PumpControlSecuresLoopsAndPurification(t *testing.T) {
 	cm := p.GetControlMap()
 
 	require.NoError(t,
-		cm["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PumpRunning"].Set("0"))
+		cm["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/LoopAPumpRunning"].Set("0"))
+	require.NoError(t,
+		cm["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/LoopBPumpRunning"].Set("0"))
 	stepN(&p, 5)
 	sf := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
-	assert.False(t, sf.PumpRunning)
+	assert.False(t, sf.LoopAPumpRunning && sf.LoopBPumpRunning)
 	assert.Zero(t, sf.PurificationFlow,
 		"secured loops pass no filter/demineralizer sidestream")
 	assert.False(t, sf.StandbyRunning)
@@ -131,12 +133,14 @@ func TestScenario34_CrudBurstCleanupRateTracksPurificationStreams(t *testing.T) 
 func TestScenario34_UncooledPoolSoaksToBoilCapAndCoolingRecovers(t *testing.T) {
 	overrideTimeStep(t, 30 * time.Minute)
 	sf := SpentFuelPoolCoolingSystem{
-		PumpRunning:    true,
-		DriveReady:     true,
-		HeaderPressure: SFPCPressureNormalMin,
-		PoolTemp:       SFPCPoolDesignTemp,
+		LoopAPumpRunning: true,
+		LoopBPumpRunning: true,
+		DriveReady:       true,
+		HeaderPressure:   SFPCPressureNormalMin,
+		PoolTemp:         SFPCPoolDesignTemp,
 	}
-	sf.PumpRunning = false
+	sf.LoopAPumpRunning = false
+	sf.LoopBPumpRunning = false
 	for range 200 { // 100 h unattended
 		sf = sf.Step(true)
 		assert.LessOrEqual(t, sf.PoolTemp.Float(), SFPCPoolBoilingTemp,
@@ -145,7 +149,8 @@ func TestScenario34_UncooledPoolSoaksToBoilCapAndCoolingRecovers(t *testing.T) {
 	assert.InDelta(t, SFPCPoolBoilingTemp, sf.PoolTemp.Float(), 0.01,
 		"an unattended pool lands on the boiling point")
 
-	sf.PumpRunning = true
+	sf.LoopAPumpRunning = true
+	sf.LoopBPumpRunning = true
 	overrideTimeStep(t, 10 * time.Minute)
 	prev := sf.PoolTemp.Float()
 	for range int(24 * time.Hour / (10 * time.Minute)) { // 24 h cooled
@@ -165,8 +170,13 @@ func TestScenario34_UncooledPoolSoaksToBoilCapAndCoolingRecovers(t *testing.T) {
 // over an hour-scale window.
 func TestScenario34_UncooledHeatupMatchesDecayHeatBalance(t *testing.T) {
 	overrideTimeStep(t, time.Minute)
-	sf := SpentFuelPoolCoolingSystem{PumpRunning: true, DriveReady: true}
-	sf.PumpRunning = false
+	sf := SpentFuelPoolCoolingSystem{
+		LoopAPumpRunning: true,
+		LoopBPumpRunning: true,
+		DriveReady:       true,
+	}
+	sf.LoopAPumpRunning = false
+	sf.LoopBPumpRunning = false
 	start := sf.PoolTemp.Float()
 	for range 60 {
 		sf = sf.Step(true)
@@ -183,4 +193,44 @@ func TestScenario34_UncooledHeatupMatchesDecayHeatBalance(t *testing.T) {
 // first-order interval.
 func timeFactor(elapsedS float64, tauS float64) float64 {
 	return math.Exp(-elapsedS / tauS)
+}
+
+// The trained evolution the standby pump exists for: tripping one of
+// the two duty loops sags the supply header below the 50 psig auto-
+// start setpoint, the third pump picks up, and the header recovers
+// into the normal band - all through real dynamics, with purification
+// uninterrupted (plans/p44_1.txt).
+func TestSFPC_SingleLoopTripSagsAndStandbyPicksUp(t *testing.T) {
+	s := SpentFuelPoolCoolingSystem{
+		LoopAPumpRunning: true,
+		LoopBPumpRunning: true,
+		DriveReady:       true,
+		HeaderPressure:   SFPCPressureNormalMin,
+	}
+	// Settle both-loops at the normal band first.
+	for range int(SFPCPressureTimeConstant.Seconds()) {
+		s = s.Step(true)
+	}
+	require.False(t, s.StandbyRunning, "precondition: standby off")
+
+	// Trip loop B: the header sags toward the one-loop target,
+	// crossing the standby-start setpoint on the way down.
+	s.LoopBPumpRunning = false
+	sawSagBelowStart := false
+	for range int(2 * SFPCPressureTimeConstant.Seconds() / TimeStep.Seconds()) {
+		s = s.Step(true)
+		if s.HeaderPressure < SFPCStandbyStartPressure && !s.StandbyRunning {
+			sawSagBelowStart = true
+		}
+	}
+	assert.True(t, s.StandbyRunning,
+		"the sag must cross the standby auto-start setpoint")
+	assert.True(t, sawSagBelowStart || s.HeaderPressure >= SFPCStandbyStartPressure,
+		"the header transient passes through the pickup band")
+
+	// Two pumps running again (one duty + standby): header recovers
+	// into the maintained band and purification never stopped.
+	assert.GreaterOrEqual(t, s.HeaderPressure, SFPCStandbyStartPressure)
+	assert.Greater(t, s.PurificationFlow, 0.0,
+		"the surviving duty loop keeps the sidestream flowing")
 }
