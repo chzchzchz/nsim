@@ -176,37 +176,37 @@ func TestReactor_OutletDropsAfterTrip(t *testing.T) {
 		"want Outlet < %v after 1 min of decay, got %v", start, r.Outlet.Float())
 }
 
-// With RCP not running, Inlet temperature is preserved across steps
-// (pump off = no cold-leg turnover).
-func TestReactor_InletFrozenWhenRCPOff(t *testing.T) {
+// With the pumps off but the hot leg well above the cold leg, the
+// thermosiphon turns the loop over: the cold-leg inlet follows its
+// program anchor instead of freezing. The old expectation here
+// ("inlet frozen") was the asserted-anchor behavior the natural-
+// circulation gap removed. Movement paces at powerFrac scaled by
+// PrimaryInletTimeConstant on post-trip decay heat (~5 percent), so
+// ten minutes moves the inlet single-digit degrees — asserted
+// directionally against that constant-derived magnitude.
+//
+// Spec justification:
+//   - "a thermal driving head will exist to produce natural
+//     circulation flow if the RCPs are not operating"
+//     specs/westinghouse_tech_manual/chapter_3/page_0328.txt:31-32
+func TestReactor_InletFollowsProgramUnderNaturalCirculation(t *testing.T) {
 	r := ReactorPressureVessel{
-		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
+		ControlRods:  ControlRods{Insertion: 1, DemandInsertion: 1, BoronConcentration: CVCSInitialBoron},
 		Inlet:        Temperature{Val: 420, Unit: u.Fahrenheit},
 		Outlet:       Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
 	}
-	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		r = r.Step(0, 0) // RCP off
+	r.Trip = true
+	r.SeedSteadyStatePower(CoreRatedThermalPower)
+	for i := 0; i < int(10*time.Minute/TimeStep); i++ {
+		r = r.Step(0, 0) // pumps off, buoyancy carries the loop
 	}
-	assert.Equal(t, 420.0, r.Inlet.Float(),
-		"want Inlet frozen at 420°F with RCP off, got %v", r.Inlet.Float())
-}
-
-// Even with the RCP latch (Running) "on" by convention, if the
-// rotor speed is zero (e.g. breaker just opened) the Step function
-// must not drive the inlet-outlet blend. Regression for the bug
-// where rcpRunning bool was the gate rather than the actual speed.
-func TestReactor_InletFrozenWhenRCPSpeedZero(t *testing.T) {
-	r := ReactorPressureVessel{
-		ControlRods:  ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
-		Inlet:        Temperature{Val: 420, Unit: u.Fahrenheit},
-		Outlet:       Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
-	}
-	// Step with rcpSpeed = 0 (pump latch on, but rotor coasting).
-	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		r = r.Step(0, 0)
-	}
-	assert.Equal(t, 420.0, r.Inlet.Float(),
-		"want Inlet frozen at 420°F with rcpSpeed=0, got %v", r.Inlet.Float())
+	assert.Greater(t, r.NaturalCircFlowFrac, 0.03,
+		"want thermosiphon flow developed, got %v", r.NaturalCircFlowFrac)
+	// Measured ten-minute rise ~3 degF: pacing is post-trip decay
+	// heat scaled by PrimaryInletTimeConstant. Half-margin witness.
+	assert.Greater(t, r.Inlet.Float(), 421.5,
+		"want Inlet driven toward its anchor under natural circulation, got %v",
+		r.Inlet.Float())
 }
 
 // Post-trip decay-heat inventories must be a function of fission

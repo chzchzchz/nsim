@@ -1188,6 +1188,35 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Natural-circulation loop flow, percent of rated loop flow:
+	// "a thermal driving head will exist to produce natural
+	// circulation flow if the RCPs are not operating."
+	// specs/westinghouse_tech_manual/chapter_3/page_0328.txt:31-32
+	m["ReactorBuilding/ReactorPressureVessel/NaturalCircFlow"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "NaturalCircFlow",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				100.0*p.ReactorBuilding.ReactorPressureVessel.
+					NaturalCircFlowFrac)
+		},
+	}
+
+	// Loop delta-T (hot leg minus cold leg), the buoyancy head the
+	// thermosiphon rides on: RTDs "supply indication of Tavg and ΔT".
+	// specs/westinghouse_tech_manual/chapter_3/page_0328.txt:17-19
+	m["ReactorBuilding/ReactorPressureVessel/LoopDeltaT"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "LoopDeltaT",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()-
+					p.ReactorBuilding.ReactorPressureVessel.Inlet.Float())
+		},
+	}
+
 
 	// Steam generator pressure:
 	m["ReactorBuilding/SteamGenerator/Pressure"] = &bridge.Sensor{

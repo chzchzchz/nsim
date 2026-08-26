@@ -158,6 +158,11 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 	// simulation state.
 	overrideTimeStep(t, 25*time.Millisecond)
 	p := MakePlant()
+	// At-power maneuvering requires forced flow: "Natural
+	// circulation flow is sufficient only for decay heat removal of
+	// a shutdown reactor, not for power operation."
+	// specs/westinghouse_tech_manual/chapter_3/page_0325.txt:14-15
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	boron := 500.0
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = boron
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = boron
@@ -224,6 +229,8 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 func TestRodAutoControlPartialPowerPlateauAscent(t *testing.T) {
 	overrideTimeStep(t, 25 * time.Millisecond)
 	p := MakePlant()
+	// Forced flow for an at-power arc (see the plateau test above).
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = 500
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 500
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
@@ -281,6 +288,8 @@ func TestRodAutoControlDailyLoadFollowArc(t *testing.T) {
 	// overrideTimeStep mutates global simulation state.
 	overrideTimeStep(t, 25*time.Millisecond)
 	p := MakePlant()
+	// Forced flow for an at-power arc (see the plateau test above).
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	// Main feedwater carries the arc's whole-day hold: the corrected
 	// secondary balance drains the boiling stock at the rated
 	// evaporation rate whenever the core is making power

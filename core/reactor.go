@@ -93,35 +93,51 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:73-74
 	powerFrac := float64(ret.TotalThermalPower()) / float64(CoreRatedThermalPower)
 	powerFrac = max(powerFrac, 0)
+
+	// Thermosiphon channel: the SGs sit above the core, so a hot
+	// loop carries its own buoyancy head against loop resistance
+	// once forced flow is gone. The sqrt law is the head-vs-
+	// resistance balance; the first-order lag is the loop
+	// transport delay.
+	//   "The higher elevation of the steam generators relative to
+	//    the reactor vessel produces a thermal driving head to
+	//    establish and maintain flow in the RCS"
+	//   specs/westinghouse_tech_manual/chapter_3/page_0325.txt:11-13
+	pumpedFrac := min(max(float64(rcpSpeed)/float64(RCPRatedSpeed), 0), 1)
+	headDeltaT := max(r.Outlet.Float()-r.Inlet.Float(), 0)
+	ncTarget := min(NatCircHeadGainPerDegF*math.Sqrt(headDeltaT),
+		NatCircMaxFlowFrac)
+	ret.NaturalCircFlowFrac += (ncTarget - ret.NaturalCircFlowFrac) *
+		dt.Seconds() / NatCircTimeConstant
+	totalFlow := min(pumpedFrac+ret.NaturalCircFlowFrac, 1.0)
+	transportCapW := totalFlow * float64(CoreRatedThermalPower)
+
 	refDeltaF := CoreReferenceOutletF - CoreReferenceInletF
 	// Flow-degraded per-pass temperature rise: at fixed power the
 	// coolant temperature rise across the core scales inversely with
-	// pumped flow (delta-T proportional to power over flow), so a
-	// lost or coasting machine raises the hot-leg temperature the
-	// loop must reject. Applied only above the at-power permissive,
-	// where reduced forced flow is an off-normal condition rather
-	// than the normal sequential-start / hot-standby lineup; at full
-	// flow the divisor is one and nothing changes. The loss-of-flow
-	// margin challenge this represents: "the cold leg temperature in
-	// loop #1 will increase rapidly"
-	// (specs/pwr_sim/chapter_4/page_052.txt:26-27). Like the low-flow
-	// trip, the stretch is scoped to the degraded-forced-flow regime:
-	// flow exactly zero is natural circulation, whose equilibrium the
-	// existing no-load anchors already represent.
+	// total loop flow (delta-T proportional to power over flow), so
+	// a lost or coasting machine raises the hot-leg temperature the
+	// loop must reject, and a pumpless plant rides its thermosiphon.
+	// Applied only above the at-power permissive, where reduced
+	// forced flow is an off-normal condition rather than the normal
+	// sequential-start / hot-standby lineup; at full flow the divisor
+	// is one and nothing changes. The loss-of-flow margin challenge
+	// this represents: "the cold leg temperature in loop #1 will
+	// increase rapidly" (specs/pwr_sim/chapter_4/page_052.txt:26-27).
 	flowDivisor := 1.0
-	if flow := float64(rcpSpeed) / float64(RCPRatedSpeed); flow > 0 &&
-		powerFrac >= RPSAtPowerPermissiveFraction {
-		flowDivisor = min(max(flow, CoreFlowDegradedFloorFrac), 1.0)
+	if totalFlow > 0 && powerFrac >= RPSAtPowerPermissiveFraction {
+		flowDivisor = min(max(totalFlow, CoreFlowDegradedFloorFrac), 1.0)
 	}
 	targetOutlet := CoreReferenceInletF + powerFrac*refDeltaF/flowDivisor
 
 	coreCapabilityW := powerFrac * float64(CoreRatedThermalPower)
 	retained := 1.0
 	if secondaryExcess > 0 {
-		if float64(secondaryExcess) >= coreCapabilityW {
+		accepted := min(float64(secondaryExcess), transportCapW)
+		if accepted >= coreCapabilityW {
 			retained = 0
 		} else {
-			retained = 1 - float64(secondaryExcess)/coreCapabilityW
+			retained = 1 - accepted/coreCapabilityW
 		}
 	}
 
@@ -147,16 +163,23 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 
 	// Active-sink energy balance (secondary excess draw): primary
 	// stored heat leaves at the m*cp rate scaled by the deficit's
-	// share of production. A subcritical core under dump/RHRS draw
-	// gets the full rate; at power the same draw is ordinary
-	// load-following absorbed by the secondary, not primary cooling.
-	// Bounded by the operational program envelope either way.
+	// share of production. The flowing loop caps what the sink can
+	// accept — with pumps running the cap sits far above any dump
+	// demand, while a pumpless plant accepts only decay-heat-sized
+	// draws through its thermosiphon ("Natural circulation flow is
+	// sufficient for removal of reactor decay heat",
+	// specs/westinghouse_tech_manual/chapter_3/page_0328.txt:33).
+	// A subcritical core under dump/RHRS draw gets the full rate;
+	// at power the same draw is ordinary load-following absorbed by
+	// the secondary, not primary cooling. Bounded by the operational
+	// program envelope either way.
 	if secondaryExcess > 0 {
+		accepted := min(float64(secondaryExcess), transportCapW)
 		share := 1.0
-		if coreCapabilityW > float64(secondaryExcess) {
-			share = float64(secondaryExcess) / coreCapabilityW
+		if coreCapabilityW > accepted {
+			share = accepted / coreCapabilityW
 		}
-		deltaTF := -share * float64(secondaryExcess) /
+		deltaTF := -share * accepted /
 			(RCSMassKg * SpecificHeatWater) * dt.Seconds() * 9.0 / 5.0
 		deltaTF = min(max(deltaTF, -maxStep), maxStep)
 		outletF += deltaTF
@@ -164,15 +187,13 @@ func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) R
 	outletF = max(outletF, 0)
 	ret.Outlet = Temperature{Val: outletF, Unit: u.Fahrenheit}
 
-	// The cold-leg / downcomer inlet temperature only blends
-	// with the outlet when the RCP is actually spinning. The
-	// gate is the actual rotor speed, not the operator latch:
-	// if the ESF breaker opens the pump coasts down to zero
-	// speed even though Running=true is latched, and there is
-	// no flow to drive the inlet-outlet blend.
-	rcpFlowFrac := float64(rcpSpeed) / float64(RCPRatedSpeed)
-	rcpFlowFrac = max(rcpFlowFrac, 0)
-	if rcpFlowFrac > 0 {
+	// The cold-leg / downcomer inlet temperature follows its
+	// program line whenever anything turns the loop over — the
+	// pumps or the thermosiphon. The gate is actual circulation,
+	// not the operator latch or rotor speed alone: if the ESF
+	// breaker opens the pump coasts down even though Running=true
+	// is latched, and only buoyancy keeps the loop moving.
+	if totalFlow > 0 {
 		// Cold-leg program: the loop ΔT lives on the hot-leg rise,
 		// so the inlet holds its own anchor line from the shared
 		// no-load temperature to the rated cold-leg value. Mixing
@@ -630,6 +651,18 @@ type ReactorPressureVessel struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-111
 	PumpHeatInput Watts
 
+	// NaturalCircFlowFrac is the loop flow fraction carried by
+	// the thermosiphon: buoyancy head from the hot-leg /
+	// cold-leg delta-T balanced against loop resistance. Zero
+	// when the loop is isothermal; saturates at
+	// NatCircMaxFlowFrac.
+	//
+	// Spec justification:
+	//   - "a thermal driving head will exist to produce natural
+	//     circulation flow if the RCPs are not operating"
+	//     specs/westinghouse_tech_manual/chapter_3/page_0328.txt:31-32
+	NaturalCircFlowFrac float64
+
 	// AxialOffset is the axial power distribution observable, percent:
 	// top-half power minus bottom-half power over total core power.
 	// Rod insertion drives it negative (rods enter from the top);
@@ -1030,9 +1063,32 @@ const (
 	// of the outlet target: below this forced-flow fraction the
 	// per-pass delta-T stops growing, keeping the worst-case target
 	// at four times the full-flow rise. Assumption; the lumped band
-	// has no natural-circulation flow model to carry the ratio
-	// further.
+	// stops stretching past a four-fold rise.
 	CoreFlowDegradedFloorFrac float64 = 0.25
+
+	// NatCircMaxFlowFrac caps the thermosiphon at its decay-heat-
+	// sized capability: "Natural circulation flow is sufficient
+	// only for decay heat removal of a shutdown reactor, not for
+	// power operation."
+	// specs/westinghouse_tech_manual/chapter_3/page_0325.txt:14-15
+	// Derived: at the cap the flowing loop carries roughly the
+	// post-shutdown decay-heat fraction (~6 percent of rated)
+	// across a loop rise comparable to the design span
+	// CoreReferenceOutletF-CoreReferenceInletF, so flow_frac ~ Q_frac.
+	NatCircMaxFlowFrac = 0.06
+
+	// NatCircHeadGainPerDegF converts loop delta-T into flow
+	// fraction through the sqrt head-vs-resistance law
+	// nc = gain*sqrt(dT). Derived so a typical decay-heat loop
+	// rise (~56 degF at the cap below) lands just under
+	// NatCircMaxFlowFrac: gain ~= 0.055/sqrt(56) ~= 0.0073.
+	NatCircHeadGainPerDegF = 0.0073
+
+	// NatCircTimeConstant is the loop transport lag of the
+	// thermosiphon response (seconds). Derived: tens of seconds —
+	// slower than the pump-ramp electrical transient, faster than
+	// the minutes-scale thermal anchors above.
+	NatCircTimeConstant = 30.0
 
 	// CoreDopplerBasePcmPerDegF is the fuel-side Doppler /
 	// power-defect base of the temperature feedback, a constant

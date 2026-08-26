@@ -826,6 +826,11 @@ func TestPlant_FreshAtPowerIdlesWithoutSpuriousTrips(t *testing.T) {
 	// discrete integration honest while covering an hour of idle.
 	overrideTimeStep(t, 250*time.Millisecond)
 	p := MakePlant()
+	// The full-load seed requires forced flow: "Natural circulation
+	// flow is sufficient only for decay heat removal of a shutdown
+	// reactor, not for power operation."
+	// specs/westinghouse_tech_manual/chapter_3/page_0325.txt:14-15
+	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 
 	for range int(time.Hour / (250 * time.Millisecond)) {
 		stepN(&p, 1)
