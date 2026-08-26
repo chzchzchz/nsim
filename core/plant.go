@@ -2010,9 +2010,16 @@ func (p *Plant) Step() {
 	fwi := p.nextPlant.ReactorBuilding.ReactorProtectionSystem.
 		FeedwaterIsolationActuated
 	reg := p.nextPlant.TurbineBuilding.FeedwaterRegulator
+	priorDemand := reg.ValveDemand
 	reg.Level = sgLevelPct
-	reg.SteamFlow = sg.SteamFlowRate.Float()
-	reg.FeedwaterFlow = sg.SteamFlowRate.Float()
+	// Both flow inputs read live measurements now: steam side from
+	// this tick's measured SG offtake, feed side from the last
+	// committed valve demand (the regulator's documented linear
+	// flow-vs-position characteristic). The sizing constant fed
+	// both inputs a static design value before.
+	reg.SteamFlow = p.TurbineBuilding.SteamOfftakeFraction *
+		FeedwaterDesignFlow.Float()
+	reg.FeedwaterFlow = priorDemand * FeedwaterDesignFlow.Float()
 	// Feedwater isolation stands the regulator down: a stopped
 	// regulator decays its demand and freezes the integrator, so
 	// retransfer to automatic does not bump the valve.

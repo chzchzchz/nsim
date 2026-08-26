@@ -174,12 +174,48 @@ func TestFeedwaterRegulator_SteamFlowFeedforward(t *testing.T) {
 		LevelSetpoint: FeedwaterLevelSetpoint,
 		Level:         FeedwaterLevelSetpoint,
 		SteamFlow:     halfDesign,
+		// Balanced feed keeps the third element at zero so the
+		// closed form below stays feedforward-only.
+		FeedwaterFlow: halfDesign,
 		Running:       true,
 	}
 	r2 := r.Step()
 	assert.InDelta(t, 0.5, r2.ValveDemand, 1e-9,
 		"want ValveDemand=0.5 with zero error and half-design steam "+
 			"flow, got %v", r2.ValveDemand)
+}
+
+// The third element trims demand by the measured steam/feed
+// imbalance at zero level error: under-delivery opens the valve,
+// over-delivery closes it - supply-side disturbances are countered
+// before they become level error.
+//
+// Spec justification: the regulator is "controlled by steam generator
+// level, steam flow and feedwater flow."
+// specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
+func TestFeedwaterRegulator_FeedMismatchTrimsDemand(t *testing.T) {
+	// Half-design steaming keeps every variant inside the [0,1]
+	// clamp so the closed forms are observable, not saturated.
+	half := FeedwaterDesignFlow.Float() / 2
+	base := func(feed float64) float64 {
+		r := FeedwaterRegulator{
+			LevelSetpoint: FeedwaterLevelSetpoint,
+			Level:         FeedwaterLevelSetpoint,
+			SteamFlow:     half,
+			FeedwaterFlow: feed,
+			Running:       true,
+		}
+		return r.Step().ValveDemand
+	}
+	balanced := base(half)
+	under := base(half / 2)
+	over := base(half * 3 / 2)
+	assert.InDelta(t, 0.5, balanced, 1e-9,
+		"balanced flows leave the pure feedforward demand")
+	assert.InDelta(t, 0.75, under, 1e-9,
+		"half delivery opens the valve by the normalized imbalance")
+	assert.InDelta(t, 0.25, over, 1e-9,
+		"excess delivery closes the valve by the same trim")
 }
 
 // When the regulator is wired into the plant and the pump is

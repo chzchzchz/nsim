@@ -6,7 +6,8 @@ package core
 // feedforward input:
 //
 //	e_level = LevelSetpoint - Level
-//	ValveDemand = Kp * e_level + Ki * integral(e_level) + K_ff * SteamFlow
+//	ValveDemand = Kp * e_level + Ki * integral(e_level) +
+//	              K_ff * (SteamFlow - FeedwaterFlow)
 //
 // Where:
 //
@@ -77,6 +78,14 @@ func (r *FeedwaterRegulator) Step() FeedwaterRegulator {
 		return ret
 	}
 
+	// Third element: measured steam/feed imbalance normalized to
+	// the same scale as the feedforward - zero at balance by
+	// construction, positive when steaming exceeds delivery. This
+	// is what makes the controller three-element: supply-side
+	// disturbances are countered before they become level error.
+	mismatch := kff * (ret.SteamFlow - ret.FeedwaterFlow) /
+		FeedwaterDesignFlow.Float()
+
 	eLevel := ret.LevelSetpoint - ret.Level
 
 	// Conditional-integration anti-windup: freeze the integrator
@@ -86,14 +95,14 @@ func (r *FeedwaterRegulator) Step() FeedwaterRegulator {
 	//	winds the integral deeply negative, and the proportional term
 	//	cannot reopen the valve for hours after the level finally drops
 	//	below setpoint; the SG drains unchecked the whole time.
-	demand := kp*eLevel + ki*ret.IntegralError + ffInput
+	demand := kp*eLevel + ki*ret.IntegralError + ffInput + mismatch
 	saturatedHigh := demand > 1 && eLevel > 0
 	saturatedLow := demand < 0 && eLevel < 0
 	if !saturatedHigh && !saturatedLow {
 		ret.IntegralError += eLevel * TimeStep.Seconds()
 	}
 
-	demand = kp*eLevel + ki*ret.IntegralError + ffInput
+	demand = kp*eLevel + ki*ret.IntegralError + ffInput + mismatch
 	demand = min(max(demand, 0), 1)
 	ret.ValveDemand = demand
 
