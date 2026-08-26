@@ -56,6 +56,7 @@ $(WASM_OUT): $(WASM_SRC)/main.go ../core ../bridge ../core/svg
 wasm-exec: $(WASM_EXEC_DST_SRC)
 
 $(WASM_EXEC_DST_SRC):
+	mkdir -p $(dir $@)
 	cp $(GOROOT)/lib/wasm/wasm_exec.js $(WASM_EXEC_DST_SRC)
 
 descriptions: $(DESC_JSON)
