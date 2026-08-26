@@ -127,6 +127,16 @@ func TestOverlay_Coverage(t *testing.T) {
 			"ESFAS trips red the steam generators and spray tanks")
 	})
 
+	t.Run("containment sump readout gates on inventory", func(t *testing.T) {
+		p := core.MakePlant()
+		assert.NotContains(t, renderPlant(t, &p), "sump ")
+
+		sis := &p.ReactorBuilding.SafetyInjectionSystem
+		sis.Sump = core.Volume{Val: 42000, Unit: u.Gallon}
+		assert.Regexp(t, `sump 42000 gal`, renderPlant(t, &p),
+			"spilled inventory reads on the containment systems skid")
+	})
+
 	t.Run("pzr pressure and level readouts", func(t *testing.T) {
 		p := core.MakePlant()
 		out := renderPlant(t, &p)

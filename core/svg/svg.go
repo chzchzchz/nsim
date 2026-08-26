@@ -669,6 +669,48 @@ var visualPipes = []visualPipe{
 			return 0
 		},
 	},
+	{
+		// Post-shutdown decay heat removal: "The RHR pumps are
+		// started." Each train ties to the RCS independently.
+		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:46
+		id: "RHRRCSA", from: "RHRS_A", to: "RPV", colour: "blue",
+		flow: func(p *core.Plant) float64 {
+			if p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Pump.Running {
+				return 1
+			}
+			return 0
+		},
+	},
+	{
+		id: "RHRRCSB", from: "RHRS_B", to: "RPV", colour: "blue",
+		flow: func(p *core.Plant) float64 {
+			if p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.Pump.Running {
+				return 1
+			}
+			return 0
+		},
+	},
+	{
+		// CCWS "provides cooling water to safeguards equipment such
+		// as the residual heat removal heat exchangers."
+		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:33-39
+		id: "CCWRHRA", from: "CCWSHX", to: "RHRS_A", colour: "blue",
+		flow: func(p *core.Plant) float64 {
+			if p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning {
+				return 1
+			}
+			return 0
+		},
+	},
+	{
+		id: "CCWRHRB", from: "CCWSHX", to: "RHRS_B", colour: "blue",
+		flow: func(p *core.Plant) float64 {
+			if p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning {
+				return 1
+			}
+			return 0
+		},
+	},
 }
 
 // valvePlacement seats a standalone valve onto a drawn polyline:
@@ -1851,6 +1893,22 @@ var readouts = []readoutDef{
 		},
 		text: func(p *core.Plant) string {
 			return "dist divert"
+		},
+	},
+	{
+		// Containment sump inventory: break discharge spills into
+		// it and recirculation draws from it - "both the HHSI and
+		// RHR pumps for each subsystem take suction directly from
+		// one of the two containment sump recirculation lines."
+		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:172-177
+		id: "CIS",
+		dy: 12,
+		show: func(p *core.Plant) bool {
+			return p.ReactorBuilding.SafetyInjectionSystem.Sump.Float() > 0
+		},
+		text: func(p *core.Plant) string {
+			return fmt.Sprintf("sump %.0f gal",
+				p.ReactorBuilding.SafetyInjectionSystem.Sump.Float())
 		},
 	},
 }

@@ -280,6 +280,20 @@ func TestRiverAndCVCSVisualsRendered(t *testing.T) {
 		strings.Count(renderPlant(t, &p1), `class="flow"`),
 		"running the HHSI pump adds exactly one streaming visual")
 
+	// Each RHR train ties to the RCS, and the CCWS pump feeds both
+	// trains' heat exchangers.
+	p2 := core.MakePlant()
+	p2.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Pump.Running = true
+	assert.Equal(t, strings.Count(out, `class="flow"`)+1,
+		strings.Count(renderPlant(t, &p2), `class="flow"`),
+		"an RHR pump streams its own RCS tie line")
+
+	p3 := core.MakePlant()
+	p3.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning = true
+	assert.Equal(t, strings.Count(out, `class="flow"`)+2,
+		strings.Count(renderPlant(t, &p3), `class="flow"`),
+		"the CCWS pump streams both heat-exchanger supply lines")
+
 	seated := regexp.MustCompile(
 		`<g data-part="AuxiliaryBuilding/ChemicalVolumeControlSystem"[^>]*transform="translate\(`)
 	assert.Positive(t, len(seated.FindAllString(out, -1)),
