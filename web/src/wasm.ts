@@ -4,7 +4,7 @@
 
 // Sole polyfill loader: bundling it keeps window.Go available
 // under any deploy base, unlike a root-absolute script tag.
-import "./wasm_exec.js";
+import "../js/wasm_exec.js";
 
 export async function loadWasm(): Promise<void> {
     const go = new window.Go();

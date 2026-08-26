@@ -3,7 +3,7 @@
 # Targets:
 #   make build   — compile wasm, copy polyfill, run tsc
 #   make wasm    — compile wasm; the polyfill copy lives in wasm-exec
-#   make wasm-exec — copy $(go env GOROOT)/lib/wasm/wasm_exec.js into src/
+#   make wasm-exec — copy $(go env GOROOT)/lib/wasm/wasm_exec.js into js/
 #                  (the Vite-bundled polyfill source)
 #   make typecheck — tsc --noEmit
 #   make test    — vitest run (pure-logic unit tests)
@@ -15,7 +15,7 @@
 #                  static hosting; alias for bundle-release
 #   make bundle-debug — pack web-debug.tgz (readable JS with
 #                  sourcemaps, wasm keeps full debug info)
-#   make clean   — remove public/nsim.wasm, dist/, src/wasm_exec.js,
+#   make clean   — remove public/nsim.wasm, dist/, js/wasm_exec.js,
 #                  web.tgz, web-debug.tgz
 #
 # Node dependencies install automatically: targets that need them
@@ -26,7 +26,7 @@ GO ?= go
 GOROOT := $(shell $(GO) env GOROOT)
 WASM_SRC := wasm
 WASM_OUT := public/nsim.wasm
-WASM_EXEC_DST_SRC := src/wasm_exec.js
+WASM_EXEC_DST_SRC := js/wasm_exec.js
 BUNDLE_DIR := nsim-web
 BUNDLE_TGZ := web.tgz
 BUNDLE_DEBUG_TGZ := web-debug.tgz
