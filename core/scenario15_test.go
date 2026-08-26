@@ -142,7 +142,7 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 	// steam-derived output uncapped by contract, and the walk never
 	// starts.
 	setControl(t, &p, "PlantOperation/LoadFollow", "1")
-	setControl(t, &p, "ReactorBuilding/Grid/LoadDemand", "100")
+	setControl(t, &p, "Electrical/Grid/LoadDemand", "100")
 	maxSgP := 0.0
 	for i := 0; i < int(140*time.Second/scenario15Tick); i++ {
 		stepN(&p, 1)

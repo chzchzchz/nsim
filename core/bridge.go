@@ -211,8 +211,8 @@ func addPlantOperationControls(p *Plant, m bridge.ControlMap) {
 	// the model boundary (core/plant.go). Reaches the turbine load
 	// reference only while the dispatch permissive above is engaged.
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:44-47
-	m["ReactorBuilding/Grid/LoadDemand"] = &bridge.Control{
-		Part:  "ReactorBuilding/Grid",
+	m["Electrical/Grid/LoadDemand"] = &bridge.Control{
+		Part:  "Electrical/Grid",
 		Label: "LoadDemand",
 		Kind:  "mw",
 		Get: func() string {

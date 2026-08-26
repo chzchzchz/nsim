@@ -4,7 +4,7 @@ The DEHC computes control signals comparing turbine speed and first-stage pressu
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_15/page_202.txt:11-18
 
-Related controls: [LoadDemand](ReactorBuilding/Grid/LoadDemand), [SpeedDemand](TurbineBuilding/Turbine/SpeedDemand)
+Related controls: [LoadDemand](Electrical/Grid/LoadDemand), [SpeedDemand](TurbineBuilding/Turbine/SpeedDemand)
 Related sensors: [GoverningValve](TurbineBuilding/Turbine/GoverningValve)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_15/page_202.txt:11-18

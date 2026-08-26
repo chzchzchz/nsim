@@ -5,6 +5,6 @@ Power sources feeding the ESF buses are physically and electrically independent 
 Source: /chapter_11/page_165.txt:29-36
 
 Related controls: [BreakerClosed](AuxiliaryBuilding/DieselGenerator/Generator/BreakerClosed)
-Related sensors: [Energized](Electrical/ESFBusA/Energized), [Voltage](ReactorBuilding/Grid/Voltage)
+Related sensors: [Energized](Electrical/ESFBusA/Energized), [Voltage](Electrical/Grid/Voltage)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:29-36

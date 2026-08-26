@@ -5,7 +5,7 @@ Terminal voltage is reactive power control in practice: raising field current ex
 Source: specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:46-47
 Source: specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:1-10
 
-Related sensors: [Voltage](ReactorBuilding/Grid/Voltage), [MVALimitAlarm](TurbineBuilding/Generator/MVALimitAlarm)
+Related sensors: [Voltage](Electrical/Grid/Voltage), [MVALimitAlarm](TurbineBuilding/Generator/MVALimitAlarm)
 
 Source: $W/chapter_11/page_166.txt:46-47
 Source: $W/chapter_15/page_208.txt:1-10

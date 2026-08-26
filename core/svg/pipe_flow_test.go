@@ -3,6 +3,7 @@ package svg
 import (
 	"math"
 	"regexp"
+	"strings"
 	"strconv"
 	"testing"
 
@@ -169,4 +170,21 @@ func TestReliefPipeSeatsValves(t *testing.T) {
 		assert.LessOrEqualf(t, distToPipe(cx, cy), 3.0,
 			"%s must sit on the relief pipe", id)
 	}
+}
+
+// TestRiverAndCVCSVisualsRendered pins the decorative and
+// spec-cited visual additions: the circulating-water source band,
+// the four CVCS loop segments, and the letdown valve seated on its
+// line rather than floating at a bare anchor.
+func TestRiverAndCVCSVisualsRendered(t *testing.T) {
+	p0 := core.MakePlant()
+	out := renderPlant(t, &p0)
+	assert.Contains(t, out, `stroke="`+riverColour+`"`)
+	assert.GreaterOrEqual(t,
+		strings.Count(out, `stroke="`+cvcsColour+`"`), 4)
+
+	seated := regexp.MustCompile(
+		`<g data-part="AuxiliaryBuilding/ChemicalVolumeControlSystem"[^>]*transform="translate\(`)
+	assert.Positive(t, len(seated.FindAllString(out, -1)),
+		"expected the letdown valve seated on the CVCS line")
 }

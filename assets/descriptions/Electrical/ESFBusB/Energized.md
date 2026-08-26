@@ -6,7 +6,7 @@ Source: /chapter_11/page_165.txt:81-82
 Source: specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:1-5
 
 Related controls: [BreakerClosed](Electrical/ESFBusB/BreakerClosed), [StartSignal](AuxiliaryBuilding/DieselGenerator/StartSignal)
-Related sensors: [Voltage](ReactorBuilding/Grid/Voltage)
+Related sensors: [Voltage](Electrical/Grid/Voltage)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:81-82
 Source: specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:1-5

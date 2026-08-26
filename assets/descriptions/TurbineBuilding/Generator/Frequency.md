@@ -4,6 +4,6 @@ Online, small deviations are the grid breathing: every unit absorbs them via dro
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_11/page_168.txt:15
 
-Related sensors: [Frequency](ReactorBuilding/Grid/Frequency), [Velocity](TurbineBuilding/Turbine/Velocity)
+Related sensors: [Frequency](Electrical/Grid/Frequency), [Velocity](TurbineBuilding/Turbine/Velocity)
 
 Source: $W/chapter_11/page_168.txt:15

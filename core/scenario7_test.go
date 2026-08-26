@@ -162,7 +162,7 @@ func TestScenario7_SynchronizedUnitEscalatesAtControlledRate(t *testing.T) {
 	setControl(t, p, "PlantOperation/LoadFollow", "1")
 	// Rated demand in MW: LoadDemandRef = 1000 x WattsPerMW /
 	// TurbineRatedkW = 1.0 setpoint fraction.
-	setControl(t, p, "ReactorBuilding/Grid/LoadDemand", "1000")
+	setControl(t, p, "Electrical/Grid/LoadDemand", "1000")
 	maxDump := 0.0
 	maxPowerFrac := 0.0
 	minSgP := 2000.0

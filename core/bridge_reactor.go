@@ -464,8 +464,8 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	//     generator and the associated controls necessary to
 	//     transmit power to the off-site distribution grid."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_11/page_164.txt:17-19
-	m["ReactorBuilding/Grid/LoadDemand"] = &bridge.Control{
-		Part:  "ReactorBuilding/Grid",
+	m["Electrical/Grid/LoadDemand"] = &bridge.Control{
+		Part:  "Electrical/Grid",
 		Label: "LoadDemand",
 		Kind:  "mw",
 		Get: func() string {
@@ -1128,8 +1128,8 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		//    reference values established by the dispatcher or
 		//    initiated at the operator's panel."
 		//    specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:36-41
-		m["ReactorBuilding/Grid/LoadDemand"] = &bridge.Control{
-			Part:  "ReactorBuilding/Grid",
+		m["Electrical/Grid/LoadDemand"] = &bridge.Control{
+			Part:  "Electrical/Grid",
 			Label: "LoadDemand",
 			Kind:  "mw",
 			Get: func() string {
@@ -1870,8 +1870,8 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 	// "Wide range speed control of the turbine from turning
 	// gear to rated speed."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
-	m["ReactorBuilding/Grid/Frequency"] = &bridge.Sensor{
-		Part:  "ReactorBuilding/Grid",
+	m["Electrical/Grid/Frequency"] = &bridge.Sensor{
+		Part:  "Electrical/Grid",
 		Label: "Frequency",
 		Kind:  "hz",
 		Get: func() (string, error) {
@@ -1884,8 +1884,8 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 	// Off-site grid voltage (chapter 16):
 	// "If offsite power is not available, the long coast"
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:64
-	m["ReactorBuilding/Grid/Voltage"] = &bridge.Sensor{
-		Part:  "ReactorBuilding/Grid",
+	m["Electrical/Grid/Voltage"] = &bridge.Sensor{
+		Part:  "Electrical/Grid",
 		Label: "Voltage",
 		Kind:  "volt",
 		Get: func() (string, error) {

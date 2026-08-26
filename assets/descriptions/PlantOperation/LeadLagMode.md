@@ -5,7 +5,7 @@ In turbine lead the dispatcher's load demand moves the turbine governor first, a
 Source: specs/pwr_sim/chapter_2/page_023.txt:27-28
 Source: specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:24-31
 
-Related controls: [LoadDemand](ReactorBuilding/Grid/LoadDemand)
+Related controls: [LoadDemand](Electrical/Grid/LoadDemand)
 Related sensors: [PowerError](PlantOperation/PowerError)
 
 Source: specs/pwr_sim/chapter_2/page_023.txt:27-28

@@ -579,11 +579,28 @@ type visualPipe struct {
 // Remotely operated stop valves are provided to isolate these
 // relief valves should excessive leakage occur."
 // specs/the_westinghouse_pressurized_water_react/chapter_3/page_071.txt:115-124
+// cvcsColour tints the chemical-and-volume-control visual pipes so
+// the loop reads as one system apart from the fluid-graph lines.
+const cvcsColour = "#9fc5e8"
+
+// riverColour fills the circulating-water source band drawn
+// through the intake house.
+const riverColour = "#6fa8dc"
+
 var visualPipes = []visualPipe{
 	{
 		id: "PZRREL", from: "Pressurizer", to: "PRT", colour: "red",
 		flow: func(p *core.Plant) float64 { return p.ReactorBuilding.PORV.Open },
 	},
+	{
+		// Letdown taps reactor coolant for the volume control tank;
+		// charging returns it through the pump and BTRS beds.
+		// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:6-10,66-67
+		id: "CVCSLETDOWN", from: "RPV", to: "VCT", colour: cvcsColour,
+	},
+	{id: "CVCSCHG1", from: "VCT", to: "ChgPump", colour: cvcsColour},
+	{id: "CVCSCHG2", from: "ChgPump", to: "BTRS", colour: cvcsColour},
+	{id: "CVCSCHG3", from: "BTRS", to: "RPV", colour: cvcsColour},
 }
 
 // valvePlacement seats a standalone valve onto a drawn polyline:
@@ -592,11 +609,19 @@ var visualPipes = []visualPipe{
 // shift slides the glyph along the route as a fraction of its
 // length (negative toward from). Every binding cites its spec
 // passage; valves without a citable line keep their own anchors.
-var valvePlacements = map[string]struct {
-	pipe            string
-	from, to, near  string
-	shift           float64
-}{
+// valvePlacement seats a standalone valve onto a drawn polyline:
+// either a fluid-graph edge (from/to) or a named visualPipe. near
+// biases placement toward that endpoint's laid-out anchor, and
+// shift slides the glyph along the route as a fraction of its
+// length (negative toward from). Every binding cites its spec
+// passage; valves without a citable line keep their own anchors.
+type valvePlacement struct {
+	pipe           string
+	from, to, near string
+	shift          float64
+}
+
+var valvePlacements = map[string]valvePlacement{
 	// "The main steam lines are provided with a stop valve and a
 	// check valve in each line just outside the containment."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:71-76
@@ -615,6 +640,9 @@ var valvePlacements = map[string]struct {
 	// citation (chapter_3/page_071.txt:115-124).
 	"PZRPORV": {pipe: "PZRREL", shift: 0.30},
 	"PZRBLK":  {pipe: "PZRREL", shift: 0.62},
+	// Letdown isolation valve on the RCS-to-VCT line (chapter_4
+	// letdown/charging path, see visualPipes above).
+	"LTDVN": {pipe: "CVCSLETDOWN", shift: 0.45},
 	// "low-pressure feedwater heaters are cascaded back to the
 	// condenser." The sentence starts at the bottom of page 220;
 	// page_221 truncates it after "Drains from the four".
@@ -925,6 +953,20 @@ func classifyPipe(g *core.PlantGraph, e core.GraphEdge) pipeWater {
 		return pipeFlowing
 	}
 	return pipeWet
+}
+
+// placementRoute resolves the polyline a placed valve seats on:
+// a named visual pipe when set, otherwise the fluid-graph edge
+// between from and to.
+func (r *renderer) placementRoute(
+	pl valvePlacement,
+	visRoutes map[string][]Anchor,
+) ([]Anchor, bool) {
+	if pl.pipe != "" {
+		pts, ok := visRoutes[pl.pipe]
+		return pts, ok && len(pts) >= 2
+	}
+	return r.routeFor(core.GraphEdge{From: pl.from, To: pl.to})
 }
 
 // pipe renders one graph edge as dot's routed polyline (or a plain
@@ -1274,6 +1316,34 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		b.WriteString("</g>\n")
 	}
 
+	// River: the circulating water system's ultimate heat sink.
+	// "water may be a river, lake, ocean, or cooling tower ...
+	// Water enters the system through an intake house"
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:29-34
+	// Drawn under everything as a wide band through the intake,
+	// circulating-water pumps, and cooling tower anchors.
+	if ia, ok := r.anchor("Intake"); ok {
+		var pts []Anchor
+		if cwp, okC := r.anchor("CWP"); okC {
+			pts = append(pts, Anchor{X: cwp.X - 60, Y: cwp.Y + 34})
+		}
+		pts = append(pts, Anchor{X: ia.X - 70, Y: ia.Y + 30},
+			Anchor{X: ia.X + 80, Y: ia.Y + 34})
+		if ct, okCT := r.anchor("CoolingTower"); okCT {
+			pts = append(pts, Anchor{X: ct.X - 20, Y: ct.Y + 62})
+		}
+		var pp strings.Builder
+		for i, p := range pts {
+			if i > 0 {
+				pp.WriteString(" ")
+			}
+			fmt.Fprintf(&pp, "%.1f,%.1f", p.X, p.Y)
+		}
+		fmt.Fprintf(&b,
+			`<polyline points="%s" fill="none" stroke="%s" stroke-width="22" stroke-opacity="0.5"/>`+"\n",
+			pp.String(), riverColour)
+	}
+
 	// Containment internals: spray headers sized relative to the
 	// dome footprint, skipped where they would collide with a real
 	// part. RCFC units are real diagramParts placed by dot.
@@ -1404,13 +1474,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	for _, sv := range standaloneValves {
 		open := sv.valve(p).Open
 		if pl, okP := valvePlacements[sv.id]; okP {
-			pts, okR := ([]Anchor)(nil), false
-			if pl.pipe != "" {
-				pts, okR = visRoutes[pl.pipe], true
-			} else if route, routed := r.routeFor(core.GraphEdge{From: pl.from, To: pl.to}); routed {
-				pts, okR = route, true
-			}
-			if okR {
+			if pts, okR := r.placementRoute(pl, visRoutes); okR {
 				total := routeLen(pts)
 				dist := 0.5 * total
 				if a, okA := r.anchor(pl.near); okA {
@@ -1430,12 +1494,26 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		writeValveBody(sv.part, a, 0, sv.kind, open)
 	}
 	for _, sv := range scalarValves {
+		open := sv.open(p)
+		if pl, okP := valvePlacements[sv.id]; okP {
+			if pts, okR := r.placementRoute(pl, visRoutes); okR {
+				total := routeLen(pts)
+				dist := 0.5 * total
+				if a, okA := r.anchor(pl.near); okA {
+					dist = projectAnchorDist(pts, a)
+				}
+				dist = clampRange(dist+pl.shift*total, 0.04*total, 0.96*total)
+				at, deg := routePointAt(pts, dist)
+				writeValveBody(sv.part, at, deg, sv.kind, open)
+				continue
+			}
+		}
 		a, ok := r.anchor(sv.id)
 		if !ok {
 			r.missing[sv.id] = true
 			continue
 		}
-		writeValveBody(sv.part, a, 0, sv.kind, sv.open(p))
+		writeValveBody(sv.part, a, 0, sv.kind, open)
 	}
 
 	// Live overlays: readouts and alarm rings track their symbols.
