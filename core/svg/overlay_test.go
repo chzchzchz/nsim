@@ -96,10 +96,14 @@ func TestOverlay_Coverage(t *testing.T) {
 		assert.NotContains(t, out, "brs-carryover")
 
 		brs := &p.AuxiliaryBuilding.BoronRecycleSystem
+		base := strings.Count(renderPlant(t, &p), `fill="green" stroke="var(--pid-dot-edge`)
 		brs.FeedPumpRunning = true
 		brs.FeedFlow = 10
-		assert.Regexp(t, `10\.0 gpm`, renderPlant(t, &p),
+		out = renderPlant(t, &p)
+		assert.Regexp(t, `10\.0 gpm`, out,
 			"feed flow reads while the panel latch is on")
+		assert.Greater(t, strings.Count(out, `fill="green" stroke="var(--pid-dot-edge`), base,
+			"the feed pump latch lights a run dot")
 
 		brs.Carryover = true
 		assert.Contains(t, renderPlant(t, &p), `class="brs-carryover"`)

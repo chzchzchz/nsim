@@ -264,6 +264,9 @@ var runAccessors = map[string]func(*core.Plant) bool{
 	"BTRSPUMP": func(p *core.Plant) bool {
 		return p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning
 	},
+	"BRS": func(p *core.Plant) bool {
+		return p.AuxiliaryBuilding.BoronRecycleSystem.FeedPumpRunning
+	},
 }
 
 // levelAccessors maps tank-backed diagram parts to their live
@@ -311,6 +314,14 @@ var levelAccessors = map[string]func(*core.Plant) (core.Volume, core.Volume){
 	"CSSTank": func(p *core.Plant) (core.Volume, core.Volume) {
 		return p.AuxiliaryBuilding.ContainmentSpraySystem.CSSTLevel,
 			core.CSSTCapacity
+	},
+	// The model stores no VCT capacity constant; the operating band
+	// tops out at VCTHighLevel, where letdown diverts to the BRS
+	// holdup tanks, so full on the gauge reads as divert.
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
+	"VCT": func(p *core.Plant) (core.Volume, core.Volume) {
+		return p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel,
+			core.Volume{Val: core.VCTHighLevel, Unit: u.Gallon}
 	},
 	"SATTank": func(p *core.Plant) (core.Volume, core.Volume) {
 		return p.AuxiliaryBuilding.ContainmentSpraySystem.SATLevel,

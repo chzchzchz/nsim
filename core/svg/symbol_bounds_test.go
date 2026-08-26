@@ -24,17 +24,6 @@ import (
 //
 // Containment is enforced strictly (boundary counts as outside):
 // a shape lying exactly on the viewBox edge clips half its stroke.
-//
-// symbolWaivers lists symbols allowed to overflow today, each with
-// the reason it cannot be fixed locally. A waiver is visible debt,
-// not a pass: shrinking it back to empty deletes the waiver.
-var symbolWaivers = map[string]string{
-	// Composed into safety_systems.svg via <use>, so widening its
-	// viewBox rescales every HX instance in those compositions;
-	// fixing means retuning the composed placements first.
-	"heat-exchanger": "composed into safety_systems; retune compositions",
-}
-
 var (
 	symbolSymRe   = regexp.MustCompile(`(?s)<symbol id="([\w-]+)"([^>]*)>(.*?)</symbol>`)
 	symViewBoxRe  = regexp.MustCompile(`viewBox="([^"]+)"`)
@@ -146,10 +135,6 @@ func TestSymbolGeometryInsideViewBox(t *testing.T) {
 			h, _ := strconv.ParseFloat(vb[3], 64)
 			maxX, maxY := minX+w, minY+h
 
-			if reason, waived := symbolWaivers[id]; waived {
-				t.Logf("waived %s/%s: %s", fam.name, id, reason)
-				continue
-			}
 			for _, em := range symElementRe.FindAllStringSubmatch(sm[3], -1) {
 				// Invisible routing-anchor markers (fill and stroke
 				// both none) render nothing; clipping them is moot.

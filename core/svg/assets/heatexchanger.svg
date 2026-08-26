@@ -15,12 +15,12 @@
 <line x1="-40" y1="6" x2="40" y2="6"/>
 <line x1="-40" y1="12" x2="40" y2="12"/>
 </g>
-<rect x="-52" y="-10" width="8" height="6" fill="#cccccc" stroke="black"/>
-<rect x="44" y="-10" width="8" height="6" fill="#cccccc" stroke="black"/>
+<rect x="-50" y="-10" width="6" height="6" fill="#cccccc" stroke="black"/>
+<rect x="44" y="-10" width="6" height="6" fill="#cccccc" stroke="black"/>
 <rect x="-6" y="18" width="12" height="6" fill="#cccccc" stroke="black"/>
 <rect x="-6" y="-24" width="12" height="6" fill="#cccccc" stroke="black"/>
-<circle id="hx-anchor-tube-in" cx="-52" cy="-7" r="2" fill="none" stroke="none"/>
-<circle id="hx-anchor-tube-out" cx="52" cy="-7" r="2" fill="none" stroke="none"/>
+<circle id="hx-anchor-tube-in" cx="-47" cy="-7" r="2" fill="none" stroke="none"/>
+<circle id="hx-anchor-tube-out" cx="47" cy="-7" r="2" fill="none" stroke="none"/>
 <circle id="hx-anchor-shell-in" cx="0" cy="-24" r="2" fill="none" stroke="none"/>
 <circle id="hx-anchor-shell-out" cx="0" cy="24" r="2" fill="none" stroke="none"/>
 </symbol>
