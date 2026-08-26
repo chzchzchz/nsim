@@ -84,7 +84,7 @@ function renderControl(
 
     const text = document.createElement("span");
     text.className = "label-text";
-    text.textContent = label;
+    text.innerHTML = label.replace(/\//g, "/<wbr>");
     row.appendChild(text);
 
     const desc = helpFor(e.id);
