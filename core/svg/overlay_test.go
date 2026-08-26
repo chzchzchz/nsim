@@ -112,6 +112,21 @@ func TestOverlay_Coverage(t *testing.T) {
 		assert.Contains(t, renderPlant(t, &p), "dist divert")
 	})
 
+	t.Run("esfas and tavg alarms halo their parts", func(t *testing.T) {
+		p := core.MakePlant()
+		base := strings.Count(renderPlant(t, &p), `stroke="#e02020"`)
+
+		p.TurbineBuilding.Turbine.LowTavgDeviationHold = true
+		assert.Contains(t, renderPlant(t, &p), `stroke="#f0a500"`,
+			"the Tavg loading hold ambers the turbine")
+
+		p.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationActuated = true
+		p.ReactorBuilding.ReactorProtectionSystem.ContainmentSprayActuated = true
+		assert.Greater(t,
+			strings.Count(renderPlant(t, &p), `stroke="#e02020"`), base,
+			"ESFAS trips red the steam generators and spray tanks")
+	})
+
 	t.Run("pzr pressure and level readouts", func(t *testing.T) {
 		p := core.MakePlant()
 		out := renderPlant(t, &p)

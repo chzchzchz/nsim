@@ -331,6 +331,14 @@ var levelAccessors = map[string]func(*core.Plant) (core.Volume, core.Volume){
 		t := p.AuxiliaryBuilding.DieselGeneratorB.Fuel
 		return t.Level, t.Capacity
 	},
+	// Accumulator injection inventory: the gauge drains during a
+	// blowdown while the bank feeds the cold legs passively.
+	// "This high flow is provided by the accumulators"
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:16-23
+	"SISAccumulators": func(p *core.Plant) (core.Volume, core.Volume) {
+		a := p.ReactorBuilding.SafetyInjectionSystem.Accumulator
+		return a.Level, a.Capacity
+	},
 }
 
 // tintAmber/tintRed are halo colours for warning vs trip severity.
@@ -381,6 +389,16 @@ var alarmParts = map[core.AlarmID][]string{
 	core.AlarmIDFeedwaterIsolation:    {"MainFeedValve"},
 	core.AlarmIDContainmentIsolA:      {"CIS"},
 	core.AlarmIDContainmentIsolB:      {"CIS"},
+	// The MSIVs themselves are standalone valves, which cannot take
+	// halos, so the steam generators carry steam-line alarms.
+	core.AlarmIDSteamlineIsolation:    {"SG"},
+	core.AlarmIDTurbineLowTavg:        {"Turbine"},
+	core.AlarmIDContainmentSpray:      {"CSSTank", "SATTank"},
+	// Low-steamline-pressure, low-Tcold, and containment-high-
+	// pressure annunciators are declared in core/alarm.go but never
+	// raised (their alarm docs say so), so mapping them would be dead
+	// configuration; the containment dome wash already encodes high
+	// pressure visually.
 }
 
 // haloTint is the resolved overlay state for one part: halo colour
