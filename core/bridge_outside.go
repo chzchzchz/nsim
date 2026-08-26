@@ -400,8 +400,9 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 		Label: "EvaporationFlow",
 		Kind:  "gpm",
 		Get: func() (string, error) {
+			// Stored gal/s; presented gpm (x60 at the presentation boundary).
 			return bridge.FormatSensorValue("gpm",
-				p.Outside.CoolingTower.EvaporationFlow.Float())
+				p.Outside.CoolingTower.EvaporationFlow.Float() * 60)
 		},
 	}
 
@@ -520,9 +521,9 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 	// openings to a common header."
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:51-54
 	// The simplified model collapses the three pumps into a
-	// single lumped Flow value (gpm); we use the bridge
-	// "gallon" kind as the closest analog (no "gpm" kind
-	// exists in bridge/convert.go).
+	// single lumped Flow value already stored in gpm
+	// (ServiceWaterPumpFlow is a per-pump gpm figure), so this
+	// sensor needs no unit conversion.
 	m["Outside/ServiceWaterSystem/Flow"] = &bridge.Sensor{
 		Part:  "Outside/ServiceWaterSystem",
 		Label: "Flow",
@@ -576,6 +577,7 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 	}
 
 
+	// Backing field FlowGPM is stored in true gpm; no conversion.
 	// Circulating Water System flow (chapter 12):
 	// "Circulating water for each main condenser is supplied
 	// by vertical, mixed flow, volute type circulating water

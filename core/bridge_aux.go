@@ -1099,8 +1099,9 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Label: "ChargingFlow",
 		Kind:  "gpm",
 		Get: func() (string, error) {
+			// Stored gal/s; presented gpm (x60 at the presentation boundary).
 			return bridge.FormatSensorValue("gpm",
-				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingFlow.Float())
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingFlow.Float() * 60)
 		},
 	}
 
@@ -1116,8 +1117,9 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Label: "LetdownFlow",
 		Kind:  "gpm",
 		Get: func() (string, error) {
+			// Stored gal/s; presented gpm (x60 at the presentation boundary).
 			return bridge.FormatSensorValue("gpm",
-				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownFlow.Float())
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownFlow.Float() * 60)
 		},
 	}
 
@@ -1333,8 +1335,9 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Label: "SolidPlantReliefFlow",
 		Kind:  "gpm",
 		Get: func() (string, error) {
+			// Stored gal/s; presented gpm (x60 at the presentation boundary).
 			return bridge.FormatSensorValue("gpm",
-				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantReliefFlow.Float())
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantReliefFlow.Float() * 60)
 		},
 	}
 
@@ -1501,6 +1504,7 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Kind:  "gpm",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("gpm",
+				// Backing constant is stored in true gpm; no conversion.
 				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PurificationFlow)
 		},
 	}
@@ -1556,8 +1560,9 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Label: "FeedFlow",
 		Kind:  "gpm",
 		Get: func() (string, error) {
+			// Stored gal/s; presented gpm (x60 at the presentation boundary).
 			return bridge.FormatSensorValue("gpm",
-				p.AuxiliaryBuilding.BoronRecycleSystem.FeedFlow)
+				p.AuxiliaryBuilding.BoronRecycleSystem.FeedFlow * 60)
 		},
 	}
 

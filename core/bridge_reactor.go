@@ -1670,8 +1670,9 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Label: "Flow",
 		Kind:  "gpm",
 		Get: func() (string, error) {
+			// Stored gal/s; presented gpm (x60 at the presentation boundary).
 			return bridge.FormatSensorValue("gpm",
-				p.ReactorBuilding.ReactorMakeupControlValve.Flow.Float())
+				p.ReactorBuilding.ReactorMakeupControlValve.Flow.Float() * 60)
 		},
 	}
 
