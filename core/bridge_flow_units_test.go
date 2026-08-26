@@ -34,6 +34,16 @@ func TestBridge_FlowSensorsPresentGPM(t *testing.T) {
 	p.Outside.CirculatingWaterSystem.FlowGPM = 550000
 	p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PurificationFlow = 100
 
+	// BreakFlow stores a PER-STEP volume (gal over one TimeStep), so
+	// the gpm presentation divides out the tick: 0.12 gal/step at the
+	// 1 ms tick is the 120 gal/s full-open break rate = 7200 gpm.
+	p.ReactorBuilding.ReactorPressureVessel.BreakFlow =
+		Volume{Val: 0.12, Unit: u.Gallon}
+	// HHSIHotLegFlow stores a rate in gal/s (design 970/60 gal/s x the
+	// hot-leg fraction); presented like any other gal/s field.
+	p.ReactorBuilding.SafetyInjectionSystem.HHSIHotLegFlow =
+		Volume{Val: 8, Unit: u.Gallon}
+
 	cases := []struct {
 		path string
 		want float64
@@ -47,6 +57,8 @@ func TestBridge_FlowSensorsPresentGPM(t *testing.T) {
 		{"Outside/ServiceWaterSystem/Flow", 20000},
 		{"Outside/CirculatingWaterSystem/Flow", 550000},
 		{"AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PurificationFlow", 100},
+		{"ReactorBuilding/ReactorPressureVessel/BreakFlow", 7200},
+		{"ReactorBuilding/SafetyInjectionSystem/HHSIHotLegFlow", 480},
 	}
 
 	m := GetSensorMap(&p)
@@ -54,6 +66,8 @@ func TestBridge_FlowSensorsPresentGPM(t *testing.T) {
 		t.Run(tc.path, func(t *testing.T) {
 			s, ok := m[tc.path]
 			require.True(t, ok, "sensor %q must be registered", tc.path)
+			assert.Equal(t, "gpm", s.Kind,
+				"%s must declare the gpm kind it presents", tc.path)
 			out, err := s.Get()
 			require.NoError(t, err)
 			got, err := strconv.ParseFloat(out, 64)

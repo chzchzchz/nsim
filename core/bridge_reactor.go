@@ -1838,16 +1838,19 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 
 
 	// Hot-leg LOCA break discharge. The exercise records the
-	// break flow as the transient develops.
+	// break flow as a rate into Table V.
 	// "Record the break flow in Table V."
 	// specs/pwr_sim/chapter_4/page_053.txt:64-65
+	// Backing field is a per-step volume; presented as gpm by
+	// dividing out the tick and scaling to minutes.
 	m["ReactorBuilding/ReactorPressureVessel/BreakFlow"] = &bridge.Sensor{
 		Part:  "ReactorBuilding/ReactorPressureVessel",
 		Label: "BreakFlow",
-		Kind:  "gallon",
+		Kind:  "gpm",
 		Get: func() (string, error) {
-			return bridge.FormatSensorValue("gallon",
-				p.ReactorBuilding.ReactorPressureVessel.BreakFlow.Float())
+			return bridge.FormatSensorValue("gpm",
+				p.ReactorBuilding.ReactorPressureVessel.BreakFlow.Float() /
+					TimeStep.Seconds()*60)
 		},
 	}
 
@@ -1859,10 +1862,11 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 	m["ReactorBuilding/SafetyInjectionSystem/HHSIHotLegFlow"] = &bridge.Sensor{
 		Part:  "ReactorBuilding/SafetyInjectionSystem",
 		Label: "HHSIHotLegFlow",
-		Kind:  "gallon",
+		Kind:  "gpm",
 		Get: func() (string, error) {
-			return bridge.FormatSensorValue("gallon",
-				p.ReactorBuilding.SafetyInjectionSystem.HHSIHotLegFlow.Float())
+			// Backing field is stored in gal/s; presented gpm.
+			return bridge.FormatSensorValue("gpm",
+				p.ReactorBuilding.SafetyInjectionSystem.HHSIHotLegFlow.Float() * 60)
 		},
 	}
 
