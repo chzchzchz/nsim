@@ -200,7 +200,10 @@ func TestPlant_SteamLineBreakOvercoolsPastProgramEnvelope(t *testing.T) {
 	startF := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 	trippedAt := -1
 	maxCoolFps := 0.0
-	const window = 60 * time.Second
+	// 30 s captures the full fault signature: the trip lands within
+	// seconds of the break and both thresholds are pace-relative, so
+	// halving the window tightens rather than loosens them.
+	const window = 30 * time.Second
 	for i := 0; i < int(window/TimeStep); i++ {
 		pre := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 		p.Step()

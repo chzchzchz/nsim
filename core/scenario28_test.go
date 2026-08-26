@@ -391,12 +391,20 @@ func TestReactor_ECCSInjectionMixesStorageTemperature(t *testing.T) {
 // separation is attributable to the ECCS volume credit arriving at
 // storage temperature instead of as pure volume. The crediting plant
 // must end colder by a strictly positive margin - design-flow mixing
-// is gentle by derivation (~0.2 F per 30 s against ~419400 gal), so
-// the window is sized to accumulate a clear signal. Securing HHSI
-// manually is deliberately inexpressible here: while the actuation
-// signal stands the model re-latches its pumps.
+// is gentle by derivation, and the measured separation shrinks the
+// longer the blowdown dwell runs (both legs converge toward the
+// saturation floor), so 15 s of dwell keeps the largest signal:
+// 1.59 F at the production tick, 1.586 F at a uniform 5 ms tick.
+// Securing HHSI manually is deliberately inexpressible here: while
+// the actuation signal stands the model re-latches its pumps.
+//
+// Width note: break discharge, accumulator delivery, and ECCS mixing
+// are all linear-in-dt channels; accumulator and trip thresholds shift
+// by at most one tick; and the assertion is differential between twin
+// legs that share any residual discretization bias.
 func TestScenario28_ECCSCreditCoolsRefilledPrimary(t *testing.T) {
 	t.Parallel()
+	overrideTimeStep(t, 5*time.Millisecond)
 
 	runLeg := func(seedAccumulators bool) float64 {
 		p := MakePlant()
@@ -406,7 +414,7 @@ func TestScenario28_ECCSCreditCoolsRefilledPrimary(t *testing.T) {
 		}
 		cm := GetControlMap(&p)
 		require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
-		for i := 0; i < int(45*time.Second/TimeStep); i++ {
+		for i := 0; i < int(15*time.Second/TimeStep); i++ {
 			p.Step()
 			p.Update()
 		}

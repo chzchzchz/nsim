@@ -44,9 +44,14 @@ func hdsScenarioPlant(pct float64) Plant {
 // on a benign lineup: a LOCA-sensed plant isolates its vent (Table
 // 7-1) and falls back to the recombiner-only arc covered above.
 func TestScenario37_VentilationControlDeepensRemoval(t *testing.T) {
-	// Production tick: widened ticks fire spurious diesel start
-	// signals at hot standby, which sense a LOCA and generate
-	// hydrogen - the benign premise dies with them.
+	// Width note: the hydrogen state integrates linear streams, and
+	// probes at 1/5/10 ms all reproduced the closed-form decline
+	// exactly while the baseline froze to 1e-9 - the spurious diesel
+	// SI sense that forced the production tick does not fire at
+	// 10 ms. If it ever returns, the exact-freeze assertion below
+	// fails loudly, so the widened tick cannot silently rot the
+	// benign premise.
+	overrideTimeStep(t, 10*time.Millisecond)
 	key := "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression/"
 
 	p := MakePlant()
@@ -56,7 +61,7 @@ func TestScenario37_VentilationControlDeepensRemoval(t *testing.T) {
 
 	// Dormant baseline: nothing crosses the wall, concentration
 	// holds exactly.
-	stepN(&p, 300000)
+	stepN(&p, int(300*time.Second/TimeStep))
 	baseline := p.ReactorBuilding.ContainmentBuilding.
 		HydrogenDetectionSuppression.HydrogenVolumePercent
 	assert.InDelta(t, 1.4, baseline, 1e-9,
@@ -65,9 +70,10 @@ func TestScenario37_VentilationControlDeepensRemoval(t *testing.T) {
 	// Vent on: the decline deepens by exactly the ventilation
 	// stream over the window.
 	require.NoError(t, cm[key+"Ventilation"].Set("1"))
-	stepN(&p, 900000)
+	const ventWindow = 900 * time.Second
+	stepN(&p, int(ventWindow/TimeStep))
 	hds := p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
-	want := baseline - 900.0/3600.0*HydrogenVentilationRemovalRate
+	want := baseline - ventWindow.Seconds()/3600.0*HydrogenVentilationRemovalRate
 	assert.InDelta(t, want,
 		hds.HydrogenVolumePercent, 0.01,
 		"the decline must equal the ventilation stream alone")
