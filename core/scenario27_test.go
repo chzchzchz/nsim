@@ -121,7 +121,7 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 	r := ReactorProtectionSystem{}
 	low := RPSLowPressurizerPressureTrip - 1
 	s1 := r.Step(SteamGeneratorShellPressure, low, 50,
-		CoreReferenceInletF, AtmosphericPressure, 1.0, 1)
+		CoreReferenceInletF, AtmosphericPressure, 1.0, 1, 0)
 	assert.Equal(t, 1, s1.TripSignalCount,
 		"low pressurizer pressure contributes one voting channel")
 	assert.True(t, s1.SafetyInjectionActuated,
@@ -129,7 +129,7 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 	assert.True(t, s1.SteamlineIsolationActuated,
 		"low pressurizer pressure is a steamline-isolation trigger")
 	s2 := s1.Step(SteamGeneratorShellPressure, low, 50,
-		CoreReferenceInletF, AtmosphericPressure, 1.0, 1)
+		CoreReferenceInletF, AtmosphericPressure, 1.0, 1, 0)
 	assert.True(t, s2.ReactorTripped,
 		"the SI latch votes the reactor trip")
 
@@ -138,7 +138,7 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 	cold := ReactorProtectionSystem{}
 	s3 := cold.Step(SteamGeneratorShellPressure, low, 50,
 		CoreReferenceInletF, AtmosphericPressure,
-		RPSAtPowerPermissiveFraction/2, 1)
+		RPSAtPowerPermissiveFraction/2, 1, 0)
 	assert.False(t, s3.SafetyInjectionActuated)
 	assert.Equal(t, 0, s3.TripSignalCount)
 
@@ -146,14 +146,14 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 	// away from the setpoint, so calibration cannot actuate SI.
 	tested := ReactorProtectionSystem{ChannelTest: RPSPressurizerChannelInTest}
 	s4 := tested.Step(SteamGeneratorShellPressure, low, 50,
-		CoreReferenceInletF, AtmosphericPressure, 1.0, 1)
+		CoreReferenceInletF, AtmosphericPressure, 1.0, 1, 0)
 	assert.False(t, s4.SafetyInjectionActuated,
 		"isolated channel cannot actuate protections")
 
 	// Healthy pressure at power contributes nothing.
 	ok := ReactorProtectionSystem{}
 	s5 := ok.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
-		CoreReferenceInletF, AtmosphericPressure, 1.0, 1)
+		CoreReferenceInletF, AtmosphericPressure, 1.0, 1, 0)
 	assert.Equal(t, 0, s5.TripSignalCount)
 	assert.False(t, s5.SafetyInjectionActuated)
 }

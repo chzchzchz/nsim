@@ -5146,7 +5146,12 @@ const (
 	RPSLowPressurizerPressureTrip Pressure = 1800.0
 
 	// RPSHighPressurizerLevelTrip is the pressurizer level
-	// (%) above which a trip signal is generated.
+	// (%) above which a reactor trip signal is generated.
+	// Assumption; the source lists the trip signal without a
+	// numeric setpoint (specs/the_westinghouse_pressurized_water_react/
+	// chapter_7/page_138.txt:19-21). Sized above the full-load
+	// programmed level (60 percent) with surge margin, mirroring
+	// the SG hi-channel's relation to its own operating band.
 	RPSHighPressurizerLevelTrip float64 = 80.0
 
 	// RPSLowSteamGeneratorLevelTrip is the steam generator

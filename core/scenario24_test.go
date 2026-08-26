@@ -50,12 +50,12 @@ func TestRPS_LowFlowTripVotesDirectTripAtPower(t *testing.T) {
 	// before a degradation can actuate (a rising startup ramp passing
 	// through the band never trips).
 	established := r.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
-		CoreReferenceInletF, 0, 1.0, 1.0)
+		CoreReferenceInletF, 0, 1.0, 1.0, 0)
 	assert.False(t, established.ReactorTripped,
 		"full forced flow is not a trip condition")
 
 	tripped := established.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
-		CoreReferenceInletF, 0, 1.0, 0.5)
+		CoreReferenceInletF, 0, 1.0, 0.5, 0)
 	assert.True(t, tripped.ReactorTripped,
 		"degraded established flow at power must scram the reactor")
 	assert.False(t, tripped.SafetyInjectionActuated,
@@ -64,20 +64,20 @@ func TestRPS_LowFlowTripVotesDirectTripAtPower(t *testing.T) {
 	assert.False(t, tripped.ContainmentSprayActuated)
 
 	belowPermissive := r.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
-		CoreReferenceInletF, 0, RPSAtPowerPermissiveFraction/2, 0.5)
+		CoreReferenceInletF, 0, RPSAtPowerPermissiveFraction/2, 0.5, 0)
 	assert.False(t, belowPermissive.ReactorTripped,
 		"reduced-flow lineups below the permissive are normal")
 
 	inTest := ReactorProtectionSystem{ChannelTest: RPSFlowChannelInTest}
 	establishedInTest := inTest.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
-		CoreReferenceInletF, 0, 1.0, 1.0)
+		CoreReferenceInletF, 0, 1.0, 1.0, 0)
 	blocked := establishedInTest.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
-		CoreReferenceInletF, 0, 1.0, 0.5)
+		CoreReferenceInletF, 0, 1.0, 0.5, 0)
 	assert.False(t, blocked.ReactorTripped,
 		"the flow channel under test must not actuate the trip")
 
 	secured := r.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
-		CoreReferenceInletF, 0, 1.0, 0)
+		CoreReferenceInletF, 0, 1.0, 0, 0)
 	assert.False(t, secured.ReactorTripped,
 		"a lineup whose flow never established cannot low-flow trip")
 }

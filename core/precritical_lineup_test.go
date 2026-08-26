@@ -224,7 +224,7 @@ func TestRPS_ChannelTestSuppressesTestedChannel(t *testing.T) {
 	lowSteamline := RPSLowSteamlinePressureTrip - 10
 
 	tested := ReactorProtectionSystem{ChannelTest: RPSSteamlineChannelInTest}
-	tested = tested.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1)
+	tested = tested.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 0)
 	assert.Equal(t, 0, tested.TripSignalCount,
 		"the isolated channel contributes no trip vote")
 	assert.False(t, tested.SafetyInjectionActuated,
@@ -233,7 +233,7 @@ func TestRPS_ChannelTestSuppressesTestedChannel(t *testing.T) {
 		"steamline isolation stays clear during its own channel test")
 
 	inService := ReactorProtectionSystem{}
-	inService = inService.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1)
+	inService = inService.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 0)
 	assert.True(t, inService.SafetyInjectionActuated,
 		"with channels in service the same state actuates SI")
 
@@ -241,7 +241,7 @@ func TestRPS_ChannelTestSuppressesTestedChannel(t *testing.T) {
 	sprayTested := ReactorProtectionSystem{
 		ChannelTest: RPSContainmentChannelInTest}
 	sprayTested = sprayTested.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
-		CoreReferenceInletF, highContainment, 0, 1)
+		CoreReferenceInletF, highContainment, 0, 1, 0)
 	assert.False(t, sprayTested.ContainmentSprayActuated,
 		"containment spray stays clear during its channel test")
 	assert.False(t, sprayTested.ContainmentIsolationPhaseBActuated,

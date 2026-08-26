@@ -42,6 +42,7 @@ func (r *ReactorProtectionSystem) Step(
 	containmentPressureGauge Pressure,
 	powerFrac float64,
 	flowFrac float64,
+	pzrLevelPct float64,
 ) ReactorProtectionSystem {
 	ret := *r
 
@@ -49,11 +50,12 @@ func (r *ReactorProtectionSystem) Step(
 	// the trip count; the trip is declared when the count
 	// reaches RPSTripVotingThreshold (2/4 logic).
 	//
-	// Note: the simplified model omits the high-pressurizer-level
-	// trip. It requires a stable level measurement that the
-	// simplified model does not yet provide; it is deferred to a
-	// higher fidelity band as called out in the plan's
-	// "Assumptions" section.
+	// The high-pressurizer-level channel rides the same at-power
+	// permissive as its siblings: cold lineups sit water-solid at
+	// 100 percent level by design, so the healthy reading is past
+	// any plausible setpoint below P-7. It consumes the level
+	// fraction computed each step for the CVCS level controller -
+	// the measurement an earlier omission note called missing.
 	//
 	// "A 2/4 logic means that a trip occurs when at least 2
 	// signals out of 4 indicate a trip condition."
@@ -133,6 +135,9 @@ func (r *ReactorProtectionSystem) Step(
 		trips++
 	}
 	if pzrPressure < RPSLowPressurizerPressureTrip && atPowerTripsEnabled {
+		trips++
+	}
+	if pzrLevelPct > RPSHighPressurizerLevelTrip && atPowerTripsEnabled {
 		trips++
 	}
 	if containmentPressureGauge > RPSHighContainmentPressureTrip {

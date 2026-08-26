@@ -156,7 +156,7 @@ func TestScenario38_SolidPlantReliefTrimsHeaterTestOverpressure(t *testing.T) {
 func TestScenario38_SGLevelChannelsRespectAtPowerPermissive(t *testing.T) {
 	r := ReactorProtectionSystem{}
 	idle := r.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 95,
-		CoreReferenceInletF, 0, 0, 1)
+		CoreReferenceInletF, 0, 0, 1, 0)
 	assert.Zero(t, idle.TripSignalCount,
 		"wet-layup level must not vote below the permissive")
 	assert.False(t, idle.FeedwaterIsolationActuated,
@@ -165,7 +165,7 @@ func TestScenario38_SGLevelChannelsRespectAtPowerPermissive(t *testing.T) {
 		"layup fill must not trip a secured turbine")
 
 	atPower := r.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 95,
-		CoreReferenceInletF, 0, 0.5, 1)
+		CoreReferenceInletF, 0, 0.5, 1, 0)
 	assert.Equal(t, 1, atPower.TripSignalCount,
 		"above the permissive the high level votes")
 	assert.True(t, atPower.FeedwaterIsolationActuated,
@@ -176,7 +176,7 @@ func TestScenario38_SGLevelChannelsRespectAtPowerPermissive(t *testing.T) {
 	fresh := ReactorProtectionSystem{}
 	lowLevelStart := fresh.Step(
 		SteamGeneratorShellPressure, PressurizerHeaterTarget, 5,
-		CoreReferenceInletF, 0, 0, 1)
+		CoreReferenceInletF, 0, 0, 1, 0)
 	assert.True(t, lowLevelStart.AuxiliaryFeedPumpsStartActuated,
 		"AFW auto-start on low level stays live in every mode")
 }

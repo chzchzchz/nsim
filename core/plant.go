@@ -249,6 +249,10 @@ func (r *ReactorBuilding) Step(
 		sgLevelPct = 100.0 * ret.SteamGenerator.Water.Float() /
 			ret.SteamGenerator.Volume.Float()
 	}
+	pzrLevelPct := 0.0
+	if pzrVolume := ret.Pressurizer.Volume.Float(); pzrVolume > 0 {
+		pzrLevelPct = 100.0 * ret.Pressurizer.Water.Float() / pzrVolume
+	}
 	containmentGauge := ret.ContainmentBuilding.Pressure -
 		AtmosphericPressure
 	ret.ReactorProtectionSystem = ret.ReactorProtectionSystem.Step(
@@ -260,6 +264,7 @@ func (r *ReactorBuilding) Step(
 		float64(ret.ReactorPressureVessel.TotalThermalPower()) /
 			float64(CoreRatedThermalPower),
 		float64(ret.ReactorCoolantPumps.Velocity())/float64(RCPRatedSpeed),
+		pzrLevelPct,
 	)
 	// Propagate the reactor trip to the reactor pressure
 	// vessel so the RPV step drops rods and follows the
