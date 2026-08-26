@@ -86,11 +86,14 @@ export function initConsole(
         URL.revokeObjectURL(url);
         errorLine.textContent = "";
     });
-    header.appendChild(exportBtn);
+
+    const btnGroup = document.createElement("div");
+    btnGroup.className = "cmd-export-btns";
+    btnGroup.appendChild(exportBtn);
 
     const exportPlantBtn = document.createElement("button");
     exportPlantBtn.id = "btn-cmd-export-plant";
-    exportPlantBtn.textContent = "Export Plant";
+    exportPlantBtn.textContent = "\u2b07 Export Plant (.json)";
     exportPlantBtn.setAttribute(
         "aria-label",
         "Export current plant state as JSON file",
@@ -111,7 +114,8 @@ export function initConsole(
         URL.revokeObjectURL(url);
         errorLine.textContent = "";
     });
-    header.appendChild(exportPlantBtn);
+    btnGroup.appendChild(exportPlantBtn);
+    header.appendChild(btnGroup);
 
     const listEl = document.createElement("div");
     listEl.id = "cmd-list";

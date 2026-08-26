@@ -365,6 +365,21 @@
             white-space: nowrap;
         }
         #btn-cmd-export:hover { background: #2a8a6b; }
+        .cmd-export-btns {
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
+        }
+        #btn-cmd-export-plant {
+            background: #1e6b52;
+            color: white;
+            border: 1px solid #14503c;
+            padding: 3px 10px;
+            cursor: pointer;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        #btn-cmd-export-plant:hover { background: #2a8a6b; }
         #cmd-list {
             max-height: 180px;
             overflow-y: auto;
