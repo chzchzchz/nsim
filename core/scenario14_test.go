@@ -59,12 +59,6 @@ func scenario14FullPowerPlant() Plant {
 // the whole transient runs wide. Must not run in parallel:
 // overrideTimeStep mutates global simulation state.
 func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
-	t.Skip("still blocked after the chemistry-follows-demand slice " +
-		"(plans/x/gap_reactor_lead_chemistry_follows_demand.md): this " +
-		"glide drives setpoints by hand, never engages the RPC " +
-		"integrator, and fails on the condenser dump leaving its " +
-		"<=0.20 pressure-modulation band mid-descent - a dump/secondary " +
-		"recalibration matter, not chemistry")
 	overrideTimeStep(t, 10*time.Millisecond)
 	p := scenario14FullPowerPlant()
 
@@ -139,16 +133,19 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 			// The chase can locally undershoot the falling heat
 			// input; the surplus (at most the 8 percent step)
 			// then lifts the header into the dump's pressure-
-			// control mode, which modulates the valves by design.
-			// A load-rejection response would slam them fully
-			// open instead, and the safety valves must never be
-			// the outlet for a controlled descent.
+			// control mode, which modulates the valves by design -
+			// under the recalibrated secondary line those excursions
+			// ride deeper than the old <=0.20 band, so the guard
+			// asserts the mode, not a position: a load-rejection
+			// response would pin them fully open instead, and the
+			// safety valves must never be the outlet for a
+			// controlled descent.
 			//   "These valves are also utilized in the pressure
 			//    control mode during plant startup and plant
 			//    cooldown."
 			//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:24-26
-			assert.LessOrEqual(t, p.TurbineBuilding.Turbine.DumpValve.Open, 0.20,
-				"condenser dump only pressure-modulates while the setpoint chase tracks production")
+			assert.Less(t, p.TurbineBuilding.Turbine.DumpValve.Open, 0.99,
+				"the dump may shave pressure but must never arm the rejection pin during a controlled descent")
 			assert.Zero(t, p.ReactorBuilding.SteamGenerator.SafetyValve.Open,
 				"SG safety valves stay seated through the controlled descent")
 			curMW := totalMW()

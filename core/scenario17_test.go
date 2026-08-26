@@ -24,10 +24,6 @@ import (
 //     turbine."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:32-33
 func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
- 	t.Skip("load-rejection ride-through now trips via the low-steamline " +
-		"channel during the dump swing: the flat part-load secondary line " +
-		"(plans/x/gaps.md item 14) leaves the header underset at the park; " +
-		"revisit after the secondary recalibration slice")
 	// Rejection latching is snapshot-based (one operator write past
 	// LoadRejectDetectFraction = 0.10), the valves stroke fully in
 	// 0.5 s at SteamDumpValveTravelRate = 2.0/s against the 5 s
@@ -38,39 +34,15 @@ func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
 	// so they keep their meaning at any width. Must not run in
 	// parallel: overrideTimeStep mutates global simulation state.
 	overrideTimeStep(t, 10*time.Millisecond)
-	p := MakePlant()
-	// Maneuvering chemistry: diluted shim puts the net temperature
-	// coefficient negative so the fold below full power is
-	// self-stabilizing. At fresh-fuel chemistry the positive
-	// coefficient leaves the core no stable part-load point: it either
-	// rides the rated cap or folds to the neutron-source floor.
-	//   "through the negative moderator coefficient"
-	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:81-83
-	//   "the coefficient is substantially more negative due to depletion
-	//    and removal of shim boron"
-	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:119-121
-	boron := 500.0
-	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = boron
-	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = boron
+	// The at-power fixture is the ride-through's premise: a rejection
+	// is only defined against a synchronized machine carrying load.
+	// The construction default now idles at hot standby, so the
+	// MakePlant surgery this test once used no longer produces a plant
+	// with anything to reject.
+	p := fullPowerLineup()
 	cm := p.GetControlMap()
 
-	require.NoError(t, cm["TurbineBuilding/Turbine/Setpoint"].Set("1"))
-	for i := 0; i < int(15*time.Second/TimeStep); i++ {
-		p.Step()
-		p.Update()
-	}
-	require.NoError(t,
-		cm["TurbineBuilding/Generator/BreakerClosed"].Set("true"))
-	require.NoError(t, cm["TurbineBuilding/Turbine/Setpoint"].Set("0.03"))
-	// Trim rods back to criticality for the reduced-power lineup the
-	// dump-backed ride-through settles at: with the condenser dump
-	// carrying the load the turbine dropped, the core repositions just
-	// under its pre-rejection power instead of folding away.
-	//   "The steam dump serves as a short-term artificial load which allows
-	//    the reactor control system time to automatically cut back power."
-	//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:27-31
-	require.NoError(t,
-		cm["ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion"].Set("0.05"))
+	require.NoError(t, cm["TurbineBuilding/Turbine/Setpoint"].Set("0.05"))
 
 	dumpAt5s := 0.0
 	dumpAt60s := 1.0
