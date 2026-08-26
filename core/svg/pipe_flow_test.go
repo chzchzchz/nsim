@@ -294,6 +294,32 @@ func TestRiverAndCVCSVisualsRendered(t *testing.T) {
 		strings.Count(renderPlant(t, &p3), `class="flow"`),
 		"the CCWS pump streams both heat-exchanger supply lines")
 
+	// Suction follows the alignment: the RWST leg streams on tank
+	// suction, then the sump leg replaces it after switchover.
+	streaming := func(out, id string) bool {
+		for _, el := range regexp.MustCompile(`<polyline[^>]*/>`).FindAllString(out, -1) {
+			if strings.Contains(el, `data-pipe="`+id+`"`) &&
+				strings.Contains(el, `class="flow"`) {
+				return true
+			}
+		}
+		return false
+	}
+	p4 := core.MakePlant()
+	p4.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = true
+	onTank := renderPlant(t, &p4)
+	assert.True(t, streaming(onTank, "SISSUCTION"))
+	assert.False(t, streaming(onTank, "SUMPSUCTION"))
+
+	p5 := core.MakePlant()
+	sis := &p5.ReactorBuilding.SafetyInjectionSystem
+	sis.HHSIPumpRunning = true
+	sis.HHSISuction = core.SISSuctionSump
+	onSump := renderPlant(t, &p5)
+	assert.True(t, streaming(onSump, "SUMPSUCTION"))
+	assert.False(t, streaming(onSump, "SISSUCTION"),
+		"the tank leg stops streaming once suction moves to the sump")
+
 	seated := regexp.MustCompile(
 		`<g data-part="AuxiliaryBuilding/ChemicalVolumeControlSystem"[^>]*transform="translate\(`)
 	assert.Positive(t, len(seated.FindAllString(out, -1)),

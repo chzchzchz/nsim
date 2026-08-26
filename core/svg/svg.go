@@ -659,11 +659,29 @@ var visualPipes = []visualPipe{
 		},
 	},
 	{
-		// HHSI takes suction directly from the RWST.
+		// HHSI takes suction directly from the RWST - until the
+		// alignment switches, so this leg streams only while the
+		// pump runs on tank suction.
 		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
 		id: "SISSUCTION", from: "RWST", to: "HHSI", colour: "blue",
 		flow: func(p *core.Plant) float64 {
-			if p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning {
+			sis := p.ReactorBuilding.SafetyInjectionSystem
+			if sis.HHSISuction == core.SISSuctionRWST && sis.HHSIPumpRunning {
+				return 1
+			}
+			return 0
+		},
+	},
+	{
+		// After switchover the pumps draw from containment:
+		// "both the HHSI and RHR pumps for each subsystem take
+		// suction directly from one of the two containment sump
+		// recirculation lines."
+		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:172-177
+		id: "SUMPSUCTION", from: "CIS", to: "HHSI", colour: "blue",
+		flow: func(p *core.Plant) float64 {
+			sis := p.ReactorBuilding.SafetyInjectionSystem
+			if sis.HHSISuction == core.SISSuctionSump && sis.HHSIPumpRunning {
 				return 1
 			}
 			return 0
@@ -1520,6 +1538,8 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		} else {
 			frag = DrawPipePathIdle(pts, vp.colour)
 		}
+		frag = strings.Replace(frag, "/>",
+			fmt.Sprintf(` data-pipe=%q`, vp.id)+"/>", 1)
 		b.WriteString(frag)
 		b.WriteString("\n")
 	}
