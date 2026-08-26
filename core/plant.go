@@ -84,6 +84,7 @@ func (r *ReactorBuilding) Step(
 	turbineLoadFraction float64,
 	op PlantOperation,
 	turbineAdmitting bool,
+	turbineTripped bool,
 ) ReactorBuilding {
 	ret := *r
 	dt := TimeStep
@@ -265,6 +266,7 @@ func (r *ReactorBuilding) Step(
 			float64(CoreRatedThermalPower),
 		float64(ret.ReactorCoolantPumps.Velocity())/float64(RCPRatedSpeed),
 		pzrLevelPct,
+		turbineTripped,
 	)
 	// Propagate the reactor trip to the reactor pressure
 	// vessel so the RPV step drops rods and follows the
@@ -1266,6 +1268,7 @@ func (p *Plant) Step() {
 		p.TurbineBuilding.Turbine.Setpoint,
 		p.nextPlant.PlantOperation,
 		p.TurbineBuilding.Turbine.State == TurbineRunning,
+		p.TurbineBuilding.Turbine.State == TurbineTripped,
 	)
 	// Debit the holdup tanks for what the reclaim train drew this
 	// step. The CVCS stepped after the BRS and added its own letdown

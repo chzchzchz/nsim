@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,10 +11,15 @@ import (
 
 // Scenario 15 (turbine trip and recovery). The trip-side physics has
 // durable coverage in core/plant_test.go and core/turbine_test.go
-// (automatic stepback park, SG safety valves, bypass modulation,
+// (scram on the at-power trip, SG safety valves, bypass modulation,
 // feedwater, full-load endpoint); this file pins the operator recovery
 // sequence that stitches those pieces together:
 //
+//   - Above the at-power permissive the turbine-generator trip itself
+//     initiates a reactor trip:
+//     "Turbine-generator trip - Trip of the turbinegenerator above a
+//     certain power level initiates a reactor trip"
+//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:33-34
 //   - Reset precedes steam re-admission because the auto-stop-oil latch
 //     force-holds the stop valves while tripped ("release of auto stop
 //     oil [...] causes all steam control valves to close",
@@ -31,13 +37,13 @@ import (
 const scenario15Tick = 10 * time.Millisecond
 
 func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
-	// Width note: the latching logic (trip, reset, stepback release),
+	// Width note: the latching logic (trip, reset, scram release),
 	// the speed ramp, and the dispatcher setpoint walk are exact at any
-	// tick width; the stepback fold trajectory is width-sensitive but
-	// its park band is verified at the production tick by
-	// TestPlant_TurbineTripStepbackHoldsSixtyPercent, so this sequence
-	// test runs at 10 ms and asserts the fold only coarsely. Must not
-	// run in parallel.
+	// tick width; the scram fold trajectory is width-sensitive but its
+	// collapse is verified at the production tick by
+	// TestPlant_TurbineTripAtPowerScramsSupersedingStepback, so this
+	// sequence test runs at 10 ms and asserts the fold only coarsely.
+	// Must not run in parallel.
 	overrideTimeStep(t, 10*time.Millisecond)
 
 	p := MakePlant()
@@ -55,12 +61,16 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 	setControl(t, &p, "TurbineBuilding/Generator/BreakerClosed", "0")
 	stepFor(&p, 3*time.Second)
 	require.Equal(t, TurbineTripped, p.TurbineBuilding.Turbine.State)
-	require.True(t, p.PlantOperation.StepbackActive)
+	require.True(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+		"the at-power machine loss must scram the reactor")
 	assert.LessOrEqual(t, float64(p.TurbineBuilding.Generator.RealPower),
 		50e6, "generator output must collapse when the breaker opens")
 
 	// Hold window: the bypass replaces the turbine as the steam load
-	// while the stepback walks the core toward the park level.
+	// while the scram folds the core onto decay heat. The post-scram
+	// dump response spends headroom only down to its ESFAS-safe floor
+	// and shuts as Tavg restores, so the header never approaches the
+	// low-steamline protection channel.
 	maxDump := 0.0
 	for i := 0; i < int(30*time.Second/scenario15Tick); i++ {
 		stepN(&p, 1)
@@ -69,22 +79,24 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 	rpv := p.ReactorBuilding.ReactorPressureVessel
 	park := StepbackPowerFraction * float64(CoreFissionPowerAtRated)
 	folded := float64(rpv.FissionPower)
-	assert.Less(t, folded, float64(CoreFissionPowerAtRated)*0.9,
-		"the stepback must be folding the core during the hold")
-	assert.Greater(t, folded, park*0.5,
-		"the fold must not overshoot far past the park level")
-	assert.GreaterOrEqual(t, maxDump, 0.5,
-		"the modulating bypass must carry the steam while tripped")
+	assert.Less(t, folded, park*0.5,
+		"the scram folds the core below the stepback park")
+	assert.Less(t, maxDump, 1.0,
+		"the post-scram dump modulates rather than pinning wide open")
 	sgP := float64(p.ReactorBuilding.SteamGenerator.Pressure)
-	assert.GreaterOrEqual(t, sgP, 700.0,
-		"header must stay clear of the low-steamline trip")
-	assert.LessOrEqual(t, sgP, float64(SteamGeneratorShellDesignPressure))
-	assert.False(t, rpv.Trip)
-	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped)
+	assert.Greater(t, sgP, float64(RPSLowSteamlinePressureTrip),
+		"header must stay clear of the low-steamline setpoint")
+	assert.LessOrEqual(t, sgP, float64(SteamGeneratorShellDesignPressure),
+		"header must stay under the SG design clamp")
+	assert.True(t, rpv.Trip,
+		"the scram holds the rods full in through the hold")
+	assert.True(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+		"the reactor trip latches through the hold")
 
-	// Recovery: the reset is honored only once the rotor has decayed
-	// below turbineStopThreshold, so coast down first; reset clears
-	// the trip at rest, rods restore first, and only then is steam
+	// Recovery: the resets are honored only once the rotor has decayed
+	// below turbineStopThreshold, so coast down first; both trips clear
+	// at rest. Rods lead the restore, and only when resumed production
+	// holds the header clear of the low-steamline setpoint is steam
 	// re-admitted for the roll.
 	for i := 0; i < int(90*time.Second/scenario15Tick); i++ {
 		if float64(p.TurbineBuilding.Turbine.Velocity) < 1e-3 {
@@ -97,8 +109,50 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 	setControl(t, &p, "TurbineBuilding/Turbine/Reset", "Reset")
 	stepN(&p, 10)
 	require.Equal(t, TurbineOff, p.TurbineBuilding.Turbine.State)
+	// The RPS latch clears only once the machine is shut and its trip
+	// can no longer re-declare: reset cannot bypass an active trip.
+	setControl(t, &p,
+		"ReactorBuilding/ReactorProtectionSystem/Reset", "Reset")
+	stepN(&p, 10)
+	require.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
+		"the operator reset clears the scram from hot standby")
+	require.False(t, p.ReactorBuilding.ReactorPressureVessel.Trip)
+	// The protective cascade latched a turbine load runback on the
+	// scram; the operator clears it as part of restoring the machine
+	// so the dispatcher walk can engage again.
+	setControl(t, &p, "TurbineBuilding/Turbine/LoadRunback", "0")
 	setControl(t, &p,
 		"ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion", "0")
+	// Hand the rods to automatic control with the park band as the
+	// power target: the controller withdraws from the post-scram
+	// shutdown state and then holds production where turbine-scale
+	// admission is sustainable, instead of letting fully withdrawn
+	// rods run the core to rated against a no-load machine.
+	setControl(t, &p, "PlantOperation/RodControlAuto", "1")
+	setControl(t, &p, "PlantOperation/PowerSetpointTarget",
+		fmt.Sprintf("%v", StepbackPowerFraction))
+	// Rods lead the restore: withdrawn rods recover power before any
+	// steam is re-admitted ("Control rods are manually withdrawn to
+	// raise reactor power",
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:52-56).
+	// Re-admission waits until production reaches the same park band
+	// the stepback holds - the model's established level from which
+	// turbine-scale admission is sustainable - so the opening surge
+	// cannot crash the header into the low-steamline setpoint.
+	for i := 0; i < int(900*time.Second/scenario15Tick); i++ {
+		stepN(&p, 1)
+		if float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower) >=
+			StepbackPowerFraction*float64(CoreFissionPowerAtRated) &&
+			float64(p.ReactorBuilding.SteamGenerator.Pressure) >
+				float64(RPSLowSteamlinePressureTrip)+50 {
+			break
+		}
+	}
+	require.GreaterOrEqual(t,
+		float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower),
+		StepbackPowerFraction*float64(CoreFissionPowerAtRated),
+		"withdrawn rods must restore production to the park band "+
+			"before steam is re-admitted")
 	setControl(t, &p, "TurbineBuilding/Turbine/Setpoint", "0")
 	setControl(t, &p, "TurbineBuilding/Turbine/SpeedDemand", "1")
 	setControl(t, &p, "TurbineBuilding/Turbine/StopValve", "1")
@@ -158,6 +212,6 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 		"the unit must be picking up load again by the end of the walk")
 	assert.LessOrEqual(t, maxSgP, float64(SteamGeneratorShellDesignPressure),
 		"the bypass must keep the header under the design cap")
-	assert.False(t, rpv.Trip)
+	assert.False(t, p.ReactorBuilding.ReactorPressureVessel.Trip)
 	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped)
 }

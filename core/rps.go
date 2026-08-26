@@ -43,6 +43,7 @@ func (r *ReactorProtectionSystem) Step(
 	powerFrac float64,
 	flowFrac float64,
 	pzrLevelPct float64,
+	turbineTripped bool,
 ) ReactorProtectionSystem {
 	ret := *r
 
@@ -187,13 +188,21 @@ func (r *ReactorProtectionSystem) Step(
 	} else if ret.TripSignalCount >= RPSTripVotingThreshold ||
 		ret.ManualTrip ||
 		lowFlowTrip ||
-		ret.SafetyInjectionActuated {
+		ret.SafetyInjectionActuated ||
+		(turbineTripped && atPowerTripsEnabled) {
 		// An SI signal votes the trip directly: "Safety injection
 		// signal - Actuation of the Safety Injection System
 		// simultaneously initiates a reactor trip". The latch read
 		// here is the previous step's, so the trip lands within one
 		// timestep of the actuation.
 		// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:38-40
+		// A turbine-generator trip above the permissive initiates
+		// the reactor trip outright - same direct-initiation class.
+		// With the condenser gone as a heat sink, only the dump
+		// banks remain for full-power production.
+		//   "Turbine-generator trip - Trip of the turbinegenerator
+		//    above a certain power level initiates a reactor trip"
+		//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:33-34
 		ret.ReactorTripped = true
 	}
 
