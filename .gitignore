@@ -12,7 +12,7 @@ web/.vite/
 web/public/nsim.wasm
 web/public/wasm_exec.js
 web/public/descriptions.json
-web/src/wasm_exec.js
+web/src/*.js
 web/web.tgz
 web/web-debug.tgz
 
