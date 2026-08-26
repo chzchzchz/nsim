@@ -4,9 +4,9 @@ import (
 	"strconv"
 	"testing"
 
+	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	u "github.com/bcicen/go-units"
 )
 
 // Flow sensors must present gallons-per-minute while the model's storage
@@ -33,6 +33,9 @@ func TestBridge_FlowSensorsPresentGPM(t *testing.T) {
 	p.Outside.ServiceWaterSystem.Flow = 20000
 	p.Outside.CirculatingWaterSystem.FlowGPM = 550000
 	p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PurificationFlow = 100
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ProgrammedLevel = 40
+	p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.Turbidity = 12
+	p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent = 2.5
 
 	// BreakFlow stores a PER-STEP volume (gal over one TimeStep), so
 	// the gpm presentation divides out the tick: 0.12 gal/step at the
@@ -43,22 +46,30 @@ func TestBridge_FlowSensorsPresentGPM(t *testing.T) {
 	// hot-leg fraction); presented like any other gal/s field.
 	p.ReactorBuilding.SafetyInjectionSystem.HHSIHotLegFlow =
 		Volume{Val: 8, Unit: u.Gallon}
+	// BTRSBedSaturation stores a 0..1 fraction; percent presentation
+	// scales to the [0,100] range the kind promises.
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSBedSaturation = 0.5
 
 	cases := []struct {
 		path string
+		kind string
 		want float64
 	}{
-		{"AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingFlow", 60},
-		{"AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownFlow", 120},
-		{"AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantReliefFlow", 180},
-		{"AuxiliaryBuilding/BoronRecycleSystem/FeedFlow", 240},
-		{"Outside/CoolingTower/EvaporationFlow", 300},
-		{"ReactorBuilding/ReactorMakeupControlValve/Flow", 360},
-		{"Outside/ServiceWaterSystem/Flow", 20000},
-		{"Outside/CirculatingWaterSystem/Flow", 550000},
-		{"AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PurificationFlow", 100},
-		{"ReactorBuilding/ReactorPressureVessel/BreakFlow", 7200},
-		{"ReactorBuilding/SafetyInjectionSystem/HHSIHotLegFlow", 480},
+		{"AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingFlow", "gpm", 60},
+		{"AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownFlow", "gpm", 120},
+		{"AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantReliefFlow", "gpm", 180},
+		{"AuxiliaryBuilding/BoronRecycleSystem/FeedFlow", "gpm", 240},
+		{"Outside/CoolingTower/EvaporationFlow", "gpm", 300},
+		{"ReactorBuilding/ReactorMakeupControlValve/Flow", "gpm", 360},
+		{"Outside/ServiceWaterSystem/Flow", "gpm", 20000},
+		{"Outside/CirculatingWaterSystem/Flow", "gpm", 550000},
+		{"AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PurificationFlow", "gpm", 100},
+		{"ReactorBuilding/ReactorPressureVessel/BreakFlow", "gpm", 7200},
+		{"ReactorBuilding/SafetyInjectionSystem/HHSIHotLegFlow", "gpm", 480},
+		{"AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRSBedSaturation", "percent", 50},
+		{"AuxiliaryBuilding/ChemicalVolumeControlSystem/ProgrammedLevel", "percent", 40},
+		{"AuxiliaryBuilding/SpentFuelPoolCoolingSystem/Turbidity", "percent", 12},
+		{"ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression/HydrogenPercent", "percent", 2.5},
 	}
 
 	m := GetSensorMap(&p)
@@ -66,14 +77,14 @@ func TestBridge_FlowSensorsPresentGPM(t *testing.T) {
 		t.Run(tc.path, func(t *testing.T) {
 			s, ok := m[tc.path]
 			require.True(t, ok, "sensor %q must be registered", tc.path)
-			assert.Equal(t, "gpm", s.Kind,
-				"%s must declare the gpm kind it presents", tc.path)
+			assert.Equal(t, tc.kind, s.Kind,
+				"%s must declare the kind it presents", tc.path)
 			out, err := s.Get()
 			require.NoError(t, err)
 			got, err := strconv.ParseFloat(out, 64)
 			require.NoError(t, err, "sensor emitted %q", out)
 			assert.Equal(t, tc.want, got,
-				"%s must present gpm at the presentation boundary", tc.path)
+				"%s must present its declared unit at the presentation boundary", tc.path)
 		})
 	}
 }

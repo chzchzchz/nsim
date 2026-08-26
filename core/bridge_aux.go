@@ -1267,8 +1267,9 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Label: "BTRSBedSaturation",
 		Kind:  "percent",
 		Get: func() (string, error) {
+			// Stored as a 0..1 saturation fraction; presented in percent.
 			return bridge.FormatSensorValue("percent",
-				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSBedSaturation)
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSBedSaturation*100)
 		},
 	}
 
