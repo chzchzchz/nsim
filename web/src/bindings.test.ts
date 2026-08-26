@@ -106,13 +106,13 @@ describe("displayPart", () => {
         const display = displayPart("Outside");
         expect(display("Outside/DieselGenerator")).toBe("DieselGenerator");
         expect(display("Outside/DieselGenerator/Generator")).toBe(
-            "DieselGenerator/Generator",
+            "DieselGenerator/<wbr>Generator",
         );
     });
 
     it("passes through paths from another prefix unchanged", () => {
         expect(displayPart("Outside")("ReactorBuilding/RPV")).toBe(
-            "ReactorBuilding/RPV",
+            "ReactorBuilding/<wbr>RPV",
         );
     });
 });

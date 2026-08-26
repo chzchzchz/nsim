@@ -73,12 +73,15 @@ export function groupByPrefix(bindings: PartBinding[]): PrefixGroup[] {
 // a full part path for display. e.g. with prefix "Outside",
 // "Outside/DieselGenerator" becomes "DieselGenerator" and
 // "Outside/DieselGenerator/Generator" becomes
-// "DieselGenerator/Generator". The full path is preserved on the
-// PartBinding itself; only the heading text is shortened.
+// "DieselGenerator<wbr>/<wbr>Generator". The full path is preserved on
+// the PartBinding itself; only the heading text is shortened and
+// wrapped at slash boundaries.
 export function displayPart(prefix: string): PartDisplay {
     const head = prefix + "/";
     return (part: string): string =>
-        part.startsWith(head) ? part.slice(head.length) : part;
+        part.startsWith(head)
+            ? part.slice(head.length).replace(/\//g, "/<wbr>")
+            : part.replace(/\//g, "/<wbr>");
 }
 
 // PartDisplay shortens a full Part path for use as a heading.

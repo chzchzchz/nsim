@@ -87,7 +87,7 @@ function renderSensorRow(e: Entry, rows: SensorRow[]): HTMLElement {
     }
     const labelSpan = document.createElement("span");
     labelSpan.className = "label-text";
-    labelSpan.innerHTML = label.replace(/\//g, "/<wbr>");
+    labelSpan.textContent = label;
     td1.appendChild(labelSpan);
     tr.appendChild(td1);
 
