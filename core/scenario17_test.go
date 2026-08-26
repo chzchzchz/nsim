@@ -163,3 +163,38 @@ func TestPlant_HighNeutronFluxScramsDirectly(t *testing.T) {
 		float64(p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion),
 		1e-6, "rods must be fully inserted after the scram")
 }
+
+// A pressurizer pressure excursion past the trip setpoint scrams the
+// reactor end to end, and the trip answers BEFORE the relieving
+// devices: the seeded 2420 psia sits above the trip but below the PORV
+// and code-safety setpoints, so the scram - not a primary-coolant
+// discharge - is what arrests the heatup.
+//
+// Spec: "Pressurizer trip signals - High pressure, low pressure,
+// and high-level trip signals initiate a reactor trip"
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:19-21
+func TestPlant_HighPressurizerPressureScramsBeforeRelief(t *testing.T) {
+	p := fullPowerLineup()
+	p.ReactorBuilding.Pressurizer.Pressure = 2420
+
+	trippedAt := -1
+	for i := 0; i < 50; i++ {
+		stepN(&p, 1)
+		if trippedAt < 0 &&
+			p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped {
+			trippedAt = i
+			break
+		}
+	}
+	require.GreaterOrEqualf(t, trippedAt, 0,
+		"high pressurizer pressure must scram the reactor")
+	require.Lessf(t, trippedAt, 5,
+		"the trip must land within a few plant steps")
+	assert.True(t, p.ReactorBuilding.ReactorPressureVessel.Trip,
+		"the scram must propagate to the rod drop")
+	assert.False(t, p.ReactorBuilding.Pressurizer.PORVStuckOpen,
+		"the PORV must never be challenged on this transient")
+	assert.InDelta(t, 1.0,
+		float64(p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion),
+		1e-6, "rods must be fully inserted after the scram")
+}

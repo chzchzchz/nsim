@@ -215,6 +215,41 @@ func TestRPS_HighNeutronFluxTripDirectInitiation(t *testing.T) {
 		"the reactor trip must latch across subsequent steps")
 }
 
+// The high-pressurizer-pressure channel initiates the reactor trip
+// outright at any power level - no permissive gates it and it needs
+// no second vote, because unlike its low-pressure sibling it has no
+// SI echo to back-trip the reactor. It carries no ESFAS output.
+//
+// Spec: "Pressurizer trip signals - High pressure, low pressure,
+// and high-level trip signals initiate a reactor trip"
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:19-21
+func TestRPS_HighPressurizerPressureTripDirectInitiation(t *testing.T) {
+	idle := ReactorProtectionSystem{}
+	benign := idle.Step(SteamGeneratorShellPressure,
+		2380, 50, CoreReferenceInletF, 0, 1, 1, 50,
+		false)
+	assert.Zero(t, benign.TripSignalCount,
+		"pressure below the setpoint records no vote")
+	assert.False(t, benign.ReactorTripped,
+		"pressure below the setpoint must not scram")
+
+	overpressure := idle.Step(SteamGeneratorShellPressure,
+		2390, 50, CoreReferenceInletF, 0, 1, 1, 50,
+		false)
+	assert.Zero(t, overpressure.TripSignalCount,
+		"the channel declares directly, not through the tally")
+	assert.True(t, overpressure.ReactorTripped,
+		"want ReactorTripped=true on high pressurizer pressure, "+
+			"got %v", overpressure.ReactorTripped)
+	assert.False(t, overpressure.SafetyInjectionActuated,
+		"the channel alone must not actuate safeguards")
+	latched := overpressure.Step(SteamGeneratorShellPressure,
+		100, 50, CoreReferenceInletF, 0, 1, 1, 50,
+		false)
+	assert.True(t, latched.ReactorTripped,
+		"the reactor trip must latch across subsequent steps")
+}
+
 // Manual trip does not trigger containment spray (spray requires
 // high containment pressure or manual; manual trip is a separate
 // operator action).

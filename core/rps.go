@@ -195,6 +195,18 @@ func (r *ReactorProtectionSystem) Step(
 	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:6-81
 	highFluxTrip := powerFrac > RPSHighNeutronFluxTripFraction
 
+	// High-pressurizer-pressure reactor trip. Like the flux channel
+	// it declares outright: the collapsed single-integer vote cannot
+	// reach the 2/4 threshold alone, and unlike low pressurizer
+	// pressure this channel has no SI echo to back-trip the reactor
+	// (Table 7-1 lists no safeguard on high pressurizer pressure).
+	// It arms at every power level - boundary protection is
+	// unconditional, and cold overpressurization happens below P-7.
+	//   "Pressurizer trip signals - High pressure, low pressure,
+	//    and high-level trip signals initiate a reactor trip"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:19-21
+	highPzrPressureTrip := pzrPressure > RPSHighPressurizerPressureTrip
+
 	// Declare reactor trip when 2/4 voting threshold is met
 	// OR when the operator has pressed manual trip.
 	// "The RPS provides for manual initiation of reactor trip
@@ -207,7 +219,8 @@ func (r *ReactorProtectionSystem) Step(
 		lowFlowTrip ||
 		ret.SafetyInjectionActuated ||
 		(turbineTripped && atPowerTripsEnabled) ||
-		highFluxTrip {
+		highFluxTrip ||
+		highPzrPressureTrip {
 		// An SI signal votes the trip directly: "Safety injection
 		// signal - Actuation of the Safety Injection System
 		// simultaneously initiates a reactor trip". The latch read

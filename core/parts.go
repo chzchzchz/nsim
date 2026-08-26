@@ -5239,6 +5239,18 @@ const (
 	//   specs/pwr_sim/chapter_2/page_025.txt:32
 	RPSHighNeutronFluxTripFraction float64 = 1.20
 
+	// RPSHighPressurizerPressureTrip is the pressurizer pressure
+	// (psia) above which the overpower-pressure channel declares the
+	// reactor trip outright. Derived: the primary document lists the
+	// channel without a number; the value sits inside the model's
+	// own relief escalation order - above the full-power operating
+	// band, below the PORV and code-safety setpoints - so the scram
+	// arrests the heatup before any relieving device lifts.
+	//   "Pressurizer trip signals - High pressure, low pressure,
+	//    and high-level trip signals initiate a reactor trip"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:19-21
+	RPSHighPressurizerPressureTrip Pressure = 2385.0
+
 	// RPSHighContainmentPressureTrip is the containment
 	// pressure (psig) above which a trip signal is generated.
 	// Equal to the containment design pressure so a
