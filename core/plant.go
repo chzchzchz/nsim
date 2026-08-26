@@ -2007,32 +2007,40 @@ func (p *Plant) Step() {
 	if sg.Volume.Float() > 0 {
 		sgLevelPct = 100.0 * sg.Water.Float() / sg.Volume.Float()
 	}
+	fwi := p.nextPlant.ReactorBuilding.ReactorProtectionSystem.
+		FeedwaterIsolationActuated
 	reg := p.nextPlant.TurbineBuilding.FeedwaterRegulator
 	reg.Level = sgLevelPct
 	reg.SteamFlow = sg.SteamFlowRate.Float()
 	reg.FeedwaterFlow = sg.SteamFlowRate.Float()
+	// Feedwater isolation stands the regulator down: a stopped
+	// regulator decays its demand and freezes the integrator, so
+	// retransfer to automatic does not bump the valve.
 	reg.Running = p.nextPlant.TurbineBuilding.MainFeedwaterPump.Running &&
-		!p.nextPlant.TurbineBuilding.Turbine.LoadRunback
+		!p.nextPlant.TurbineBuilding.Turbine.LoadRunback &&
+		!fwi
 	reg = reg.Step()
 	p.nextPlant.TurbineBuilding.FeedwaterRegulator = reg
+	valveDemand := reg.ValveDemand
+	if fwi {
+		// Belt and suspenders: even a manual-mode regulator cannot
+		// hold the valve open against an active isolation.
+		valveDemand = 0
+	}
+	p.nextPlant.TurbineBuilding.MainFeedwaterControlValve.Open = valveDemand
 
 	// Drive the main feedwater control valve to the regulator's
 	// demand. The valve position is the regulator's output and
 	// gates the effective flow into the SG. RPS tracks
 	// FeedwaterIsolationActuated per Table 7-1 (FWI on high SG
 	// level, safety injection, or coincidence of reactor trip
-	// and low Tcold) but the simplified model does NOT close
-	// the valve on FWI here — that wiring requires a
-	// feedwater-isolation trip valve beyond the regulator's
-	// demand range. FWI is exposed via the RPS field for
-	// operator display and downstream coordination.
+	// and low Tcold) and while it stands both the regulator and
+	// the valve are forced shut above - main feed returns only
+	// after the operator resets the ESFAS latch.
 	//
 	// Spec justification:
 	//   - ESFAS Table 7-1: Feedwater Isolation triggers.
 	//     specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:73-76
-	p.nextPlant.TurbineBuilding.MainFeedwaterControlValve.Open =
-		reg.ValveDemand
-
 	// Main feedwater replenishment. With the pump running and the
 	// regulator in service, the valve demand meters FeedwaterDesign-
 	// Flow into the lumped SG and out of the condenser hotwell, so
@@ -2043,7 +2051,8 @@ func (p *Plant) Step() {
 	//    hotwell and pump condensate [...]; the water discharge from
 	//    the feedwater pumps flows [...] into the steam generators."
 	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-51
-	if reg.Running && p.nextPlant.TurbineBuilding.MainFeedwaterPump.Running {
+	if reg.Running && !fwi &&
+		p.nextPlant.TurbineBuilding.MainFeedwaterPump.Running {
 		delivery := reg.ValveDemand *
 			FeedwaterDesignFlow.Float() * TimeStep.Seconds()
 		sgWater := min(sg.Water.Float()+delivery,
@@ -2411,6 +2420,7 @@ func (p *Plant) mirrorOffsiteAvailability() {
 	p.Electrical.OffsiteSourceA.Voltage = voltage
 	p.Electrical.OffsiteSourceB.Voltage = voltage
 }
+
 
 func (p *Plant) Update() {
 	p.ReactorBuilding = p.nextPlant.ReactorBuilding

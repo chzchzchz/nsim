@@ -341,3 +341,59 @@ func TestLowTcoldBlocksAutomaticDumpDemand(t *testing.T) {
 	assert.Greaterf(t, maxOpen, 0.05,
 		"releasing the block lets the restoration duty open the dump")
 }
+
+// Feedwater isolation must reach the feed path: SI at power latches
+// FWI, the regulator stands down, and the control valve shuts - main
+// feed stops replacing secondary inventory while the primary is
+// losing it, and the AFW start latches as the paired response.
+//
+// Spec: "Feedwater Isolation: High steam generator level, Safety
+// injection, Coincidence of reactor trip and low Tcold"
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:73-76
+func TestFeedwaterIsolationShutsMainFeed(t *testing.T) {
+	p := fullPowerLineup()
+	// Hold the regulator in a DEMANDING state (level below its
+	// setpoint): without the isolation consumer the open-valve
+	// demand survives FWI and the guard passes vacuously.
+	p.ReactorBuilding.SteamGenerator.Water.Val = 60000
+	p.TurbineBuilding.FeedwaterRegulator.LevelSetpoint = 95
+	// Drive SI the real way: drop pressurizer pressure below the
+	// low-pzr SI setpoint with forced flow established.
+	p.ReactorBuilding.Pressurizer.Pressure =
+		RPSLowPressurizerPressureTrip - 50
+
+	fwiAt := -1
+	for i := 0; i < 300; i++ {
+		stepN(&p, 1)
+		if p.ReactorBuilding.ReactorProtectionSystem.FeedwaterIsolationActuated {
+			fwiAt = i
+			break
+		}
+	}
+	require.GreaterOrEqualf(t, fwiAt, 0,
+		"the low-pzr transient must latch feedwater isolation")
+	assert.Truef(t,
+		p.ReactorBuilding.ReactorProtectionSystem.AuxiliaryFeedPumpsStartActuated,
+		"the AFW start latches as the paired Table 7-1 response")
+
+	// Post-FWI the operator demands FULL OPEN in manual mode - a
+	// command the isolation must override. Only the consumer under
+	// test can hold the valve shut against it, so this discriminates
+	// independently of whatever the PI law happens to compute.
+	p.TurbineBuilding.FeedwaterRegulator.ManualControl = true
+	p.TurbineBuilding.FeedwaterRegulator.ValveDemand = 1
+	hotwell0 := float64(p.TurbineBuilding.Condenser.HotwellLevel.Val)
+	valveShutAt := -1
+	for i := 0; i < 3000; i++ {
+		stepN(&p, 1)
+		open := float64(p.TurbineBuilding.MainFeedwaterControlValve.Open)
+		if valveShutAt < 0 && open < 1e-6 {
+			valveShutAt = i
+		}
+		require.LessOrEqualf(t, open, 1e-6,
+			"an active FWI overrides even a manual full-open demand")
+	}
+	assert.GreaterOrEqualf(t,
+		float64(p.TurbineBuilding.Condenser.HotwellLevel.Val), hotwell0-1e-6,
+		"with main feed isolated the hotwell stops draining into the SG")
+}
