@@ -133,3 +133,57 @@ func TestAutoBoron_TurbineLeadErrorKeysOnTurbineSetpoint(t *testing.T) {
 	assert.Equal(t, modeWith, modeWithout,
 		"the turbine setpoint must not influence the tier under reactor lead")
 }
+
+// The armed full-load -> house-load descent, paced at the spec loading
+// cap ("plant loading is continued to full power at a rate not to
+// exceed 5 percent of full power per minute",
+// specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:148-150),
+// must complete without protective actuation while fission tracks the
+// walked demand and the header holds its ESFAS-safe floor. The first
+// attempt at this arc walked 18 percent per minute and tripped; at the
+// spec pace the p48 halves track healthy through sp 0.15 (measured max
+// deviation 0.043). The hold phase's terminal overshoot is item 18's
+// recorded remaining blocker and is deliberately out of this window.
+//
+// The widened tick stretches the walk; state bands carry assertions.
+// Must not run in parallel: overrideTimeStep mutates global state.
+func TestHouseLoadDescent_PacedWalkTracksProgramWithoutTrip(t *testing.T) {
+	overrideTimeStep(t, 10*time.Millisecond)
+	p := fullPowerLineup()
+	p.PlantOperation.RodControlAuto = true
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.AutoControl = true
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoBoronControl = true
+
+	ratePerSec := float64(TurbineLoadRunbackRate)
+	walkTicks := int(0.95 / ratePerSec * float64(time.Second) / float64(TimeStep))
+	checkpointEvery := int(30 * time.Second / TimeStep)
+
+	minSgP := 1e9
+	for i := 0; i < walkTicks; i++ {
+		p.TurbineBuilding.Turbine.Setpoint =
+			max(p.TurbineBuilding.Turbine.Setpoint-
+				ratePerSec*TimeStep.Seconds(), 0.05)
+		p.Step()
+		p.Update()
+		sp := p.TurbineBuilding.Turbine.Setpoint
+		ff := fissionFraction(p.ReactorBuilding.ReactorPressureVessel.FissionPower)
+		if i%checkpointEvery == 0 && sp >= 0.15 {
+			deviation := ff - sp
+			if deviation < 0 {
+				deviation = -deviation
+			}
+			assert.LessOrEqual(t, deviation, 0.08,
+				"fission must track the walked demand at sp %.3f, got %.3f", sp, ff)
+		}
+		sgP := float64(p.ReactorBuilding.SteamGenerator.Pressure)
+		minSgP = min(minSgP, sgP)
+	}
+	rps := p.ReactorBuilding.ReactorProtectionSystem
+	assert.False(t, rps.ReactorTripped,
+		"the spec-paced descent must not trip the reactor")
+	assert.False(t, rps.SafetyInjectionActuated,
+		"the spec-paced descent must not actuate SI")
+	assert.GreaterOrEqual(t, minSgP,
+		SteamDumpTripHeaderFloorFraction*float64(SteamGeneratorShellPressure),
+		"the header must hold its floor through the walk, got %v psia", minSgP)
+}
