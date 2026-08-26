@@ -1739,6 +1739,18 @@ func (p *Plant) Step() {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:30-33
 	hds := p.nextPlant.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
 	hds.GenerationActive = locaSensed
+	// Containment vent isolation (Table 7-1): with either phase
+	// latched, the atmosphere-exchange path through the wall is
+	// shut and hydrogen control shifts to the recombiners, which
+	// circulate inside containment. The operator flag resumes
+	// command when both phases clear.
+	//   "Containment Vent Isolation: Safety injection, [...]
+	//    Manual actuation of Phase A isolation"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:51-54
+	if p.nextPlant.ReactorBuilding.ContainmentBuilding.
+		ContainmentIsolationSystem.IsIsolated() {
+		hds.VentilationActive = false
+	}
 	hds = hds.Step()
 	p.nextPlant.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression = hds
 

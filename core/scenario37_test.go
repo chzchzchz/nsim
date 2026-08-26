@@ -37,35 +37,42 @@ func hdsScenarioPlant(pct float64) Plant {
 	return p
 }
 
-// Routing the atmosphere through containment ventilation deepens the
-// decline from the recombiner-only rate by exactly the ventilation
-// stream: closed-form wiring check against production constants, with
-// the direction (two suppression streams beat one) physics-forced.
+// Routing the atmosphere through containment ventilation removes
+// hydrogen at exactly the ventilation stream: a two-phase closed-form
+// wiring check against production constants - dormant baseline, then
+// vent-on decline - with the direction physics-forced. The phase runs
+// on a benign lineup: a LOCA-sensed plant isolates its vent (Table
+// 7-1) and falls back to the recombiner-only arc covered above.
 func TestScenario37_VentilationControlDeepensRemoval(t *testing.T) {
-	overrideTimeStep(t, time.Second)
+	// Production tick: widened ticks fire spurious diesel start
+	// signals at hot standby, which sense a LOCA and generate
+	// hydrogen - the benign premise dies with them.
 	key := "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression/"
 
-	p := hdsScenarioPlant(2.6)
-	stepN(&p, 600)
-	recombOnly := p.ReactorBuilding.ContainmentBuilding.
-		HydrogenDetectionSuppression.HydrogenVolumePercent
-	wantRecombOnly := 2.6 - 600.0/3600.0*
-		HydrogenGenerationRate // net: gen minus four recombiners
-	assert.InDelta(t, wantRecombOnly, recombOnly, 0.02)
-
+	p := MakePlant()
+	p.ReactorBuilding.ContainmentBuilding.
+		HydrogenDetectionSuppression.HydrogenVolumePercent = 1.4
 	cm := p.GetControlMap()
+
+	// Dormant baseline: nothing crosses the wall, concentration
+	// holds exactly.
+	stepN(&p, 300000)
+	baseline := p.ReactorBuilding.ContainmentBuilding.
+		HydrogenDetectionSuppression.HydrogenVolumePercent
+	assert.InDelta(t, 1.4, baseline, 1e-9,
+		"with no suppression streams active the concentration freezes")
+
+	// Vent on: the decline deepens by exactly the ventilation
+	// stream over the window.
 	require.NoError(t, cm[key+"Ventilation"].Set("1"))
-	stepN(&p, 900)
+	stepN(&p, 900000)
 	hds := p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
-	netWithVent := HydrogenGenerationRate -
-		float64(HydrogenNumRecombiners)*HydrogenRecombinerRemovalRate -
-		HydrogenVentilationRemovalRate
-	wantVent := recombOnly + 900.0/3600.0*netWithVent
-	assert.InDelta(t, wantVent, hds.HydrogenVolumePercent, 0.03)
-	assert.Less(t, hds.HydrogenVolumePercent, recombOnly,
-		"ventilation must remove hydrogen beyond recombination alone")
-	assert.True(t, hds.VentilationActive,
-		"the routed ventilation must read back in service")
+	want := baseline - 900.0/3600.0*HydrogenVentilationRemovalRate
+	assert.InDelta(t, want,
+		hds.HydrogenVolumePercent, 0.01,
+		"the decline must equal the ventilation stream alone")
+	assert.Less(t, hds.HydrogenVolumePercent, baseline,
+		"ventilation must carry hydrogen out of the atmosphere")
 }
 
 // The alarm latches at the setpoint and clears only through the
@@ -125,4 +132,70 @@ func TestScenario37_RecombinersDeactivateInLowerBand(t *testing.T) {
 	}
 	require.True(t, deactivated,
 		"recombiners must eventually stand down below the lower band")
+}
+
+// Containment vent isolation (Table 7-1) must shut the atmosphere-
+// exchange path: with Phase A latched the operator's ventilation flag
+// is overridden - nothing crosses an isolated wall, so the contained
+// concentration freezes exactly even though the vent stream would
+// otherwise carry hydrogen out. Clearing the phase returns command to
+// the operator.
+//
+// Spec: "Containment Vent Isolation: Safety injection, [...]
+// Manual actuation of Phase A isolation"
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:51-54
+func TestScenario37_VentIsolationStopsExchange(t *testing.T) {
+	// Production tick throughout: at widened ticks the hot-standby
+	// header crashes through the low-steamline SI trigger within a
+	// couple of steps and the fixture stops being benign.
+	key := "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression/"
+
+	p := MakePlant()
+	p.ReactorBuilding.ContainmentBuilding.
+		HydrogenDetectionSuppression.HydrogenVolumePercent = 1.4
+	cm := p.GetControlMap()
+	require.NoError(t, cm[key+"Ventilation"].Set("1"))
+	stepN(&p, 3000)
+	hds := p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
+	require.True(t, hds.VentilationActive,
+		"precondition: the operator routed the ventilation stream")
+
+	// Latch Phase A through the protection system - the CIS manual
+	// flags mirror these ESFAS outputs each step.
+	p.ReactorBuilding.ReactorProtectionSystem.
+		ContainmentIsolationPhaseAActuated = true
+	stepN(&p, 1000)
+	cis := p.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem
+	require.True(t, cis.PhaseAIsolated, "precondition: Phase A latched")
+	hds = p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
+	require.False(t, hds.VentilationActive,
+		"the isolated wall must force the ventilation stream off")
+
+	// Seeded below every suppression band, the isolated containment
+	// freezes exactly: no generation, no ventilation term crossing
+	// the boundary, recombiners dormant.
+	before := p.ReactorBuilding.ContainmentBuilding.
+		HydrogenDetectionSuppression.HydrogenVolumePercent
+	stepN(&p, 60000)
+	got := p.ReactorBuilding.ContainmentBuilding.
+		HydrogenDetectionSuppression.HydrogenVolumePercent
+	assert.InDelta(t, before, got, 1e-9,
+		"an isolated containment exchanges no atmosphere")
+	require.False(t,
+		p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.VentilationActive,
+		"ventilation stays forced off through isolation")
+
+	// Clearing the protection output releases the CIS demand and
+	// returns the valve to operator command.
+	p.ReactorBuilding.ReactorProtectionSystem.
+		ContainmentIsolationPhaseAActuated = false
+	stepN(&p, 1000)
+	require.False(t,
+		p.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem.IsIsolated(),
+		"precondition: phases cleared after reset")
+	require.NoError(t, cm[key+"Ventilation"].Set("1"))
+	stepN(&p, 100)
+	assert.True(t,
+		p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.VentilationActive,
+		"the operator commands ventilation again once isolated paths clear")
 }
