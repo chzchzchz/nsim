@@ -601,14 +601,23 @@ var visualPipes = []visualPipe{
 	{id: "CVCSCHG1", from: "VCT", to: "ChgPump", colour: cvcsColour},
 	{id: "CVCSCHG2", from: "ChgPump", to: "BTRS", colour: cvcsColour},
 	{id: "CVCSCHG3", from: "BTRS", to: "RPV", colour: cvcsColour},
+	{
+		// Makeup to the RCS can come from "the refueling water
+		// storage tank as a backup" when VCT level drops.
+		// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:1-4
+		id: "CVCSMAKEUP", from: "RWST", to: "VCT", colour: cvcsColour,
+	},
+	{
+		// "Cold water can be sprayed into the pressurizer relief
+		// tank to increase the heat sink capacity."
+		// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:35-38
+		id: "PRTSPRAYLINE", from: "CCWSHX", to: "PRT", colour: "blue",
+		flow: func(p *core.Plant) float64 {
+			return p.ReactorBuilding.PRTSprayValve.Open
+		},
+	},
 }
 
-// valvePlacement seats a standalone valve onto a drawn polyline:
-// either a fluid-graph edge (from/to) or a named visualPipe. near
-// biases placement toward that endpoint's laid-out anchor, and
-// shift slides the glyph along the route as a fraction of its
-// length (negative toward from). Every binding cites its spec
-// passage; valves without a citable line keep their own anchors.
 // valvePlacement seats a standalone valve onto a drawn polyline:
 // either a fluid-graph edge (from/to) or a named visualPipe. near
 // biases placement toward that endpoint's laid-out anchor, and
@@ -643,6 +652,10 @@ var valvePlacements = map[string]valvePlacement{
 	// Letdown isolation valve on the RCS-to-VCT line (chapter_4
 	// letdown/charging path, see visualPipes above).
 	"LTDVN": {pipe: "CVCSLETDOWN", shift: 0.45},
+	// Spray valve seated on its supply line from component cooling.
+	"PRTSPRAY": {pipe: "PRTSPRAYLINE", shift: 0.55},
+	// Makeup valve on the RWST backup supply line to the VCT.
+	"MKUPV": {pipe: "CVCSMAKEUP", shift: 0.50},
 	// "low-pressure feedwater heaters are cascaded back to the
 	// condenser." The sentence starts at the bottom of page 220;
 	// page_221 truncates it after "Drains from the four".
@@ -671,6 +684,25 @@ var scalarValves = []struct {
 		func(p *core.Plant) float64 {
 			return float64(boolToInt(p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen))
 		}},
+	{"MKUPV", "ReactorBuilding/ReactorMakeupControlValve", "modulating",
+		func(p *core.Plant) float64 {
+			return p.ReactorBuilding.ReactorMakeupControlValve.Open
+		}},
+}
+
+// decorativeValves are spec-described glyphs with no model state
+// behind them, drawn at a cited spot on an existing pipe and
+// always fully open from the renderer's perspective.
+var decorativeValves = []struct {
+	id, kind, from, to, near string
+	shift                    float64
+}{
+	// Swing check valve in each main steam line protects against
+	// backflow of steam following a line break inside containment:
+	// "The main steam stop valves automatically close ... The swing
+	// check valves protect against backflow of [steam]."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:76-82
+	{id: "SGCHK", kind: "swing_check", from: "SG", to: "Condenser", near: "SG", shift: 0.16},
 }
 
 // renderer composes one SVG document against a specific layout,
@@ -1514,6 +1546,22 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			continue
 		}
 		writeValveBody(sv.part, a, 0, sv.kind, open)
+	}
+
+	// Decorative spec-cited glyphs with no model state behind them.
+	// "The swing check valves protect against backflow of [steam in
+	// the event of a steam line break inside the containment]."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:76-82
+	for _, dv := range decorativeValves {
+		if pts, ok := r.placementRoute(valvePlacement{
+			from: dv.from, to: dv.to, near: dv.near,
+		}, visRoutes); ok {
+			total := routeLen(pts)
+			dist := clampRange((0.5+dv.shift)*total, 0.04*total, 0.96*total)
+			at, deg := routePointAt(pts, dist)
+			b.WriteString(r.valvePartHTML("", at, deg, dv.kind, 1))
+			b.WriteString("\n")
+		}
 	}
 
 	// Live overlays: readouts and alarm rings track their symbols.

@@ -108,6 +108,94 @@ func TestRouteProjection(t *testing.T) {
 
 var polylineNumRe = regexp.MustCompile(`-?\d+(?:\.\d+)?`)
 
+// polylineSegs extracts every drawn segment from the document.
+func polylineSegs(out string) [][2][2]float64 {
+	var segs [][2][2]float64
+	for _, m := range regexp.MustCompile(`<polyline points="([^"]+)"`).FindAllStringSubmatch(out, -1) {
+		n := polylineNumRe.FindAllString(m[1], -1)
+		var pts [][2]float64
+		for i := 0; i+1 < len(n); i += 2 {
+			x, _ := strconv.ParseFloat(n[i], 64)
+			y, _ := strconv.ParseFloat(n[i+1], 64)
+			pts = append(pts, [2]float64{x, y})
+		}
+		for i := 1; i < len(pts); i++ {
+			segs = append(segs, [2][2]float64{pts[i-1], pts[i]})
+		}
+	}
+	return segs
+}
+
+// minDistToSegs reports how far a point sits from the nearest
+// segment - zero when a glyph is centred on its pipe.
+func minDistToSegs(segs [][2][2]float64, cx, cy float64) float64 {
+	best := math.Inf(1)
+	for _, s := range segs {
+		ax, ay := s[0][0], s[0][1]
+		bx, by := s[1][0], s[1][1]
+		vx, vy := bx-ax, by-ay
+		l2 := vx*vx + vy*vy
+		tt := 0.0
+		if l2 > 0 {
+			tt = ((cx-ax)*vx + (cy-ay)*vy) / l2
+			if tt < 0 {
+				tt = 0
+			}
+			if tt > 1 {
+				tt = 1
+			}
+		}
+		d := math.Hypot(cx-(ax+vx*tt), cy-(ay+vy*tt))
+		if d < best {
+			best = d
+		}
+	}
+	return best
+}
+
+// seatedGroupCentre returns the translate coordinates of the first
+// positioned group bound to part.
+func seatedGroupCentre(out string, part string) (cx, cy float64, ok bool) {
+	tagRe := regexp.MustCompile(`<g data-part="` + regexp.QuoteMeta(part) + `"[^>]*transform="translate\((-?[\d.]+) (-?[\d.]+)\)(?: rotate\(-?[\d.]+\))?"`)
+	m := tagRe.FindStringSubmatch(out)
+	if m == nil {
+		return 0, 0, false
+	}
+	x, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		return 0, 0, false
+	}
+	y, err := strconv.ParseFloat(m[2], 64)
+	if err != nil {
+		return 0, 0, false
+	}
+	return x, y, true
+}
+
+// TestSeatedValvesOnPipes pins the operator-facing guarantee that
+// placed valve glyphs ride their pipes: relief pair on the
+// pressurizer line, spray and makeup valves on their CVCS lines.
+func TestSeatedValvesOnPipes(t *testing.T) {
+	p := core.MakePlant()
+	out := renderPlant(t, &p)
+	segs := polylineSegs(out)
+	assert.NotEmpty(t, segs)
+	for id, part := range map[string]string{
+		"PZRPORV":  "ReactorBuilding/PORV",
+		"PZRBLK":   "ReactorBuilding/BlockValve",
+		"PRTSPRAY": "ReactorBuilding/PRTSprayValve",
+		"MKUPV":    "ReactorBuilding/ReactorMakeupControlValve",
+	} {
+		cx, cy, ok := seatedGroupCentre(out, part)
+		if !assert.Truef(t, ok, "%s group rendered", id) {
+			continue
+		}
+		assert.LessOrEqualf(t, minDistToSegs(segs, cx, cy), 3.0,
+			"%s must sit on a pipe", id)
+	}
+	assert.Contains(t, out, `href="#valve-swing_check"`)
+}
+
 // TestReliefPipeSeatsValves codifies the visual relief path: the
 // pressurizer-to-PRT line renders, and the PORV plus its block
 // valve sit on it (centre within a glyph height of the polyline)
@@ -160,7 +248,7 @@ func TestReliefPipeSeatsValves(t *testing.T) {
 		"PZRPORV": "ReactorBuilding/PORV",
 		"PZRBLK":  "ReactorBuilding/BlockValve",
 	} {
-		tagRe := regexp.MustCompile(`<g data-part="` + regexp.QuoteMeta(part) + `"[^>]*transform="translate\((-?[\d.]+) (-?[\d.]+)\)"`)
+		tagRe := regexp.MustCompile(`<g data-part="` + regexp.QuoteMeta(part) + `"[^>]*transform="translate\((-?[\d.]+) (-?[\d.]+)\)(?: rotate\(-?[\d.]+\))?"`)
 		m := tagRe.FindStringSubmatch(out)
 		if !assert.NotNilf(t, m, "%s group rendered", id) {
 			continue
