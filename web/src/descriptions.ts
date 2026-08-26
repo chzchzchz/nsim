@@ -6,6 +6,10 @@
 
 let helpTexts = new Map<string, string>();
 
+export function seedDescriptions(entries: Record<string, string>): void {
+    helpTexts = new Map(Object.entries(entries));
+}
+
 export async function loadDescriptions(): Promise<void> {
     try {
         const res = await fetch("./descriptions.json");

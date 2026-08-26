@@ -141,12 +141,15 @@ function openTip(btn: HTMLButtonElement, text: string): void {
     tip.addEventListener("click", (ev) => {
         const href = crossReferenceHref(ev);
         if (href === "") return;
-        const target = helpFor(href);
-        if (target !== undefined) {
-            btn.nextElementSibling?.remove();
-            openTip(btn, target);
-        } else if (!revealElement(href)) {
-            // keep popup open
+        if (revealElement(href)) {
+            // Jumped to a rendered row and flashed it. Keep the
+            // existing popup open and unchanged.
+        } else {
+            const target = helpFor(href);
+            if (target !== undefined) {
+                btn.nextElementSibling?.remove();
+                openTip(btn, target);
+            }
         }
     });
     btn.insertAdjacentElement("afterend", tip);
