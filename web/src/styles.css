@@ -254,6 +254,10 @@
             gap: 6px;
             margin: 2px 0;
         }
+        .label-text {
+            overflow-wrap: break-word;
+            min-width: 0;
+        }
         /* The (?) icon leads its label in control rows; DOM order
            stays label-first so the open popup still lands last. */
         .ctl-row > .ctl-help { order: -1; }

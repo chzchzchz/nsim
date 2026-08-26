@@ -83,6 +83,7 @@ function renderControl(
     row.dataset.bridgeId = e.id;
 
     const text = document.createElement("span");
+    text.className = "label-text";
     text.textContent = label;
     row.appendChild(text);
 

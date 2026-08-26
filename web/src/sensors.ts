@@ -85,7 +85,10 @@ function renderSensorRow(e: Entry, rows: SensorRow[]): HTMLElement {
     if (desc) {
         td1.appendChild(makeHelpButton(desc));
     }
-    td1.appendChild(document.createTextNode(label));
+    const labelSpan = document.createElement("span");
+    labelSpan.className = "label-text";
+    labelSpan.textContent = label;
+    td1.appendChild(labelSpan);
     tr.appendChild(td1);
 
     const td2 = document.createElement("td");
