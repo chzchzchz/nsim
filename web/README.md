@@ -207,6 +207,33 @@ table does not cover, so adding a kind in `bridge/convert.go`
 without a units.ts entry surfaces at load instead of rendering
 silently wrong.
 
+## Troubleshooting (symptom: works in `make dev`, broken in `web.tgz`)
+
+The most common cause is a stale `.js` file shadowing a `.ts` source
+in `src/`. The project's canonical sources are `.ts`, but running
+`tsc` without `--noEmit` (or `npm run build`) writes `.js` twins
+next to them. Node/Rollup resolve `.js` before `.ts`, so the
+production bundle may contain outdated logic while the dev server
+serves the live `.ts` transpilation.
+
+Quick checks:
+
+- `ls src/*.js | grep -v wasm_exec.js` — any output means stale
+  artifacts exist; delete them.
+- `git status --short | grep 'src/.*\.js$'` — untracked `.js` files
+  in `src/` are almost always shadows.
+- `grep -o 'fetch("[^"]*")' dist/assets/index-*.js | grep '^fetch("\/'`
+  — root-absolute fetch paths in the bundle break subpath hosting.
+
+All runtime asset fetches (`nsim.wasm`, `descriptions.json`, etc.)
+must be relative or built from `import.meta.env.BASE_URL`. The
+canonical `wasm.ts` already shows the correct pattern; the same
+discipline applies to any new `fetch()` added by features or fixes.
+
+For the full diagnosis methodology, the directory contracts, and
+the step-by-step reproduction workflow, read
+`plans/WEBBUILD-SKILL.md`.
+
 ## Testing
 
 The wasm build is verified by `make build` succeeding. Pure-logic

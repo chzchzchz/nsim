@@ -8,7 +8,7 @@ let helpTexts = new Map<string, string>();
 
 export async function loadDescriptions(): Promise<void> {
     try {
-        const res = await fetch("/descriptions.json");
+        const res = await fetch("./descriptions.json");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const raw = (await res.json()) as Record<string, string>;
         helpTexts = new Map(Object.entries(raw));
