@@ -133,6 +133,41 @@ func TestTurbineTripAtPowerInitiatesReactorTrip(t *testing.T) {
 		1e-6, "rods must be fully inserted after the scram")
 }
 
+// Device 4 of the protective list trips the machine through the same
+// emergency-trip path as its siblings: with the failure input written
+// through the control map, the running machine trips, the extraction
+// NRVs shut, and the at-power reactor-trip consumer scrams the core.
+//
+// Spec: "Thrust bearing trip"
+// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:34
+func TestThrustBearingFailureTripsTurbineAndScrams(t *testing.T) {
+	p := fullPowerLineup()
+	cm := p.GetControlMap()
+	require.NoError(t,
+		cm["TurbineBuilding/Turbine/ThrustBearingWorn"].Set("1"))
+
+	turbineTrippedAt := -1
+	scrammedAt := -1
+	for i := 0; i < 300 && scrammedAt < 0; i++ {
+		stepN(&p, 1, DefaultTimeStep)
+		if turbineTrippedAt < 0 &&
+			p.TurbineBuilding.Turbine.State == TurbineTripped {
+			turbineTrippedAt = i
+		}
+		if p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped {
+			scrammedAt = i
+		}
+	}
+	require.GreaterOrEqualf(t, turbineTrippedAt, 0,
+		"the worn thrust bearing must trip the running machine")
+	require.Lessf(t, turbineTrippedAt, 5,
+		"device 4 must trip within a few plant steps")
+	require.GreaterOrEqualf(t, scrammedAt, 0,
+		"the turbine trip must scram the reactor at power")
+	assert.True(t, p.TurbineBuilding.Turbine.ExtractionNRVClosed,
+		"the emergency trip must shut the extraction NRVs")
+}
+
 // An overpowering core drives the flux channel past its setpoint and
 // the reactor trips outright - no second vote, no permissive. The
 // neutron-flux feed must read fission power unclamped: the total-power

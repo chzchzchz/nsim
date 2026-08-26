@@ -34,6 +34,10 @@ import (
 //   - Running -> Tripped on overspeed (Velocity > TurbineRatedSpeed *
 //     TurbineOverspeedTripRatio) or when SteamFlow == 0 has persisted
 //     past TurbineSteamLossDeadline.
+//   - Running -> Tripped on any protective-device release: low vacuum,
+//     low bearing-oil pressure, or a worn thrust bearing (the spec's
+//     device list has no setpoint for device 4, so its cause is the
+//     externally written ThrustBearingWorn failure input).
 //   - Tripped -> Off when reset is requested and Velocity has decayed
 //     to 0.
 //
@@ -255,11 +259,22 @@ func (t *Turbine) Step(dt time.Duration, sgPressure, condPressure Pressure, tavg
 		float64(ret.BearingOilPressure) < TurbineLowBearingOilTripPsi {
 		ret.TripByBearingOil = true
 	}
+
+	// Thrust-bearing trip: device 4 trips the machine through the
+	// same emergency trip valve as devices 1-3; the spec prints no
+	// setpoint, so the cause arrives as the ThrustBearingWorn
+	// failure latch.
+	//   "Thrust bearing trip"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:34
+	if ret.State == TurbineRunning && ret.ThrustBearingWorn {
+		ret.TripByThrustBearing = true
+	}
+
 	// Any emergency-trip release closes all steam control valves and
 	// shuts the extraction nonreturn valves via the air pilot.
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:24-34
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:100-104
-	if ret.TripByVacuum || ret.TripByBearingOil {
+	if ret.TripByVacuum || ret.TripByBearingOil || ret.TripByThrustBearing {
 		ret.ExtractionNRVClosed = true
 		ret.GoverningValve.Open = 0
 		ret.StopValve.Open = 0
@@ -267,10 +282,13 @@ func (t *Turbine) Step(dt time.Duration, sgPressure, condPressure Pressure, tavg
 	}
 
 	// Reset clears all trip latches once the rotor has stopped.
+	// ThrustBearingWorn is hardware damage, not a latch: reset does
+	// not clear it, and a restarted machine re-trips while it stands.
 	if reset && ret.Velocity < turbineStopThreshold {
 		ret.OPCTrip = false
 		ret.TripByVacuum = false
 		ret.TripByBearingOil = false
+		ret.TripByThrustBearing = false
 		ret.ExtractionNRVClosed = false
 	}
 

@@ -211,6 +211,31 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Thrust-bearing wear failure input: the spec's protective
+	// device 4 has no printed setpoint, so the cause is written
+	// externally and the turbine step consumes it into the shared
+	// emergency-trip path.
+	// "Thrust bearing trip"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:34
+	m["TurbineBuilding/Turbine/ThrustBearingWorn"] = &bridge.Control{
+		Part:  "TurbineBuilding/Turbine",
+		Label: "ThrustBearingWorn",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.TurbineBuilding.Turbine.ThrustBearingWorn)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.Turbine.ThrustBearingWorn = v
+			return nil
+		},
+	}
+
+
 	// Turbine speed demand (chapter 15): pre-breaker wide-range
 	// speed control reference as a fraction of rated speed.
 	// "(1) Wide range speed control of the turbine from turning gear

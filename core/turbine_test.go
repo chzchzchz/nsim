@@ -514,6 +514,51 @@ func TestTurbine_TripClosesExtractionNRVs(t *testing.T) {
 	assert.Zero(t, tr.ExtractionSteamFlow.Float(), "want extraction flow cut")
 }
 
+// The thrust-bearing protective trip (device 4) trips a running
+// machine through the shared emergency-trip path; reset clears the
+// trip latch but not the underlying wear, so a restarted machine
+// re-trips while the failure input stands.
+//
+// Spec justification:
+//   - "Thrust bearing trip"
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:34
+func TestTurbine_ThrustBearingTrip(t *testing.T) {
+	tr := steamingTurbine()
+	tr.State = TurbineRunning
+	tr.Velocity = TurbineRatedSpeed
+
+	// A healthy twin stays running: the cause is the worn-bearing
+	// input alone, not any sensed threshold.
+	healthy := tr.Step(DefaultTimeStep, SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, openValve())
+	assert.False(t, healthy.TripByThrustBearing,
+		"healthy machine must not latch device 4")
+	assert.Equal(t, TurbineRunning, healthy.State)
+
+	tr.ThrustBearingWorn = true
+	tr = tr.Step(DefaultTimeStep, SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, openValve())
+	assert.True(t, tr.TripByThrustBearing, "want TripByThrustBearing latched")
+	assert.Equal(t, TurbineTripped, tr.State, "want Tripped on thrust bearing")
+	assert.Zero(t, tr.StopValve.Open, "want stop valve shut on thrust bearing trip")
+	assert.True(t, tr.ExtractionNRVClosed, "want NRVs shut on thrust bearing trip")
+
+	// Coast to rest and reset: the latch clears, the damage stays.
+	for i := 0; i < int(5*time.Second/DefaultTimeStep); i++ {
+		tr = tr.Step(DefaultTimeStep, 0, 0, Temperature{Val: 600}, true, openValve())
+	}
+	require.Equal(t, TurbineOff, tr.State, "want Off after reset")
+	assert.False(t, tr.TripByThrustBearing, "reset must clear the trip latch")
+	assert.True(t, tr.ThrustBearingWorn, "reset must not repair the bearing")
+
+	// Restart re-trips within one step while the wear stands; the
+	// operator first re-establishes valve control after the trip.
+	tr.GoverningValve.Open = 1
+	tr = tr.Step(DefaultTimeStep, SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, openValve())
+	require.Equal(t, TurbineRunning, tr.State, "precondition: want restart")
+	tr = tr.Step(DefaultTimeStep, SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, openValve())
+	assert.True(t, tr.TripByThrustBearing,
+		"worn bearing must re-trip the restarted machine")
+}
+
 // Mechanical power tracks admitted steam energy: half admission
 // converges to half of rated power with no setpoint ceiling.
 func TestTurbine_RealPowerTracksSteamEnergy(t *testing.T) {

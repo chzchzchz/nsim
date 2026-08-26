@@ -263,6 +263,22 @@ type Turbine struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:25
 	TripByBearingOil bool
 
+	// TripByThrustBearing latches when the thrust-bearing failure
+	// input is present while running; trip device 4 of the
+	// protective list. The spec names the device but prints no
+	// setpoint, so the cause arrives as the ThrustBearingWorn
+	// failure latch rather than a sensed threshold.
+	// "Thrust bearing trip"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:34
+	TripByThrustBearing bool
+
+	// ThrustBearingWorn models excessive wear of the axial-location
+	// thrust bearing ("located axially by the thrust bearing",
+	// page_200.txt:42-45). It is operator/malfunction-written state;
+	// clearing it models repair. It deliberately survives trip reset:
+	// returning the machine to service does not repair hardware.
+	ThrustBearingWorn bool
+
 	// GoverningValve is the DEHM-positioned governing-valve bank
 	// (0..1). Admission = StopValve.Open * GoverningValve.Open.
 	// Spec justification:
