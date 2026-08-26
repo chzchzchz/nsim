@@ -61,11 +61,12 @@ func TestScenario29_LatchedSignalStartsSprayAndSwitchoverStopsAdditive(t *testin
 	// expectations below are wiring checks against production's own
 	// CSSDesignFlow constant, not independently sourced numbers.
 	injecting := ContainmentSpraySystem{
-		Running:         true,
-		DriveReady:      true,
-		SprayHeaderOpen: true,
-		CSSTLevel:       CSSTCapacity,
-		SATLevel:        SATCapacity,
+		Running:                true,
+		DriveReady:             true,
+		SprayHeaderOpen:        true,
+		SATIsolationValveBOpen: true,
+		CSSTLevel:              CSSTCapacity,
+		SATLevel:               SATCapacity,
 	}
 	for i := 0; i < int(1*time.Second/TimeStep); i++ {
 		injecting = injecting.Step()

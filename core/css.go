@@ -91,10 +91,17 @@ func (c *ContainmentSpraySystem) Step() ContainmentSpraySystem {
 		newCSST := ret.CSSTLevel.Float() - dV
 		newCSST = max(newCSST, 0)
 		ret.CSSTLevel = Volume{Val: newCSST, Unit: u.Gallon}
-		ratio := SATCapacity.Float() / CSSTCapacity.Float()
-		newSAT := ret.SATLevel.Float() - dV*ratio
-		newSAT = max(newSAT, 0)
-		ret.SATLevel = Volume{Val: newSAT, Unit: u.Gallon}
+		// The SAT only feeds the pump suction headers through
+		// the SAT isolation valves "B"; with them closed the
+		// pumps spray borated water without additive.
+		// "opens the SAT isolation valves "B""
+		// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:60-61
+		if ret.SATIsolationValveBOpen {
+			ratio := SATCapacity.Float() / CSSTCapacity.Float()
+			newSAT := ret.SATLevel.Float() - dV*ratio
+			newSAT = max(newSAT, 0)
+			ret.SATLevel = Volume{Val: newSAT, Unit: u.Gallon}
+		}
 
 		// Sump pH adjustment latches once the CSST drains below
 		// the Lo-Lo setpoint. The simplified model only tracks
@@ -108,7 +115,11 @@ func (c *ContainmentSpraySystem) Step() ContainmentSpraySystem {
 		//     of stainless steel components, and for keeping the
 		//     iodine entrained in the water."
 		//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:40-49
-		if ret.CSSTLevel.Float() < CSSLowLevelSetpoint {
+		// The pH credit is tied to additive actually delivered:
+		// with the SAT isolated by valves "B" no sodium hydroxide
+		// enters the spray, so the consequence cannot latch.
+		if ret.CSSTLevel.Float() < CSSLowLevelSetpoint &&
+			ret.SATIsolationValveBOpen {
 			ret.SumpPHAdjusted = true
 		}
 		// Recirculation switchover is deliberately NOT automatic:

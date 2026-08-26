@@ -34,6 +34,31 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// SAT isolation valves "B": with them closed the spray
+	// additive tank is isolated and the pumps deliver borated
+	// water without sodium hydroxide.
+	// "This signal starts the spray pumps, opens the spray header
+	// isolation valves "A", and opens the SAT isolation valves
+	// "B"."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-61
+	m["AuxiliaryBuilding/ContainmentSpraySystem/SATIsolationValveBOpen"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ContainmentSpraySystem",
+		Label: "SATIsolationValveBOpen",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.ContainmentSpraySystem.SATIsolationValveBOpen)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ContainmentSpraySystem.SATIsolationValveBOpen = v
+			return nil
+		},
+	}
+
 	// RHR train-A pump manual stop / start. The operator stops
 	// the RHR pumps when plant startup begins; during cooldown
 	// one train runs on miniflow until RCS is below 350°F.
@@ -1268,6 +1293,19 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("bool",
 				p.AuxiliaryBuilding.ContainmentSpraySystem.SprayHeaderOpen)
+		},
+	}
+
+	// Spray additive tank isolation valves "B" (chapter 6):
+	// "opens the SAT isolation valves "B""
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:60-61
+	m["AuxiliaryBuilding/ContainmentSpraySystem/SATIsolationValveBOpen"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ContainmentSpraySystem",
+		Label: "SATIsolationValveBOpen",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.ContainmentSpraySystem.SATIsolationValveBOpen)
 		},
 	}
 

@@ -1538,6 +1538,7 @@ func (p *Plant) Step() {
 			p.nextPlant.ReactorBuilding.ReactorProtectionSystem.ContainmentSprayActuated) {
 		css.Running = true
 		css.SprayHeaderOpen = true
+		css.SATIsolationValveBOpen = true
 	}
 
 	// SWS pumps are fed from the 6600V engineered safety
@@ -2740,14 +2741,15 @@ func MakePlant() Plant {
 	//     30 minutes of spray with spray additive."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:16-18
 	p.AuxiliaryBuilding.ContainmentSpraySystem = ContainmentSpraySystem{
-		Running:              false,
-		SprayHeaderOpen:      false,
-		CSSTLevel:            CSSTCapacity,
-		SATLevel:             SATCapacity,
-		CSSTLowLevelSetpoint: Volume{Val: CSSLowLevelSetpoint, Unit: u.Gallon},
-		SuctionSump:          false,
-		SumpPHAdjusted:       false,
-		SprayFlow:            0,
+		Running:                false,
+		SprayHeaderOpen:        false,
+		SATIsolationValveBOpen: false,
+		CSSTLevel:              CSSTCapacity,
+		SATLevel:               SATCapacity,
+		CSSTLowLevelSetpoint:   Volume{Val: CSSLowLevelSetpoint, Unit: u.Gallon},
+		SuctionSump:            false,
+		SumpPHAdjusted:         false,
+		SprayFlow:              0,
 	}
 	p.ReactorBuilding.ContainmentPressure = AtmosphericPressure
 

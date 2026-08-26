@@ -49,11 +49,12 @@ func TestCSS_InitialStateIsIdle(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:61-63
 func TestCSS_CSSTDepletesWhileRunning(t *testing.T) {
 	c := ContainmentSpraySystem{
-		Running:         true,
-		DriveReady:      true,
-		SprayHeaderOpen: true,
-		CSSTLevel:       CSSTCapacity,
-		SATLevel:        SATCapacity,
+		Running:                true,
+		DriveReady:             true,
+		SprayHeaderOpen:        true,
+		SATIsolationValveBOpen: true,
+		CSSTLevel:              CSSTCapacity,
+		SATLevel:               SATCapacity,
 	}
 	dt := TimeStep.Seconds()
 	wantLoss := (CSSDesignFlow / 60.0) * dt
@@ -75,11 +76,12 @@ func TestCSS_CSSTDepletesWhileRunning(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:64-66
 func TestCSS_SATDepletesProportionallyWithCSST(t *testing.T) {
 	c := ContainmentSpraySystem{
-		Running:         true,
-		DriveReady:      true,
-		SprayHeaderOpen: true,
-		CSSTLevel:       CSSTCapacity,
-		SATLevel:        SATCapacity,
+		Running:                true,
+		DriveReady:             true,
+		SprayHeaderOpen:        true,
+		SATIsolationValveBOpen: true,
+		CSSTLevel:              CSSTCapacity,
+		SATLevel:               SATCapacity,
 	}
 	c2 := c.Step()
 	csstLoss := CSSTCapacity.Float() - c2.CSSTLevel.Float()
@@ -100,11 +102,12 @@ func TestCSS_SATDepletesProportionallyWithCSST(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:20-22
 func TestCSS_MiniflowReducesCSSTDrainWhenHeaderClosed(t *testing.T) {
 	openHeader := ContainmentSpraySystem{
-		Running:         true,
-		DriveReady:      true,
-		SprayHeaderOpen: true,
-		CSSTLevel:       CSSTCapacity,
-		SATLevel:        SATCapacity,
+		Running:                true,
+		DriveReady:             true,
+		SprayHeaderOpen:        true,
+		SATIsolationValveBOpen: true,
+		CSSTLevel:              CSSTCapacity,
+		SATLevel:               SATCapacity,
 	}
 	closedHeader := openHeader
 	closedHeader.SprayHeaderOpen = false
@@ -135,11 +138,12 @@ func TestCSS_MiniflowReducesCSSTDrainWhenHeaderClosed(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:40-49
 func TestCSS_SumpPHAdjustedLatchesBelowLoLo(t *testing.T) {
 	c := ContainmentSpraySystem{
-		Running:         true,
-		DriveReady:      true,
-		SprayHeaderOpen: true,
-		CSSTLevel:       Volume{Val: CSSLowLevelSetpoint-10, Unit: u.Gallon},
-		SATLevel:        Volume{Val: SATCapacity.Float()/CSSTCapacity.Float()*(CSSLowLevelSetpoint-10), Unit: u.Gallon},
+		Running:                true,
+		DriveReady:             true,
+		SprayHeaderOpen:        true,
+		SATIsolationValveBOpen: true,
+		CSSTLevel:              Volume{Val: CSSLowLevelSetpoint-10, Unit: u.Gallon},
+		SATLevel:               Volume{Val: SATCapacity.Float()/CSSTCapacity.Float()*(CSSLowLevelSetpoint-10), Unit: u.Gallon},
 	}
 	c2 := c.Step()
 	assert.True(t, c2.SumpPHAdjusted,
@@ -161,11 +165,12 @@ func TestCSS_SumpPHAdjustedLatchesBelowLoLo(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:69-70
 func TestCSS_SwitchoverToSumpStopsCSSTDrain(t *testing.T) {
 	c := ContainmentSpraySystem{
-		Running:         true,
-		DriveReady:      true,
-		SprayHeaderOpen: true,
-		CSSTLevel:       Volume{Val: CSSLowLevelSetpoint-10, Unit: u.Gallon},
-		SATLevel:        Volume{Val: 100, Unit: u.Gallon},
+		Running:                true,
+		DriveReady:             true,
+		SprayHeaderOpen:        true,
+		SATIsolationValveBOpen: true,
+		CSSTLevel:              Volume{Val: CSSLowLevelSetpoint-10, Unit: u.Gallon},
+		SATLevel:               Volume{Val: 100, Unit: u.Gallon},
 	}
 	// Below Lo-Lo but before the operator acts: still injecting.
 	c2 := c.Step()
@@ -188,11 +193,12 @@ func TestCSS_SwitchoverToSumpStopsCSSTDrain(t *testing.T) {
 // and zero otherwise.
 func TestCSS_SprayFlowTracksHeaderState(t *testing.T) {
 	c := ContainmentSpraySystem{
-		Running:         true,
-		DriveReady:      true,
-		SprayHeaderOpen: true,
-		CSSTLevel:       CSSTCapacity,
-		SATLevel:        SATCapacity,
+		Running:                true,
+		DriveReady:             true,
+		SprayHeaderOpen:        true,
+		SATIsolationValveBOpen: true,
+		CSSTLevel:              CSSTCapacity,
+		SATLevel:               SATCapacity,
 	}
 	c2 := c.Step()
 	assert.InDelta(t, CSSDesignFlow/60.0, c2.SprayFlow, 1e-9,
@@ -201,6 +207,46 @@ func TestCSS_SprayFlowTracksHeaderState(t *testing.T) {
 	c3 := c.Step()
 	assert.Zero(t, c3.SprayFlow,
 		"want SprayFlow=0 with header closed, got %v", c3.SprayFlow)
+}
+
+// Identical lineups differing only in the SAT isolation valves "B":
+// with B closed the additive tank is isolated (SATLevel frozen) and
+// the sump-pH consequence never latches even below Lo-Lo, because
+// the pH credit is tied to additive actually delivered during
+// injection.
+//
+// Spec justification:
+//   - "This signal starts the spray pumps, opens the spray header
+//     isolation valves \"A\", and opens the SAT isolation valves
+//     \"B\"."
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-61
+//   - "the sodium hydroxide (spray additive) that is delivered
+//     through the injection phase is sufficient to raise the
+//     long-term sump pH to a level adequate [...]"
+//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:40-49
+func TestCSS_ClosedSATIsolationValvesFreezeAdditiveAndPHCredit(t *testing.T) {
+	open := ContainmentSpraySystem{
+		Running:                true,
+		DriveReady:             true,
+		SprayHeaderOpen:        true,
+		SATIsolationValveBOpen: true,
+		CSSTLevel:              Volume{Val: CSSLowLevelSetpoint - 10, Unit: u.Gallon},
+		SATLevel:               SATCapacity,
+	}
+	closed := open
+	closed.SATIsolationValveBOpen = false
+
+	openStep := open.Step()
+	assert.Less(t, openStep.SATLevel.Float(), SATCapacity.Float(),
+		"with B open the SAT drains proportionally with the CSST")
+	assert.True(t, openStep.SumpPHAdjusted,
+		"with B open the additive is delivered and the pH consequence latches")
+
+	closedStep := closed.Step()
+	assert.InDelta(t, SATCapacity.Float(), closedStep.SATLevel.Float(), 1e-9,
+		"with B closed the SAT stays full, got %v", closedStep.SATLevel.Float())
+	assert.False(t, closedStep.SumpPHAdjusted,
+		"with B closed no additive is delivered, so the pH credit cannot be earned")
 }
 
 // End-to-end via Plant.Step: opening the PORV (high RCS pressure)
@@ -232,6 +278,9 @@ func TestCSS_EndToEndHighContainmentPressureStartsCSS(t *testing.T) {
 	assert.True(t, css.SprayHeaderOpen,
 		"want SprayHeaderOpen=true after auto-start, got %v",
 		css.SprayHeaderOpen)
+	assert.True(t, css.SATIsolationValveBOpen,
+		"want SATIsolationValveBOpen=true after auto-start (actuation opens A and B together), got %v",
+		css.SATIsolationValveBOpen)
 	assert.Less(t, css.CSSTLevel.Float(), CSSTCapacity.Float(),
 		"want CSSTLevel < CSSTCapacity after stepping with CSS running, got %v",
 		css.CSSTLevel.Float())

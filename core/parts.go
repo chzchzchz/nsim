@@ -3605,6 +3605,15 @@ type ContainmentSpraySystem struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:59-60
 	SprayHeaderOpen bool
 
+	// SATIsolationValveBOpen is true when the spray-additive-tank
+	// isolation valves "B" are open. Auto-start opens A and B
+	// together; with B closed the SAT is isolated, so the loops
+	// spray borated water without additive and the sump-pH credit
+	// cannot be earned.
+	// "opens the SAT isolation valves "B""
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:60-61
+	SATIsolationValveBOpen bool
+
 	// CSSTLevel is the remaining borated water volume in the
 	// containment spray storage tank (gal). Decreases at the
 	// spray flow rate during the injection phase.
