@@ -327,3 +327,31 @@ func TestPlant_RPSResetReleasesContainmentIsolation(t *testing.T) {
 	assert.False(t, cis.PhaseAIsolated, "want Phase A unlatched after reset")
 	assert.False(t, cis.PhaseBIsolated, "want Phase B unlatched after reset")
 }
+
+// The low-steamline channel votes only above the at-power permissive:
+// cold lineups hold the header near atmospheric by design (cooldown
+// ends with the dumps closed as pressure approaches zero psig), so the
+// healthy reading is sub-setpoint below P-7 and must not stand as a
+// permanent vote. Above the permissive the channel votes exactly as
+// before, and the SI trigger stays live below it when unblocked (its
+// own block governs that output - covered by
+// TestRPS_ChannelTestSuppressesTestedChannel's in-service case).
+//
+// Spec: at-power trips enable above P-7/P-10
+// (specs/westinghouse_plant_operations/chapter_19/page_018.txt:3-7);
+// planned descents arm the blocks before crossing
+// (specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:108-110).
+func TestRPS_LowSteamlineVoteFollowsAtPowerPermissive(t *testing.T) {
+	idle := ReactorProtectionSystem{}
+	cold := idle.Step(100, PressurizerHeaterTarget,
+		50, CoreReferenceInletF, 0, 0, 1)
+	assert.Zero(t, cold.TripSignalCount,
+		"a sub-setpoint header votes nothing below the permissive")
+	assert.False(t, cold.ReactorTripped,
+		"the standing cold-lineup state alone must not scram")
+
+	atPower := idle.Step(100, PressurizerHeaterTarget,
+		50, CoreReferenceInletF, 0, 0.5, 1)
+	assert.Equal(t, 1, atPower.TripSignalCount,
+		"above the permissive the same state votes")
+}

@@ -118,7 +118,15 @@ func (r *ReactorProtectionSystem) Step(
 	if sgLevelPct > RPSHighSteamGeneratorLevelTrip && atPowerTripsEnabled {
 		trips++
 	}
-	if steamlinePressure < RPSLowSteamlinePressureTrip {
+	// The low-steamline channel completes the at-power family: cold
+	// lineups hold the header near atmospheric by design (cooldown
+	// ends with the dumps closed as pressure approaches zero psig),
+	// and the procedure arms the SI/steamline blocks before planned
+	// descents cross the shared setpoints - so below P-7 the healthy
+	// reading is sub-setpoint and contributes no vote.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:108-110
+	// specs/westinghouse_plant_operations/chapter_19/page_018.txt:3-7
+	if steamlinePressure < RPSLowSteamlinePressureTrip && atPowerTripsEnabled {
 		trips++
 	}
 	if tcoldF < RPSLowTcoldTrip && atPowerTripsEnabled {
