@@ -340,6 +340,14 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 				return err
 			}
 			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.Running = v
+			if v {
+				// Starting a pump activates its train: the
+				// discharge valve is normally full open when
+				// the system is activated, and the operator
+				// retains throttling authority afterwards.
+				// specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:1-4
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.FlowModulatingValve.Open = 1.0
+			}
 			return nil
 		},
 	}
@@ -358,6 +366,14 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 				return err
 			}
 			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPump.Running = v
+			if v {
+				// Starting a pump activates its train: the
+				// discharge valve is normally full open when
+				// the system is activated, and the operator
+				// retains throttling authority afterwards.
+				// specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:1-4
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPump.FlowModulatingValve.Open = 1.0
+			}
 			return nil
 		},
 	}
@@ -376,6 +392,14 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 				return err
 			}
 			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.Running = v
+			if v {
+				// Starting a pump activates its train: the
+				// discharge valve is normally full open when
+				// the system is activated, and the operator
+				// retains throttling authority afterwards.
+				// specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:1-4
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.FlowModulatingValve.Open = 1.0
+			}
 			return nil
 		},
 	}
@@ -394,6 +418,14 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 				return err
 			}
 			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.Running = v
+			if v {
+				// Starting a pump activates its train: the
+				// discharge valve is normally full open when
+				// the system is activated, and the operator
+				// retains throttling authority afterwards.
+				// specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:1-4
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.FlowModulatingValve.Open = 1.0
+			}
 			return nil
 		},
 	}
