@@ -190,8 +190,13 @@ func TestRPS_TurbineTripInitiatesReactorTripAbovePermissive(t *testing.T) {
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:56-63
 func TestRPS_HighNeutronFluxTripDirectInitiation(t *testing.T) {
 	idle := ReactorProtectionSystem{}
+	// Raw fractions of rated thermal: full-power fission is 93.5
+	// percent of rated (the seed splits fission from decay heat),
+	// so the sourced 120-percent-of-full-power-flux setpoint lands
+	// at raw 1.122 - and a raw excursion to 1.13 must trip even
+	// though it sits under a naive raw-1.20 threshold.
 	benign := idle.Step(SteamGeneratorShellPressure,
-		PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 1.19, 1, 50,
+		PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 1.10, 1, 50,
 		false)
 	assert.Zero(t, benign.TripSignalCount,
 		"flux below the setpoint records no vote")
@@ -199,8 +204,8 @@ func TestRPS_HighNeutronFluxTripDirectInitiation(t *testing.T) {
 		"flux below the setpoint must not scram")
 
 	overpower := idle.Step(SteamGeneratorShellPressure,
-		PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 1.21, 1, 50,
-		true)
+		PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 1.13, 1, 50,
+		false)
 	assert.Zero(t, overpower.TripSignalCount,
 		"the flux channel declares directly, not through the tally")
 	assert.True(t, overpower.ReactorTripped,

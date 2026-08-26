@@ -232,9 +232,7 @@ func (r *ReactorBuilding) Step(
 	// evaluates trip conditions from the current process
 	// variables (steamline pressure, pressurizer pressure,
 	// SG level, Tcold, containment pressure, forced-coolant
-	// flow) and computes ESFAS outputs. The high-pressurizer-
-	// level trip is deferred at this fidelity band (see rps.go
-	// preamble).
+	// flow) and computes ESFAS outputs.
 	//
 	// Spec justification:
 	//   - 2/4 voting: "A 2/4 logic means that a trip occurs

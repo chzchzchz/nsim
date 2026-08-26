@@ -193,7 +193,16 @@ func (r *ReactorProtectionSystem) Step(
 	//    operations."
 	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:56-63
 	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:6-81
-	highFluxTrip := powerFrac > RPSHighNeutronFluxTripFraction
+	// Normalization: full-power neutron flux is the fission
+	// component alone - the seed splits rated thermal into fission
+	// plus equilibrium decay heat (6.5 percent), so dividing by
+	// rated thermal alone would read 0.935 at full power and delay
+	// the trip past the sourced setpoint.
+	//   specs/pwr_sim/chapter_2/page_025.txt:32
+	fullPowerFlux := float64(CoreRatedThermalPower) *
+		(1 - CoreDecayHeatShutdownFraction)
+	highFluxTrip := powerFrac*float64(CoreRatedThermalPower) >
+		RPSHighNeutronFluxTripFraction*fullPowerFlux
 
 	// High-pressurizer-pressure reactor trip. Like the flux channel
 	// it declares outright: the collapsed single-integer vote cannot
