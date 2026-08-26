@@ -61,7 +61,7 @@ function renderPart(
 ): HTMLElement {
     const fs = document.createElement("fieldset");
     const lg = document.createElement("legend");
-    lg.textContent = display(part.part);
+    lg.innerHTML = display(part.part);
     fs.appendChild(lg);
 
     for (const e of part.controls) {

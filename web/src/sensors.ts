@@ -58,7 +58,7 @@ function renderPartTable(
     const wrap = document.createElement("div");
     wrap.className = "readout-part";
     const h = document.createElement("div");
-    h.textContent = display(part.part);
+    h.innerHTML = display(part.part);
     h.className = "sub-heading";
     wrap.appendChild(h);
 
