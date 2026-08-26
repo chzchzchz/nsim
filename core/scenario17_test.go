@@ -243,3 +243,52 @@ func TestSteamlineIsolationClosesMSIVAndKillsOfftake(t *testing.T) {
 		float64(p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open),
 		"after the reset the operator commands the MSIV again")
 }
+
+// The Turbine-Trip ESFAS output must reach the machine: high SG level
+// alone carries no scram (a single collapsed vote against 2/4), so
+// without a consumer a feedwater overfill at power latches the output
+// into the void while the turbine keeps drawing carryover steam.
+//
+// Spec: "High water level trip signals protect against excessive
+// water carryover into the turbine."
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:27-29
+func TestTurbineTripOutputTripsMachineOnHighSGLevel(t *testing.T) {
+	p := fullPowerLineup()
+	p.ReactorBuilding.SteamGenerator.Water.Val = 92000
+
+	trippedAt := -1
+	scrammedAt := -1
+	for i := 0; i < 50; i++ {
+		stepN(&p, 1)
+		if trippedAt < 0 &&
+			p.TurbineBuilding.Turbine.State == TurbineTripped {
+			trippedAt = i
+		}
+		if scrammedAt < 0 &&
+			p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped {
+			scrammedAt = i
+		}
+		if trippedAt >= 0 && scrammedAt >= 0 {
+			break
+		}
+	}
+	require.Truef(t,
+		p.ReactorBuilding.ReactorProtectionSystem.TurbineTripActuated,
+		"the hi-level trigger must latch the ESFAS output")
+	require.GreaterOrEqualf(t, trippedAt, 0,
+		"the turbine-trip output must trip the machine")
+	require.Lessf(t, trippedAt, 5,
+		"the machine trip must land within a few plant steps")
+	assert.Equalf(t, 0.0,
+		float64(p.TurbineBuilding.Turbine.StopValve.Open),
+		"stop valves shut on the protective trip")
+	assert.Lessf(t, scrammedAt, trippedAt+5,
+		"once the machine is down at power, the TG-trip initiator "+
+			"brings the reactor down behind it")
+	assert.Truef(t,
+		p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion > 0.99,
+		"rods fall full in on the follow-on scram")
+	assert.Truef(t,
+		p.ReactorBuilding.ReactorProtectionSystem.FeedwaterIsolationActuated,
+		"feedwater isolation latches as the shared-trigger sibling")
+}

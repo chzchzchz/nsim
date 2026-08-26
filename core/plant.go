@@ -1784,6 +1784,24 @@ func (p *Plant) Step() {
 		}
 	}
 
+	// Table 7-1's Turbine-Trip row actuates the machine trip on
+	// high steam generator level or safety injection directly -
+	// not only through the reactor trip above. A high level alone
+	// carries no scram vote beyond the single collapsed channel,
+	// so without this consumer the carryover protection never
+	// reaches the machine.
+	//   "Turbine Trip / Reactor trip / High steam generator level /
+	//    Safety injection"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:35-38
+	//   "High water level trip signals protect against excessive
+	//    water carryover into the turbine."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:27-29
+	if p.nextPlant.ReactorBuilding.ReactorProtectionSystem.TurbineTripActuated &&
+		p.TurbineBuilding.Turbine.State == TurbineRunning {
+		p.TurbineBuilding.Turbine.StopValve.Open = 0
+		p.TurbineBuilding.Turbine.State = TurbineTripped
+	}
+
 	// Load-runback propagation. The spec's protective-layer output
 	// for the DEHM is a "controlled selectable rate" runback on
 	// dropped rod / high kw/ft / low DNBR / rapid nuclear flux
