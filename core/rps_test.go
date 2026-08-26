@@ -180,6 +180,41 @@ func TestRPS_TurbineTripInitiatesReactorTripAbovePermissive(t *testing.T) {
 		"the reactor trip must latch across subsequent steps")
 }
 
+// The high-neutron-flux channel initiates the reactor trip outright
+// at any power level - no permissive gates it and it needs no second
+// vote, because the overpower evolution is exactly a single-signal
+// response. It carries no ESFAS output of its own.
+//
+// Spec: "Neutron flux trip signals ... High flux rate trips protect
+// the reactor in case of rod ejection or accidental rod drop"
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:56-63
+func TestRPS_HighNeutronFluxTripDirectInitiation(t *testing.T) {
+	idle := ReactorProtectionSystem{}
+	benign := idle.Step(SteamGeneratorShellPressure,
+		PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 1.19, 1, 50,
+		false)
+	assert.Zero(t, benign.TripSignalCount,
+		"flux below the setpoint records no vote")
+	assert.False(t, benign.ReactorTripped,
+		"flux below the setpoint must not scram")
+
+	overpower := idle.Step(SteamGeneratorShellPressure,
+		PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 1.21, 1, 50,
+		true)
+	assert.Zero(t, overpower.TripSignalCount,
+		"the flux channel declares directly, not through the tally")
+	assert.True(t, overpower.ReactorTripped,
+		"want ReactorTripped=true on overpowering flux, got %v",
+		overpower.ReactorTripped)
+	assert.False(t, overpower.SafetyInjectionActuated,
+		"the flux trip alone must not actuate safeguards")
+	latchedFlux := overpower.Step(SteamGeneratorShellPressure,
+		PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0.5, 1, 50,
+		false)
+	assert.True(t, latchedFlux.ReactorTripped,
+		"the reactor trip must latch across subsequent steps")
+}
+
 // Manual trip does not trigger containment spray (spray requires
 // high containment pressure or manual; manual trip is a separate
 // operator action).

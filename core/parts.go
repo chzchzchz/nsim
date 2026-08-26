@@ -5215,6 +5215,16 @@ const (
 	// specs/westinghouse_plant_operations/chapter_19/page_018.txt:3-5
 	RPSAtPowerPermissiveFraction float64 = 0.10
 
+	// RPSHighNeutronFluxTripFraction is the neutron-flux fraction of
+	// rated full-power flux that declares the overpower reactor trip
+	// outright. Derived: the primary document lists the flux trip
+	// among the reactor trip signals without a number; the 120
+	// percent value is adopted from the modeling source.
+	//   "High neutron flux trip - trip setpoint = 120 % of Neutron
+	//    Flux at full power"
+	//   specs/pwr_sim/chapter_2/page_025.txt:32
+	RPSHighNeutronFluxTripFraction float64 = 1.20
+
 	// RPSHighContainmentPressureTrip is the containment
 	// pressure (psig) above which a trip signal is generated.
 	// Equal to the containment design pressure so a

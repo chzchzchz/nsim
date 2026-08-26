@@ -178,6 +178,23 @@ func (r *ReactorProtectionSystem) Step(
 		ret.FlowEstablished = true
 	}
 
+	// High-neutron-flux reactor trip. This votes the trip directly
+	// rather than through the collapsed vote count, for the same
+	// single-signal reason as the low-flow channel: an overpower
+	// transient demands exactly that immediate response ("High flux
+	// rate trips protect the reactor in case of rod ejection or
+	// accidental rod drop"). It arms at every power level - the flux
+	// channels exist for "protection during startup, full power, and
+	// shutdown operations" - so no permissive gates it, and Table 7-1
+	// lists no flux-driven safeguard.
+	//   "Neutron flux trip signals - Source, intermediate, low power
+	//    range, and high power range signals are provided for
+	//    protection during startup, full power, and shutdown
+	//    operations."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:56-63
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:6-81
+	highFluxTrip := powerFrac > RPSHighNeutronFluxTripFraction
+
 	// Declare reactor trip when 2/4 voting threshold is met
 	// OR when the operator has pressed manual trip.
 	// "The RPS provides for manual initiation of reactor trip
@@ -189,7 +206,8 @@ func (r *ReactorProtectionSystem) Step(
 		ret.ManualTrip ||
 		lowFlowTrip ||
 		ret.SafetyInjectionActuated ||
-		(turbineTripped && atPowerTripsEnabled) {
+		(turbineTripped && atPowerTripsEnabled) ||
+		highFluxTrip {
 		// An SI signal votes the trip directly: "Safety injection
 		// signal - Actuation of the Safety Injection System
 		// simultaneously initiates a reactor trip". The latch read

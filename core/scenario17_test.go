@@ -130,3 +130,36 @@ func TestTurbineTripAtPowerInitiatesReactorTrip(t *testing.T) {
 		float64(p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion),
 		1e-6, "rods must be fully inserted after the scram")
 }
+
+// An overpowering core drives the flux channel past its setpoint and
+// the reactor trips outright - no second vote, no permissive. The
+// neutron-flux feed must read fission power unclamped: the total-power
+// helper saturates at rated and would hide every overpower.
+//
+// Spec: "Neutron flux trip signals ... provided for protection during
+// startup, full power, and shutdown operations."
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:56-63
+func TestPlant_HighNeutronFluxScramsDirectly(t *testing.T) {
+	p := fullPowerLineup()
+	p.ReactorBuilding.ReactorPressureVessel.FissionPower =
+		Watts(1.25 * float64(CoreRatedThermalPower))
+
+	trippedAt := -1
+	for i := 0; i < 50; i++ {
+		stepN(&p, 1)
+		if trippedAt < 0 &&
+			p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped {
+			trippedAt = i
+			break
+		}
+	}
+	require.GreaterOrEqualf(t, trippedAt, 0,
+		"overpowering flux must scram the reactor end to end")
+	require.Lessf(t, trippedAt, 5,
+		"the flux trip must land within a few plant steps")
+	assert.True(t, p.ReactorBuilding.ReactorPressureVessel.Trip,
+		"the scram must propagate to the rod drop")
+	assert.InDelta(t, 1.0,
+		float64(p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion),
+		1e-6, "rods must be fully inserted after the scram")
+}

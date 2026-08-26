@@ -262,7 +262,10 @@ func (r *ReactorBuilding) Step(
 		sgLevelPct,
 		ret.ReactorPressureVessel.Inlet.Float(),
 		containmentGauge,
-		float64(ret.ReactorPressureVessel.TotalThermalPower()) /
+		// Neutron-flux channel: fission power only, unclamped. The
+		// flux trip reads the fission rate, and the total-power
+		// helper clamps at rated, which would mask every overpower.
+		float64(ret.ReactorPressureVessel.FissionPower) /
 			float64(CoreRatedThermalPower),
 		float64(ret.ReactorCoolantPumps.Velocity())/float64(RCPRatedSpeed),
 		pzrLevelPct,
