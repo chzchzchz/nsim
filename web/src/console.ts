@@ -88,6 +88,31 @@ export function initConsole(
     });
     header.appendChild(exportBtn);
 
+    const exportPlantBtn = document.createElement("button");
+    exportPlantBtn.id = "btn-cmd-export-plant";
+    exportPlantBtn.textContent = "Export Plant";
+    exportPlantBtn.setAttribute(
+        "aria-label",
+        "Export current plant state as JSON file",
+    );
+    exportPlantBtn.title =
+        "Download the current plant state as a JSON file "
+        + "(distinct from the command log export).";
+    exportPlantBtn.addEventListener("click", () => {
+        const raw = plant.toJSON();
+        const blob = new Blob([raw], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "nsim-plant.json";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        errorLine.textContent = "";
+    });
+    header.appendChild(exportPlantBtn);
+
     const listEl = document.createElement("div");
     listEl.id = "cmd-list";
     hostEl.appendChild(listEl);
