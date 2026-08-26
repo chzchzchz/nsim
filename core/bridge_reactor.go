@@ -1227,9 +1227,10 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 	m["ReactorBuilding/SteamGenerator/Pressure"] = &bridge.Sensor{
 		Part:  "ReactorBuilding/SteamGenerator",
 		Label: "Pressure",
-		Kind:  "psig",
+		// Backing field stores psia; badge now matches the unit.
+		Kind:  "psia",
 		Get: func() (string, error) {
-			return bridge.FormatSensorValue("psig",
+			return bridge.FormatSensorValue("psia",
 				p.ReactorBuilding.SteamGenerator.Pressure)
 		},
 	}
@@ -1243,9 +1244,10 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 	m["ReactorBuilding/Pressurizer/Pressure"] = &bridge.Sensor{
 		Part:  "ReactorBuilding/Pressurizer",
 		Label: "Pressure",
-		Kind:  "psig",
+		// Backing field stores psia; badge now matches the unit.
+		Kind:  "psia",
 		Get: func() (string, error) {
-			return bridge.FormatSensorValue("psig",
+			return bridge.FormatSensorValue("psia",
 				p.ReactorBuilding.Pressurizer.Pressure)
 		},
 	}
@@ -1420,9 +1422,10 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 	m["ReactorBuilding/ReactorPressureVessel/Pressure"] = &bridge.Sensor{
 		Part:  "ReactorBuilding/ReactorPressureVessel",
 		Label: "Pressure",
-		Kind:  "psig",
+		// Backing field stores psia; badge now matches the unit.
+		Kind:  "psia",
 		Get: func() (string, error) {
-			return bridge.FormatSensorValue("psig",
+			return bridge.FormatSensorValue("psia",
 				p.ReactorBuilding.ReactorPressureVessel.Pressure)
 		},
 	}

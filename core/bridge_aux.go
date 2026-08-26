@@ -293,13 +293,14 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantPressureSetpoint"] = &bridge.Control{
 		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem",
 		Label: "SolidPlantPressureSetpoint",
-		Kind:  "psig",
+		// Backing field stores psia; badge now matches the unit.
+		Kind:  "psia",
 		Get: func() string {
 			return fmt.Sprintf("%v",
 				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantPressureSetpoint)
 		},
 		Set: func(s string) error {
-			validated, err := bridge.ConvertControlValue("psig", s)
+			validated, err := bridge.ConvertControlValue("psia", s)
 			if err != nil {
 				return err
 			}

@@ -94,7 +94,7 @@ func FormatSensorValue(kind string, v any) (string, error) {
 			return "1", nil
 		}
 		return "0", nil
-	case "normalized", "percent", "signedpercent", "rpm", "psig", "fahrenheit", "gallon", "watt", "ppm", "volt", "hz", "gpm", "cps", "dpm":
+	case "normalized", "percent", "signedpercent", "rpm", "psig", "psia", "fahrenheit", "gallon", "watt", "ppm", "volt", "hz", "gpm", "cps", "dpm":
 		f, err := toFloat(v)
 		if err != nil {
 			return "", err

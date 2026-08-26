@@ -77,3 +77,72 @@ func TestBridge_FlowSensorsPresentGPM(t *testing.T) {
 		})
 	}
 }
+
+// Pressure sensors must declare the unit their backing field actually
+// stores. Five fields hold psia (RPV design 2500 psia, SG shell 920
+// psia per chapter_3/page_066.txt:80-82, RHRS solid-plant setpoint
+// "(psia)" per core/parts.go) but were labeled psig; the audited-psig
+// trio (containment design 60 psig, SFPC header 55-75 psig, bearing oil
+// 25 psig) stays. Values pass through unscaled - the badge is the fix.
+func TestBridge_PressureSensorsDeclareStoredUnit(t *testing.T) {
+	p := MakePlant()
+	p.ReactorBuilding.Pressurizer.Pressure = Pressure(2250)
+	p.ReactorBuilding.SteamGenerator.Pressure = Pressure(920)
+	p.ReactorBuilding.ReactorPressureVessel.Pressure = Pressure(2500)
+	p.TurbineBuilding.Turbine.FirstStagePressure = Pressure(920)
+	p.TurbineBuilding.Condenser.Pressure = Pressure(1.5)
+
+	psiaCases := []struct {
+		path string
+		want float64
+	}{
+		{"ReactorBuilding/Pressurizer/Pressure", 2250},
+		{"ReactorBuilding/SteamGenerator/Pressure", 920},
+		{"ReactorBuilding/ReactorPressureVessel/Pressure", 2500},
+		{"TurbineBuilding/Turbine/FirstStagePressure", 920},
+		{"TurbineBuilding/Condenser/Pressure", 1.5},
+	}
+	psigCases := []string{
+		"ReactorBuilding/ContainmentPressure",
+		"AuxiliaryBuilding/SpentFuelPoolCoolingSystem/HeaderPressure",
+		"TurbineBuilding/Turbine/BearingOilPressure",
+	}
+
+	m := GetSensorMap(&p)
+	for _, tc := range psiaCases {
+		t.Run(tc.path, func(t *testing.T) {
+			s, ok := m[tc.path]
+			require.True(t, ok, "sensor %q must be registered", tc.path)
+			assert.Equal(t, "psia", s.Kind,
+				"%s stores psia and must say so", tc.path)
+			out, err := s.Get()
+			require.NoError(t, err)
+			got, err := strconv.ParseFloat(out, 64)
+			require.NoError(t, err, "sensor emitted %q", out)
+			assert.Equal(t, tc.want, got,
+				"%s passes the psia value through unscaled", tc.path)
+		})
+	}
+	// The RHRS solid-plant pressure setpoint is a psia CONTROL (not a
+	// sensor): kind, Get passthrough, and Set validation must all agree.
+	t.Run("AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantPressureSetpoint", func(t *testing.T) {
+		cm := GetControlMap(&p)
+		c, ok := cm["AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantPressureSetpoint"]
+		require.True(t, ok, "control must be registered")
+		assert.Equal(t, "psia", c.Kind,
+			"the setpoint stores psia and must say so")
+		require.NoError(t, c.Set("415"))
+		got, err := strconv.ParseFloat(c.Get(), 64)
+		require.NoError(t, err)
+		assert.Equal(t, 415.0, got, "setpoint round-trips unscaled")
+	})
+
+	for _, path := range psigCases {
+		t.Run(path, func(t *testing.T) {
+			s, ok := m[path]
+			require.True(t, ok, "sensor %q must be registered", path)
+			assert.Equal(t, "psig", s.Kind,
+				"%s is an audited-psig quantity and keeps its badge", path)
+		})
+	}
+}

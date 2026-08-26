@@ -604,9 +604,10 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 	m["TurbineBuilding/Turbine/FirstStagePressure"] = &bridge.Sensor{
 		Part:  "TurbineBuilding/Turbine",
 		Label: "FirstStagePressure",
-		Kind:  "psig",
+		// Backing field stores psia; badge now matches the unit.
+		Kind:  "psia",
 		Get: func() (string, error) {
-			return bridge.FormatSensorValue("psig",
+			return bridge.FormatSensorValue("psia",
 				p.TurbineBuilding.Turbine.FirstStagePressure)
 		},
 	}
@@ -635,9 +636,10 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 	m["TurbineBuilding/Condenser/Pressure"] = &bridge.Sensor{
 		Part:  "TurbineBuilding/Condenser",
 		Label: "Pressure",
-		Kind:  "psig",
+		Kind:  "psia",
 		Get: func() (string, error) {
-			return bridge.FormatSensorValue("psig",
+			// Backing field is absolute pressure (psia); badge matches.
+			return bridge.FormatSensorValue("psia",
 				p.TurbineBuilding.Condenser.Pressure)
 		},
 	}
