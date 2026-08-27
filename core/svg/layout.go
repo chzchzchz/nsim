@@ -374,6 +374,25 @@ func pumpHopFor(e core.GraphEdge) (edgeHopRef, bool) {
 		return edgeHopRef{"MainFeedwaterPump", clusterFor["HDT"], "MainFeedwaterPump", ""}, true
 	case e.From == "HPHeaterDrain" && e.To == "HDT":
 		return edgeHopRef{"HeaterDrainPump", clusterFor["HPHeaterDrain"], "HeaterDrainPump", ""}, true
+	case e.From == "CST" && e.To == "DieselAFWPump":
+		// AFW subsystem pumps draw suction from the CST and discharge
+		// to the steam generators through their respective service
+		// water valves.
+		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:61-69
+		return edgeHopRef{"DieselAFWPump", clusterFor["CST"], "DieselAFWPump", ""}, true
+	case e.From == "CST" && e.To == "MotorAFWPump":
+		return edgeHopRef{"MotorAFWPump", clusterFor["CST"], "MotorAFWPump", ""}, true
+	case e.From == "CST" && e.To == "TurbineAFWPump":
+		return edgeHopRef{"TurbineAFWPump", clusterFor["CST"], "TurbineAFWPump", ""}, true
+	case e.From == "DieselAFWPump" && e.To == "SG":
+		// AFW pumps have their own CST suction and service-water
+		// discharge valves already mapped in valveHopFor; the hop
+		// here mirrors the pump node so the symbol sits on the pipe.
+		return edgeHopRef{"DieselAFWPump", clusterFor["DieselAFWPump"], "DieselAFWPump", ""}, true
+	case e.From == "MotorAFWPump" && e.To == "SG":
+		return edgeHopRef{"MotorAFWPump", clusterFor["MotorAFWPump"], "MotorAFWPump", ""}, true
+	case e.From == "TurbineAFWPump" && e.To == "SG":
+		return edgeHopRef{"TurbineAFWPump", clusterFor["TurbineAFWPump"], "TurbineAFWPump", ""}, true
 	}
 	return edgeHopRef{}, false
 }
@@ -403,6 +422,7 @@ func valveHopFor(e core.GraphEdge) (edgeHopRef, bool) {
 	}
 	return r, true
 }
+
 
 // assignEdgeHops returns, per graph edge, the ordered hop nodes its
 // DOT routing passes through. Ids colliding with earlier hops get a

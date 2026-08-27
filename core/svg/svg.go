@@ -118,11 +118,13 @@ var diagramParts = []diagramPart{
 	{"SWSHeader", "Outside/ServiceWaterSystem", "ServiceWaterHeader", "SWS Header"},
 	{"RWST", "ReactorBuilding/SafetyInjectionSystem/RWST", "RefuelingWaterStorageTank", "RWST"},
 	{"HHSI", "ReactorBuilding/SafetyInjectionSystem", "HHSIPump", "HHSI"},
+	// Charging pump on the CVCS letdown/charging skid.
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:66-67
+	{"ChgPump", "AuxiliaryBuilding/ChemicalVolumeControlSystem", "ChargingPump", "Chg Pump"},
 	{"CSSTank", "AuxiliaryBuilding/ContainmentSpraySystem/CSST", "ContainmentSprayStorageTank", "CSST"},
 	{"SATTank", "AuxiliaryBuilding/ContainmentSpraySystem/SAT", "SprayAdditiveTank", "SAT"},
 	{"CSSPump", "AuxiliaryBuilding/ContainmentSpraySystem", "ContainmentSprayPump", "CSS Pump"},
 	{"VCT", "AuxiliaryBuilding/ChemicalVolumeControlSystem/VCT", "VolumeControlTank", "VCT"},
-	{"ChgPump", "AuxiliaryBuilding/ChemicalVolumeControlSystem", "ChargingPump", "Chg Pump"},
 	{"MSR", "TurbineBuilding/MoistureSeparatorReheater", "MoistureSeparatorReheater", "MSR"},
 	{"EAMD", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPump", "EmergencyFeedwaterPumpMD", "EFWS A MD"},
 	{"EATD", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump", "EmergencyFeedwaterPumpTD", "EFWS A TD"},
@@ -139,6 +141,9 @@ var diagramParts = []diagramPart{
 	{"BTRS", "AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRS", "BTRSDemineralizer", "BTRS"},
 	{"BTRSPUMP", "AuxiliaryBuilding/ChemicalVolumeControlSystem", "BTRSPump", "BTRS Pump"},
 	{"BRS", "AuxiliaryBuilding/BoronRecycleSystem", "BoronRecycleSystem", "BRS"},
+	{"SGADV", "ReactorBuilding/SteamGenerator/AtmosphericDumpValve", "relief", "SG ADV"},
+	{"SGSSV", "ReactorBuilding/SteamGenerator/SafetyValve", "safety", "SG SSV"},
+	{"SOLIDPP", "AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantPressureValve", "modulating", "Solid PP"},
 }
 
 // buildingLabels captions the cluster outlines drawn behind symbols.
@@ -188,6 +193,9 @@ var pumpAccessors = map[string]func(*core.Plant) *core.Pump{	"RCP": func(p *core
 	"RHRS_B": func(p *core.Plant) *core.Pump {
 		return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.Pump
 	},
+	// Circulating-water pump: "Circulating water for each main condenser is
+	// supplied by [...] circulating water pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_170.txt:53-57
 	"CWP": func(p *core.Plant) *core.Pump {
 		return &p.Outside.CirculatingWaterPump
 	},
@@ -779,6 +787,7 @@ var valvePlacements = map[string]valvePlacement{
 	// to the deaerator"; HDT stands in for that deaerator tank.
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:13-14
 	"HPDV": {from: "HPHeaterDrain", to: "HDT", near: "HPHeaterDrain", shift: 0.12},
+	"CREJ": {from: "Condenser", to: "CST", near: "Condenser", shift: -0.06},
 }
 
 // scalarValves binds valve-shaped model fields that are plain 0..1
