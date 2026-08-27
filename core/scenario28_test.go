@@ -403,7 +403,10 @@ func TestReactor_ECCSInjectionMixesStorageTemperature(t *testing.T) {
 // by at most one tick; and the assertion is differential between twin
 // legs that share any residual discretization bias.
 func TestScenario28_ECCSCreditCoolsRefilledPrimary(t *testing.T) {
-	t.Parallel()
+	// Must not run in parallel: overrideTimeStep mutates the global
+	// tick other stepping tests read, and a concurrent leg changes
+	// where the blowdown lands (observed: RPV pressure parked exactly
+	// at the accumulator precharge in a sibling test).
 	overrideTimeStep(t, 5*time.Millisecond)
 
 	runLeg := func(seedAccumulators bool) float64 {
