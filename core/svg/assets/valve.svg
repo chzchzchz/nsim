@@ -1,60 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg">
 <title>PWR valve symbols</title>
-<desc>Gate, swing-check, safety, relief, PORV, stop, and modulating valve symbols for the PWR plant P\u0026ID. Source-of-truth citations live in plans/svg/valve.md.</desc>
+<desc>Gate, swing-check, safety, relief, PORV, stop, and modulating valve symbols for the PWR plant P&ID. Source-of-truth citations live in plans/svg/valve.md.</desc>
 
-<symbol id="valve-gate" viewBox="-12 -8 24 16">
+<symbol id="valve-gate" viewBox="-36 -24 72 48">
 <title>Gate Valve</title>
-<polygon points="-11.5,-6 0,0 -11.5,6" fill="white" stroke="black"/>
-<polygon points="11.5,-6 0,0 11.5,6" fill="white" stroke="black"/>
-<rect x="-2" y="-8" width="4" height="16" fill="white" stroke="black"/>
+<polygon points="-34.5,-18 0,0 -34.5,18" fill="white" stroke="black" stroke-width="1.5"/>
+<polygon points="34.5,-18 0,0 34.5,18" fill="white" stroke="black" stroke-width="1.5"/>
+<rect x="-6" y="-24" width="12" height="48" fill="white" stroke="black" stroke-width="1.5"/>
 </symbol>
 
-<symbol id="valve-swing_check" viewBox="-12 -8 24 16">
+<symbol id="valve-swing_check" viewBox="-36 -24 72 48">
 <title>Swing Check Valve</title>
-<line x1="-11.5" y1="-6" x2="11.5" y2="-6" stroke="black" stroke-width="1.5"/>
-<circle cx="10" cy="-6" r="1.2" fill="black"/>
-<polygon points="-10,5 -2,5 -2,-3" fill="white" stroke="black"/>
-<line x1="-10" y1="5" x2="-2" y2="-3" stroke="black" stroke-width="1"/>
+<line x1="-34.5" y1="-18" x2="34.5" y2="-18" stroke="black" stroke-width="2.5"/>
+<circle cx="30" cy="-18" r="3.6" fill="black"/>
+<polygon points="-30,15 -6,15 -6,-9" fill="white" stroke="black" stroke-width="1.5"/>
+<line x1="-30" y1="15" x2="-6" y2="-9" stroke="black" stroke-width="1.5"/>
 </symbol>
 
-<symbol id="valve-safety" viewBox="-12 -10 24 20">
+<symbol id="valve-safety" viewBox="-36 -30 72 60">
 <title>Safety Valve</title>
-<polygon points="-11.5,4 0,-2 11.5,4" fill="white" stroke="black"/>
-<line x1="0" y1="-2" x2="0" y2="-8.5" stroke="black"/>
-<path d="M -2 -7.5 L 0 -9.25 L 2 -7.5" fill="none" stroke="black"/>
-<circle cx="0" cy="-8.25" r="1" fill="none" stroke="black"/>
+<polygon points="-34.5,12 0,-6 34.5,12" fill="white" stroke="black" stroke-width="1.5"/>
+<line x1="0" y1="-6" x2="0" y2="-25.5" stroke="black" stroke-width="1.5"/>
+<path d="M -6 -22.5 L 0 -27.75 L 6 -22.5" fill="none" stroke="black" stroke-width="1.5"/>
+<circle cx="0" cy="-24.75" r="3" fill="none" stroke="black" stroke-width="1.5"/>
 </symbol>
 
-<symbol id="valve-relief" viewBox="-12 -10 24 20">
+<symbol id="valve-relief" viewBox="-36 -30 72 60">
 <title>Power-Operated Relief Valve</title>
-<polygon points="-11.5,4 0,-2 11.5,4" fill="white" stroke="black"/>
-<rect x="-3" y="-9" width="6" height="6" fill="white" stroke="black"/>
-<line x1="0" y1="-3" x2="0" y2="-9" stroke="black"/>
-<text x="6" y="-5" font-size="6">A</text>
+<polygon points="-34.5,12 0,-6 34.5,12" fill="white" stroke="black" stroke-width="1.5"/>
+<rect x="-9" y="-27" width="18" height="18" fill="white" stroke="black" stroke-width="1.5"/>
+<line x1="0" y1="-9" x2="0" y2="-27" stroke="black" stroke-width="1.5"/>
+<text x="18" y="-15" font-size="6">A</text>
 </symbol>
 
-<symbol id="valve-porv" viewBox="-12 -10 24 20">
+<symbol id="valve-porv" viewBox="-36 -30 72 60">
 <title>Power-Operated Relief Valve (PORV)</title>
-<polygon points="-11.5,4 0,-2 11.5,4" fill="white" stroke="black"/>
-<rect x="-3" y="-9" width="6" height="6" fill="white" stroke="black"/>
-<line x1="0" y1="-3" x2="0" y2="-9" stroke="black"/>
-<text x="6" y="-5" font-size="6">P</text>
+<polygon points="-34.5,12 0,-6 34.5,12" fill="white" stroke="black" stroke-width="1.5"/>
+<rect x="-9" y="-27" width="18" height="18" fill="white" stroke="black" stroke-width="1.5"/>
+<line x1="0" y1="-9" x2="0" y2="-27" stroke="black" stroke-width="1.5"/>
+<text x="18" y="-15" font-size="6">P</text>
 </symbol>
 
-<symbol id="valve-stop" viewBox="-12 -10 24 20">
+<symbol id="valve-stop" viewBox="-36 -30 72 60">
 <title>Main Steam Stop Valve</title>
-<polygon points="-11.5,4 0,-2 11.5,4" fill="white" stroke="black"/>
-<rect x="-4" y="-9" width="8" height="6" fill="white" stroke="black"/>
-<line x1="0" y1="-3" x2="0" y2="-9" stroke="black"/>
-<circle cx="0" cy="-6" r="1.5" fill="black"/>
+<polygon points="-34.5,12 0,-6 34.5,12" fill="white" stroke="black" stroke-width="1.5"/>
+<rect x="-12" y="-27" width="24" height="18" fill="white" stroke="black" stroke-width="1.5"/>
+<line x1="0" y1="-9" x2="0" y2="-27" stroke="black" stroke-width="1.5"/>
+<circle cx="0" cy="-18" r="4.5" fill="black"/>
 </symbol>
 
-<symbol id="valve-modulating" viewBox="-12 -10 24 20">
+<symbol id="valve-modulating" viewBox="-36 -30 72 60">
 <title>Modulating Valve</title>
-<circle cx="0" cy="0" r="6" fill="white" stroke="black"/>
-<line x1="0" y1="-6" x2="0" y2="-8" stroke="black"/>
-<polygon points="-2.5,-8 2.5,-8 0,-9.5" fill="black"/>
+<circle cx="0" cy="0" r="24" fill="white" stroke="black" stroke-width="1.5"/>
+<line x1="0" y1="-18" x2="0" y2="-24" stroke="black" stroke-width="1.5"/>
+<polygon points="-7.5,-24 7.5,-24 0,-28.5" fill="black"/>
 </symbol>
-
 </svg>
