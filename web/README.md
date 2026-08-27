@@ -52,7 +52,7 @@ builds. The host (`go build ./...`) skips it.
 
 ```sh
 cd web
-make build         # wasm + tsc; copies wasm_exec.js into src/
+make build         # wasm + tsc; copies wasm_exec.js into js/
 ```
 
 `make build` is just three commands:

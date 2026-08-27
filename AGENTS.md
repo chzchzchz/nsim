@@ -30,6 +30,7 @@ These are sources of truth and where to look for answers when asking questions. 
 * godoc mcp must query local packages by relative path with working_dir set to this repo root, e.g. path "./core", working_dir "/home/chz/go/src/github.com/chzchzchz/nsim-alt6". Never pass the import path (github.com/chzchzchz/nsim/core) as path: the module is not published, so the tool tries a remote git fetch and fails with "could not read Username for 'https://github.com'". Local resolution still reports the correct import path because go.mod declares module github.com/chzchzchz/nsim.
 * Prefer gopls mcp's lsp tool commands for mechanical code changes.
 * cmd/nsimrun can simulate a Plant using plant json (see cmd/nsimrun/README.md)
+* **Use `view` to read files.** There is no `read` tool. Key parameters: `file_path` (required), `offset` (line number to start from, 0-based), `limit` (max lines to return). Default `limit` is 200 lines; omit `limit` to read up to 200 lines. Use `offset` and `limit` to avoid loading large files, but reading the whole file is acceptable for small files where the full context is needed. See `skills/TOOLS.md` for model-specific notes (applies to step-3.7-flash and similar).
 
 # Writing Tests
 
