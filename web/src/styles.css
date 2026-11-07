@@ -74,6 +74,13 @@
             gap: 16px;
             padding: 16px;
         }
+        /* The handle strip glues to the pane inside a column
+           container so it sits flush below without the main-column
+           gap in between. */
+        .pid-wrap {
+            display: flex;
+            flex-direction: column;
+        }
         #pid {
             background: white;
             border: 1px solid #ccc;
@@ -84,13 +91,26 @@
             position: relative;
             display: flex;
             justify-content: center;
-            max-height: 50vh;
+            align-items: center;
+            height: var(--pid-height, 50svh);
             touch-action: none;
         }
-        #pid svg { max-height: 50vh; max-width: 100%; width: auto; height: auto; display: block; }
+        #pid svg { max-height: var(--pid-height, 50svh); max-width: 100%; width: auto; height: auto; display: block; }
         /* Components act as anchors into the control panel. */
         #pid g[data-part] { cursor: pointer; }
         .pid-canvas { transform-origin: 0 0; will-change: transform; }
+        /* Drag handle below the pane: adjustable vertical space. */
+        .pid-resize-handle {
+            flex: 0 0 8px;
+            cursor: ns-resize;
+            touch-action: none;
+            border-radius: 4px;
+            background: #d5e3ef;
+        }
+        .pid-resize-handle:hover,
+        .pid-resize-handle:active {
+            background: #a8c1d9;
+        }
         .pid-zoom {
             position: absolute;
             top: 8px;

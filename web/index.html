@@ -35,7 +35,14 @@
             <span class="objective-title"></span>
             <span class="objective-status"></span>
         </section>
-        <div id="pid"></div>
+        <!-- Static PID structure owned semantically by PidViewport:
+             #pid carries the diagram surface; .pid-resize-handle is the
+             drag strip. PidViewport may create the handle only as a
+             fallback if this sibling is missing. -->
+        <div class="pid-wrap">
+            <div id="pid" aria-label="P&ID diagram"></div>
+            <div class="pid-resize-handle" title="Drag to resize the P&ID pane"></div>
+        </div>
         <div id="alarms"></div>
         <div id="tiles"></div>
         <section id="console"></section>

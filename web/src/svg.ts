@@ -1,167 +1,27 @@
-// svg.ts — mount the SVG document produced by the wasm side.
-// The diagram is stateless markup; part highlighting binds via
-// data-part attributes, so remounting never loses handlers.
+// SVG-content boundary: mountPlant() replaces diagram markup and owns the
+// one-time zoom-overlay shell. It does not own runtime viewport state.
+//
+// PidViewport is the single owner for pane height, pan/zoom behavior,
+// viewport persistence, resize listeners, and canvas transform state.
+// This module calls those public methods but should not duplicate state
+// here, mutate the canvas directly, register pan/height listeners, or
+// create the resize surface. The static #pid/.pid-wrap/.pid-resize-handle
+// structure lives in index.html.
+//
+// Compatibility note: keep mountPlant(target, svgText) as the call-site
+// API used by main.ts. Refactoring the viewport internals should not
+// require refresh-loop changes in main.ts.
 
-import { REF_FLASH_MS, revealPart } from "./bindings";
+import { PidViewport } from "./pidViewport";
 
-// Zoom state lives here rather than on the mounted <svg> because
-// refreshes replace that node wholesale; re-applying the same
-// transform after each mount keeps the operator's viewpoint stable
-// across ticks.
-const MIN_SCALE = 1;
-const MAX_SCALE = 12;
-const WHEEL_FACTOR = 1.1;
-const BUTTON_FACTOR = 1.25;
-// A pan gesture ends with a browser click event; jumps from
-// clicking a component are suppressed beyond this travel so
-// dragging the mimic never triggers navigation.
-const CLICK_SUPPRESS_PX = 5;
-
-// The viewpoint survives reloads through localStorage, versioned so
-// a schema change discards stale blobs instead of misreading them.
-const VIEW_STORAGE_KEY = "nsim-pid-view";
-const VIEW_VERSION = 1;
-
-interface PidView {
-    version: number;
-    scale: number;
-    panX: number;
-    panY: number;
-}
-
-function loadView(): PidView | null {
-    let raw: string | null;
-    try {
-        raw = localStorage.getItem(VIEW_STORAGE_KEY);
-    } catch {
-        return null;
-    }
-    if (raw === null) return null;
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(raw);
-    } catch {
-        return null;
-    }
-    const v = parsed as Partial<PidView>;
-    if (
-        v.version !== VIEW_VERSION ||
-        typeof v.scale !== "number" ||
-        typeof v.panX !== "number" ||
-        typeof v.panY !== "number" ||
-        !Number.isFinite(v.scale) ||
-        !Number.isFinite(v.panX) ||
-        !Number.isFinite(v.panY)
-    ) {
-        return null;
-    }
-    return {
-        version: VIEW_VERSION,
-        scale: Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.scale)),
-        panX: v.panX,
-        panY: v.panY,
-    };
-}
-
-function saveView(): void {
-    const view: PidView = {
-        version: VIEW_VERSION,
-        scale,
-        panX,
-        panY,
-    };
-    try {
-        localStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify(view));
-    } catch {
-        // Private-browsing quotas leave the viewpoint session-only.
-    }
-}
-
-let canvas: HTMLDivElement | null = null;
-let scale = 1;
-let panX = 0;
-let panY = 0;
-// Restoration runs once per page load; later mounts re-apply the
-// live module state instead of racing fresh reads.
-let restored = false;
-
-const boundHosts = new WeakSet<HTMLElement>();
+let viewport: PidViewport | null = null;
 
 export function mountPlant(target: HTMLElement, svgText: string): void {
-    if (!boundHosts.has(target)) {
-        if (!restored) {
-            restored = true;
-            const view = loadView();
-            if (view) {
-                scale = view.scale;
-                panX = view.panX;
-                panY = view.panY;
-            }
-        }
-        const viewport = document.createElement("div");
-        viewport.className = "pid-canvas";
-        target.appendChild(viewport);
+    if (!viewport) {
+        viewport = new PidViewport(target);
         target.appendChild(buildZoomOverlay(target));
-        bindZoomGestures(target);
-        canvas = viewport;
     }
-    canvas!.innerHTML = svgText;
-    applyTransform();
-}
-
-function applyTransform(): void {
-    canvas!.style.transform =
-        `translate(${panX}px, ${panY}px) scale(${scale})`;
-}
-
-// anchoredPan computes the pan offsets that keep the diagram point
-// under (px, py) fixed while the scale moves from prevScale to
-// nextScale. Pure so the anchor invariant is unit-testable.
-export function anchoredPan(
-    px: number,
-    py: number,
-    prevScale: number,
-    nextScale: number,
-    prevPanX: number,
-    prevPanY: number,
-): { x: number; y: number } {
-    return {
-        x: px - ((px - prevPanX) / prevScale) * nextScale,
-        y: py - ((py - prevPanY) / prevScale) * nextScale,
-    };
-}
-
-function zoomAt(
-    target: HTMLElement,
-    clientX: number,
-    clientY: number,
-    factor: number,
-): void {
-    const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * factor));
-    if (next === scale) return;
-    const rect = target.getBoundingClientRect();
-    // The canvas is laid out centred inside the host, so the scaled
-    // coordinate space starts at the canvas corner, not the host
-    // corner. offsetLeft/offsetTop ignore transforms and therefore
-    // report that true origin.
-    const px = clientX - rect.left - canvas!.offsetLeft;
-    const py = clientY - rect.top - canvas!.offsetTop;
-    ({ x: panX, y: panY } = anchoredPan(px, py, scale, next, panX, panY));
-    scale = next;
-    if (scale === MIN_SCALE) {
-        panX = 0;
-        panY = 0;
-    }
-    applyTransform();
-    saveView();
-}
-
-function resetView(): void {
-    scale = 1;
-    panX = 0;
-    panY = 0;
-    applyTransform();
-    saveView();
+    viewport.mountSvg(svgText);
 }
 
 function buildZoomOverlay(target: HTMLElement): HTMLElement {
@@ -170,7 +30,7 @@ function buildZoomOverlay(target: HTMLElement): HTMLElement {
     const mk = (
         label: string,
         title: string,
-        onClick: (ev: MouseEvent) => void,
+        onClick: () => void,
     ): HTMLButtonElement => {
         const btn = document.createElement("button");
         btn.textContent = label;
@@ -178,94 +38,9 @@ function buildZoomOverlay(target: HTMLElement): HTMLElement {
         btn.addEventListener("click", onClick);
         return btn;
     };
-    const centerFactor = (factor: number): void => {
-        const rect = target.getBoundingClientRect();
-        zoomAt(target, rect.left + rect.width / 2, rect.top + rect.height / 2, factor);
-    };
-    bar.appendChild(mk("−", "Zoom out", () => centerFactor(1 / BUTTON_FACTOR)));
-    bar.appendChild(mk("＋", "Zoom in", () => centerFactor(BUTTON_FACTOR)));
-    bar.appendChild(mk("↺", "Reset view", () => resetView()));
+    const BUTTON_FACTOR = 1.25;
+    bar.appendChild(mk("−", "Zoom out", () => viewport?.zoomFactor(1 / BUTTON_FACTOR)));
+    bar.appendChild(mk("＋", "Zoom in", () => viewport?.zoomFactor(BUTTON_FACTOR)));
+    bar.appendChild(mk("↺", "Reset view", () => viewport?.resetView()));
     return bar;
-}
-
-function bindZoomGestures(target: HTMLElement): void {
-    boundHosts.add(target);
-
-    target.addEventListener("wheel", (ev) => {
-        ev.preventDefault();
-        const factor = ev.deltaY < 0 ? WHEEL_FACTOR : 1 / WHEEL_FACTOR;
-        zoomAt(target, ev.clientX, ev.clientY, factor);
-    }, { passive: false });
-
-    let downX = 0;
-    let downY = 0;
-    // Capture is deferred until travel exceeds the click threshold:
-    // capturing immediately would retarget the compatibility click
-    // event to the host and hide the component that was clicked.
-    let pressed = false;
-    let dragging = false;
-    let lastX = 0;
-    let lastY = 0;
-    target.addEventListener("pointerdown", (ev) => {
-        downX = ev.clientX;
-        downY = ev.clientY;
-        pressed = ev.button === 0 &&
-            !(ev.target as HTMLElement | null)?.closest(".pid-zoom");
-        if (pressed) {
-            lastX = ev.clientX;
-            lastY = ev.clientY;
-        }
-    });
-    target.addEventListener("pointermove", (ev) => {
-        if (!pressed) return;
-        if (!dragging) {
-            if (
-                Math.hypot(ev.clientX - downX, ev.clientY - downY) <
-                    CLICK_SUPPRESS_PX
-            ) {
-                return;
-            }
-            dragging = true;
-            target.setPointerCapture(ev.pointerId);
-        }
-        panX += ev.clientX - lastX;
-        panY += ev.clientY - lastY;
-        lastX = ev.clientX;
-        lastY = ev.clientY;
-        applyTransform();
-    });
-    const endDrag = (ev: PointerEvent): void => {
-        pressed = false;
-        if (!dragging) return;
-        dragging = false;
-        saveView();
-        if (target.hasPointerCapture(ev.pointerId)) {
-            target.releasePointerCapture(ev.pointerId);
-        }
-    };
-    target.addEventListener("pointerup", endDrag);
-    target.addEventListener("pointercancel", endDrag);
-
-    // Clicking a diagram component jumps to the control that can
-    // operate it, mirroring how (?) popups cross-reference rows.
-    target.addEventListener("click", (ev) => {
-        if (
-            Math.hypot(ev.clientX - downX, ev.clientY - downY) >
-                CLICK_SUPPRESS_PX
-        ) {
-            return;
-        }
-        const g = (ev.target as Element | null)?.closest("[data-part]");
-        const part = g?.getAttribute("data-part");
-        if (!g || !part) return;
-        if (revealPart(part)) return;
-        // Components without bridge rows (e.g. the heater drain
-        // pump has no bindings yet) still acknowledge the click so
-        // it does not feel dead.
-        g.classList.add("ref-flash");
-        window.setTimeout(
-            () => g.classList.remove("ref-flash"),
-            REF_FLASH_MS,
-        );
-    });
 }
