@@ -69,6 +69,15 @@ type GraphEdge struct {
 type PlantGraph struct {
 	Nodes map[string]GraphNode
 	Edges []GraphEdge
+	// fromIdx/toIdx parallel g.Edges, resolved from the node map
+	// once per graph build so simulateFluidFlow does not hash
+	// string IDs on every tick. -1 means the edge endpoint is
+	// absent from Nodes (skipped by the integrator).
+	fromIdx []int
+	toIdx   []int
+	// nodeList orders Nodes for reset iteration without a map
+	// walk on the cached hot path.
+	nodeList []GraphNode
 }
 
 // fluidNode is the minimal interface a graph node must implement for the
@@ -191,6 +200,29 @@ type flowRecorder interface {
 	resetFlow()
 }
 
+func (g *PlantGraph) resolveEdgeIndices() {
+	g.nodeList = g.nodeList[:0]
+	index := make(map[string]int, len(g.Nodes))
+	for id, n := range g.Nodes {
+		index[id] = len(g.nodeList)
+		g.nodeList = append(g.nodeList, n)
+	}
+	g.fromIdx = g.fromIdx[:0]
+	g.toIdx = g.toIdx[:0]
+	for _, e := range g.Edges {
+		fi, ok := index[e.From]
+		if !ok {
+			fi = -1
+		}
+		ti, ok := index[e.To]
+		if !ok {
+			ti = -1
+		}
+		g.fromIdx = append(g.fromIdx, fi)
+		g.toIdx = append(g.toIdx, ti)
+	}
+}
+
 func recordGraphFlow(g *PlantGraph, e GraphEdge, dt time.Duration) {
 	tn, ok := g.Nodes[e.To]
 	if !ok {
@@ -260,16 +292,16 @@ func simulateFluidFlow(g *PlantGraph, dt time.Duration, efwsBlocked ...bool) {
 		efwsActive = true
 	}
 	dtSec := dt.Seconds()
+	if g.fromIdx == nil {
+		g.resolveEdgeIndices()
+	}
 	for i := range g.Edges {
 		e := &g.Edges[i]
-		fn, ok := g.Nodes[e.From]
-		if !ok {
+		if g.fromIdx[i] < 0 || g.toIdx[i] < 0 {
 			continue
 		}
-		tn, ok := g.Nodes[e.To]
-		if !ok {
-			continue
-		}
+		fn := g.nodeList[g.fromIdx[i]]
+		tn := g.nodeList[g.toIdx[i]]
 		// Step-owned flow edges are audit-only (plans/p59_1.txt
 		// §1, option B): the owning Step already moved the volume
 		// and simulateFluidFlow runs last (plant.go:2362), so moving

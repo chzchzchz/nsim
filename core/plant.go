@@ -2208,8 +2208,6 @@ func (p *Plant) Step(dt time.Duration) {
 			Volume{Val: hotwell, Unit: u.Gallon}
 	}
 
-	p.nextPlant.Electrical = p.Electrical.Step(dt)
-
 	// Plant electrical systems step (plans/p27_1.txt). The
 	// simplified model rolls offsite availability, diesel
 	// start timing, ESF bus transfer, inverter power, and
@@ -3357,7 +3355,10 @@ func (p *Plant) BuildGraph() *PlantGraph { return p.BuildGraphFor(p) }
 func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	if p.cachedGraph != nil && p.cachedTarget == target {
 		g := p.cachedGraph
-		for _, n := range g.Nodes {
+		if g.nodeList == nil {
+			g.resolveEdgeIndices()
+		}
+		for _, n := range g.nodeList {
 			if rec, ok := n.Ref.(flowRecorder); ok {
 				rec.resetFlow()
 			}
