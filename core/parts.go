@@ -5145,8 +5145,8 @@ const (
 	// (specs/BWRX-300-General-Description/chapter_3/) state
 	// an inter-region rate either, so 0.2/h is a derived
 	// hourscale assumption carried over from the retired
-	// HydrogenVentilationRemovalRate magnitude
-	// (plans/x/gap_two_node_containment.md).
+	// pre-G3 magnitude (plans/x/gap_two_node_containment.md,
+	// plans/x/big_gaps.md G3).
 	PocketExchangePerHour float64 = 0.2
 
 	// NaturalExchangePerHour is the same inter-region

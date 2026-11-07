@@ -192,6 +192,28 @@ func TestContainmentBuilding_TemperatureAndPressureTrackHeatBalance(t *testing.T
 		balanced.Temperature.Float())
 }
 
+// A fresh MakePlant steps one tick with zero node split and the
+// single-node trajectory unchanged: the derived averages equal
+// the weighted node means by construction. This pins the
+// plans/x/gap_two_node_containment.md empty-construction
+// criterion (MakePlant + one step shows zero node split).
+func TestMakePlant_EmptyConstructionZeroNodeSplit(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	cb := &p.ReactorBuilding.ContainmentBuilding
+	assert.Equal(t, cb.UpperTemperature, cb.LowerTemperature)
+	assert.Zero(t, cb.UpperHydrogenPercent)
+	assert.Zero(t, cb.LowerHydrogenPercent)
+	stepN(&p, 1, DefaultTimeStep)
+	cb = &p.ReactorBuilding.ContainmentBuilding
+	assert.Equal(t, cb.UpperTemperature, cb.LowerTemperature)
+	assert.Zero(t, cb.UpperHydrogenPercent)
+	assert.Zero(t, cb.LowerHydrogenPercent)
+	assert.Equal(t, cb.Temperature.Float(),
+		cb.UpperTemperature.Float()*UpperVolumeFraction+
+			cb.LowerTemperature.Float()*(1-UpperVolumeFraction))
+}
+
 // End-to-end via Plant.Step: all four RCFC units run at
 // startup; after the LOCA signal arrives the fans switch to low
 // speed; the RCFC sink keeps the containment atmosphere from
