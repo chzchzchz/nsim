@@ -50,7 +50,7 @@ func TestRodAutoControlDeadbandAndSlew(t *testing.T) {
 	}
 	hot.applyAutoControl(DefaultTimeStep,
 		Temperature{Val: RCSNoLoadTavgF + 20, Unit: u.Fahrenheit},
-		0, 0.5, 0)
+		0, 0.5, 0, 1.0)
 	assert.Greater(t, hot.DemandInsertion, 0.0,
 		"power above the no-load program inserts rods")
 
@@ -63,7 +63,7 @@ func TestRodAutoControlDeadbandAndSlew(t *testing.T) {
 	}
 	cold.applyAutoControl(DefaultTimeStep,
 		Temperature{Val: programmedRodTavg(1), Unit: u.Fahrenheit},
-		1, fullTarget/2, 0)
+		1, fullTarget/2, 0, 1.0)
 	assert.Less(t, cold.DemandInsertion, 0.05,
 		"power under the program withdraws rods")
 
@@ -75,7 +75,7 @@ func TestRodAutoControlDeadbandAndSlew(t *testing.T) {
 	}
 	frozen.applyAutoControl(DefaultTimeStep,
 		Temperature{Val: programmedRodTavg(1), Unit: u.Fahrenheit},
-		1, fullTarget+RodCtrlDeadbandFrac/2, 0)
+		1, fullTarget+RodCtrlDeadbandFrac/2, 0, 1.0)
 	assert.InDelta(t, 0.05, frozen.DemandInsertion, 1e-12,
 		"settled state freezes rod motion")
 }

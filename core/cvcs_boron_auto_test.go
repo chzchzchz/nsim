@@ -20,14 +20,14 @@ import (
 func TestCVCSAutoBoronSelectsModeFromRodTravel(t *testing.T) {
 	t.Parallel()
 	low := CVCS{AutoBoronControl: true}
-	low.applyAutoBoronControl(CVCSAutoBoronLowInsertionFrac/2, 0, 0)
+	low.applyAutoBoronControl(CVCSAutoBoronLowInsertionFrac/2, 0, 0, 1.0)
 	assert.Equal(t, CVCSDilution, low.Mode,
 		"bank out of travel dilutes")
 	assert.True(t, low.BTRSRecirculationPumpRunning,
 		"dilution needs the BTRS pump")
 
 	high := CVCS{AutoBoronControl: true}
-	high.applyAutoBoronControl(CVCSAutoBoronHighInsertionFrac*2, 0, 0)
+	high.applyAutoBoronControl(CVCSAutoBoronHighInsertionFrac*2, 0, 0, 1.0)
 	assert.Equal(t, CVCSBoration, high.Mode,
 		"buried bank borates")
 }
@@ -42,7 +42,7 @@ func TestCVCSAutoBoronNeutralMidBand(t *testing.T) {
 		AutoBoronControl:             true,
 	}
 	mid.applyAutoBoronControl(
-		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2, 0, 0)
+		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2, 0, 0, 1.0)
 	assert.Equal(t, CVCSVolumeControl, mid.Mode)
 	assert.False(t, mid.BTRSRecirculationPumpRunning)
 }
@@ -57,21 +57,21 @@ func TestCVCSAutoBoronAnswersAxialOffsetBand(t *testing.T) {
 	bottomSkew := CVCS{AutoBoronControl: true}
 	bottomSkew.applyAutoBoronControl(
 		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2,
-		-CoreAFDTargetBandPct-1, 0)
+		-CoreAFDTargetBandPct-1, 0, 1.0)
 	assert.Equal(t, CVCSBoration, bottomSkew.Mode,
 		"bottom-skewed offset borates")
 
 	topSkew := CVCS{AutoBoronControl: true}
 	topSkew.applyAutoBoronControl(
 		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2,
-		CoreAFDTargetBandPct+1, 0)
+		CoreAFDTargetBandPct+1, 0, 1.0)
 	assert.Equal(t, CVCSDilution, topSkew.Mode,
 		"top-skewed offset dilutes")
 
 	insideBand := CVCS{AutoBoronControl: true}
 	insideBand.applyAutoBoronControl(
 		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2,
-		-CoreAFDTargetBandPct/2, 0)
+		-CoreAFDTargetBandPct/2, 0, 1.0)
 	assert.Equal(t, CVCSVolumeControl, insideBand.Mode,
 		"in-band offset stays neutral")
 
@@ -82,7 +82,7 @@ func TestCVCSAutoBoronAnswersAxialOffsetBand(t *testing.T) {
 	// the band rule borates - boration is pinned.
 	skewVsBuried := CVCS{AutoBoronControl: true}
 	skewVsBuried.applyAutoBoronControl(
-		CVCSAutoBoronLowInsertionFrac/2, -CoreAFDTargetBandPct-1, 0)
+		CVCSAutoBoronLowInsertionFrac/2, -CoreAFDTargetBandPct-1, 0, 1.0)
 	assert.Equal(t, CVCSBoration, skewVsBuried.Mode,
 		"bottom skew outranks withdrawal-limit dilution")
 
@@ -90,7 +90,7 @@ func TestCVCSAutoBoronAnswersAxialOffsetBand(t *testing.T) {
 	// band rule dilutes - dilution is pinned.
 	skewVsBuried2 := CVCS{AutoBoronControl: true}
 	skewVsBuried2.applyAutoBoronControl(
-		CVCSAutoBoronHighInsertionFrac*2, CoreAFDTargetBandPct+1, 0)
+		CVCSAutoBoronHighInsertionFrac*2, CoreAFDTargetBandPct+1, 0, 1.0)
 	assert.Equal(t, CVCSDilution, skewVsBuried2.Mode,
 		"top skew outranks burial-limit boration")
 }
@@ -189,34 +189,29 @@ func TestCVCSAutoBoronAnswersPowerError(t *testing.T) {
 		CVCSAutoBoronHighInsertionFrac) / 2
 
 	underDemand := CVCS{AutoBoronControl: true}
-	underDemand.applyAutoBoronControl(midInsertion, 0,
-		CVCSAutoBoronPowerErrBandFrac*3)
+	underDemand.applyAutoBoronControl(midInsertion, 0, CVCSAutoBoronPowerErrBandFrac*3, 1.0)
 	assert.Equal(t, CVCSDilution, underDemand.Mode,
 		"a standing deficit dilutes even with the bank mid-window")
 	assert.True(t, underDemand.BTRSRecirculationPumpRunning)
 
 	overSwing := CVCS{AutoBoronControl: true}
-	overSwing.applyAutoBoronControl(midInsertion, 0,
-		-CVCSAutoBoronPowerErrBandFrac*3)
+	overSwing.applyAutoBoronControl(midInsertion, 0, -CVCSAutoBoronPowerErrBandFrac*3, 1.0)
 	assert.Equal(t, CVCSBoration, overSwing.Mode,
 		"an achieved-power overswing borates")
 
 	onTarget := CVCS{AutoBoronControl: true}
-	onTarget.applyAutoBoronControl(midInsertion, 0,
-		CVCSAutoBoronPowerErrBandFrac/2)
+	onTarget.applyAutoBoronControl(midInsertion, 0, CVCSAutoBoronPowerErrBandFrac/2, 1.0)
 	assert.Equal(t, CVCSVolumeControl, onTarget.Mode,
 		"inside the deadband the mid-band position rule governs")
 
 	// The tier sits below the axial-offset band: a running spatial
 	// instability outranks load-error relief.
 	skewWins := CVCS{AutoBoronControl: true}
-	skewWins.applyAutoBoronControl(midInsertion,
-		CoreAFDTargetBandPct+1, CVCSAutoBoronPowerErrBandFrac*3)
+	skewWins.applyAutoBoronControl(midInsertion, CoreAFDTargetBandPct+1, CVCSAutoBoronPowerErrBandFrac*3, 1.0)
 	assert.Equal(t, CVCSDilution, skewWins.Mode,
 		"band excursion and deficit agree on dilution")
 	skewOpposes := CVCS{AutoBoronControl: true}
-	skewOpposes.applyAutoBoronControl(midInsertion,
-		-CoreAFDTargetBandPct-1, CVCSAutoBoronPowerErrBandFrac*3)
+	skewOpposes.applyAutoBoronControl(midInsertion, -CoreAFDTargetBandPct-1, CVCSAutoBoronPowerErrBandFrac*3, 1.0)
 	assert.Equal(t, CVCSBoration, skewOpposes.Mode,
 		"the axial-offset band outranks the standing deficit")
 }
@@ -230,24 +225,23 @@ func TestCVCSAutoBoronAnswersPowerError(t *testing.T) {
 func TestCVCSAutoBoronDrivePacesWithError(t *testing.T) {
 	t.Parallel()
 	c := CVCS{AutoBoronControl: true}
-	c.applyAutoBoronControl(0.04, 0, CVCSAutoBoronPowerErrBandFrac*1.01)
+	c.applyAutoBoronControl(0.04, 0, CVCSAutoBoronPowerErrBandFrac*1.01, 1.0)
 	assert.InDelta(t, 0, c.AutoBoronDrive, 1e-2,
 		"errors just past the deadband barely drive")
 
 	c = CVCS{AutoBoronControl: true}
-	c.applyAutoBoronControl(0.04, 0,
-		(CVCSAutoBoronPowerErrBandFrac+CVCSAutoBoronPowerErrSpanFrac)/2)
+	c.applyAutoBoronControl(0.04, 0, (CVCSAutoBoronPowerErrBandFrac+CVCSAutoBoronPowerErrSpanFrac)/2, 1.0)
 	assert.InDelta(t, 0.5, c.AutoBoronDrive, 1e-9,
 		"mid-span error drives half rate")
 
 	c = CVCS{AutoBoronControl: true}
-	c.applyAutoBoronControl(0.04, 0, CVCSAutoBoronPowerErrSpanFrac*4)
+	c.applyAutoBoronControl(0.04, 0, CVCSAutoBoronPowerErrSpanFrac*4, 1.0)
 	assert.InDelta(t, 1.0, c.AutoBoronDrive, 1e-9,
 		"errors past the span clamp at full drive")
 
 	positional := CVCS{AutoBoronControl: true}
 	positional.applyAutoBoronControl(
-		CVCSAutoBoronLowInsertionFrac/2, 0, 0)
+		CVCSAutoBoronLowInsertionFrac/2, 0, 0, 1.0)
 	assert.InDelta(t, 0.875*CVCSAutoBoronPositionDriveCapFrac, positional.AutoBoronDrive, 1e-9,
 		"position tiers pace to the cap across the position span")
 }
@@ -263,25 +257,25 @@ func TestAutoBoron_PositionTiersPaceWithDepthPastThreshold(t *testing.T) {
 	span := CVCSAutoBoronPositionSpanFrac
 
 	atLow := CVCS{AutoBoronControl: true}
-	atLow.applyAutoBoronControl(CVCSAutoBoronLowInsertionFrac-1e-12, 0, 0)
+	atLow.applyAutoBoronControl(CVCSAutoBoronLowInsertionFrac-1e-12, 0, 0, 1.0)
 	assert.Equal(t, CVCSDilution, atLow.Mode)
 	assert.InDelta(t, 0.0, atLow.AutoBoronDrive, 1e-9,
 		"at the low threshold the drive is zero but the tier acts")
 
 	atHigh := CVCS{AutoBoronControl: true}
-	atHigh.applyAutoBoronControl(CVCSAutoBoronHighInsertionFrac+1e-12, 0, 0)
+	atHigh.applyAutoBoronControl(CVCSAutoBoronHighInsertionFrac+1e-12, 0, 0, 1.0)
 	assert.Equal(t, CVCSBoration, atHigh.Mode)
 	assert.InDelta(t, 0.0, atHigh.AutoBoronDrive, 1e-9,
 		"at the high threshold the drive is zero but the tier acts")
 
 	half := CVCS{AutoBoronControl: true}
-	half.applyAutoBoronControl(CVCSAutoBoronLowInsertionFrac-span/2, 0, 0)
+	half.applyAutoBoronControl(CVCSAutoBoronLowInsertionFrac-span/2, 0, 0, 1.0)
 	assert.InDelta(t, cap/2, half.AutoBoronDrive, 1e-9,
 		"halfway to the position span drives half the cap")
 
 	saturated := CVCS{AutoBoronControl: true}
 	saturated.applyAutoBoronControl(
-		CVCSAutoBoronHighInsertionFrac+span*4, 0, 0)
+		CVCSAutoBoronHighInsertionFrac+span*4, 0, 0, 1.0)
 	assert.InDelta(t, cap, saturated.AutoBoronDrive, 1e-9,
 		"past the position span the drive clamps at the cap")
 }
@@ -306,4 +300,61 @@ func TestCVCSDilutionRateFullWithoutAutoTrim(t *testing.T) {
 	dropped := start - c.BoronConcentration
 	assert.InDelta(t, float64(CVCSDilutionRate), dropped, 1e-6,
 		"disengaged trim dilutes at the design rate")
+}
+
+// Deep-band rods-first scaling of the power-error tier (p61, gaps.md item
+// 18): inside the demand band the error-tier drive scales by remaining rod
+// corrective travel. Borating at full withdrawal scales to zero drive but
+// keeps mode and pump (pre-positioning contract); diluting at full
+// withdrawal runs at full pace (dilution needs withdrawal, which is exactly
+// the parked state). Authority reaches 1 at the position-tier thresholds.
+// Spec: boron compensates "whenever control rod operation is restricted"
+// (specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:79-82)
+// and mode+magnitude key on the total mismatch (page_135.txt:58-69), so the
+// tier keeps its mode and only its magnitude is spent with rod travel.
+func TestCVCSAutoBoronDeepBandScalesWithRodAuthority(t *testing.T) {
+	t.Parallel()
+
+	// Borating an overpowered park at full withdrawal: drive 0, but the
+	// tier selects the mode and latches the BTRS pump so beds
+	// pre-position for the eventual flip.
+	parkBorate := CVCS{AutoBoronControl: true}
+	parkBorate.applyAutoBoronControl(0, 0, -CVCSAutoBoronPowerErrSpanFrac*4, 0.05)
+	assert.Equal(t, CVCSBoration, parkBorate.Mode,
+		"deep-band borating error still selects the boration mode")
+	assert.True(t, parkBorate.BTRSRecirculationPumpRunning,
+		"zero-drive pre-positioning keeps the BTRS pump latched")
+	assert.InDelta(t, 0.0, parkBorate.AutoBoronDrive, 1e-9,
+		"at full withdrawal the borating drive is zero (zero ppm/s exchange)")
+
+	// Diluting a deficit park at full withdrawal: full paced drive,
+	// because dilution *is* withdrawal and the pit after a down-maneuver
+	// needs it at full pace.
+	parkDilute := CVCS{AutoBoronControl: true}
+	parkDilute.applyAutoBoronControl(0, 0, CVCSAutoBoronPowerErrSpanFrac*4, 0.05)
+	assert.Equal(t, CVCSDilution, parkDilute.Mode,
+		"deep-band diluting error still selects the dilution mode")
+	assert.InDelta(t, 1.0, parkDilute.AutoBoronDrive, 1e-9,
+		"at full withdrawal the diluting drive is full pace")
+
+	// Authority reaches 1 at the thresholds: borating at the high
+	// threshold, diluting at the low threshold, even deep in the band.
+	highEdge := CVCS{AutoBoronControl: true}
+	highEdge.applyAutoBoronControl(
+		CVCSAutoBoronHighInsertionFrac, 0, -CVCSAutoBoronPowerErrSpanFrac*4, 0.05)
+	assert.InDelta(t, 1.0, highEdge.AutoBoronDrive, 1e-9,
+		"borating at the high threshold runs at full pace")
+	lowEdge := CVCS{AutoBoronControl: true}
+	lowEdge.applyAutoBoronControl(
+		CVCSAutoBoronLowInsertionFrac, 0, CVCSAutoBoronPowerErrSpanFrac*4, 0.05)
+	assert.InDelta(t, 1.0, lowEdge.AutoBoronDrive, 1e-9,
+		"diluting at the low threshold runs at full pace")
+
+	// Above the deep band the drive is unchanged (walk above 0.20 must not
+	// regress): same zero-insertion borating error at demand 1.0 drives at
+	// the ungated pace.
+	aboveBand := CVCS{AutoBoronControl: true}
+	aboveBand.applyAutoBoronControl(0, 0, -CVCSAutoBoronPowerErrSpanFrac*4, 1.0)
+	assert.InDelta(t, 1.0, aboveBand.AutoBoronDrive, 1e-9,
+		"outside the deep band the drive is ungated")
 }

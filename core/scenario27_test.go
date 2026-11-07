@@ -46,7 +46,7 @@ func TestScenario27_RPCWithdrawsAtCappedRateAfterDrop(t *testing.T) {
 	for i := 0; i < steps; i++ {
 		c.applyAutoControl(DefaultTimeStep,
 			Temperature{Val: programmedRodTavg(1.0) - 10, Unit: u.Fahrenheit},
-			1.0, 0.30, -3.9)
+			1.0, 0.30, -3.9, 1.0)
 		c = c.Step(DefaultTimeStep)
 	}
 
@@ -75,7 +75,7 @@ func TestScenario27_RPCWithdrawsAtCappedRateAfterDrop(t *testing.T) {
 	for i := 0; i < steps; i++ {
 		held.applyAutoControl(DefaultTimeStep,
 			Temperature{Val: programmedRodTavg(0.30), Unit: u.Fahrenheit},
-			0.30, 0.30, 0)
+			0.30, 0.30, 0, 0.5)
 	}
 	assert.Equal(t, 0.30, held.DemandInsertion,
 		"deadband must leave a balanced lineup untouched")

@@ -178,7 +178,8 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 		ret.Aux.ChemicalVolumeControlSystem.applyAutoBoronControl(
 			ret.ReactorPressureVessel.ControlRods.Insertion,
 			ret.ReactorPressureVessel.AxialOffset,
-			powerError)
+			powerError,
+			op.boronDemandPower(turbineLoadFraction))
 	}
 	tavg := Temperature{Val: (ret.ReactorPressureVessel.Inlet.Float() +
 		ret.ReactorPressureVessel.Outlet.Float()) / 2, Unit: u.Fahrenheit}
@@ -303,7 +304,8 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 			float64(CoreRatedThermalPower)
 		ret.ReactorPressureVessel.ControlRods.applyAutoControl(dt,
 			tavg, turbineLoadFraction, powerFraction,
-			float64(ret.ReactorPressureVessel.Reactivity))
+			float64(ret.ReactorPressureVessel.Reactivity),
+			op.boronDemandPower(turbineLoadFraction))
 	}
 
 	if op.StepbackActive {

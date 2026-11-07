@@ -1192,6 +1192,24 @@ const (
 	// before full withdrawal; the power-error span would never
 	// saturate it.
 	CVCSAutoBoronPositionSpanFrac float64 = 0.02
+
+	// CVCSAutoBoronParkMaxLoadFrac is the demand ceiling below which
+	// the power-error tier's drive is scaled by remaining rod
+	// corrective travel (rods-first ordering): at house load the bank
+	// sits near full withdrawal, so bore-driven exchange integrated
+	// there consumes the dilution reserve the xenon pit needs later.
+	// Reuses the p48 probe magnitude (header held 925-975 psia down
+	// to ff 0.14; restored dump duty above 0.20) so chemistry and
+	// sink gates share one deep-band boundary without sharing the
+	// dump-specific constant's domain. Derived from probe, NOT
+	// spec: the spec states the ordering rule ("compensates ...
+	// whenever control rod operation is restricted",
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:79-82)
+	// but no load figure. Sweep bounds: freeze in [0.10, 0.30]; below
+	// 0.10 the probe band (ff 0.14) loses coverage and the gate cannot
+	// act before the pit, above 0.30 the walk's legitimate staged
+	// descents (scenario 14/17 arcs) regress under the rods-first scale.
+	CVCSAutoBoronParkMaxLoadFrac float64 = 0.20
 )
 
 // ReactorMakeupDesignFlow is the per-minute volume of makeup
@@ -2438,6 +2456,14 @@ type CVCS struct {
 	// insertion) through the existing BTRS mode and pump paths.
 	// The zero value keeps Mode operator-owned.
 	AutoBoronControl bool
+
+	// DeepBandGatedPreposition latches while the last cascade run
+	// gated a power-error drive to zero in the deep part-load band
+	// (p61): the tier keeps its mode and pump for pre-positioning,
+	// and the deep-band eventual flip is dilution, so boration-mode
+	// steps condition the beds cold instead of hot. It is cleared
+	// whenever a non-zero drive or a different mode is commanded.
+	DeepBandGatedPreposition bool
 
 	// LetdownFlow is the flow rate from the RCS letdown tap
 	// through the letdown chiller and demineralizers back to

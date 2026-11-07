@@ -219,7 +219,7 @@ func (c *ControlRods) applyAutoControl(dt time.Duration,
 	tavg Temperature,
 	loadFraction float64,
 	powerFraction float64,
-	reactivityPct float64,
+	reactivityPct float64, demandFraction float64,
 ) {
 	c.ProgrammedTavg = programmedRodTavg(loadFraction)
 	program := programPowerFraction(c.ProgrammedTavg)
@@ -245,6 +245,20 @@ func (c *ControlRods) applyAutoControl(dt time.Duration,
 		RodCtrlTavgTrimSpanF * RodCtrlTavgTrimAuthorityFrac * parkBand
 	target += min(max(tavgTrimFrac, -RodCtrlTavgTrimAuthorityFrac),
 		RodCtrlTavgTrimAuthorityFrac)
+	// Inside the deep part-load band a hot residual that would trim the
+	// target below the deadband is clamped at the deadband, per the
+	// spec's expandable reduced-power deadband
+	// (specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:77-81)
+	// and the house-load manual-transfer posture
+	// (specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:156-159).
+	// The park band fades at RodCtrlTavgTrimParkBand but the deadband
+	// stays; the park-relative residual (22.6F line offset, probe)
+	// keeps full-weight trim above the deadband, so a hot park trims
+	// only as far as the deadband and can still climb back when the
+	// park cools — hold power cannot be driven through that floor.
+	if demandFraction <= CVCSAutoBoronParkMaxLoadFrac && target < RodCtrlDeadbandFrac {
+		target = RodCtrlDeadbandFrac
+	}
 	errFrac := target - powerFraction
 
 	rhoSetpoint := RodCtrlRhoSetpointPerFrac * errFrac

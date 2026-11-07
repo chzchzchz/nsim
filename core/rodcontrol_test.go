@@ -499,7 +499,7 @@ func TestRodControl_MeasuredTavgTrimsPowerTarget(t *testing.T) {
 	runCase := func(offset float64) float64 {
 		c := newRods()
 		for i := 0; i < steps; i++ {
-			c.applyAutoControl(DefaultTimeStep, tavgAt(offset), 0.5, 0.5, 0)
+			c.applyAutoControl(DefaultTimeStep, tavgAt(offset), 0.5, 0.5, 0, 0.5)
 		}
 		return c.DemandInsertion
 	}

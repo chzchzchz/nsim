@@ -227,7 +227,18 @@ func (c *CVCS) Step(dt time.Duration,
 	switch ret.Mode {
 	case CVCSBoration:
 		if ret.BTRSRecirculationPumpRunning {
-			ret.prepareBeds(CVCSBoration, dt.Seconds())
+			// Deep-band gated pre-positioning (p61): the value
+			// applyAutoBoronControl stored when it last ran is still
+			// on ret, so a zero drive here means rods are out of
+			// travel in the deep band and the eventual flip is
+			// dilution; condition the beds cold instead so the flip
+			// does not starve the dilution (plan step 4 trim).
+			if ret.AutoBoronControl && ret.AutoBoronDrive <= 0 &&
+				ret.DeepBandGatedPreposition {
+				ret.prepareBeds(CVCSDilution, dt.Seconds())
+			} else {
+				ret.prepareBeds(CVCSBoration, dt.Seconds())
+			}
 			if ret.bedAtTarget(CVCSBoration) && ret.BTRSBedSaturation < 1 {
 				ret.BTRSLastExchangeMode = CVCSBoration
 				ret.BTRSBedSaturation = min(
@@ -437,8 +448,17 @@ func programmedPzrLevel(tavg Temperature) float64 {
 // (specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-65).
 func (c *CVCS) applyAutoBoronControl(
 	rodInsertion float64, axialOffsetPct float64, powerErrorFrac float64,
+	demandFraction float64,
 ) {
 	c.AutoBoronDrive = 1
+	// Deep-band pre-positioning: in the deep part-load band the
+	// eventual pit flip is dilution, so when the cascade stands
+	// neutral while demand sits inside the band the beds step
+	// toward dilution's cold target instead of following the
+	// idle opposite-last-exchange rule (p61).
+	if demandFraction <= CVCSAutoBoronParkMaxLoadFrac {
+		c.DeepBandGatedPreposition = true
+	}
 	switch {
 	case axialOffsetPct < -CoreAFDTargetBandPct:
 		c.Mode = CVCSBoration
@@ -449,11 +469,25 @@ func (c *CVCS) applyAutoBoronControl(
 	case powerErrorFrac > CVCSAutoBoronPowerErrBandFrac:
 		c.Mode = CVCSDilution
 		c.BTRSRecirculationPumpRunning = true
-		c.AutoBoronDrive = c.pacedAutoBoronDrive(powerErrorFrac)
+		drive := c.pacedAutoBoronDrive(powerErrorFrac)
+		if demandFraction <= CVCSAutoBoronParkMaxLoadFrac {
+			drive *= errorTierRodAuthority(rodInsertion, false)
+			if drive == 0 {
+				c.DeepBandGatedPreposition = true
+			}
+		}
+		c.AutoBoronDrive = drive
 	case powerErrorFrac < -CVCSAutoBoronPowerErrBandFrac:
 		c.Mode = CVCSBoration
 		c.BTRSRecirculationPumpRunning = true
-		c.AutoBoronDrive = c.pacedAutoBoronDrive(-powerErrorFrac)
+		drive := c.pacedAutoBoronDrive(-powerErrorFrac)
+		if demandFraction <= CVCSAutoBoronParkMaxLoadFrac {
+			drive *= errorTierRodAuthority(rodInsertion, true)
+			if drive == 0 {
+				c.DeepBandGatedPreposition = true
+			}
+		}
+		c.AutoBoronDrive = drive
 	case rodInsertion < CVCSAutoBoronLowInsertionFrac:
 		c.Mode = CVCSDilution
 		c.BTRSRecirculationPumpRunning = true
@@ -475,6 +509,33 @@ func (c *CVCS) applyAutoBoronControl(
 func (c *CVCS) pacedAutoBoronDrive(errAbs float64) float64 {
 	span := CVCSAutoBoronPowerErrSpanFrac - CVCSAutoBoronPowerErrBandFrac
 	return min(max((errAbs-CVCSAutoBoronPowerErrBandFrac)/span, 0), 1)
+}
+
+// errorTierRodAuthority is the rods-first scale on the power-error tier's
+// drive inside the deep part-load band. Power control is adjusted
+// "through control rod motions, boron concentration changes" with rods
+// listed first
+// (specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:25-31),
+// and boron compensates the Tc error "whenever control rod operation is
+// restricted for any reason"
+// (specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:79-82).
+// The tier keeps mode selection keyed on the total mismatch
+// (specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-69)
+// but its magnitude tracks remaining corrective travel: borating (excess
+// power) corrects by inserting, so authority ramps with insertion depth to 1
+// at the high threshold; diluting (deficit) corrects by withdrawing, so
+// authority ramps as insertion falls toward the low threshold. Both reach 1
+// at the position-tier thresholds, so inside the deep band chemistry cannot
+// outrun the bank it relieves. At zero corrective travel the drive is 0 but
+// the tier still selects the mode and runs the pump, so beds pre-position via
+// prepareBeds; drive 0 is zero ppm/s exchange (rateScale = max(drive,0)), not
+// a minimum-exchange floor.
+func errorTierRodAuthority(insertion float64, borating bool) float64 {
+	if borating {
+		return min(max(insertion/CVCSAutoBoronHighInsertionFrac, 0), 1)
+	}
+	span := CVCSAutoBoronHighInsertionFrac - CVCSAutoBoronLowInsertionFrac
+	return min(max((CVCSAutoBoronHighInsertionFrac-insertion)/span, 0), 1)
 }
 
 // pacedPositionDrive maps past-threshold rod travel onto the
