@@ -243,7 +243,8 @@ func TestPlant_SteamLineBreakOvercoolsPastProgramEnvelope(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	synchronizeAndCloseBreaker(&p)
-	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
+	testDt := 10 * time.Millisecond
+	stepN(&p, int(2*time.Second/testDt), testDt)
 
 	ctrl, ok := p.GetControlMap()["ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open"]
 	require.True(t, ok, "break control must be registered")
@@ -256,9 +257,9 @@ func TestPlant_SteamLineBreakOvercoolsPastProgramEnvelope(t *testing.T) {
 	// seconds of the break and both thresholds are pace-relative, so
 	// halving the window tightens rather than loosens them.
 	const window = 30 * time.Second
-	for i := 0; i < int(window/DefaultTimeStep); i++ {
+	for i := 0; i < int(window/testDt); i++ {
 		pre := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
-		p.Step(DefaultTimeStep)
+		p.Step(testDt)
 		p.Update()
 		post := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 		if trippedAt < 0 {
@@ -267,7 +268,7 @@ func TestPlant_SteamLineBreakOvercoolsPastProgramEnvelope(t *testing.T) {
 			}
 			continue
 		}
-		maxCoolFps = max(maxCoolFps, (pre-post)/DefaultTimeStep.Seconds())
+		maxCoolFps = max(maxCoolFps, (pre-post)/testDt.Seconds())
 	}
 	require.GreaterOrEqual(t, trippedAt, 0, "the break must trip the reactor")
 	endF := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()

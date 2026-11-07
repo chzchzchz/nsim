@@ -235,7 +235,7 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 //	specs/the_westinghouse_pressurized_water_react/chapter_16/page_232.txt:54-55
 func TestRodAutoControlPartialPowerPlateauAscent(t *testing.T) {
 	t.Parallel()
-	testDt := 25 * time.Millisecond
+	testDt := 250 * time.Millisecond
 	p := MakePlant()
 	// Forced flow for an at-power arc (see the plateau test above).
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
@@ -292,7 +292,7 @@ func TestRodAutoControlDailyLoadFollowArc(t *testing.T) {
 	// by TestReactorFissionPower_WidthInvariance; the automatic boron
 	// trim selects a fixed-rate BTRS mode on rod position alone
 	// (applyAutoBoronControl) whose ppm integration is linear in dt;
-	testDt := 25 * time.Millisecond
+	testDt := 250 * time.Millisecond
 	p := MakePlant()
 	// Forced flow for an at-power arc (see the plateau test above).
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)

@@ -199,11 +199,11 @@ func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
 	// Boron integrates linearly in dt and the asserted swing is a
 	// settled reactivity band, so the widened step preserves both
 	// legs' trajectories while cutting step count 100x..
-	testDt := 10 * time.Millisecond
+	testDt := 100 * time.Millisecond
 	// Boron is seeded directly in both legs, so Reactivity reflects
 	// the swing as soon as thermal feedback settles; 30 s covers
 	// the relaxation without a full minute of stepping.
-	steps := int(30 * time.Second / DefaultTimeStep)
+	steps := int(30 * time.Second / testDt)
 
 	high := MakePlant()
 	high.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
@@ -245,13 +245,14 @@ func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
 // that shell volume.
 func TestBug_SGWaterExceedsVolume(t *testing.T) {
 	t.Parallel()
+	// Width-safe: the phantom top-up grew SG water within seconds, so a
+	// half minute window at a widened tick still catches its return.
+	testDt := 500 * time.Millisecond
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	p.ReactorBuilding.Pressurizer.HeatersOn = true
 
-	// The phantom top-up grew SG water within seconds, so a half
-	// minute window is ample to catch its return.
-	stepN(&p, int(30*time.Second/DefaultTimeStep), DefaultTimeStep)
+	stepN(&p, int(30*time.Second/testDt), testDt)
 
 	water := p.ReactorBuilding.SteamGenerator.Water.Float()
 	volume := p.ReactorBuilding.SteamGenerator.Volume.Float()
@@ -276,13 +277,14 @@ func TestBug_SGWaterExceedsVolume(t *testing.T) {
 //   - specs/the_westinghouse_pressurized_water_react/chapter_3/page_064.txt:20-27
 func TestPlant_SGInventoryNotToppedUpFromPrimary(t *testing.T) {
 	t.Parallel()
+	// Width-safe: the phantom top-up grew SG water within seconds, so a
+	// half minute window at a widened tick still catches its return.
+	testDt := 500 * time.Millisecond
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	p.ReactorBuilding.Pressurizer.HeatersOn = true
 
-	// The phantom top-up grew SG water within seconds, so a half
-	// minute window is ample to catch its return.
-	stepN(&p, int(30*time.Second/DefaultTimeStep), DefaultTimeStep)
+	stepN(&p, int(30*time.Second/testDt), testDt)
 
 	water := p.ReactorBuilding.SteamGenerator.Water.Float()
 	initial := p.ReactorBuilding.SteamGenerator.Volume.Float() * 0.8

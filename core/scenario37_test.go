@@ -44,14 +44,13 @@ func hdsScenarioPlant(pct float64) Plant {
 // 7-1) and falls back to the recombiner-only arc covered above.
 func TestScenario37_VentilationControlDeepensRemoval(t *testing.T) {
 	t.Parallel()
-	// Width note: the hydrogen state integrates linear streams, and
-	// probes at 1/5/10 ms all reproduced the closed-form decline
-	// exactly while the baseline froze to 1e-9 - the spurious diesel
-	// SI sense that forced the production tick does not fire at
-	// 10 ms. If it ever returns, the exact-freeze assertion below
-	// fails loudly, so the widened tick cannot silently rot the
-	// benign premise.
-	testDt := DefaultTimeStep
+	// Width note: the hydrogen state integrates linear streams
+	// (hds.go: dH2 is exactly linear in dt), so a widened tick
+	// reproduces the closed-form decline exactly. The baseline
+	// freeze assertion below fails loudly if a spurious SI sense
+	// ever fires at the widened tick, so the benign premise cannot
+	// silently rot.
+	testDt := 100 * time.Millisecond
 	key := "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression/"
 
 	p := MakePlant()
@@ -193,7 +192,7 @@ func TestScenario37_VentIsolationStopsExchange(t *testing.T) {
 	// the boundary, recombiners dormant.
 	before := p.ReactorBuilding.ContainmentBuilding.
 		HydrogenDetectionSuppression.HydrogenVolumePercent
-	stepN(&p, 60000, DefaultTimeStep)
+	stepN(&p, 600, 100*time.Millisecond)
 	got := p.ReactorBuilding.ContainmentBuilding.
 		HydrogenDetectionSuppression.HydrogenVolumePercent
 	assert.InDelta(t, before, got, 1e-9,

@@ -155,15 +155,16 @@ func TestScenario4_SteamlineVentDrawsSteamToHotwell(t *testing.T) {
 // linearly and the floors credit 25 s of the window at full-open rate.
 func TestScenario4_DrainValvePullsLevelToNormalBand(t *testing.T) {
 	t.Parallel()
+	testDt := 250 * time.Millisecond
 	baseline := MakePlant()
 	setControl(t, &baseline, "TurbineBuilding/MainFeedwaterPump/Running", "0")
-	stepFor(&baseline, 30*time.Second, DefaultTimeStep)
+	stepFor(&baseline, 30*time.Second, testDt)
 
 	drained := MakePlant()
 	setControl(t, &drained, "TurbineBuilding/MainFeedwaterPump/Running", "0")
 	setControl(t, &drained, "ReactorBuilding/SteamGenerator/DrainValve/Open", "1")
 	hotwellBefore := drained.TurbineBuilding.Condenser.HotwellLevel.Float()
-	stepFor(&drained, 30*time.Second, DefaultTimeStep)
+	stepFor(&drained, 30*time.Second, testDt)
 
 	drainDelta := baseline.ReactorBuilding.SteamGenerator.Water.Float() -
 		drained.ReactorBuilding.SteamGenerator.Water.Float()

@@ -140,7 +140,7 @@ func TestCVCSAutoBoronUnlocksDeepPlateau(t *testing.T) {
 	// integrated linearly in dt; the assertions are wide bands around
 	// the walked plateau, so the widened tick reproduces the
 	// trajectory at one tenth the step count..
-	testDt := 10 * time.Millisecond
+	testDt := 100 * time.Millisecond
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.AutoControl = true
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoBoronControl = true

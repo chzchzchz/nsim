@@ -56,7 +56,7 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 	t.Parallel()
 	// The descent is one coupled maneuver (rod loop, chemistry, dump
 	// modulation) with no passive windows, sampled against measured
-	testDt := 10 * time.Millisecond
+	testDt := 50 * time.Millisecond
 	p := scenario14FullPowerPlant()
 
 	// Reactor-lead power control owns the descent: the operator steps
@@ -101,7 +101,7 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 	// Guards are sampled every checkEvery-th step: the descent takes
 	// minutes while the trip/pressure physics move on second scales,
 	// so a 200 ms sample rate cannot miss a regime.
-	const checkEvery = 200
+	const checkEvery = 4
 
 	maxDump := 0.0
 	prevPF := fissionFraction(rpv.FissionPower)
