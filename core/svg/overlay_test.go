@@ -161,7 +161,7 @@ func TestOverlay_Coverage(t *testing.T) {
 	t.Run("generator demand tracks the dispatcher", func(t *testing.T) {
 		p := core.MakePlant()
 		p.TurbineBuilding.Generator.BreakerClosed = true
-		p.ReactorBuilding.Grid.LoadDemand = 0.7
+		p.ReactorBuilding.Grid.LoadDemand = 700
 		assert.Regexp(t, `\d+ MW / dem 700 MW`, renderPlant(t, &p))
 	})
 

@@ -1062,11 +1062,13 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-	// Dispatcher load reference for this unit in MW against
-	// the 1000 MW machine rating. Plant.Step normalizes it into
-	// Turbine.LoadDemandRef, which the electro-hydraulic control
-	// ramps Setpoint toward while the unit is synchronized; the
-	// operator panel writes the same reference directly:
+	// Dispatcher load reference for this unit, stored in MW
+	// (bridge kind "mw"): Set writes the entered dispatcher MW
+	// into Grid.LoadDemand and Get reads it back unchanged.
+	// Plant.Step normalizes it into Turbine.LoadDemandRef, which
+	// the electro-hydraulic control ramps Setpoint toward while
+	// the unit is synchronized; the operator panel writes the
+	// same reference directly:
 	//   "...comparing turbine speed and first-stage pressure with
 	//    reference values established by the dispatcher or
 	//    initiated at the operator's panel."

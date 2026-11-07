@@ -1957,10 +1957,10 @@ func (p *Plant) Step(dt time.Duration) {
 	p.nextPlant.ReactorBuilding.Grid = p.ReactorBuilding.Grid.Step(dt)
 	p.TurbineBuilding.Turbine.GridFrequency = p.nextPlant.ReactorBuilding.Grid.Frequency
 	// Dispatch demand reaches the turbine only under the operator's
-	// dispatching permissive, converted once from MW to the
-	// Setpoint-scale fraction here: LoadDemand is stored in MW
-	// (bridge kind "mw") against TurbineRatedkW, so 600 MW on the
-	// 1000 MW machine lands at 0.6.
+	// dispatching permissive. LoadDemand is stored in MW (bridge
+	// kind "mw"); the conversion to the Setpoint-scale fraction is
+	// this division and only this division, so 600 MW on the 1000 MW
+	// machine lands at 0.6.
 	// "to act as a permissive network so that unsafe demands from
 	// the computer [...]"
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:10-12

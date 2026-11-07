@@ -1,4 +1,4 @@
-Dispatcher load demand on the unit as a fraction of rated electrical output. The turbine load reference latches this value each step, and the governor drives the governing valves toward whatever steam flow delivers it.
+Dispatcher load demand on the unit in MW against the 1000 MW rating. Stored in MW (bridge kind "mw") and converted once at the Plant.Step boundary into the Setpoint-scale fraction the turbine load reference latches each step; the governor drives the governing valves toward whatever steam flow delivers it.
 
 The reference design computes control signals comparing turbine speed and first-stage pressure against reference values established by the dispatcher or initiated at the operator's panel. A remote dispatch interface guards this boundary in real plants: it feeds the network-dispatching computer the plant's computed power capability, but acts as a permissive network so that unsafe demands cannot be executed - operator dispatching permission and safety limits both gate what reaches the turbine.
 

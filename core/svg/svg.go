@@ -2070,9 +2070,8 @@ var readouts = []readoutDef{
 		},
 		text: func(p *core.Plant) string {
 			mw := float64(p.TurbineBuilding.Generator.RealPower) / core.WattsPerMW
-			demand := p.ReactorBuilding.Grid.LoadDemand *
-				float64(core.TurbineRatedkW) / core.WattsPerMW
-			return fmt.Sprintf("%.0f MW / dem %.0f MW", mw, demand)
+			return fmt.Sprintf("%.0f MW / dem %.0f MW",
+				mw, p.ReactorBuilding.Grid.LoadDemand)
 		},
 	},
 	{
