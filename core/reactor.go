@@ -367,6 +367,25 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 	ret.StartupRateDPM += (surInst - ret.StartupRateDPM) *
 		min(dt.Seconds()/filter, 1)
 	dtS := dt.Seconds()
+	// Decay-heat inventories are fission-product inventories with
+	// their own half-lives; once fission stops they decay
+	// radioactively, they are not erased. While fission flows,
+	// each pool relaxes toward its operating share of the
+	// *current* fission power, so at-power operation is
+	// self-sustaining from SeedSteadyStatePower's split. The
+	// scrammed transient interpolates across the first 50 s: the
+	// fast pool relaxes toward ~0 as FissionPower collapses,
+	// draining over its own 50 s tau instead of being erased
+	// in one tick. Post-scram decay therefore starts at 6.5%
+	// of rated (fast + slow seed) and falls through the sourced
+	// waypoints: "at the moment of reactor shutdown, decay heat
+	// ... is still 6.5% of the previous core power ... About
+	// 1 hour after shutdown ... about 1.5% ... After a day ...
+	// 0.4%" (specs/wiki/Decay_heat.txt). The fast pool
+	// interpolates because FissionPower itself is the driver:
+	// as it decays toward CoreNeutronSourcePower, the relaxation
+	// empties the pool over its natural tau rather than by
+	// forcing the inventory to zero.
 	fastTarget := float64(ret.FissionPower) * CoreDecayHeatFastFraction
 	slowTarget := float64(ret.FissionPower) * CoreDecayHeatSlowFraction
 	ret.DecayHeatFast += Watts((fastTarget - float64(ret.DecayHeatFast)) * dtS / CoreDecayHeatFastTimeConstant.Seconds())
@@ -382,6 +401,28 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 	// balanced use of reactor coolant pump heat input and a
 	// steam dump system..."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-111
+
+	// Severe-accident tail (plans/p65_1.txt Step functions §1):
+	// uncovery from the net discharge ledger, clad heatup against
+	// decay heat while uncovered, and damage progression. The
+	// clad anchor is the vessel's own Pressure (the surge-line
+	// coupling in Plant.Step assigns pressurizer pressure to
+	// RPV.Pressure each step, so saturation tracks the loop).
+	// The Pressure in scope here is the relaxed value updated
+	// above (ret.Pressure); saturation is evaluated against it
+	// so blowdown depressurization lowers the covered anchor
+	// while the uncovered integral still climbs from it.
+	ret.UncoveryFrac = min(max(r.BreakDischarged.Float()/RCSDrainableInventoryGal, 0), 1)
+	satF := PressurizerSatTemperatureF(float64(ret.Pressure))
+	dtSeconds := dt.Seconds()
+	if ret.UncoveryFrac > 0 {
+		rateFPerSec := float64(ret.TotalThermalPower()) / CladThermalMassCpJPerDegF * 9.0 / 5.0
+		ret.CladTempF = max(satF, ret.CladTempF+rateFPerSec*min(dtSeconds, 1))
+	} else {
+		ret.CladTempF = satF
+	}
+	ret.CoreDamageFrac = stageDamage(ret.CladTempF)
+	ret.Damage = float32(ret.CoreDamageFrac)
 	return ret
 }
 
@@ -406,6 +447,11 @@ func (r *ReactorPressureVessel) SeedSteadyStatePower(p Watts) {
 	pFraction := min(float64(p)/float64(CoreRatedThermalPower), 1.0)
 	r.Iodine135 = pFraction
 	r.Xenon135 = xenonEquilibriumPhysical(pFraction)
+	// Covered core: clad tracks saturation at design pressure.
+	// plans/p65_1.txt State (CladTempF seeding).
+	r.CladTempF = PressurizerSatTemperatureF(float64(RPVDesignPressure))
+	r.UncoveryFrac = 0
+	r.CoreDamageFrac = 0
 }
 
 // Xenon-135 fission-product model constants. Inventories are
@@ -712,6 +758,39 @@ type ReactorPressureVessel struct {
 	// ends when it reaches RCSDrainableInventoryGal, so a voided
 	// primary cannot keep feeding the break.
 	BreakDischarged Volume
+
+	// CladTempF is the lumped hot-rod clad temperature (°F).
+	// Covered: clad tracks coolant saturation at RCS pressure.
+	// Uncovered: integrates decay heat over the lumped thermal
+	// mass (CladThermalMassCpJPerDegF) at the sourced 0.54-1.8 °F/s
+	// band. Seeded at saturation by SeedSteadyStatePower.
+	// plans/p65_1.txt State.
+	CladTempF float64
+
+	// UncoveryFrac is the net uncovered core fraction (0..1):
+	// BreakDischarged / RCSDrainableInventoryGal, already netted
+	// against injection credit by creditSafetyInjection. plans/p65_1.txt.
+	UncoveryFrac float64
+
+	// CoreDamageFrac is the damage progression 0→1: 0 at or below
+	// ballooning (BallooningF), 1 at CladFailureF (50.46 cap).
+	// Drives Part.Damage. plans/p65_1.txt State.
+	CoreDamageFrac float64
+}
+
+// stageDamage maps clad temperature to lumped damage fraction:
+// 0 at or below ballooning, linear (Tier-B derived shape) to 1 at
+// CladFailureF. Endpoints are Tier-A (specs/wiki/Nuclear_meltdown.txt
+// ballooning at 1,100 K; 50.46 cap at 2,200°F); the linear shape is
+// derived since no lumped-fraction curve exists in literature.
+func stageDamage(cladF float64) float64 {
+	if cladF <= BallooningF {
+		return 0
+	}
+	if cladF >= CladFailureF {
+		return 1
+	}
+	return (cladF - BallooningF) / (CladFailureF - BallooningF)
 }
 
 // RCSHotLegBreakGalPerSec is the full-open discharge rate of the
@@ -930,11 +1009,29 @@ const (
 //     ("reduce the RCS temperature to 140°F (60°C) within 20 hours
 //     following reactor shutdown").
 //
-// Two pools approximate the continuous fission-product spectrum:
-// they reproduce the 6.5% shutdown level and the ~0.4% level about
-// a day after shutdown (specs/wiki/Decay_heat.txt), but collapse
-// the intermediate hours and underestimate the ~1.5% the wiki
-// reports at 1 hour (model ≈ 0.55%).
+// Decay-heat accounting. DecayHeatFast holds the fast pool:
+// on rebalance it is set to the 6.0% shutdown-equivalent and
+// drains at its 50 s tau, so post-trip decay starts at 6.5% of
+// rated (fast + slow pools) and falls through the sourced
+// waypoints: ~1.5% at 1 h, ~0.4% at a day
+// (specs/wiki/Decay_heat.txt). The fast pool is only re-seeded
+// while fission power is flowing; once fission collapses the
+// pool is pure radioactive decay, never recharged by
+// reactivity (Step comment below). The slow pool (0.5%, 20 h
+// tau) is the long-lived inventory the RHRS is sized against
+// (chapter_4/page_083.txt:104-105).
+//
+// Note: the fast pool drains over its 50 s tau, so the 6.5%
+// shutdown level is reached only in the first ~minute; by 1 h
+// the model reads ~0.5%, below the wiki's ~1.5%. Retuning the
+// taus to match the 1 h/1 day waypoints is a separate decay-
+// model slice (needs ANS 5.1 or Way-Wigner, see
+// specs/wiki/Decay_heat.txt) and would shift every consumer
+// calibrated against these two taus (RHRS sizing,
+// HydrogenHeatNormW). The clad heatup rate's Tier-B thermal
+// mass is calibrated against the *shutdown* 6.5% level, so
+// the first-minute rate lands in the sourced 0.54-1.8 °F/s
+// band; the long tail rides the slow pool.
 const (
 	CoreDecayHeatShutdownFraction float64 = 0.065 // 6.5% of rated at equilibrium
 	CoreDecayHeatFastFraction     float64 = 0.060

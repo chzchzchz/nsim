@@ -1996,4 +1996,37 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Severe-accident core state (plans/p65_1.txt State): clad
+	// temperature, net uncovery, and damage progression are
+	// physics outputs, not operator levers. "In the unlikely event
+	// of a LOCA, the SIS is designed to limit increases in fuel
+	// clad temperatures" (specs/the_westinghouse_pressurized_water_react/chapter_5/page_094.txt:51-53).
+	m["ReactorBuilding/ReactorPressureVessel/CladTemp"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "CladTemp",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.ReactorBuilding.ReactorPressureVessel.CladTempF)
+		},
+	}
+	m["ReactorBuilding/ReactorPressureVessel/Uncovery"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "Uncovery",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				100.0*p.ReactorBuilding.ReactorPressureVessel.UncoveryFrac)
+		},
+	}
+	m["ReactorBuilding/ReactorPressureVessel/Damage"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "Damage",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				float64(p.ReactorBuilding.ReactorPressureVessel.Damage)*100.0)
+		},
+	}
+
 }

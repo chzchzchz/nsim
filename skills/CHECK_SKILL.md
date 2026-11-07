@@ -387,6 +387,14 @@ Checks:
   dead state wearing a live name. Classify before deleting — design
   parameters deserve readers back, TODO placeholders are plan anchors,
   production-written/test-read fields may be deliberate seams.
+- **Pair every new stored physics field with its bridge sensor at
+  birth.** A field the sim integrates but no SensorMap entry exposes
+  is invisible to the web UI and strategy layer while the planner
+  never greps bridge_reactor.go: the "Damage 0 at any accident
+  severity" failure mode. Audit before declaring done: grep the new
+  field names in the bridge file and confirm a sensor entry plus a
+  GetSensorMap read-back test exists for each; the plan may own the
+  delays (p65_3 owned bridge), but the checklist must name them.
 
 ## 6. Comments and citations
 

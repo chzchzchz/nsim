@@ -5195,6 +5195,28 @@ const (
 	// activate; below (setpoint + hysteresis) they stay
 	// active to prevent cycling near the setpoint.
 	HydrogenRecombinerHysteresis float64 = 0.5
+
+	// BallooningF is the lumped fuel-ballooning onset: the
+	// "first stage of core damage" at ~1,100 K (1,520 °F).
+	// plans/p65_1.txt Tier-A (sourced from
+	// specs/wiki/Nuclear_meltdown.txt, Kuan/Haskin).
+	BallooningF = 1520.0
+
+	// CladFailureF is the 10 CFR 50.46 limit (a) peak-clad
+	// temperature cap: "Peak clad temp. < 2200°F"
+	// (specs/westinghouse_tech_manual/chapter_2/page_0209.txt:25-30).
+	// Owned by p65_1 (plans/p65_1.txt); the CoreDamageFrac
+	// saturation point reuses it. plans/p65_3.txt must not
+	// redeclare it.
+	CladFailureF = 2200.0
+
+	// CladThermalMassCpJPerDegF is the lumped hot-rod thermal
+	// mass (J/°F) behind the clad-heatup integrator. Tier-B
+	// derived (plans/p65_1.txt Heating law): post-trip decay
+	// heat 6.5% × 3,800 MWt ≈ 247 MW divided by the sourced
+	// pre-damage heatup band midpoint (~0.65 K/s, ~1.17 °F/s;
+	// specs/wiki/Nuclear_meltdown.txt) gives ≈2.5e8 J/°F.
+	CladThermalMassCpJPerDegF = 2.5e8
 )
 
 // ReactorProtectionSystem models the Reactor Protection System
