@@ -3,6 +3,7 @@ package svg
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/chzchzchz/nsim/core"
@@ -19,7 +20,9 @@ import (
 //	blue   - feedwater / cooling water (circulating water shares
 //	         the feedwater hue: both are liquid water supplies,
 //	         while the condenser steam/condensate sides stay brown)
-//	green  - service water
+//	green  - service water (CCWS barrier)
+//	sis    - safety injection / residual heat removal (purple)
+//	cvcs   - chemical and volume control (light blue)
 //	black  — anything else
 //
 // Spec justification:
@@ -55,32 +58,56 @@ func DrawPipe(fromX, fromY, toX, toY float64, colour string, elbowed bool) strin
 }
 
 // pipeColours lists every colour ColourForEdge can return so the
-// document defines one flow-arrow marker per colour.
-var pipeColours = []string{"red", "blue", "brown", "black"}
+// document defines one flow-arrow marker per colour. Keys are the
+// names used in stroke attributes; values are the hex colours.
+// marker-mid is intentionally absent: direction is a single
+// marker-end per polyline (arrow blobs on short legs otherwise).
+var pipeColours = map[string]string{
+	"red":   "red",
+	"blue":  "blue",
+	"brown": "brown",
+	"ccws": "#2e7d32",
+	"sis":   "#7030a0",
+	"cvcs":  "#9fc5e8",
+	"black": "black",
+}
 
 // PipeArrowMarkers emits one arrowhead <marker> per pipe colour.
-// Polylines attach them with marker-mid so arrowheads appear on
-// every interior vertex, oriented along the local segment.
 // markerWidth/Height 3.2 on the shared 10-unit viewBox draws each
 // head about 6 px long at the standard 2 px stroke - small enough
 // to read as direction cues rather than landmarks.
 func PipeArrowMarkers() string {
 	var b strings.Builder
-	for _, c := range pipeColours {
+	names := make([]string, 0, len(pipeColours))
+	for name := range pipeColours {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		fill := pipeColours[name]
 		fmt.Fprintf(&b,
 			`<marker id="arrow-%s" viewBox="0 0 10 10" refX="9" refY="5" `+
 				`markerWidth="3.2" markerHeight="3.2" orient="auto-start-reverse">`+
 				`<path d="M 0 0 L 10 5 L 0 10 z" fill="%s"/></marker>`+"\n",
-			c, c)
+			name, fill)
 	}
 	return b.String()
 }
 
+// pipeStrokeHex resolves a ColourForEdge name to the stroke colour
+// string used in markup; unknown names pass through.
+func pipeStrokeHex(colour string) string {
+	if hex, ok := pipeColours[colour]; ok {
+		return hex
+	}
+	return colour
+}
+
 // DrawPipePath renders dot's routed polyline for one edge as a
 // single SVG polyline so pipes follow graphviz's routing instead
-// of cutting straight across the drawing. marker-mid drops a flow
-// arrowhead on every interior vertex, oriented along the local
-// segment direction.
+// of cutting straight across the drawing. Direction is a single
+// marker-end arrowhead; interior marker-mid is dropped so short
+// legs do not read as solid arrow blobs (see plan p66 rev 2).
 func DrawPipePath(pts []Anchor, colour string) string {
 	var b strings.Builder
 	b.WriteString(`<polyline points="`)
@@ -93,9 +120,9 @@ func DrawPipePath(pts []Anchor, colour string) string {
 	// vector-effect keeps the stroke crisp when the host page
 	// scales g#viewport for pan/zoom. Width encodes system class
 	// per pipeWeightByColour (svg.go): primary > secondary > aux.
-	fmt.Fprintf(&b, `" fill="none" stroke="%s" stroke-width="%.1f" `, colour, pipeWeightByColourFor(colour))
+	fmt.Fprintf(&b, `" fill="none" stroke="%s" stroke-width="%.1f" `, pipeStrokeHex(colour), pipeWeightByColourFor(colour))
 	fmt.Fprintf(&b, `vector-effect="non-scaling-stroke" `)
-	fmt.Fprintf(&b, `marker-mid="url(#arrow-%s)"/>`, colour)
+	fmt.Fprintf(&b, `marker-end="url(#arrow-%s)"/>`, colour)
 	return b.String()
 }
 
@@ -228,6 +255,11 @@ func projectAnchorDist(pts []Anchor, a Anchor) float64 {
 // Spec: primary coolant steel in chapter_3/page_071.txt:93-96;
 // main steam stop/check valves in chapter_15/page_214.txt:70-81.
 func ColourForEdge(fromID, toID string) string {
+	// Per-system colours so CVCS/SIS/RHRS/CCWS/EFWS flows read as
+	// systems, not "Blocked/other" (plan p66). Order matters: more
+	// specific systems win over generic buckets (e.g. CCWSHX->PRT
+	// is green, not black; EFWSTankA->SG is blue feedwater, not
+	// generic SG blue).
 	switch {
 	case fromID == "CoolingTower" || toID == "CoolingTower":
 		// Condenser-tube circulating water is cooling water, not
@@ -236,6 +268,21 @@ func ColourForEdge(fromID, toID string) string {
 		//    sink for the power plant by providing large amounts of
 		//    cooling water for the main condensers."
 		//   specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:10-13
+		return "blue"
+	case isCVCS(fromID) || isCVCS(toID):
+		return "cvcs"
+	case isCCWS(fromID) || isCCWS(toID):
+		return "ccws"
+	case isSIS(fromID) || isSIS(toID):
+		return "sis"
+	case isEFWS(fromID) || isEFWS(toID):
+		// EFWS pumps and tanks deliver feedwater to the SGs:
+		//   "The primary function of the Emergency Feedwater
+		//    System (EFWS) ... is to supply feedwater to the
+		//    steam generators following accident or transient
+		//    conditions when the main feedwater system is not
+		//    available."
+		//   specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:109-113
 		return "blue"
 	case fromID == "RPV" || toID == "RPV" ||
 		fromID == "Pressurizer" || toID == "Pressurizer" ||
@@ -259,6 +306,66 @@ func ColourForEdge(fromID, toID string) string {
 		return "blue"
 	}
 	return "black"
+}
+
+// isCVCS reports whether a node id belongs to the chemical and
+// volume control letdown/charging loop. Spec:
+//   "Letdown water leaves the RCS and flows through the shell side
+//    of the regenerative heat exchanger where it gives up its heat
+//    to makeup water being returned to the RCS."
+//   specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:6-10
+func isCVCS(id string) bool {
+	switch id {
+	case "VCT", "ChgPump", "BTRS", "BTRSPUMP", "BRS":
+		return true
+	}
+	return false
+}
+
+// isCCWS reports whether a node id belongs to component cooling.
+// Spec:
+//   "The Component Cooling Water System (CCWS) provides a
+//    continuous supply of cooling water to plant components which
+//    handle potentially radioactive fluids. In doing so it forms
+//    an intermediate barrier between these potentially
+//    radioactive systems and the Service Water System"
+//   specs/the_westinghouse_pressurized_water_react/chapter_5/page_102.txt:46-55
+func isCCWS(id string) bool {
+	switch id {
+	case "CCWSSurge", "CCWSPump", "CCWSHX":
+		return true
+	}
+	return false
+}
+
+// isSIS reports whether a node id belongs to safety injection or
+// residual heat removal. Spec:
+//   "followed by the HHSI and RHR pumps, all discharging into the
+//    cold legs of the RCS. The HHSI and RHR pumps are aligned to
+//    take suction directly from the RWST."
+//   specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:22-26
+func isSIS(id string) bool {
+	switch id {
+	case "RWST", "HHSI", "RHRS_A", "RHRS_B", "SISAccumulators",
+		"Sump", "InjectionSink", "CSSTank", "SATTank", "CSSPump",
+		"CIS", "RABYP", "RBBYP", "RAS1", "RAS2", "RBS1", "RBS2",
+		"EAMFV", "EATSA", "EAREC", "EBMFV", "EBTSA", "EBREC":
+		return true
+	}
+	return false
+}
+
+// isEFWS reports whether a node id belongs to emergency feedwater.
+func isEFWS(id string) bool {
+	switch id {
+	case "EFWSTank", "EFWSTankA", "EFWSTankB", "EAMD", "EATD", "EBMD", "EBTD",
+		"DieselAFWPump", "MotorAFWPump", "TurbineAFWPump",
+		"CSTValve", "CSTValve_2", "CSTValve_3",
+		"ServiceWaterValve", "ServiceWaterValve_2", "ServiceWaterValve_3",
+		"Valve_2", "Valve_3", "Valve_4", "Valve_5":
+		return true
+	}
+	return false
 }
 
 // ValveKindForEdge maps a graph edge's valve pointer to a Valve

@@ -24,8 +24,13 @@ import (
 type Layout struct {
 	Pos    map[string]Anchor
 	Routes map[string][]Anchor
-	Scale  float64
-	DPI    float64
+	// RoutesByChain carries one stitched polyline per edge hop
+	// chain (e.g. "EFWSTankA>Valve_2>SG"), so parallel edges
+	// sharing a From>To pair keep distinct geometries instead
+	// of colliding on the Routes key.
+	RoutesByChain map[string][]Anchor
+	Scale         float64
+	DPI           float64
 }
 
 // EmptyLayout returns a Layout whose Pos map is unset; callers
@@ -33,10 +38,11 @@ type Layout struct {
 // available.
 func EmptyLayout() *Layout {
 	return &Layout{
-		Pos:    make(map[string]Anchor),
-		Routes: make(map[string][]Anchor),
-		Scale:  1.0,
-		DPI:    layoutDPI,
+		Pos:           make(map[string]Anchor),
+		Routes:        make(map[string][]Anchor),
+		RoutesByChain: make(map[string][]Anchor),
+		Scale:         1.0,
+		DPI:           layoutDPI,
 	}
 }
 
@@ -194,6 +200,8 @@ var clusterFor = map[string]string{
 
 	// Auxiliary (EFWS, CCWS, RHRS, BRS).
 	"EFWSTank":    "cluster_auxiliary",
+	"EFWSTankA":   "cluster_auxiliary",
+	"EFWSTankB":   "cluster_auxiliary",
 	"CCWSHX":      "cluster_auxiliary",
 	"RHRS_A":      "cluster_auxiliary",
 	"RHRS_B":      "cluster_auxiliary",
@@ -227,6 +235,13 @@ var clusterFor = map[string]string{
 // connected and the guard skips them. The list stays nil;
 // only truly isolated extras added later would need docking.
 var dockingExtrasForRPV = []string(nil)
+
+// auxConstraintEdges reserved for future invisible constraint
+// edges. Live EFWS/CCWS placement uses cluster membership +
+// layoutRowGroups subsystem ordering: invisible edges between
+// connected nodes create cycles that break dot's rank repair
+// (moving Turbine/Generator by 500px, probed).
+var auxConstraintEdges = [][2]string{}
 
 // BuildDot generates a DOT description of the plant graph with
 // layout clusters, node sizes, and optional pinned positions.
@@ -391,8 +406,16 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 		}
 		b.WriteString("  }\n")
 	}
+
 	for _, e := range layoutRankEdges(rows) {
 		fmt.Fprintf(&b, "  %q -> %q [style=invis];\n", e[0], e[1])
+	}
+	for _, e := range auxConstraintEdges {
+		// Only emit when both endpoints exist in the DOT;
+		// extraNodes include ids that later gain real edges.
+		if mainNodes[e[0]] && mainNodes[e[1]] {
+			fmt.Fprintf(&b, "  %q -> %q [style=invis];\n", e[0], e[1])
+		}
 	}
 	// Dock safety-system extras to the RPV per Fig 3-1 injection
 	// topology; pinned layouts (pos != nil) skip ranks in the
@@ -1037,10 +1060,11 @@ func ComputeLayout(p *core.Plant) (*Layout, error) {
 	}
 	t := computeFit(wIn, hIn)
 	layout := &Layout{
-		Pos:    make(map[string]Anchor, len(posIn)),
-		Routes: make(map[string][]Anchor, len(g.Edges)),
-		Scale:  t.scale,
-		DPI:    layoutDPI,
+		Pos:           make(map[string]Anchor, len(posIn)),
+		Routes:        make(map[string][]Anchor, len(g.Edges)),
+		RoutesByChain: make(map[string][]Anchor, len(g.Edges)),
+		Scale:         t.scale,
+		DPI:           layoutDPI,
 	}
 	for id, aIn := range posIn {
 		a := t.point(aIn)
@@ -1059,10 +1083,30 @@ func ComputeLayout(p *core.Plant) (*Layout, error) {
 		transformed[key] = out
 	}
 	hops := assignEdgeHops(g)
+	// Route vertices are clamped to the same margin box as node
+	// centers so a spline cannot leave the viewBox (e.g. the
+	// -10.7,528.7 RWST→InjectionSink vertex found by the raster
+	// audit). Vertices are clipped, not rerouted: graphviz owns
+	// routing, this only enforces containment.
+	for key, pts := range transformed {
+		for i := range pts {
+			pts[i].X = clampRange(pts[i].X, layoutMargin, DocumentWidth-layoutMargin)
+			pts[i].Y = clampRange(pts[i].Y, layoutMargin, DocumentHeight-layoutMargin)
+		}
+		transformed[key] = pts
+	}
+	// Rebuild each ORIGINAL edge's polyline by concatenating the
+	// routed segments through its hop chain. The same {from,to}
+	// may appear twice in the graph (parallel EFWS legs); both
+	// edges are rendered (the map key collides, so the second
+	// skips) and the renderer dedupes by route signature — dot
+	// gives parallel edges distinct segments via their distinct
+	// hop chains, so collapsing on key alone would hide one leg.
 	for i, e := range g.Edges {
 		key := e.From + ">" + e.To
 		chain := append([]string{e.From}, hopIDs(hops[i])...)
 		chain = append(chain, e.To)
+		chainKey := strings.Join(chain, ">")
 		var route []Anchor
 		complete := true
 		for j := 0; j+1 < len(chain); j++ {
@@ -1077,7 +1121,14 @@ func ComputeLayout(p *core.Plant) (*Layout, error) {
 			route = append(route, seg...)
 		}
 		if complete && len(route) >= 2 {
-			layout.Routes[key] = route
+			// Per-chain store: parallel edges keep distinct
+			// geometries. Routes (legacy) keeps the first
+			// route per From>To for callers that only know
+			// the pair.
+			layout.RoutesByChain[chainKey] = route
+			if _, dup := layout.Routes[key]; !dup {
+				layout.Routes[key] = route
+			}
 		}
 	}
 	return layout, nil

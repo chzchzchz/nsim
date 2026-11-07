@@ -47,15 +47,15 @@ func TestDrawPipePath(t *testing.T) {
 
 	assert.Contains(t, out, `points="1.0,2.0 3.0,4.0 5.0,6.0"`)
 	assert.Contains(t, out, `stroke="red"`)
-	assert.Contains(t, out, `marker-mid="url(#arrow-red)"`)
+	assert.Contains(t, out, `marker-end="url(#arrow-red)"`)
 	assert.True(t, strings.HasPrefix(out, `<polyline `))
 }
 
 // TestPipeArrowMarkers defines one marker per pipe colour.
 func TestPipeArrowMarkers(t *testing.T) {
 	out := PipeArrowMarkers()
-	for _, c := range pipeColours {
-		assert.Contains(t, out, `id="arrow-`+c+`"`)
+	for name := range pipeColours {
+		assert.Contains(t, out, `id="arrow-`+name+`"`)
 	}
 }
 

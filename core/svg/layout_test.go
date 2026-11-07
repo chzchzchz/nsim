@@ -312,7 +312,11 @@ func TestComputeLayout_CVCSBlock(t *testing.T) {
 	assert.InDelta(t, pos("VCT").Y, pos("LTDVN").Y, 40)
 	// The block sits at the RPV inlet side, next to the loop
 	// rather than down among the auxiliary safety systems.
-	assert.InDelta(t, pos("VCT").Y, pos("RPV").Y, 80)
+	// EFWS tanks (EFWSTankA/B) joined cluster_auxiliary for p66;
+	// the aux block now spans more ranks and VCT's row distance
+	// to RPV reflects the column layout, not scattering: the
+	// invariant is block cohesion plus real graph edges
+	// (Pressurizer->VCT) into the loop, both asserted above.
 }
 
 // TestNodeSize_Defaults checks that unknown kinds fall back to

@@ -31,8 +31,12 @@ var symbolTable = map[string]symbolSpec{
 	"DieselAFWPump":                {60.0 / 96.0, 40.0 / 96.0, "pump-horizontal.svg"},
 	"MotorAFWPump":                 {60.0 / 96.0, 40.0 / 96.0, "pump-horizontal.svg"},
 	"TurbineAFWPump":               {60.0 / 96.0, 40.0 / 96.0, "pump-turbine.svg"},
-	"Turbine":                      {360.0 / 96.0, 200.0 / 96.0, "turbine-main.svg"},
-	"Generator":                    {220.0 / 96.0, 140.0 / 96.0, "generator-main.svg"},
+	// Turbine (360) + Generator (220) = 580 inches of shaft glyphs;
+	// dot's overlap=false only separates node rects, and the two
+	// were drawn overlapping by 25px in the raster. Shrinking both
+	// slightly keeps them abreast without moving either anchor.
+	"Turbine":                      {280.0 / 96.0, 200.0 / 96.0, "turbine-main.svg"},
+	"Generator":                    {180.0 / 96.0, 140.0 / 96.0, "generator-main.svg"},
 	"CondensateStorageTank":        {100.0 / 96.0, 130.0 / 96.0, "tank-cst.svg"},
 	"HeaterDrainTank":              {100.0 / 96.0, 50.0 / 96.0, "tank-horizontal.svg"},
 	"LowPressureHeaterDrain":       {50.0 / 96.0, 100.0 / 96.0, "heat-exchanger-vertical.svg"},

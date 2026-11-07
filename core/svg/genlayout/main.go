@@ -54,6 +54,21 @@ func main() {
 		fmt.Fprintf(&b, "\t\t%q: {%s},\n", key, strings.Join(parts, ", "))
 	}
 	b.WriteString("\t},\n")
+	chainKeys := make([]string, 0, len(layout.RoutesByChain))
+	for key := range layout.RoutesByChain {
+		chainKeys = append(chainKeys, key)
+	}
+	sort.Strings(chainKeys)
+	b.WriteString("\tRoutesByChain: map[string][]Anchor{\n")
+	for _, key := range chainKeys {
+		pts := layout.RoutesByChain[key]
+		parts := make([]string, len(pts))
+		for i, pt := range pts {
+			parts[i] = fmt.Sprintf("{X: %s, Y: %s}", fnum(pt.X), fnum(pt.Y))
+		}
+		fmt.Fprintf(&b, "\t\t%q: {%s},\n", key, strings.Join(parts, ", "))
+	}
+	b.WriteString("\t},\n")
 	fmt.Fprintf(&b, "\tScale: %s,\n", fnum(layout.Scale))
 	fmt.Fprintf(&b, "\tDPI: %s,\n", fnum(layout.DPI))
 	b.WriteString("}\n\n")

@@ -859,12 +859,22 @@ func (r *renderer) scale() float64 {
 	return 1.0
 }
 
+// minSymbolUnits is the legibility floor for drawn symbols (p66).
+// Below this, pumps/valves read as specks in the raster. Scaling is
+// uniform (aspect preserved), never per-axis clamping.
+const minSymbolUnits = 14.0
+
 // size returns the drawn width/height of a kind's symbol: its
 // nominal footprint scaled to match the spacing graphviz computed.
 func (r *renderer) size(kind string) (float64, float64) {
 	wIn, hIn := nodeSize(kind)
 	s := layoutDPI * r.scale()
-	return wIn * s, hIn * s
+	w, h := wIn*s, hIn*s
+	if m := math.Min(w, h); m > 0 && m < minSymbolUnits {
+		k := minSymbolUnits / m
+		w, h = w*k, h*k
+	}
+	return w, h
 }
 
 // captionMaxUnits is the historical fixed label size; symbol-
@@ -873,8 +883,11 @@ func (r *renderer) size(kind string) (float64, float64) {
 const captionMaxUnits = 10.0
 
 // captionMinUnits keeps shrunken glyphs' labels on the edge of
-// legibility when the viewport is zoomed in.
-const captionMinUnits = 3.5
+// legibility when the viewport is zoomed in. Raised to 5 for p66:
+// at 3.5px readouts (FW 0%, ESF Bus, SWS) were unreadable in the
+// 1200-wide document. Minority readouts that cannot fit become
+// hover-only via the taken-box pass.
+const captionMinUnits = 5.0
 
 // scaledFont sizes symbol-relative text proportionally to the drawn
 // symbol height. Under the generated layout's global scale small
@@ -1141,12 +1154,40 @@ func (r *renderer) routeFor(e core.GraphEdge) ([]Anchor, bool) {
 		}
 		return nil, false
 	}
-	if route, ok := r.l.Routes[e.From+">"+e.To]; ok && len(route) >= 2 {
+	if route, ok := r.routeForEdge(e); ok {
 		return route, true
 	}
 	fw, fh := r.size(r.kindOf(e.From))
 	tw, th := r.size(r.kindOf(e.To))
 	return []Anchor{clipToward(from, to, fw, fh), clipToward(to, from, tw, th)}, true
+}
+
+// pipeRoute resolves an edge indexed in g.Edges to its
+// per-hop-chain stitched geometry (parallel edges keep distinct
+// pipes), falling back to routeFor when the chain route is
+// absent (e.g. layouts without RoutesByChain).
+func (r *renderer) pipeRoute(e core.GraphEdge, idx int, g *core.PlantGraph) ([]Anchor, bool) {
+	if idx >= 0 && idx < len(g.Edges) && g.Edges[idx].From == e.From && g.Edges[idx].To == e.To {
+		hops := assignEdgeHops(g)
+		chain := append([]string{e.From}, hopIDs(hops[idx])...)
+		chain = append(chain, e.To)
+		if route, ok := r.l.RoutesByChain[strings.Join(chain, ">")]; ok && len(route) >= 2 {
+			return route, true
+		}
+	}
+	return r.routeFor(e)
+}
+
+// routeForEdge resolves one graph edge to its stitched route.
+// Parallel edges (same From>To) share the Routes key, so the
+// caller must pass the chaining hops: pipe() passes the edge
+// index's hop ids (see pipeEdge) and this prefers the per-chain
+// geometry, falling back to the legacy From>To route.
+func (r *renderer) routeForEdge(e core.GraphEdge) ([]Anchor, bool) {
+	if route, ok := r.l.Routes[e.From+">"+e.To]; ok && len(route) >= 2 {
+		return route, true
+	}
+	return nil, false
 }
 
 // pipeWater is the visual state of one drawn pipe, decided from
@@ -1262,16 +1303,64 @@ func (r *renderer) placementRoute(
 	return r.routeFor(core.GraphEdge{From: pl.from, To: pl.to})
 }
 
+// valveOnly renders the inline valve glyph for a graph edge
+// without its pipe: used when the pipe geometry is already
+// drawn for a parallel edge (same stitched route via a
+// different hop chain), so each valve keeps its own anchor.
+func (r *renderer) valveOnly(p *core.Plant, g *core.PlantGraph, e core.GraphEdge) string {
+	if e.Valve == nil {
+		return ""
+	}
+	ref, ok := valveHopFor(e)
+	if !ok {
+		return ""
+	}
+	at, okA := r.anchor(ref.id)
+	if !okA {
+		return ""
+	}
+	pts, _ := r.routeFor(e)
+	var deg float64
+	if len(pts) >= 2 {
+		_, deg = routePointAt(pts, projectAnchorDist(pts, at))
+	}
+	return r.valvePartHTML(ref.part, at, deg, ValveKindForEdge(p, e), e.Valve.Open)
+}
+
 // pipe renders one graph edge as dot's routed polyline (or a plain
 // straight line when no route was computed), trimmed so the ends
 // meet the endpoint symbols' boundaries, styled by its water state
 // (see classifyPipe), plus an inline valve anchored at its hop
 // node - rotated to the local segment angle - when the edge
-// carries one.
-func (r *renderer) pipe(p *core.Plant, g *core.PlantGraph, e core.GraphEdge) string {
-	pts, ok := r.routeFor(e)
+// carries one. idx is the edge's index in g.Edges: RoutesByChain
+// is keyed by hop chain (assignEdgeHops order), so parallel
+// edges resolve distinct geometries. routeSignature is now the
+// safety net only: identical geometry from different edges
+// draws its valve glyph only.
+func (r *renderer) pipe(p *core.Plant, g *core.PlantGraph, e core.GraphEdge, seen map[string]bool, idx int) string {
+	pts, ok := r.pipeRoute(e, idx, g)
 	if !ok {
 		return ""
+	}
+	// Cold-leg retarget (p66 plan (c)): SIS/RHR/ChgPump edges
+	// carry InjectionSink as a graph node, but the spec says
+	// they discharge into the cold legs
+	// (chapter_5/page_097.txt:22-26). Draw the final segment to
+	// the RPV anchor (clipped at its boundary), not the wall
+	// sink. Graph semantics unchanged.
+	if e.To == "InjectionSink" {
+		if rpv, okR := r.anchor("RPV"); okR {
+			rw, rh := r.size(r.kindOf("RPV"))
+			pts = append([]Anchor{}, pts...)
+			pts[len(pts)-1] = clipToward(rpv, pts[len(pts)-2], rw, rh)
+		}
+	}
+	if seen != nil {
+		sig := routeSignature(r, e)
+		if seen[sig] {
+			return r.valveOnly(p, g, e)
+		}
+		seen[sig] = true
 	}
 	colour := ColourForEdge(e.From, e.To)
 	var pathFrag string
@@ -1322,6 +1411,25 @@ func snapAngle(deg float64) float64 {
 	return math.Round(deg/45) * 45
 }
 
+// routeSignature identifies a drawn pipe geometry: the From>To
+// layout key plus the exact polyline points. The layout map
+// stores one route per From>To, so parallel edges (two
+// EFWSTankA->SG legs through Valve_2 vs Valve_3) resolve to the
+// same geometry via different hop chains; the signature uses the
+// points themselves so identical-geometry edges dedupe while
+// distinct-route edges keep separate pipes.
+func routeSignature(r *renderer, e core.GraphEdge) string {
+	pts, ok := r.routeFor(e)
+	if !ok || len(pts) < 2 {
+		return e.From + ">" + e.To
+	}
+	var b strings.Builder
+	for _, p := range pts {
+		fmt.Fprintf(&b, "%.1f,%.1f ", p.X, p.Y)
+	}
+	return e.From + ">" + e.To + "|" + b.String()
+}
+
 // pipeWeightByColour attaches line weights to ColourForEdge
 // system classes (piping.go:220-249): red primary, brown
 // secondary (SG→Condenser), black blocked/other. Presentation
@@ -1330,6 +1438,9 @@ var pipeWeightByColour = map[string]float64{
 	"red":   3.0,
 	"brown": 2.0,
 	"blue":  2.0,
+	"ccws": 2.0,
+	"sis":   2.0,
+	"cvcs":  1.5,
 	"black": 1.0,
 }
 
@@ -1562,29 +1673,35 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// CVCS lines); building captions sit at the P&ID margin.
 	writeLegend := func() {
 		const (
-			lx, ly  = 12.0, DocumentHeight - 118.0
+			lx, ly  = 12.0, DocumentHeight - 132.0
 			legFs   = 8.0
 			legRowH = 14.0
 			legW    = 176.0
-			legH    = legRowH*5 + 12.0
+			legH    = legRowH*7 + 12.0
 		)
 		fmt.Fprintf(&b,
 			`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" fill="%s" stroke="%s" stroke-width="1"/>`+"\n",
 			lx, ly, legW, legH, pidBackground, pidBuildingEdge)
 		fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="%.1f" fill="%s">FLOW</text>`+"\n",
 			lx+8, ly+legRowH-2, legFs, pidText)
-		rows := []struct{ colour, label string }{
-			{"red", "RCS primary"},
-			{"brown", "Steam / secondary"},
-			{"blue", "Feed / cooling water"},
-			{cvcsColour, "CVCS system"},
-			{"black", "Blocked / other"},
+		rows := []struct {
+			colour, label string
+			width         float64
+		}{
+			{"red", "RCS primary", 3.0},
+			{"brown", "Steam / secondary", 2.0},
+			{"blue", "Feed / cooling water", 2.0},
+			{cvcsColour, "CVCS system", 1.5},
+			{"#7030a0", "SIS / RHR", 2.0},
+			{"#2e7d32", "CCWS (service water)", 2.0},
+			{"black", "Blocked / other", 1.0},
 		}
+		_ = legH
 		for i, r := range rows {
 			y := ly + legRowH*(float64(i)+1) + 4
 			fmt.Fprintf(&b,
 				`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="%.1f"/>`+"\n",
-				lx+8, y, lx+34, y, r.colour, pipeWeightByColourFor(r.colour))
+				lx+8, y, lx+34, y, r.colour, r.width)
 			fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="%.1f" fill="%s">%s</text>`+"\n",
 				lx+40, y+legFs*0.35, legFs, pidText, html.EscapeString(r.label))
 		}
@@ -1596,7 +1713,22 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 				`width="%.0f" height="%.0f"/>`,
 			sym, cx-w/2, cy-h/2, w, h)
 	}
+	// textTakenPass is the single taken-box list for every <text>
+	// (plan p66 rev 2): building captions, symbol captions, and
+	// live readouts all register here in draw order, so two texts
+	// never stack on the same pixels. There is no per-pass list.
+	// Reads (collisions) drop the text; hover/<title> keeps the
+	// value.
+	var textTaken [][4]float64
 	writeLabel := func(x, y, fs float64, text string) {
+		textW := float64(len(text)) * fs * 0.6
+		box := [4]float64{x - textW/2, y - fs, x + textW/2, y}
+		for _, t := range textTaken {
+			if boxesOverlap(box, t) {
+				return
+			}
+		}
+		textTaken = append(textTaken, box)
 		fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="%.1f" fill="%s" `+
 			`text-anchor="middle">%s</text>`+"\n", x, y, fs, pidText, html.EscapeString(text))
 	}
@@ -1682,7 +1814,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			//    hemispherical top closure and stepped flat
 			//    bottom."
 			//    specs/the_westinghouse_pressurized_water_react/chapter_1/page_025.txt:35-38
-			writeLabel(bx+bw/2, by+18, scaledFont(bh*0.04), buildingLabels[name]+" (hemispherical top)")
+			writeLabel(bx+bw/2, by+40, scaledFont(bh*0.04), buildingLabels[name]+" (hemispherical top)")
 		} else {
 			fmt.Fprintf(&b, `<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" `+
 				`fill="%s" stroke="%s" stroke-width="1.5"/>`+"\n",
@@ -1738,10 +1870,14 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			}
 			fmt.Fprintf(&pp, "%.1f,%.1f", p.X, p.Y)
 		}
+		// River band (p66): a 6px, 0.35-opacity band behind the
+		// intake/CW path (was 22px/0.5, a stripe obscuring
+		// Turbine Building symbols).
 		fmt.Fprintf(&b,
-			`<polyline points="%s" fill="none" stroke="%s" stroke-width="22" stroke-opacity="0.5"/>`+"\n",
+			`<polyline points="%s" fill="none" stroke="%s" stroke-width="6" stroke-opacity="0.35"/>`+"\n",
 			pp.String(), riverColour)
 	}
+
 
 	// Containment internals: spray ring headers (Figure 6-4)
 	// sit in the dome top where the CSS train members rank,
@@ -1766,8 +1902,14 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 
 	// Pipes first so symbols render on top of their process lines.
 	g := p.BuildGraphFor(p)
-	for _, e := range g.Edges {
-		if frag := r.pipe(p, g, e); frag != "" {
+	// seen dedupes pipe geometry: the layout stores one route per
+	// From>To, so parallel edges resolve to identical polyline
+	// points. The first draws pipe+valve; later ones draw only
+	// their own valve glyph (valveOnly), so no physical valve
+	// is lost while no identical polyline is emitted twice.
+	seen := map[string]bool{}
+	for ei, e := range g.Edges {
+		if frag := r.pipe(p, g, e, seen, ei); frag != "" {
 			b.WriteString(frag)
 			b.WriteString("\n")
 		}
@@ -1821,7 +1963,9 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			symBoxes = append(symBoxes, [4]float64{a.X - sw/2, a.Y - sh/2, a.X + sw/2, a.Y + sh/2})
 		}
 	}
-	var captionBoxes [][4]float64
+	// Single taken-box pass shares building captions (already
+	// drawn) and symbol captions; see writeLabel/textTaken above.
+	captionBoxes := textTaken
 	for _, dp := range diagramParts {
 		a, ok := r.anchor(dp.id)
 		if !ok {
@@ -1958,7 +2102,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	}
 
 	// Live overlays: readouts and alarm rings track their symbols.
-	r.writeLiveOverlays(&b, p, alarms)
+	r.writeLiveOverlays(&b, p, alarms, textTaken)
 
 	b.WriteString("</g>\n")
 
@@ -2249,8 +2393,16 @@ var rings = []ringDef{
 // writeLiveOverlays emits per-part live state as <text> elements
 // plus alarm rings. Every overlay tracks its part's laid-out
 // anchor instead of a fixed position.
-func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms []core.Alarm) {
+func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms []core.Alarm, taken [][4]float64) {
 	text := func(a Anchor, dy, fs float64, body string) {
+		textW := float64(len(body)) * fs * 0.6
+		bx := [4]float64{a.X - textW/2, a.Y + dy - fs, a.X + textW/2, a.Y + dy}
+		for _, t := range taken {
+			if boxesOverlap(bx, t) {
+				return
+			}
+		}
+		taken = append(taken, bx)
 		fmt.Fprintf(b,
 			`<text x="%.0f" y="%.0f" font-size="%.1f" `+
 				`text-anchor="middle">%s</text>`+"\n",
@@ -2289,7 +2441,7 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms [
 			}
 		}
 	}
-	var taken [][4]float64
+	// taken is the parameter; readouts append directly.
 	for _, ro := range readouts {
 		if ro.show != nil && !ro.show(p) {
 			continue
@@ -2316,7 +2468,7 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms [
 	// never share the edge.
 	cp := p.ReactorBuilding.ContainmentPressure - core.AtmosphericPressure
 	if cont, ok := r.containmentTop(); ok {
-		text(cont, +8, 8.0, fmt.Sprintf("Cont %.1f psig", float64(cp)))
+		text(cont, +14, 8.0, fmt.Sprintf("Cont %.1f psig", float64(cp)))
 	}
 
 	activeAlarms := map[core.AlarmID]bool{}

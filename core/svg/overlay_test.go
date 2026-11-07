@@ -352,17 +352,21 @@ func TestOverlay_Coverage(t *testing.T) {
 }
 
 // sumpGaugeFills returns the placed (non-symbol-def) Sump part's
-// level-gauge fill rect height for each render. The gauge fill
-// rect is the second <rect> in a class="level-gauge" group
-// (outline first), anchored just after the placed SUMP part's
-// caption text.
+// level-gauge fill rect height for each render. The gauge is the
+// sibling after the placed SUMP data-part group (aria-label SUMP),
+// not the caption text: colliding captions legitimately drop
+// (p66 textTakenPass), so anchoring on caption text is brittle.
 func sumpGaugeFills(t *testing.T, empty, half string) ([]string, []string) {
 	t.Helper()
 	fills := func(out string) []string {
-		idx := strings.LastIndex(out, `>SUMP</text>`)
-		require.Greater(t, idx, 0)
+		body := out
+		if i := strings.Index(body, "</defs>"); i >= 0 {
+			body = body[i:]
+		}
+		m := regexp.MustCompile(`data-part="ReactorBuilding/SafetyInjectionSystem"[^>]*aria-label="SUMP"`).FindStringIndex(body)
+		require.NotNil(t, m)
 		re := regexp.MustCompile(`class="level-gauge">.*?<rect[^>]*height="([0-9.]+)"[^>]*fill="#aad4ff"`)
-		return re.FindStringSubmatch(out[idx:])
+		return re.FindStringSubmatch(body[m[0]:])
 	}
 	return fills(empty), fills(half)
 }
