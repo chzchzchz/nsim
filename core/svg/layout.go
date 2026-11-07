@@ -44,7 +44,6 @@ func EmptyLayout() *Layout {
 // must appear in the P&ID. Adding them to the DOT lets graphviz
 // position them next to their cluster peers.
 var extraNodes = []struct{ id, cluster, kind string }{
-	{"Generator", "cluster_turbine", "Generator"},
 	{"PRT", "cluster_containment", "PressurizerReliefTank"},
 	{"MainFeedValve", "cluster_turbine", "modulating"},
 	{"RCFC_A", "cluster_containment", "RCFCUnit"},
@@ -119,21 +118,19 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	{"DieselB", "cluster_electrical", "DieselGenerator"},
 	{"FuelTankB", "cluster_electrical", "FuelTank"},
 
-	// Spent-fuel pool heat exchanger between the pool pumps.
-	{"SFPHX", "cluster_fuel", "ComponentCoolingWaterSystem"},
-
+	// p63_1: SFPHX, SCCWPump, BTRS are now graph nodes;
+	// removed from extraNodes to avoid double-draw. BTRSPUMP
+	// stays as the hop id on VCT->BTRS (diagramParts kind).
 	// Stator coil cooling water pump for the generator
 	// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:48-61)
 	// and the inverter-fed instrument buses that keep RPS power
 	// through a station blackout
 	// (specs/the_westinghouse_pressurized_water_react/chapter_11/page_167.txt:22-27).
-	{"SCCWPump", "cluster_turbine", "StatorCoolingPump"},
 	{"INVERTER", "cluster_electrical", "InverterBus"},
 
 	// BTRS recirculation: pump routes VCT flow through the
 	// demineralizer beds during boration and dilution
 	// (specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:37-39).
-	{"BTRS", "cluster_auxiliary", "BTRSDemineralizer"},
 	{"BTRSPUMP", "cluster_auxiliary", "BTRSPump"},
 
 	// Moisture separator reheater between the HP/LP turbine
@@ -209,6 +206,12 @@ var clusterFor = map[string]string{
 	"ESF_A": "cluster_electrical",
 	"ESF_B": "cluster_electrical",
 	"Grid":  "cluster_electrical",
+
+	// p63_1 loop nodes.
+	"BTRS":      "cluster_auxiliary",
+	"SFPHX":     "cluster_fuel",
+	"SCCWPump":  "cluster_turbine",
+	"CCWSSurge": "cluster_auxiliary",
 }
 
 // dockingExtrasForRPV are disconnected nodes (graph nodes with no
@@ -219,13 +222,10 @@ var clusterFor = map[string]string{
 // connected[] guard at the emit site, so the list may safely
 // include ids that later gain a real edge.
 //
-// Disconnected graph nodes (in BuildGraphFor, no edges):
-// SISAccumulators, RHRS_A, RHRS_B (core/plant.go:3255,3258-3259).
-// True renderer-only extras (in extraNodes only):
-// RWST, HHSI, ChgPump, BTRS (layout.go extraNodes entries).
-// Since c23b3ec every former entry carries a real edge, so
-// only the truly isolated extras (if any are added later) need
-// docking; the connected[] guard makes stale entries dead code.
+// p63_1: RWST, HHSI, ChgPump, BTRS, SFPHX, SCCWPump, CCWSSurge,
+// Generator, CWP now carry real graph edges, so they are
+// connected and the guard skips them. The list stays nil;
+// only truly isolated extras added later would need docking.
 var dockingExtrasForRPV = []string(nil)
 
 // BuildDot generates a DOT description of the plant graph with
@@ -748,6 +748,25 @@ func pumpHopFor(e core.GraphEdge) (edgeHopRef, bool) {
 		return edgeHopRef{"MotorAFWPump", clusterFor["MotorAFWPump"], "MotorAFWPump", ""}, true
 	case e.From == "TurbineAFWPump" && e.To == "SG":
 		return edgeHopRef{"TurbineAFWPump", clusterFor["TurbineAFWPump"], "TurbineAFWPump", ""}, true
+	// p63_1 hop rows: hop-only pumps (never graph nodes).
+	// Hop vs node split prevents double-draw: these ids are
+	// not in BuildGraphFor as nodes.
+	case e.From == "VCT" && e.To == "InjectionSink":
+		return edgeHopRef{"ChgPump", clusterFor["VCT"], "ChargingPump", ""}, true
+	case e.From == "RWST" && e.To == "InjectionSink":
+		return edgeHopRef{"HHSI", clusterFor["RWST"], "HHSIPump", ""}, true
+	case e.From == "CSSTank" && e.To == "CIS":
+		return edgeHopRef{"CSSPump", clusterFor["CSSTank"], "ContainmentSprayPump", ""}, true
+	case e.From == "CCWSSurge" && e.To == "CCWSHX":
+		return edgeHopRef{"CCWSPump", clusterFor["CCWSSurge"], "ComponentCoolingWaterPump", ""}, true
+	case e.From == "CoolingTower" && e.To == "Condenser":
+		return edgeHopRef{"CWP", "", "CirculatingWaterPump", ""}, true
+	case e.From == "VCT" && e.To == "BTRS":
+		return edgeHopRef{"BTRSPUMP", clusterFor["BTRS"], "BTRSPump", ""}, true
+	case e.From == "SFP" && e.To == "SFPHX":
+		return edgeHopRef{"SFPPA", clusterFor["SFP"], "SpentFuelPoolPump", ""}, true
+	case e.From == "Generator" && e.To == "SCCWPump":
+		return edgeHopRef{"SCCWPump", clusterFor["SCCWPump"], "StatorCoolingPump", ""}, true
 	}
 	return edgeHopRef{}, false
 }
@@ -834,7 +853,10 @@ func valveLabel(v *core.Valve) string {
 	return fmt.Sprintf("valve %.0f%%", v.Open*100)
 }
 
-// pumpLabel returns the edge label text for a pump.
+// pumpLabel returns the edge label text for a pump. Bool-wrapper
+// pumps have no Velocity dynamics (never stepped), so the rpm
+// branch never fires for them; gate on IsRunning() so a
+// running wrapper reads "running", not "starting" forever.
 func pumpLabel(p *core.Pump) string {
 	if p == nil {
 		return ""
@@ -843,6 +865,8 @@ func pumpLabel(p *core.Pump) string {
 	switch {
 	case p.Velocity > 0:
 		state = fmt.Sprintf("running %.0f rpm", p.Velocity)
+	case p.IsRunning():
+		state = "running"
 	case p.Running:
 		state = "starting"
 	}

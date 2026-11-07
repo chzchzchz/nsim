@@ -307,8 +307,16 @@ func TestRiverAndCVCSVisualsRendered(t *testing.T) {
 		"promoted connections still draw polylines")
 
 	// Pumps stream their real graph edges now (RHRS, CCWS).
+	// IsRunning() requires Running && DriveReady (p63_1 fix);
+	// the old test set Running alone and relied on Pump.Running.
 	p2 := core.MakePlant()
 	p2.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Pump.Running = true
+	p2.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Pump.DriveReady = true
+	p2.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.SuctionValves[0].Open = 1
+	p2.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.SuctionValves[1].Open = 1
+	// ReturnFlow is per-step gallons; classifyPipe trusts the
+	// Flow closure (>0) over the pump latch alone.
+	p2.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.ReturnFlow = core.Volume{Val: 1, Unit: u.Gallon}
 	assert.GreaterOrEqual(t, strings.Count(renderPlant(t, &p2), `class="flow"`),
 		strings.Count(out, `class="flow"`)+1,
 		"an RHR pump streams its own RCS tie line")
@@ -329,4 +337,61 @@ func TestRiverAndCVCSVisualsRendered(t *testing.T) {
 		`<g data-part="AuxiliaryBuilding/ChemicalVolumeControlSystem"[^>]*transform="translate\(`)
 	assert.Positive(t, len(seated.FindAllString(out, -1)),
 		"expected the letdown valve seated on the CVCS line")
+}
+
+// TestPumpHop_DeadDriveNotFlowing (p63_1, CHECK_SKILL §3): classifyPipe
+// must gate on Pump.IsRunning(), not Pump.Running. A bool-wrapper pump
+// with Running latched but DriveReady=false reads pipeWet/pipeEmpty,
+// never pipeFlowing, even though the Flow closure may be positive.
+func TestPumpHop_DeadDriveNotFlowing(t *testing.T) {
+	wetHigh := wetNode(500, 900)
+	deadDrive := core.GraphEdge{
+		From: "F", To: "T",
+		Pump: &core.Pump{Running: true, DriveReady: false},
+		Flow: func(time.Duration) float64 { return 100 },
+	}
+	g := graphFor(wetHigh, wetHigh)
+	// Pump gate is checked before Flow: dead drive must not stream
+	// via the pump branch. The Flow branch still applies (wet
+	// endpoints -> pipeWet), never pipeFlowing from the pump.
+	got := classifyPipe(g, deadDrive)
+	assert.NotEqual(t, pipeFlowing, got,
+		"dead-drive pump must not classify as pipeFlowing")
+
+	alive := core.GraphEdge{
+		From: "F", To: "T",
+		Pump: &core.Pump{Running: true, DriveReady: true},
+	}
+	assert.Equal(t, pipeFlowing, classifyPipe(g, alive),
+		"running+ready pump must classify as pipeFlowing")
+
+	// Running pump with a zero Flow closure (CCWS duty 0) must not
+	// animate while the audit records 0.
+	zeroFlow := core.GraphEdge{
+		From: "F", To: "T",
+		Pump: &core.Pump{Running: true, DriveReady: true},
+		Flow: func(time.Duration) float64 { return 0 },
+	}
+	assert.Equal(t, pipeWet, classifyPipe(g, zeroFlow),
+		"running pump with zero Flow closure must read pipeWet, not pipeFlowing")
+
+	posFlow := core.GraphEdge{
+		From: "F", To: "T",
+		Pump: &core.Pump{Running: true, DriveReady: true},
+		Flow: func(time.Duration) float64 { return 100 },
+	}
+	assert.Equal(t, pipeFlowing, classifyPipe(g, posFlow),
+		"running pump with positive Flow closure must read pipeFlowing")
+}
+
+// TestPumpLabel_IsRunningGate (p63_1): bool-wrapper pumps never
+// step, so Velocity stays 0; the label must read "running" when
+// IsRunning() is true, not "starting" forever.
+func TestPumpLabel_IsRunningGate(t *testing.T) {
+	assert.Equal(t, "pump running",
+		pumpLabel(&core.Pump{Running: true, DriveReady: true}))
+	assert.Equal(t, "pump starting",
+		pumpLabel(&core.Pump{Running: true, DriveReady: false}))
+	assert.Equal(t, "pump stopped",
+		pumpLabel(&core.Pump{Running: false, DriveReady: true}))
 }

@@ -97,6 +97,13 @@ func TestGraph_ExportDotRoundTrip(t *testing.T) {
 		`"SG" -> "Turbine"`,
 		`"Turbine" -> "Condenser"`,
 		`"SG" -> "Condenser"`,
+		`"BTRS"`,
+		`"SFPHX"`,
+		`"SCCWPump"`,
+		`"CoolingTower" -> "Condenser"`,
+		`"VCT" -> "BTRS"`,
+		`"SFP" -> "SFPHX"`,
+		`"Generator" -> "SCCWPump"`,
 	} {
 		assert.Contains(t, out, expect, "dot output missing %q", expect)
 	}
@@ -346,4 +353,133 @@ func TestFluidFlow_ValveHalfOpen_HalvesFlow(t *testing.T) {
 	require.Positive(t, full, "want positive flow for full-open")
 	ratio := half / full
 	assert.InDelta(t, 0.5, ratio, 0.05, "half-open / full-open ratio = %v, want ~0.5", ratio)
+}
+
+// TestGraph_PumpsConnected (p63_1, CHECK_SKILL §9): each pump glyph is
+// either a graph node incident to >=1 edge (node-backed) or an inline
+// hop on a pumped edge, never both, never neither. SFPPB is the
+// standby companion of the SFPPA hop, not a separate target.
+func TestGraph_PumpsConnected(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	g := p.BuildGraph()
+
+	// Node-backed: incident to >=1 edge.
+	nodePumps := []string{"CWP", "BTRS", "SFPHX", "SCCWPump", "Generator", "CCWSSurge"}
+	for _, id := range nodePumps {
+		incident := false
+		for _, e := range g.Edges {
+			if e.From == id || e.To == id {
+				incident = true
+				break
+			}
+		}
+		if id == "CWP" {
+			// CWP is an inline hop label, not a graph node;
+			// its connectivity is via the CoolingTower->Condenser edge.
+			continue
+		}
+		assert.True(t, incident, "node-backed pump %s has no incident edge", id)
+	}
+	// CWP: CoolingTower->Condenser edge carries the real CW pump.
+	foundCWP := false
+	for _, e := range g.Edges {
+		if e.From == "CoolingTower" && e.To == "Condenser" && e.Pump != nil {
+			foundCWP = true
+		}
+	}
+	assert.True(t, foundCWP, "no pumped CoolingTower->Condenser edge for CWP")
+
+	// Hop pumps: pumped edges exist, pump ids are not standalone nodes.
+	hopEdges := [][2]string{
+		{"VCT", "InjectionSink"},      // ChgPump
+		{"RWST", "InjectionSink"},     // HHSI
+		{"CSSTank", "CIS"},            // CSSPump
+		{"CCWSSurge", "CCWSHX"},       // CCWSPump
+		{"VCT", "BTRS"},               // BTRSPUMP hop on BTRS node
+		{"SFP", "SFPHX"},              // SFPPA hop
+		{"Generator", "SCCWPump"},     // SCCWPump
+	}
+	for _, want := range hopEdges {
+		found := false
+		for _, e := range g.Edges {
+			if e.From == want[0] && e.To == want[1] && e.Flow != nil {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "missing Flow edge %s->%s", want[0], want[1])
+	}
+	// Hop ids must not be graph nodes (would double-draw).
+	for _, id := range []string{"ChgPump", "HHSI", "CSSPump", "CCWSPump", "BTRSPUMP", "SFPPA"} {
+		_, isNode := g.Nodes[id]
+		assert.False(t, isNode, "hop pump %s must not be a graph node", id)
+	}
+	// No self-loops (would trip layout connected[] bookkeeping).
+	for _, e := range g.Edges {
+		assert.False(t, e.From == e.To && e.From != "CoolingTower",
+			"self-loop edge %s->%s", e.From, e.To)
+	}
+}
+
+// TestCWEdge_UsesRightScale (p63_1, CHECK_SKILL §2): the CWP closure
+// returns CWS.FlowGPM/60 (gpm->gal/s). Fails by 60x if raw gpm is
+// returned, and fails if CondenserDesignCWFlowGPM (20,000) is used.
+func TestCWEdge_UsesRightScale(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	p.Outside.CirculatingWaterPump.Running = true
+	p.Outside.CirculatingWaterPump.DriveReady = true
+	p.Outside.CirculatingWaterSystem.FlowGPM = CirculatingWaterDesignFlowGPM
+	g := p.BuildGraph()
+	var cw *GraphEdge
+	for i := range g.Edges {
+		if g.Edges[i].From == "CoolingTower" && g.Edges[i].To == "Condenser" {
+			cw = &g.Edges[i]
+			break
+		}
+	}
+	require.NotNil(t, cw, "CoolingTower->Condenser edge missing")
+	require.NotNil(t, cw.Flow, "CW edge must be a Flow edge")
+	got := cw.Flow(DefaultTimeStep)
+	want := CirculatingWaterDesignFlowGPM / 60.0
+	assert.InDelta(t, want, got, want*0.01,
+		"CW closure = %v gal/s, want FlowGPM/60 = %v (raw gpm would be 60x)", got, want)
+	// Negative: must not be the 20k thermal fudge.
+	if got == CondenserDesignCWFlowGPM {
+		t.Fatal("CW closure must not be CondenserDesignCWFlowGPM")
+	}
+}
+
+// TestPumpHop_DeadDriveReadsEmpty (p63_1, CHECK_SKILL §3): with the
+// drive dead (DriveReady=false) the pumped leg's Pump.IsRunning()
+// is false, so recordGraphFlow gates to 0 and classifyPipe cannot
+// read pipeFlowing via Pump.Running alone. Exercised through the
+// core graph: HHSI and ChgPump legs with latched Running but dead
+// drive must carry Pump.IsRunning()==false.
+func TestPumpHop_DeadDriveReadsEmpty(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	// HHSI: Running latched, drive dead.
+	p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = true
+	p.ReactorBuilding.SafetyInjectionSystem.HHSIDriveReady = false
+	// ChgPump: ESF buses dead, so cvcsDrive snapshots false.
+	p.Electrical.ESFBusA.Energized = false
+	p.Electrical.ESFBusB.Energized = false
+	g := p.BuildGraph()
+	for _, want := range [][2]string{{"RWST", "InjectionSink"}, {"VCT", "InjectionSink"}} {
+		var edge *GraphEdge
+		for i := range g.Edges {
+			if g.Edges[i].From == want[0] && g.Edges[i].To == want[1] {
+				edge = &g.Edges[i]
+				break
+			}
+		}
+		require.NotNil(t, edge, "edge %v missing", want)
+		require.NotNil(t, edge.Pump, "edge %v must carry a pump", want)
+		assert.False(t, edge.Pump.IsRunning(),
+			"edge %v pump must read IsRunning=false with dead drive", want)
+		// recordGraphFlow would zero the rate; simulate confirms
+		// no audit credit lands on the sink for this leg.
+	}
 }

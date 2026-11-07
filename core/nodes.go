@@ -112,6 +112,35 @@ func (n *accNode) level() Volume      { return *n.vol }
 func (n *accNode) setLevel(v Volume)  { *n.vol = v }
 func (n *accNode) capacity() Volume   { return *n.capVol }
 
+// boolPump snapshots a Running bool + DriveReady pair as a *Pump
+// so GraphEdge.Pump and recordGraphFlow's IsRunning() gate can
+// close over the same physical readiness the Step applies
+// (CHECK_SKILL §3: gate on the physical variable that throttles
+// delivery, not intent). Built inside BuildGraphFor against the
+// live target on every call (pointer-rebake rule, plans/p63_1.txt):
+// never capture a discarded plant, so the snapshot is always of
+// the current tick.
+func boolPump(running, drive bool) *Pump {
+	return &Pump{Running: running, DriveReady: drive}
+}
+
+// passThroughNode is the zero-volume audit adapter for equipment
+// that carries no inventory (BTRS bed, SFP HX, CCWS surge tank,
+// Generator stator circuit, SCCW pump). pressure/level/capacity
+// stay zero so the integrator cannot invent inventory; recordFlow
+// credits the audit volume on the sink. Generator uses it too:
+// the SCCW return edge is audit-only Flow() {return 0}, so it
+// records nowhere by design (plans/p63_1.txt).
+type passThroughNode struct{ DeliveredFlow float64 }
+
+func (n *passThroughNode) pressure() Pressure { return 0 }
+func (n *passThroughNode) level() Volume      { return zeroVolume }
+func (n *passThroughNode) setLevel(Volume)    {}
+func (n *passThroughNode) capacity() Volume   { return zeroVolume }
+func (n *passThroughNode) recordFlow(gal float64) {
+	n.DeliveredFlow += gal
+}
+
 // turbineNode adapts the main turbine as a pass-through flow node
 // on the secondary steam path SG -> Turbine -> Condenser. The
 // turbine stores no inventory; its FirstStagePressure reports

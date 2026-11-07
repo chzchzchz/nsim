@@ -3558,6 +3558,14 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	add("PRT", "PressurizerReliefTank", &target.ReactorBuilding.PressurizedReliefTank)
 	add("CIS", "ContainmentIsolationSystem", &cisSink{})
 	add("InjectionSink", "InjectionSink", &injectionSink{})
+	// p63_1: audit nodes for loop circuits whose pumps were
+	// renderer-only. All are zero-volume passThroughNodes
+	// (nodes.go); Generator is a generatorNode (not a recorder).
+	add("BTRS", "BTRSDemineralizer", &passThroughNode{})
+	add("SFPHX", "SpentFuelPoolHeatExchanger", &passThroughNode{})
+	add("SCCWPump", "StatorCoolingPump", &passThroughNode{})
+	add("CCWSSurge", "CCWSSurgeTank", &passThroughNode{})
+	add("Generator", "PowerGenerator", &passThroughNode{})
 
 	// EFWS per-subsystem flow edges (replaces Outside AFW edges
 	// CST->AFWPump->SG; specs/the_westinghouse_pressurized_water_
@@ -3598,13 +3606,35 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	flowEdge("SISAccumulators", "InjectionSink", nil, nil, func(time.Duration) float64 {
 		return sis.AccumulatorInjectionFlow.Float()
 	})
+	// sfp/ccws shortcuts for the p63_1 loop edges below.
+	ccws := &aux.ComponentCoolingWaterSystem
+	sfpc := &aux.SpentFuelPoolCoolingSystem
+	genCooling := &target.TurbineBuilding.Generator.GeneratorCoolingSystem
+	// boolPump snapshots (nodes.go); rebuilt against live target
+	// on every BuildGraphFor call, so each tick sees current latches.
+	// CVCS has no DriveReady field; charging pumps feed from the
+	// ESF bus (parts.go:2388-2391), so drive is ESF energised.
+	cvcsDrive := target.Electrical.ESFBusA.Energized || target.Electrical.ESFBusB.Energized
+	chgPump := boolPump(cvcs.ChargingPumpRunning, cvcsDrive)
+	hhsiPump := boolPump(sis.HHSIPumpRunning, sis.HHSIDriveReady)
+	cssPump := boolPump(css.Running, css.DriveReady)
+	btrsPump := boolPump(cvcs.BTRSRecirculationPumpRunning, cvcsDrive)
+	ccwsPump := boolPump(ccws.PumpRunning, ccws.DriveReady)
+	// One loop, three latches: duty A/B share the SFPPA hop;
+	// Standby is the SFPPB label on the same edge. Gate is "any".
+	sfpcRunning := sfpc.LoopAPumpRunning || sfpc.LoopBPumpRunning || sfpc.StandbyRunning
+	sfpcPump := boolPump(sfpcRunning, sfpc.DriveReady)
+	// SCCW drive: generator MCC, derived, spec silent (p63_1).
+	// GeneratorCoolingSystem has no DriveReady field; the pump
+	// is ready iff commanded on, so drive mirrors the latch.
+	sccwPump := boolPump(genCooling.SCCWPumpRunning, true)
 
 	// HHSI RWST / Sump phase edges share one guard shape; they
 	// differ only in the suction source being aligned.
 	hsiiGuard := func(src SISSuctionSource) bool {
 		return sis.HHSISuction == src && sis.HHSIPumpRunning && sis.HHSIDriveReady
 	}
-	flowEdge("RWST", "InjectionSink", nil, nil, func(time.Duration) float64 {
+	flowEdge("RWST", "InjectionSink", nil, hhsiPump, func(time.Duration) float64 {
 		if hsiiGuard(SISSuctionRWST) {
 			return sis.HHSIInjectionFlow.Float()
 		}
@@ -3648,8 +3678,14 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 		}
 		return 0
 	})
-	flowEdge("VCT", "InjectionSink", nil, nil, func(time.Duration) float64 {
+	flowEdge("VCT", "InjectionSink", nil, chgPump, func(dt time.Duration) float64 {
 		if cvcs.ChargingPumpRunning {
+			// ChargingFlow is stored gal/s (CVCS.Step sets it
+			// directly and integrates * dt.Seconds() at
+			// cvcs.go:197); the closure already returns gal/s.
+			// Bridge presentation multiplies by 60 for gpm
+			// display only. Return raw; recordGraphFlow
+			// multiplies by dt.Seconds().
 			return cvcs.ChargingFlow.Float()
 		}
 		return 0
@@ -3659,7 +3695,7 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	})
 
 	// CSS CSST/SAT to containment spray.
-	flowEdge("CSSTank", "CIS", nil, nil, func(time.Duration) float64 {
+	flowEdge("CSSTank", "CIS", nil, cssPump, func(time.Duration) float64 {
 		if css.SprayHeaderOpen && css.Running && css.DriveReady {
 			return css.SprayFlow
 		}
@@ -3683,6 +3719,98 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	flowEdge("CCWSHX", "PRT", nil, nil, func(time.Duration) float64 {
 		return PressurizedReliefTankSprayGPS * target.ReactorBuilding.PRTSprayValve.Open
 	})
+
+	// p63_1: new audit edges (audit-only; Steps already moved
+	// inventory, CHECK_SKILL §5). One scale per sum (§2).
+	// CW supply: CoolingTower -> Condenser. FlowGPM is gal/min
+	// (circulating_water.go:60); closure converts gpm -> gal/s.
+	// Never CondenserDesignCWFlowGPM (20,000 thermal fudge).
+	// Spec: "Circulating water for each main condenser is
+	// supplied by vertical, mixed flow, volute type circulating
+	// water pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_170.txt:51-58
+	flowEdge("CoolingTower", "Condenser", nil, &target.Outside.CirculatingWaterPump,
+		func(time.Duration) float64 {
+			if target.Outside.CirculatingWaterPump.Running {
+				return target.Outside.CirculatingWaterSystem.FlowGPM / 60.0
+			}
+			return 0
+		})
+	// BTRS loop: forward Flow audits recirculated volume; return
+	// is plain edge() to avoid 2x double-credit (CHECK_SKILL §2).
+	// Derived flow VCTBTRSCirculation (gal/s, parts.go:1019),
+	// labelled derived; spec silent on numeric rate.
+	// "The BTRS recirculation pump provides the motive force
+	// to route flow from the VCT through the demineralizers
+	// during boration and dilution modes."
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:37-40
+	flowEdge("VCT", "BTRS", nil, btrsPump, func(time.Duration) float64 {
+		if cvcs.BTRSRecirculationPumpRunning {
+			return VCTBTRSCirculation
+		}
+		return 0
+	})
+	// Flow (audit-only, returns 0) not plain edge(): passThroughNode
+	// pressure() is 0 while vctNode reports PressurizerBasePressure,
+	// so a plain edge would compute deltaP != 0 and simulateFluidFlow
+	// would drain VCT into the zero-volume sink every tick.
+	flowEdge("BTRS", "VCT", nil, nil, func(time.Duration) float64 { return 0 })
+	// CCWS loop: no self-loop. Pump seats on surge -> HX.
+	// Flow back-solved from HXHeatDuty (ccws.go:108-110):
+	// dutyK = CCHXApproachTemp*5/9; massKgPerS = gal/s*60*kg/gpm.
+	// gal/s = duty/(cp*dutyK*60*kg/gpm), clamped [0, CCWSDesignFlow].
+	// Derived flow; label per plan.
+	// "The component cooling water flows from the pump,
+	// through the shell side of the component cooling heat
+	// exchangers, through the components being cooled, and
+	// back to the pump. The surge tank is connected to the
+	// suction side of the component cooling pumps."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:51-56
+	flowEdge("CCWSSurge", "CCWSHX", nil, ccwsPump, func(time.Duration) float64 {
+		if !ccws.PumpRunning {
+			return 0
+		}
+		dutyK := CCHXApproachTemp.Float() * 5.0 / 9.0
+		galPerS := float64(ccws.HXHeatDuty) / (SpecificHeatWater * dutyK * 60.0 * KilogramsPerGPM)
+		if galPerS < 0 {
+			return 0
+		}
+		if galPerS > CCWSDesignFlow.Float() {
+			return CCWSDesignFlow.Float()
+		}
+		return galPerS
+	})
+	// SFP loop: pump draws from pool through HX, returns to pool.
+	// One loop, two glyphs, one shared hop (SFPPA on forward).
+	// Flow derived: spec silent on full circulation rate; only
+	// spec-backed figure is 100 gpm/loop purification sidestream
+	// (page_171.txt:68-71). Audit uses SFPCPurificationFlow/60.
+	// "The pump draws water from the pool, circulates it
+	// through the heat exchanger and returns it to the pool."
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:53-55
+	flowEdge("SFP", "SFPHX", nil, sfpcPump, func(time.Duration) float64 {
+		// Gate on IsRunning() (any latch + DriveReady), not the
+		// raw PurificationFlow which is seeded non-zero at
+		// MakePlant and would otherwise read 1.67 gal/s while idle.
+		if sfpcPump.IsRunning() {
+			return sfpc.PurificationFlow / 60.0
+		}
+		return 0
+	})
+	edge("SFPHX", "SFP", nil, nil)
+	// SCCW loop: Generator -> SCCWPump Flow + plain return.
+	// Generator is not a flowRecorder; return must not carry Flow.
+	// Derived flow GeneratorSCCWDesignFlow (gal/s).
+	// "Demineralized cooling water is provided for the stator
+	// by a closed recirculating water system"
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:48-49
+	flowEdge("Generator", "SCCWPump", nil, sccwPump, func(time.Duration) float64 {
+		if genCooling.SCCWPumpRunning {
+			return GeneratorSCCWDesignFlow
+		}
+		return 0
+	})
+	edge("SCCWPump", "Generator", nil, nil)
 
 	return g
 }

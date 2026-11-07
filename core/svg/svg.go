@@ -1173,8 +1173,26 @@ func classifyPipe(g *core.PlantGraph, e core.GraphEdge) pipeWater {
 	if e.Valve != nil && e.Valve.Open <= 0 {
 		return pipeBlocked
 	}
-	if e.Pump != nil && e.Pump.Running {
-		return pipeFlowing
+	if e.Pump != nil && e.Pump.IsRunning() {
+		// Flow edges: trust the audit closure over the pump
+		// latch alone. A spinning pump with a zero closure
+		// (e.g. CCWS back-solved duty 0) must not animate while
+		// the audit records 0 (CHECK_SKILL §3: gate on delivery).
+		if e.Flow == nil || e.Flow(core.DefaultTimeStep) > 0 {
+			return pipeFlowing
+		}
+		return pipeWet
+	}
+	// Dead-drive pump on a Flow edge: the audit gate in
+	// recordGraphFlow zeroes delivery, so the classification
+	// must not re-animate from the Flow closure or deltaP.
+	if e.Pump != nil && e.Flow != nil {
+		fLevel, _, fOK := g.Nodes[e.From].FluidState()
+		tLevel, _, tOK := g.Nodes[e.To].FluidState()
+		if (fOK && fLevel.Val > 0) || (tOK && tLevel.Val > 0) {
+			return pipeWet
+		}
+		return pipeEmpty
 	}
 	// Step-owned Flow edges (plans/p59_1.txt): the Step already
 	// moved the volume. Trust this closure over the pressure
