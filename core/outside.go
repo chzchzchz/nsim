@@ -3,14 +3,14 @@ package core
 import "time"
 
 type Outside struct {
-	// 450K gallons,
-	// 239K gallons to be operable
-	// 196 of usable water
-	// 27.7 is minimumal vortexing level
-	// 14.4 unavialable gallons due to instrument level error
-	// sums to 239K
-	// Enough water to maintain plant in hot water standby for 2 hours
-	// 350F is cutoff where residual heat removal system is capable of cooling.
+	// CondensateStorageTank sizing is from the Westinghouse
+	// Technical Manual (not the Westinghouse PWR document):
+	// specs/westinghouse_tech_manual/chapter_5/page_0532.txt:30-41:
+	// total capacity 450,000 gal; Tech Specs require 239,000 gal
+	// operable, which accounts for 27,700 gal minimum vortexing
+	// level and 14,400 gal instrument error, leaving 196,000 gal
+	// usable; maintains hot standby 2 hours then cooldown to
+	// 350°F over 4 hours at 880 gpm AFW flow.
 	CondensateStorageTank Tank
 
 	TurbineAFWPump AFWPump

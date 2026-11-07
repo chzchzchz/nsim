@@ -3778,9 +3778,11 @@ const (
 var CSSTCapacity Volume = Volume{Val: 15000, Unit: u.Gallon}
 
 // SATCapacity is the total sodium hydroxide solution capacity of
-// the simplified lumped SAT (gal). The spec does not state a
-// capacity; 500 gal is sufficient to provide additive for 30 min
-// of spray at the chosen flow.
+// the simplified lumped SAT (gal). The Westinghouse plant
+// specifies "4000 gal of 30 weight percent NaOH solution"
+// specs/westinghouse_tech_manual/chapter_5/page_0492.txt:43;
+// 500 gal is sufficient to provide additive for 30 min of spray
+// at the chosen flow.
 // "the SAT providing sodium hydroxide solution"
 // specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:62-63
 var SATCapacity Volume = Volume{Val: 500, Unit: u.Gallon}

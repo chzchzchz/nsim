@@ -2505,6 +2505,10 @@ func MakePlant() Plant {
 	}
 	p.Outside = Outside{
 		CondensateStorageTank: Tank{
+			// Seed above the 239,000-gal Tech Specs operable
+			// volume per
+			// specs/westinghouse_tech_manual/chapter_5/page_0532.txt:30-41,
+			// so the tank is operable at construction.
 			Level:    Volume{Val: 300000, Unit: u.Gallon},
 			Capacity: Volume{Val: 450000, Unit: u.Gallon},
 			Part:     Part{Temperature: Temperature{Val: 80, Unit: u.Fahrenheit}},
