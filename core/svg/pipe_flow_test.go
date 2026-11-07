@@ -261,20 +261,22 @@ func TestReliefPipeSeatsValves(t *testing.T) {
 }
 
 // TestRiverAndCVCSVisualsRendered pins the decorative and
-// spec-cited visual additions: the circulating-water source band,
-// the CVCS makeup line, the letdown valve seated on its line
-// rather than floating at a bare anchor. The CVCS loop, SIS
-// suction, RHR and CCWS legs are real graph edges (step 4), so
-// they no longer need visualPipe duplicates.
+// spec-cited visual additions: the circulating-water source band
+// and the letdown valve seated on its line rather than floating
+// at a bare anchor. The CVCS loop, SIS suction, RHR, CCWS legs,
+// and the former visualPipes (PZRREL, CVCSMAKEUP, PRTSPRAYLINE)
+// are real graph edges (step 4), so they render as routed
+// polylines, not straight visual pipes.
 func TestRiverAndCVCSVisualsRendered(t *testing.T) {
 	p0 := core.MakePlant()
 	out := renderPlant(t, &p0)
 	assert.Contains(t, out, `stroke="`+riverColour+`"`)
-	assert.GreaterOrEqual(t,
-		strings.Count(out, `stroke="`+cvcsColour+`"`), 1,
-		"the RWST->VCT makeup line renders")
-	assert.GreaterOrEqual(t, strings.Count(out, `stroke="blue"`), 1,
-		"PRT spray line renders")
+	// Every former visual pipe is now a real edge: no data-pipe
+	// markers remain, and each connection still draws a polyline.
+	assert.NotContains(t, out, "data-pipe=",
+		"promoted connections draw as routed graph edges")
+	assert.GreaterOrEqual(t, strings.Count(out, `<polyline`), 1,
+		"promoted connections still draw polylines")
 
 	// Pumps stream their real graph edges now (RHRS, CCWS).
 	p2 := core.MakePlant()

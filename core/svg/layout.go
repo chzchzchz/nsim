@@ -634,16 +634,21 @@ func layoutRankEdges(rows map[string][][]string) [][2]string {
 	// Steam/feed rank order (Figures 1-2/15.3-1): the forward
 	// chain runs SG -> Turbine -> MSR -> Condenser -> LP
 	// heaters -> HDT -> feed pumps -> HP heaters -> SG. The
-	// real graph carries the return legs; these invisible
-	// constraints keep the rank placement in chain order so
-	// dot routes the SG->Condenser polyline through Turbine/MSR
-	// instead of cutting a diagonal across both buildings.
-	// Edges are guarded by the same connected[] logic as
-	// docking: chains that already have a real edge are
-	// skipped by dot's rank repair, so the list is safe to
-	// extend. Only the forward steam leg is connected;
-	// everything else is invisible ordering.
-	edges = append(edges, [2]string{"SG", "Turbine"})
+	// real graph carries the return legs (Condenser->HDT,
+	// HDT->SG, LPHeaterDrain->Condenser, HPHeaterDrain->HDT),
+	// so only the unmodeled steam-path nodes need invisible
+	// constraints: Turbine and MSR have no real edges, and
+	// re-adding a feed-heater chain would fight the real
+	// drain-cascade directions (probed: dot breaks the cycle
+	// arbitrarily). These constraints keep the rank placement
+	// in chain order so dot routes the SG->Condenser polyline
+	// through Turbine/MSR instead of cutting a diagonal across
+	// both buildings.
+	edges = append(edges,
+		[2]string{"SG", "Turbine"},
+		[2]string{"Turbine", "MSR"},
+		[2]string{"MSR", "Condenser"},
+	)
 	return edges
 }
 

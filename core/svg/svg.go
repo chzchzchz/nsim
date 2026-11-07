@@ -709,38 +709,25 @@ type visualPipe struct {
 // Remotely operated stop valves are provided to isolate these
 // relief valves should excessive leakage occur."
 // specs/the_westinghouse_pressurized_water_react/chapter_3/page_071.txt:115-124
-// cvcsColour tints the chemical-and-volume-control visual pipes so
-// the loop reads as one system apart from the fluid-graph lines.
+// cvcsColour tints the CVCS legend swatch; the CVCS flow lines
+// are real graph edges coloured by ColourForEdge, so the legend
+// keeps the system colour without a visual-pipe duplicate.
 const cvcsColour = "#9fc5e8"
 
 // riverColour fills the circulating-water source band drawn
 // through the intake house.
 const riverColour = "#6fa8dc"
 
-var visualPipes = []visualPipe{
-	{
-		id: "PZRREL", from: "Pressurizer", to: "PRT", colour: "red",
-		flow: func(p *core.Plant) float64 { return p.ReactorBuilding.PORV.Open },
-	},
-	// The CVCS letdown/charging loop and the RHR/CCWS legs are
-	// real graph edges now; their visualPipes were removed
-	// (plan svg/layout-improvements step 4).
-	{
-		// Makeup to the RCS can come from "the refueling water
-		// storage tank as a backup" when VCT level drops.
-		// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:1-4
-		id: "CVCSMAKEUP", from: "RWST", to: "VCT", colour: cvcsColour,
-	},
-	{
-		// "Cold water can be sprayed into the pressurizer relief
-		// tank to increase the heat sink capacity."
-		// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:35-38
-		id: "PRTSPRAYLINE", from: "CCWSHX", to: "PRT", colour: "blue",
-		flow: func(p *core.Plant) float64 {
-			return p.ReactorBuilding.PRTSprayValve.Open
-		},
-	},
-}
+// visualPipes is empty: every former survivor (PZRREL
+// Pressurizer->PRT, CVCSMAKEUP RWST->VCT, PRTSPRAYLINE
+// CCWSHX->PRT) now has a real graph edge with a flow guard
+// (core/plant.go BuildGraphFor), so a straight visual pipe
+// would draw the same connection twice. Per the plan's
+// Flow-lines rule, promoted connections leave this list;
+// valvePlacements entries that named them were repointed
+// to the real edge (PZRPORV/PZRBLK to Pressurizer->PRT,
+// PRTSPRAY to CCWSHX->PRT, MKUPV to RWST->VCT).
+var visualPipes = []visualPipe{}
 
 // valvePlacement seats a standalone valve onto a drawn polyline:
 // either a fluid-graph edge (from/to) or a named visualPipe. near
@@ -774,17 +761,16 @@ var valvePlacements = map[string]valvePlacement{
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:104-118
 	"TDUMP": {from: "SG", to: "Condenser", near: "Condenser", shift: -0.05},
 	// PORV and its isolating stop valve seat on the pressurizer
-	// relief line drawn to the relief tank; see the visualPipes
-	// citation (chapter_3/page_071.txt:115-124).
-	"PZRPORV": {pipe: "PZRREL", shift: 0.30},
-	"PZRBLK":  {pipe: "PZRREL", shift: 0.62},
+	// relief line drawn to the relief tank (chapter_3/page_071.txt:115-124).
+	"PZRPORV": {from: "Pressurizer", to: "PRT", near: "Pressurizer", shift: 0.30},
+	"PZRBLK":  {from: "Pressurizer", to: "PRT", near: "Pressurizer", shift: 0.62},
 	// Letdown isolation valve on the RCS-to-VCT line (chapter_4
 	// letdown/charging path, now a real graph edge).
 	"LTDVN": {from: "RPV", to: "VCT", near: "RPV", shift: 0.45},
 	// Spray valve seated on its supply line from component cooling.
-	"PRTSPRAY": {pipe: "PRTSPRAYLINE", shift: 0.55},
+	"PRTSPRAY": {from: "CCWSHX", to: "PRT", near: "CCWSHX", shift: 0.55},
 	// Makeup valve on the RWST backup supply line to the VCT.
-	"MKUPV": {pipe: "CVCSMAKEUP", shift: 0.50},
+	"MKUPV": {from: "RWST", to: "VCT", near: "RWST", shift: 0.50},
 	// "low-pressure feedwater heaters are cascaded back to the
 	// condenser." The sentence starts at the bottom of page 220;
 	// page_221 truncates it after "Drains from the four".
@@ -1537,7 +1523,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			{"red", "RCS primary"},
 			{"brown", "Steam / secondary"},
 			{"blue", "Feed / cooling water"},
-			{cvcsColour, "CVCS visual lines"},
+			{cvcsColour, "CVCS system"},
 			{"black", "Blocked / other"},
 		}
 		for i, r := range rows {
@@ -1732,13 +1718,11 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	}
 
 	// Visual pipes: spec-cited connections the fluid graph does not
-	// model. They render as straight segments clipped at the
-	// endpoint symbols' boundaries and stream while their flow
-	// open fraction is positive; seated valves read their polyline.
-	// They stay straight (no graphviz routing) because the fluid
-	// graph never positions their intermediates; the survivors
-	// are the unmodeled annotations (PORV relief, RWST makeup,
-	// PRT spray), dimmed by DrawPipePathIdle when idle.
+	// model. Empty since every such connection gained a real
+	// edge (step 4); the loop stays so a genuinely unmodeled
+	// connection can re-enter without plumbing changes. Any entry
+	// would render as a straight segment clipped at the endpoint
+	// symbols' boundaries, dimmed by DrawPipePathIdle when idle.
 	visRoutes := map[string][]Anchor{}
 	for _, vp := range visualPipes {
 		fa, okF := r.anchor(vp.from)
