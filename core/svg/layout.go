@@ -236,9 +236,12 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 	var b strings.Builder
 	b.WriteString("digraph plant {\n")
 	// Spacing tunes how tightly dot packs the row-chunked
-	// buildings (layoutRows): a wider drawing fits tighter, but
-	// ranksep below 0.30 crowds captions on adjacent rows.
-	b.WriteString(`  graph [rankdir=TB, splines=true, overlap=false, sep="+8,+8", nodesep=0.10, ranksep=0.30, dpi=96];` + "\n")
+	// buildings (layoutRows): the fit scale is width-limited
+	// (probed: the five rank blocks stack side by side), so
+	// raising nodesep widens the drawing and shrinks every
+	// symbol; tighter packing raises the scale. ranksep stays
+	// at 0.30 because smaller crowds captions on adjacent rows.
+	b.WriteString(`  graph [rankdir=TB, splines=true, overlap=false, sep="+8,+8", nodesep=0.05, ranksep=0.30, dpi=96];` + "\n")
 	b.WriteString(`  node [shape=none];` + "\n")
 
 	// Cluster definitions, keyed by cluster name.
@@ -456,10 +459,10 @@ var layoutRowOrder = []string{
 // prefix so a row reads as one system (chapter_5/page_097.txt
 // safety-injection grouping, Figure 4.1-1 CVCS groups).
 var layoutRowWidths = map[string]int{
-	"cluster_containment": 4,
+	"cluster_containment": 3,
 	"cluster_fuel":        2,
-	"cluster_turbine":     4,
-	"cluster_auxiliary":   6,
+	"cluster_turbine":     3,
+	"cluster_auxiliary":   3,
 	"cluster_electrical":  2,
 }
 

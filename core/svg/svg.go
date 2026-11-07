@@ -1509,7 +1509,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	writeLegend := func() {
 		const (
 			lx, ly  = 12.0, DocumentHeight - 118.0
-			legFs   = captionMinUnits
+			legFs   = 8.0
 			legRowH = 14.0
 			legW    = 176.0
 			legH    = legRowH*5 + 12.0
@@ -1638,8 +1638,10 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			// on the first row's part captions (e.g. "Auxiliary
 			// Building" over RHRS A/B, "Electrical / ESF" over the
 			// ESF buses). Inside the corner it reads at the
-			// margin, clear of the first row centrally.
-			writeLabel(bx+bw-76, by+16, captionMinUnits, buildingLabels[name])
+			// margin, clear of the first row centrally. The size
+			// follows the building height with an 8-unit floor
+			// (plan acceptance) instead of the old fixed minimum.
+			writeLabel(bx+bw-76, by+16, math.Max(8.0, scaledFont(bh*0.03)), buildingLabels[name])
 		}
 		b.WriteString("</g>\n")
 	}
@@ -2260,7 +2262,7 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms [
 	// never share the edge.
 	cp := p.ReactorBuilding.ContainmentPressure - core.AtmosphericPressure
 	if cont, ok := r.containmentTop(); ok {
-		text(cont, +8, captionMinUnits, fmt.Sprintf("Cont %.1f psig", float64(cp)))
+		text(cont, +8, 8.0, fmt.Sprintf("Cont %.1f psig", float64(cp)))
 	}
 
 	activeAlarms := map[core.AlarmID]bool{}
