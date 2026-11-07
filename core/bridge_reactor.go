@@ -1848,4 +1848,63 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Anchors plan sensors for rendered groups with model state but
+	// no bridge key under their part (plans/svg/anchors.txt).
+	m["ReactorBuilding/SafetyInjectionSystem/RWST/Level"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SafetyInjectionSystem/RWST",
+		Label: "Level",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.ReactorBuilding.SafetyInjectionSystem.RWSTLevel.Float())
+		},
+	}
+
+	// Inverter availability: the INVERTER glyph on the plant
+	// electrical panel. "The 118-volt ac instrument power supply is
+	// divided into four buses."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_167.txt:22-27
+	m["ReactorBuilding/PlantElectricalSystems/Inverters/Available"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/PlantElectricalSystems/Inverters",
+		Label: "Available",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.PlantElectricalSystems.InverterPowerAvailable)
+		},
+	}
+
+	// Containment isolation: Phase A / Phase B latched state.
+	// "missile protected, Seismic Class 1"
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_113.txt:135-138
+	m["ReactorBuilding/ContainmentIsolationSystem/PhaseA"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentIsolationSystem",
+		Label: "PhaseA",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			cis := p.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem
+			return bridge.FormatSensorValue("bool", cis.PhaseAIsolated)
+		},
+	}
+	m["ReactorBuilding/ContainmentIsolationSystem/PhaseB"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentIsolationSystem",
+		Label: "PhaseB",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			cis := p.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem
+			return bridge.FormatSensorValue("bool", cis.PhaseBIsolated)
+		},
+	}
+
+	// Spent fuel pool bulk temperature (no pool-level field exists).
+	m["ReactorBuilding/SpentFuelPool/PoolTemp"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SpentFuelPool",
+		Label: "PoolTemp",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PoolTemp.Float())
+		},
+	}
+
 }

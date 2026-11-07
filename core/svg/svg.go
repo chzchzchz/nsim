@@ -182,9 +182,9 @@ var diagramKindByID = func() map[string]string {
 
 // pumpAccessors maps diagram parts backed by a core.Pump to its
 // live state, letting static exports show run status.
-var pumpAccessors = map[string]func(*core.Plant) *core.Pump{	"RCP": func(p *core.Plant) *core.Pump {
-		return &p.ReactorBuilding.ReactorCoolantPump
-	},
+var pumpAccessors = map[string]func(*core.Plant) *core.Pump{"RCP": func(p *core.Plant) *core.Pump {
+	return &p.ReactorBuilding.ReactorCoolantPump
+},
 	"CondensatePump": func(p *core.Plant) *core.Pump {
 		return &p.TurbineBuilding.CondensatePump
 	},
@@ -407,21 +407,21 @@ var alarmParts = map[core.AlarmID][]string{
 	// Diesel alarms are per-model annunciators shared by both
 	// trains (core/alarm.go collapses A and B into the same IDs),
 	// so halos cover both EDG symbols and both day tanks.
-	core.AlarmIDDieselCoolant:         {"Diesel", "DieselB"},
-	core.AlarmIDDieselLowFuel:         {"FuelTank", "FuelTankB"},
-	core.AlarmIDDieselTripped:         {"Diesel", "DieselB", "FuelTank", "FuelTankB"},
-	core.AlarmIDSGLowLevel:            {"SG"},
-	core.AlarmIDSGHighLevel:           {"SG"},
-	core.AlarmIDSIActuated:            {"SISAccumulators"},
-	core.AlarmIDAFWStart:              {"DieselAFWPump", "MotorAFWPump", "TurbineAFWPump"},
-	core.AlarmIDFeedwaterIsolation:    {"MainFeedValve"},
-	core.AlarmIDContainmentIsolA:      {"CIS"},
-	core.AlarmIDContainmentIsolB:      {"CIS"},
+	core.AlarmIDDieselCoolant:      {"Diesel", "DieselB"},
+	core.AlarmIDDieselLowFuel:      {"FuelTank", "FuelTankB"},
+	core.AlarmIDDieselTripped:      {"Diesel", "DieselB", "FuelTank", "FuelTankB"},
+	core.AlarmIDSGLowLevel:         {"SG"},
+	core.AlarmIDSGHighLevel:        {"SG"},
+	core.AlarmIDSIActuated:         {"SISAccumulators"},
+	core.AlarmIDAFWStart:           {"DieselAFWPump", "MotorAFWPump", "TurbineAFWPump"},
+	core.AlarmIDFeedwaterIsolation: {"MainFeedValve"},
+	core.AlarmIDContainmentIsolA:   {"CIS"},
+	core.AlarmIDContainmentIsolB:   {"CIS"},
 	// The MSIVs themselves are standalone valves, which cannot take
 	// halos, so the steam generators carry steam-line alarms.
-	core.AlarmIDSteamlineIsolation:    {"SG"},
-	core.AlarmIDTurbineLowTavg:        {"Turbine"},
-	core.AlarmIDContainmentSpray:      {"CSSTank", "SATTank"},
+	core.AlarmIDSteamlineIsolation: {"SG"},
+	core.AlarmIDTurbineLowTavg:     {"Turbine"},
+	core.AlarmIDContainmentSpray:   {"CSSTank", "SATTank"},
 	// Low-steamline-pressure, low-Tcold, and containment-high-
 	// pressure annunciators are declared in core/alarm.go but never
 	// raised (their alarm docs say so), so mapping them would be dead
@@ -623,19 +623,21 @@ var standaloneValves = []struct {
 		func(p *core.Plant) *core.Valve {
 			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.BypassValve
 		}},
-	{"RAS1", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve0", "gate",
+	// SuctionValve1/2 match bridge_aux.go numbering: index 0 is
+	// exposed as SuctionValve1 (see bridge_aux.go:112-113).
+	{"RAS1", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve1", "gate",
 		func(p *core.Plant) *core.Valve {
 			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.SuctionValves[0]
 		}},
-	{"RAS2", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve1", "gate",
+	{"RAS2", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve2", "gate",
 		func(p *core.Plant) *core.Valve {
 			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.SuctionValves[1]
 		}},
-	{"RBS1", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve0", "gate",
+	{"RBS1", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve1", "gate",
 		func(p *core.Plant) *core.Valve {
 			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.SuctionValves[0]
 		}},
-	{"RBS2", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve1", "gate",
+	{"RBS2", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve2", "gate",
 		func(p *core.Plant) *core.Valve {
 			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.SuctionValves[1]
 		}},
@@ -1029,7 +1031,7 @@ func (r *renderer) clusterBox(name string) (x, y, w, h float64, ok bool) {
 	return x, y, w, h, !first
 }
 
-	func (r *renderer) containmentTop() (Anchor, bool) {
+func (r *renderer) containmentTop() (Anchor, bool) {
 	cx, cy, cw, _, ok := r.clusterBox("cluster_containment")
 	if !ok {
 		return Anchor{}, false
@@ -1065,17 +1067,20 @@ var electricalTies = []struct {
 	from, to, part, label string
 	closed                func(*core.Plant) bool
 }{
-	{from: "Grid", to: "Transformer", part: "ReactorBuilding/PlantElectricalSystems/OffsiteTie",
-		label: "offsite supply tie",
+	// Bus-tie parts rebind to the ESF breaker rows that already
+	// exist in bridge_outside.go (anchors plan): the ESF bus
+	// breaker is the single model contact for each train tie.
+	{from: "Grid", to: "Transformer", part: "Electrical/ESFBusA",
+		label:  "offsite supply tie",
 		closed: func(p *core.Plant) bool { return p.ReactorBuilding.Grid.Voltage > 0 }},
 	{from: "Generator", to: "Transformer", part: "TurbineBuilding/Generator/OutputBreaker",
-		label: "generator output breaker",
+		label:  "generator output breaker",
 		closed: func(p *core.Plant) bool { return p.TurbineBuilding.Generator.BreakerClosed }},
-	{from: "Transformer", to: "ESF_A", part: "ReactorBuilding/PlantElectricalSystems/TrainABusTie",
-		label: "train A bus breaker",
+	{from: "Transformer", to: "ESF_A", part: "Electrical/ESFBusA",
+		label:  "train A bus breaker",
 		closed: func(p *core.Plant) bool { return p.Electrical.ESFBusA.BreakerClosed }},
-	{from: "Transformer", to: "ESF_B", part: "ReactorBuilding/PlantElectricalSystems/TrainBBusTie",
-		label: "train B bus breaker",
+	{from: "Transformer", to: "ESF_B", part: "Electrical/ESFBusB",
+		label:  "train B bus breaker",
 		closed: func(p *core.Plant) bool { return p.Electrical.ESFBusB.BreakerClosed }},
 	{from: "Diesel", to: "ESF_A", part: "AuxiliaryBuilding/DieselGenerator/FeedTie",
 		label: "train A diesel feed",
@@ -1502,11 +1507,11 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// CVCS lines); building captions sit at the P&ID margin.
 	writeLegend := func() {
 		const (
-			lx, ly   = 12.0, DocumentHeight - 118.0
-			legFs    = captionMinUnits
-			legRowH  = 14.0
-			legW     = 176.0
-			legH     = legRowH*5 + 12.0
+			lx, ly  = 12.0, DocumentHeight - 118.0
+			legFs   = captionMinUnits
+			legRowH = 14.0
+			legW    = 176.0
+			legH    = legRowH*5 + 12.0
 		)
 		fmt.Fprintf(&b,
 			`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" fill="%s" stroke="%s" stroke-width="1"/>`+"\n",
@@ -1557,29 +1562,29 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// always enclose the symbols graphviz grouped together. The
 	// containment outline is the dome asset rather than a rect.
 	for _, name := range []string{
-	"cluster_containment", "cluster_turbine",
-	"cluster_auxiliary", "cluster_electrical",
-} {
-	bx, by, bw, bh, ok := r.clusterBox(name)
-	if !ok {
-		continue
-	}
-	// Building outlines are backgrounds: intersect with the
-	// viewport so padded extents never spill off-canvas.
-	bx, by = math.Max(bx, 0), math.Max(by, 0)
-	bw = math.Min(bw, DocumentWidth-bx)
-	bh = math.Min(bh, DocumentHeight-by)
-	// Building captions sit inside the outline just above the
-	// first row's symbols, not on the outline edge: captions
-	// on the edge collided with the first row's part captions
-	// (e.g. "Auxiliary Building" over RHRS A/B). The part
-	// caption directly beneath stays collision-aware.
-	// data-cluster lets embedders hit-test buildings without
-	// re-deriving cluster geometry Go-side.
-	fmt.Fprintf(&b, `<g data-cluster="%s">`+"\n", name)
-	if name == "cluster_containment" {
-		writePartEl("ReactorBuilding/ContainmentBuilding", "",
-			useAt("containment-dome", bx+bw/2, by+bh/2, bw, bh))
+		"cluster_containment", "cluster_turbine",
+		"cluster_auxiliary", "cluster_electrical",
+	} {
+		bx, by, bw, bh, ok := r.clusterBox(name)
+		if !ok {
+			continue
+		}
+		// Building outlines are backgrounds: intersect with the
+		// viewport so padded extents never spill off-canvas.
+		bx, by = math.Max(bx, 0), math.Max(by, 0)
+		bw = math.Min(bw, DocumentWidth-bx)
+		bh = math.Min(bh, DocumentHeight-by)
+		// Building captions sit inside the outline just above the
+		// first row's symbols, not on the outline edge: captions
+		// on the edge collided with the first row's part captions
+		// (e.g. "Auxiliary Building" over RHRS A/B). The part
+		// caption directly beneath stays collision-aware.
+		// data-cluster lets embedders hit-test buildings without
+		// re-deriving cluster geometry Go-side.
+		fmt.Fprintf(&b, `<g data-cluster="%s">`+"\n", name)
+		if name == "cluster_containment" {
+			writePartEl("ReactorBuilding/ContainmentBuilding", "",
+				useAt("containment-dome", bx+bw/2, by+bh/2, bw, bh))
 			// Over-pressure wash: above the 60 psig containment
 			// design pressure the outline gets a translucent red
 			// fill plus heavy stroke.
@@ -2168,7 +2173,7 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms [
 		fmt.Fprintf(b,
 			`<text x="%.0f" y="%.0f" font-size="%.1f" `+
 				`text-anchor="middle">%s</text>`+"\n",
-				a.X, a.Y+dy, fs, body)
+			a.X, a.Y+dy, fs, body)
 	}
 	ring := func(a Anchor, radius float64, colour string) {
 		fmt.Fprintf(b,

@@ -35,7 +35,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Turbine governing valves. The DEHM trims them against the
 	// active reference, but the operator can position the valve
 	// bank manually; cracking them open is also what starts steam
@@ -69,7 +68,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Momentary turbine trip reset. Consumed by the next
 	// Turbine.Step; the machine returns to service only once the
 	// rotor has decayed to rest. Restoring valve control from the
@@ -88,7 +86,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Feedwater regulator valve demand (chapter 15):
 	// "Feedwater flow to each steam generator is controlled by
@@ -116,7 +113,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Manual transfer of SG level control: while latched, the
 	// regulator holds the operator's ValveDemand instead of the
 	// three-element law's. The unload evolution transfers at
@@ -142,7 +138,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Turbine load setpoint (chapter 15):
 	// "After generator breaker closure, the ability to increase or decrease
 	// electrical load at a controlled selectable rate."
@@ -167,7 +162,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Turbine dump valve (chapter 15 steam dump system):
 	// "These valves open under a sudden reduction in
@@ -196,7 +190,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Turbine load runback (chapter 15):
 	// "Automatic load runback initiated by a dropped rod signal"
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:26
@@ -217,7 +210,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Turbine speed demand (chapter 15): pre-breaker wide-range
 	// speed control reference as a fraction of rated speed.
@@ -246,7 +238,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Turning gear (chapter 15 startup): holds the rotor at a slow
 	// roll with no steam admission.
 	m["TurbineBuilding/Turbine/TurningGear"] = &bridge.Control{
@@ -265,7 +256,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Motor-driven auxiliary lube-oil pump (chapter 15): the DEHM
 	// supervises operation "from checking the bearing oil pump before
@@ -290,7 +280,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Condenser vacuum pump / steam-jet air ejector (chapter 15):
 	// operator handle for developing condenser vacuum before steam
 	// is admitted during plant startup.
@@ -314,7 +303,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Condensate pump (chapter 15): takes suction from the
 	// condenser/CST path feeding the heater drain tank ahead of
@@ -341,7 +329,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Heater drain pump returns the heater-drain tank inventory
 	// toward the steam generators through the feedwater stream.
@@ -398,7 +385,6 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Main feedwater control valve (chapter 15):
 	// "A signal from the Feedwater Control System also sets
@@ -457,6 +443,116 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Feedwater-phase valves (anchors plan).
+	// "The pump starting circuits are interlocked to prevent
+	// starting unless the recirculation control valves are open."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:35-37
+	m["TurbineBuilding/MakeupValve/Open"] = &bridge.Control{
+		Part:  "TurbineBuilding/MakeupValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.TurbineBuilding.MakeupValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.MakeupValve.Open = v
+			return nil
+		},
+	}
+	m["TurbineBuilding/RecirculateValve/Open"] = &bridge.Control{
+		Part:  "TurbineBuilding/RecirculateValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.TurbineBuilding.RecirculateValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.RecirculateValve.Open = v
+			return nil
+		},
+	}
+	m["TurbineBuilding/Condenser/RejectValve/Open"] = &bridge.Control{
+		Part:  "TurbineBuilding/Condenser/RejectValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.TurbineBuilding.RejectValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.RejectValve.Open = v
+			return nil
+		},
+	}
+
+	// Heater drain valves (anchors plan): LP drains cascade to the
+	// condenser, HP drains to the deaerator (HDT).
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:76-77
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:13-14
+	m["TurbineBuilding/LowPressureHeater/DrainValve/Open"] = &bridge.Control{
+		Part:  "TurbineBuilding/LowPressureHeater/DrainValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.TurbineBuilding.LowPressureHeater.DrainValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.LowPressureHeater.DrainValve.Open = v
+			return nil
+		},
+	}
+	m["TurbineBuilding/HighPressureHeater/DrainValve/Open"] = &bridge.Control{
+		Part:  "TurbineBuilding/HighPressureHeater/DrainValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.TurbineBuilding.HighPressureHeater.DrainValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.TurbineBuilding.HighPressureHeater.DrainValve.Open = v
+			return nil
+		},
+	}
+
 }
 
 // addTurbineBuildingSensors adds Sensor entries keyed by the namespace managed by this file to m.
@@ -475,7 +571,6 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Turbine velocity (chapter 15 design data):
 	// "Speed: 1800 rpm"
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:22
@@ -488,7 +583,6 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.TurbineBuilding.Turbine.Velocity)
 		},
 	}
-
 
 	// Turbine real power (chapter 15):
 	// "Westinghouse supplies nuclear turbinegenerator systems over
@@ -505,7 +599,6 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.TurbineBuilding.Turbine.RealPower)
 		},
 	}
-
 
 	// Generator net real power (chapter 15):
 	// "The steam by rotating the blades of the turbine elements
@@ -528,7 +621,6 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Turbine state (chapter 15):
 	m["TurbineBuilding/Turbine/State"] = &bridge.Sensor{
 		Part:  "TurbineBuilding/Turbine",
@@ -550,7 +642,6 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Main generator output voltage (chapter 15):
 	// "Output voltage: 24,000 to 26,000 volts, three-phase, 60 Hz"
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21
@@ -564,7 +655,6 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Main generator frequency (chapter 15):
 	// "Output voltage: 24,000 to 26,000 volts, three-phase, 60 Hz"
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:21
@@ -577,7 +667,6 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.TurbineBuilding.Generator.Frequency)
 		},
 	}
-
 
 	// Governing-valve bank position (chapter 15): DEHM-positioned
 	// governing valves throttle admission behind the stop valves.
@@ -595,7 +684,6 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// First-stage pressure (chapter 15): DEHM controller input.
 	// "computes signals comparing turbine speed and first-stage
 	// pressure with reference values established by the dispatcher or
@@ -605,13 +693,12 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Part:  "TurbineBuilding/Turbine",
 		Label: "FirstStagePressure",
 		// Backing field stores psia; badge now matches the unit.
-		Kind:  "psia",
+		Kind: "psia",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("psia",
 				p.TurbineBuilding.Turbine.FirstStagePressure)
 		},
 	}
-
 
 	// Bearing-oil header pressure (chapter 15): trip input for the
 	// low bearing oil pressure device.
@@ -626,7 +713,6 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.TurbineBuilding.Turbine.BearingOilPressure)
 		},
 	}
-
 
 	// Condenser back-pressure (chapter 15): the vacuum the operator
 	// develops before rolling the turbine; low vacuum trips it.
@@ -644,7 +730,6 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Extraction nonreturn valve status (chapter 15): latched shut on
 	// any turbine trip.
 	// "Extraction line nonreturn valves."
@@ -659,7 +744,6 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Generator MVA-limit alarm (chapter 15): apparent power exceeded
 	// the rating and the DEHM clamped output onto the rating circle.
 	// "output power, the power factor, and speed to ensure that the
@@ -672,6 +756,76 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.BoolToStr(
 				p.TurbineBuilding.Generator.GeneratorMVALimitAlarm), nil
+		},
+	}
+
+	// Condensate storage tank level (anchors plan, plans/svg/anchors.txt).
+	// Sizing per the Westinghouse Technical Manual:
+	// specs/westinghouse_tech_manual/chapter_5/page_0532.txt:30-41
+	// The renderer already draws the gauge (svg.go levelAccessors);
+	// this row binds the P&ID glyph to its panel.
+	m["TurbineBuilding/CondensateStorageTank/Level"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/CondensateStorageTank",
+		Label: "Level",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.Outside.CondensateStorageTank.Level.Float())
+		},
+	}
+
+	// Heater drain tank level: the deaerator stand-in draining HP
+	// heaters (chapter_15/page_221.txt:13-14).
+	m["TurbineBuilding/HeaterDrainTank/Level"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/HeaterDrainTank",
+		Label: "Level",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.TurbineBuilding.HeaterDrainTank.Level.Float())
+		},
+	}
+
+	// LP/HP heater outlet temperature readout for the heater glyphs.
+	m["TurbineBuilding/LowPressureHeater/OutletTemp"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/LowPressureHeater",
+		Label: "OutletTemp",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.TurbineBuilding.LowPressureHeater.Inlet.Float()+p.TurbineBuilding.LowPressureHeater.TemperatureRise.Float())
+		},
+	}
+	m["TurbineBuilding/HighPressureHeater/OutletTemp"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/HighPressureHeater",
+		Label: "OutletTemp",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.TurbineBuilding.HighPressureHeater.Inlet.Float()+p.TurbineBuilding.HighPressureHeater.TemperatureRise.Float())
+		},
+	}
+
+	// Exciter and stator-cooling readouts (anchors plan): the EXCITER
+	// and SCCW glyphs had run dots but no bridge key under their part.
+	m["TurbineBuilding/Generator/ExcitationSystem/ExciterOutput"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/Generator/ExcitationSystem",
+		Label: "ExciterOutput",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.TurbineBuilding.Generator.ExciterOutput)
+		},
+	}
+	m["TurbineBuilding/Generator/StatorCooling/Flow"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/Generator/StatorCooling",
+		Label: "Flow",
+		Kind:  "gpm",
+		Get: func() (string, error) {
+			// SCCWFlow is stored in gal/s; presented gpm (x60 at the
+			// presentation boundary).
+			return bridge.FormatSensorValue("gpm",
+				p.TurbineBuilding.Generator.SCCWFlow*60)
 		},
 	}
 

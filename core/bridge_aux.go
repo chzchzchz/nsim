@@ -101,7 +101,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// RHRS Train A hot-leg suction isolation valve pair.
 	// Two series motor-operated valves on the RCS hot-leg
 	// suction line; both must be open for the train to take
@@ -131,7 +130,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// RHRS Train A hot-leg suction isolation valve pair
 	// (second valve).
 	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve2/Open"] = &bridge.Control{
@@ -155,7 +153,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// RHRS Train B hot-leg suction isolation valve pair
 	// (first valve).
@@ -181,7 +178,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// RHRS Train B hot-leg suction isolation valve pair
 	// (second valve).
 	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve2/Open"] = &bridge.Control{
@@ -205,7 +201,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// RHRS Train A bypass flow-control valve (around the RHR
 	// heat exchanger). Open=1 means full bypass (no heat
@@ -234,7 +229,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// RHRS Train B bypass flow-control valve.
 	m["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/BypassValve/Open"] = &bridge.Control{
 		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB",
@@ -257,7 +251,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Solid-plant primary pressure control valve between the RHR
 	// and CVC systems, with its selected-pressure setpoint. It
@@ -294,7 +287,7 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		Part:  "AuxiliaryBuilding/ResidualHeatRemovalSystem",
 		Label: "SolidPlantPressureSetpoint",
 		// Backing field stores psia; badge now matches the unit.
-		Kind:  "psia",
+		Kind: "psia",
 		Get: func() string {
 			return fmt.Sprintf("%v",
 				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantPressureSetpoint)
@@ -312,7 +305,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// EFWS motor-driven pump manual control. Auto-starts on
 	// SI / low-low SG level; the operator manually stops it
@@ -533,7 +525,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// CVCS charging-pump running latch. The CVCS Step reads
 	// ChargingPumpRunning to decide ChargingFlow — this is the
 	// operator-visible handle.
@@ -558,7 +549,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// CVCS boron operating mode selector. Boration raises the
 	// RCS boron concentration toward the cold shutdown value
@@ -602,7 +592,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// BTRS recirculation pump: provides the motive force to
 	// route flow from the VCT through the demineralizers during
@@ -679,8 +668,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
-
 	// CVCS automatic boron trim engage switch: rod-bank travel
 	// position selects the BTRS mode so chemistry relieves what the
 	// rods no longer can.
@@ -702,7 +689,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// CVCS letdown valve-open latch. The CVCS Step reads
 	// LetdownValveOpen to decide LetdownFlow (in conjunction
@@ -735,7 +721,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// CVCS auxiliary spray valve: throttled charging flow routed
 	// into the pressurizer for pressure control while the reactor
 	// coolant pumps are secured.
@@ -766,7 +751,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen"] = &bridge.Control{
 		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
 		Label: "LetdownValveOpen",
@@ -783,33 +767,31 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = v
 			return nil
 		},
-		}
+	}
 
-
-		// CVCS automatic pressurizer level control engage switch.
-		// "The pressurizer level control system adjusts charging
-		// flow from the CVCS to maintain pressurizer level at a
-		// programmed value which varies with RCS average coolant
-		// temperature."
-		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
-		m["AuxiliaryBuilding/ChemicalVolumeControlSystem/AutoLevelControl"] = &bridge.Control{
-			Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
-			Label: "AutoLevelControl",
-			Kind:  "bool",
-			Get: func() string {
-				return bridge.BoolToStr(
-					p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl)
-			},
-			Set: func(s string) error {
-				v, err := bridge.StrToBool(s)
-				if err != nil {
-					return err
-				}
-				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = v
-				return nil
-			},
-		}
-
+	// CVCS automatic pressurizer level control engage switch.
+	// "The pressurizer level control system adjusts charging
+	// flow from the CVCS to maintain pressurizer level at a
+	// programmed value which varies with RCS average coolant
+	// temperature."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/AutoLevelControl"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "AutoLevelControl",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = v
+			return nil
+		},
+	}
 
 	// Diesel generator start signal (chapter 11):
 	// "controls for the governor, voltage regulator, generator
@@ -864,7 +846,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Diesel generator load fraction (chapter 11):
 	// "Loads are automatically sequenced on the diesel generator
 	// buses over a short period of time to preclude the possibility
@@ -893,7 +874,6 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Diesel generator breaker (chapter 11):
 	// "controls for the governor, voltage regulator, generator
@@ -1111,6 +1091,96 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// EFWS turbine sub-valves (anchors plan). Steam admission:
+	// "The steam supply line for each turbine driven pump is
+	// connected to the main steam line from a steam generator.
+	// This line is fitted with a steam admission valve..."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:42-47
+	// Recirculation echoes the feedwater interlock: "The pump
+	// starting circuits are interlocked to prevent starting unless
+	// the recirculation control valves are open."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:35-37
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/SteamAdmissionValve/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/SteamAdmissionValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.SteamAdmissionValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.SteamAdmissionValve.Open = v
+			return nil
+		},
+	}
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/RecirculationValve/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/RecirculationValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.RecirculationValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.RecirculationValve.Open = v
+			return nil
+		},
+	}
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump/SteamAdmissionValve/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump/SteamAdmissionValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.SteamAdmissionValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.SteamAdmissionValve.Open = v
+			return nil
+		},
+	}
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump/RecirculationValve/Open"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump/RecirculationValve",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v", p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.RecirculationValve.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.RecirculationValve.Open = v
+			return nil
+		},
+	}
+
 }
 
 // addAuxiliaryBuildingSensors adds Sensor entries keyed by the namespace managed by this file to m.
@@ -1143,7 +1213,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Component cooling water system outlet temperature (chapter 5):
 	// "The component cooling water inlet temperature to various
 	// components during normal cooldown is permitted to increase
@@ -1159,7 +1228,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// CVCS charging flow rate (chapter 4 CVCS):
 	// "The charging pumps take the coolant from the volume
 	// control tank [...]"
@@ -1174,10 +1242,9 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			// Stored gal/s; presented gpm (x60 at the presentation boundary).
 			return bridge.FormatSensorValue("gpm",
-				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingFlow.Float() * 60)
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingFlow.Float()*60)
 		},
 	}
-
 
 	// CVCS letdown flow rate (chapter 4 CVCS):
 	// "The charging pumps take the coolant from the volume
@@ -1192,10 +1259,9 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			// Stored gal/s; presented gpm (x60 at the presentation boundary).
 			return bridge.FormatSensorValue("gpm",
-				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownFlow.Float() * 60)
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownFlow.Float()*60)
 		},
 	}
-
 
 	// Boron setpoint target: the operator-written concentration the
 	// tracking drive ramps toward through the BTRS flow modes. While
@@ -1212,7 +1278,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronTargetConcentration)
 		},
 	}
-
 
 	// Pressurizer level program output: the Tavg-referenced
 	// programmed value the automatic level controller holds.
@@ -1240,7 +1305,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// BRS holdup tank level: diverted letdown accumulates here
 	// while the VCT is in its high-level condition.
 	// "If the volume control tank is full, a high-water level
@@ -1255,7 +1319,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BRSHoldupLevel.Float())
 		},
 	}
-
 
 	// BTRS demineralizer bed saturation: boron changes halt when
 	// the resin beds are depleted.
@@ -1272,7 +1335,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSBedSaturation*100)
 		},
 	}
-
 
 	// Diesel generator ready-to-load status (chapter 11):
 	// "designed to reach rated speed and be ready to
@@ -1298,7 +1360,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Diesel fuel oil tank level (chapter 11):
 	// "Each diesel generator is provided with a fuel oil day tank
 	// and a fuel storage tank. The onsite supply of fuel for each
@@ -1314,7 +1375,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.AuxiliaryBuilding.DieselGenerator.Fuel.Level.Float())
 		},
 	}
-
 
 	// Containment spray header isolation valves "A" (chapter 6):
 	// "This signal starts the spray pumps, opens the spray header
@@ -1343,7 +1403,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Containment spray pump running.
 	// "Containment spray is initiated automatically in response
 	// to a containment high pressure signal. This signal starts
@@ -1358,7 +1417,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.AuxiliaryBuilding.ContainmentSpraySystem.Running)
 		},
 	}
-
 
 	// CCWS pump running. One component cooling pump is in
 	// service per train during normal operation; a standby pump
@@ -1382,7 +1440,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning)
 		},
 	}
-
 
 	// RHR train-A pump running. The RHR pumps are stopped
 	// when plant startup begins and run on the miniflow
@@ -1424,10 +1481,9 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			// Stored gal/s; presented gpm (x60 at the presentation boundary).
 			return bridge.FormatSensorValue("gpm",
-				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantReliefFlow.Float() * 60)
+				p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantReliefFlow.Float()*60)
 		},
 	}
-
 
 	// EFWS motor-driven pump running. Auto-started on
 	// safety-injection signal or low-low SG level; manually
@@ -1486,7 +1542,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// SFPCS pump running. Two pumps normal, third standby.
 	// "Normal operation requires two pumps with the third pump
 	// serving as a standby."
@@ -1535,7 +1590,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Diesel generator output voltage (chapter 11):
 	// "The diesel generators are provided with static-type brushless
 	// excitation and field flashing for rapid voltage buildup."
@@ -1550,7 +1604,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Diesel generator output frequency (chapter 11):
 	// "60 Hz output which feeds its corresponding"
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_168.txt:15
@@ -1563,7 +1616,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.AuxiliaryBuilding.DieselGenerator.Generator.Frequency)
 		},
 	}
-
 
 	// Diesel generator output real power (chapter 11):
 	// "Each diesel engine's fuel oil system, air starting
@@ -1584,7 +1636,6 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.AuxiliaryBuilding.DieselGenerator.Generator.RealPower)
 		},
 	}
-
 
 	// Spent Fuel Pool purification flow (chapter 12):
 	// "passing approximately 100 gpm (23 m3/hr) of each
@@ -1657,7 +1708,7 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			// Stored gal/s; presented gpm (x60 at the presentation boundary).
 			return bridge.FormatSensorValue("gpm",
-				p.AuxiliaryBuilding.BoronRecycleSystem.FeedFlow * 60)
+				p.AuxiliaryBuilding.BoronRecycleSystem.FeedFlow*60)
 		},
 	}
 
@@ -1728,6 +1779,93 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("gallon",
 				p.AuxiliaryBuilding.BoronRecycleSystem.DistillateDelivered.Float())
+		},
+	}
+
+	// Anchors plan (plans/svg/anchors.txt) sensors for rendered
+	// groups that had state but no bridge key under their part.
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/VCT/Level"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem/VCT",
+		Label: "Level",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel.Float())
+		},
+	}
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRS/Saturation"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRS",
+		Label: "Saturation",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSBedSaturation*100)
+		},
+	}
+	m["AuxiliaryBuilding/ContainmentSpraySystem/CSST/Level"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ContainmentSpraySystem/CSST",
+		Label: "Level",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.AuxiliaryBuilding.ContainmentSpraySystem.CSSTLevel.Float())
+		},
+	}
+	m["AuxiliaryBuilding/ContainmentSpraySystem/SAT/Level"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ContainmentSpraySystem/SAT",
+		Label: "Level",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.AuxiliaryBuilding.ContainmentSpraySystem.SATLevel.Float())
+		},
+	}
+	m["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/HX/PoolTemp"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/SpentFuelPoolCoolingSystem/HX",
+		Label: "PoolTemp",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PoolTemp.Float())
+		},
+	}
+
+	// RCFC fan group: "four fan units that operate in parallel"
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:19-24
+	for i := 0; i < 4; i++ {
+		i := i
+		letter := []string{"A", "B", "C", "D"}[i]
+		m["AuxiliaryBuilding/ReactorCoolantFanCoolerSystem/Unit"+letter+"/Running"] = &bridge.Sensor{
+			Part:  "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem",
+			Label: "Unit" + letter + "Running",
+			Kind:  "bool",
+			Get: func() (string, error) {
+				return bridge.FormatSensorValue("bool",
+					p.AuxiliaryBuilding.RCFCUnits[i].Running)
+			},
+		}
+	}
+
+	// Station transformer: feeds the aux building diagram glyph.
+	// "the unit auxiliary power is transformed from the output of
+	// the plant main generator through the unit auxiliary transformer"
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:45-47
+	m["AuxiliaryBuilding/Transformer/UATVoltage"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/Transformer",
+		Label: "UATVoltage",
+		Kind:  "volt",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("volt",
+				p.ReactorBuilding.StationTransformer.UATOutputVoltage)
+		},
+	}
+	m["AuxiliaryBuilding/Transformer/SATVoltage"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/Transformer",
+		Label: "SATVoltage",
+		Kind:  "volt",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("volt",
+				p.ReactorBuilding.StationTransformer.SATOutputVoltage)
 		},
 	}
 

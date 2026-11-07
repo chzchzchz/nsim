@@ -37,7 +37,6 @@ func addOutsideControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Engineered Safety Features bus A breaker (chapter 11):
 	// "Each power source, diesel generator and offsite, up to the
 	// point of connection to the engineered safety features system
@@ -64,7 +63,6 @@ func addOutsideControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Engineered Safety Features bus B breaker (chapter 11):
 	// Same justification as ESF bus A above.
@@ -121,7 +119,6 @@ func addOutsideControls(p *Plant, m bridge.ControlMap) {
 		}
 	}
 
-
 	// Service Water pump run command (chapter 12):
 	// "The Service Water System supplies all the cooling water
 	// for the plant, including that required for emergency
@@ -154,7 +151,6 @@ func addOutsideControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Service Water nonessential-header isolation (chapter 12):
 	// "The nonessential equipment coolers are fed from
 	// separate branch headers that can be isolated from the
@@ -181,7 +177,6 @@ func addOutsideControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Cooling tower makeup valve (chapter 14 tech manual):
 	// "This inventory loss, combined with losses due to
@@ -234,7 +229,6 @@ func addOutsideControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Alarm reset (chapter 8 annunciator):
 	// "Turned off by operator acknowledgement."
 	// specs/the_westinghouse_pressurized_water_react/chapter_8/page_145.txt:66-67
@@ -257,7 +251,6 @@ func addOutsideControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	m["Alarms/Reset"] = &bridge.Control{
 		Part:  "Plant",
@@ -302,6 +295,48 @@ func addOutsideControls(p *Plant, m bridge.ControlMap) {
 					return err
 				}
 				pump.Running = v
+				return nil
+			},
+		}
+		// AFW edge valves (anchors plan): CST suction and service-water
+		// backup valves per AFW pump; state on parts.go:1585-1586.
+		m[afw.id+"/CSTValve/Open"] = &bridge.Control{
+			Part:  afw.id + "/CSTValve",
+			Label: "Open",
+			Kind:  "normalized",
+			Get: func() string {
+				return fmt.Sprintf("%v", pump.CSTValve.Open)
+			},
+			Set: func(s string) error {
+				validated, err := bridge.ConvertControlValue("normalized", s)
+				if err != nil {
+					return err
+				}
+				v, err := strconv.ParseFloat(validated, 64)
+				if err != nil {
+					return err
+				}
+				pump.CSTValve.Open = v
+				return nil
+			},
+		}
+		m[afw.id+"/ServiceWaterValve/Open"] = &bridge.Control{
+			Part:  afw.id + "/ServiceWaterValve",
+			Label: "Open",
+			Kind:  "normalized",
+			Get: func() string {
+				return fmt.Sprintf("%v", pump.ServiceWaterValve.Open)
+			},
+			Set: func(s string) error {
+				validated, err := bridge.ConvertControlValue("normalized", s)
+				if err != nil {
+					return err
+				}
+				v, err := strconv.ParseFloat(validated, 64)
+				if err != nil {
+					return err
+				}
+				pump.ServiceWaterValve.Open = v
 				return nil
 			},
 		}
@@ -402,7 +437,7 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			// Stored gal/s; presented gpm (x60 at the presentation boundary).
 			return bridge.FormatSensorValue("gpm",
-				p.Outside.CoolingTower.EvaporationFlow.Float() * 60)
+				p.Outside.CoolingTower.EvaporationFlow.Float()*60)
 		},
 	}
 
@@ -419,10 +454,10 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 			type alarmJSON struct {
 				ID           string  `json:"id"`
 				Description  string  `json:"description"`
-				Severity    string  `json:"severity"`
-				Active      bool    `json:"active"`
-				Acknowledged bool   `json:"acknowledged"`
-				TimeS       float64 `json:"time_s"`
+				Severity     string  `json:"severity"`
+				Active       bool    `json:"active"`
+				Acknowledged bool    `json:"acknowledged"`
+				TimeS        float64 `json:"time_s"`
 			}
 			out := make([]alarmJSON, len(list))
 			for i, a := range list {
@@ -436,10 +471,10 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 				out[i] = alarmJSON{
 					ID:           string(a.ID),
 					Description:  a.Description,
-					Severity:    sev,
-					Active:      a.Active,
+					Severity:     sev,
+					Active:       a.Active,
 					Acknowledged: a.Acknowledged,
-					TimeS:       a.Timestamp.Seconds(),
+					TimeS:        a.Timestamp.Seconds(),
 				}
 			}
 			b, err := json.Marshal(out)
@@ -449,7 +484,6 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 			return string(b), nil
 		},
 	}
-
 
 	// Engineered Safety Features bus A voltage (chapter 11):
 	// "All of the engineered safety system loads are fed from two
@@ -465,7 +499,6 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Engineered Safety Features bus A energized status (chapter 11):
 	// "The engineered safety features buses are normally energized
 	// from system auxiliary transformers."
@@ -479,7 +512,6 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 				p.Electrical.ESFBusA.Energized)
 		},
 	}
-
 
 	// Engineered Safety Features bus B voltage (chapter 11):
 	// "All of the engineered safety system loads are fed from two
@@ -495,7 +527,6 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Engineered Safety Features bus B energized status (chapter 11):
 	// "The engineered safety features buses are normally energized
 	// from system auxiliary transformers."
@@ -509,7 +540,6 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 				p.Electrical.ESFBusB.Energized)
 		},
 	}
-
 
 	// Service Water System flow (chapter 12):
 	// "The three essential service water pumps for each unit
@@ -534,7 +564,6 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Service Water inlet temperature (chapter 12):
 	// "The Service Water System supplies all the cooling water
 	// for the plant, including that required for emergency
@@ -553,7 +582,6 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 				p.Outside.ServiceWaterSystem.InletTemp.Float())
 		},
 	}
-
 
 	// Service Water outlet temperature (chapter 12):
 	// The outlet temperature rises above the inlet as the
@@ -576,7 +604,6 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Backing field FlowGPM is stored in true gpm; no conversion.
 	// Circulating Water System flow (chapter 12):
 	// "Circulating water for each main condenser is supplied
@@ -598,7 +625,6 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 				p.Outside.CirculatingWaterSystem.FlowGPM)
 		},
 	}
-
 
 	// Active alarms (chapter 8 annunciator):
 	// "Turned off by operator acknowledgement."

@@ -112,7 +112,7 @@ func TestSymbolManifest(t *testing.T) {
 	refs := map[string]bool{
 		"containment-dome": true, "css-spray-headers": true, "rcfc-unit": true,
 		"containment-filter": true,
-		"valve-safety": true, "valve-porv": true, "breaker": true,
+		"valve-safety":       true, "valve-porv": true, "breaker": true,
 	}
 	for _, dp := range diagramParts {
 		refs[symbolID(dp.kind)] = true
@@ -488,6 +488,69 @@ func TestPidgapsPartsRender(t *testing.T) {
 		"filtration run dot must follow recombiner state")
 }
 
+// unboundOK allow-lists rendered data-part values that intentionally
+// have no bridge key under them. Anchors plan: the test fails if a
+// new unbound part appears without an entry here.
+var unboundOK = map[string]bool{}
+
+// TestBridgePartCoverage enforces the anchors-plan acceptance
+// criterion: every rendered data-part group prefix-matches a
+// GetControlMap/GetSensorMap key, or is explicitly allow-listed.
+// Fixture is fresh core.MakePlant() with no Plant.Step: bindings
+// are static registration properties, not dynamics.
+func TestBridgePartCoverage(t *testing.T) {
+	p := core.MakePlant()
+	cm := core.GetControlMap(&p)
+	sm := core.GetSensorMap(&p)
+	keys := map[string]bool{}
+	for id := range cm {
+		keys[id] = true
+	}
+	for id := range sm {
+		keys[id] = true
+	}
+	// Bridge rows added by anchors.txt round-trip.
+	for _, key := range []string{
+		"TurbineBuilding/CondensateStorageTank/Level",
+		"TurbineBuilding/HeaterDrainTank/Level",
+		"TurbineBuilding/MakeupValve/Open",
+		"ReactorBuilding/SafetyInjectionSystem/RWST/Level",
+		"Outside/DieselAFWPump/CSTValve/Open",
+		"AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/SteamAdmissionValve/Open",
+	} {
+		_, inC := cm[key]
+		_, inS := sm[key]
+		assert.True(t, inC || inS, "bridge key %s must round-trip", key)
+	}
+	out := renderPlant(t, &p)
+	rendered := map[string]bool{}
+	for _, seg := range strings.Split(out, `data-part="`) {
+		idx := strings.Index(seg, `"`)
+		if idx < 0 {
+			continue
+		}
+		v := seg[:idx]
+		if v == "" || strings.Contains(v, " ") || strings.Contains(v, "<") || strings.Contains(v, ">") {
+			continue
+		}
+		rendered[v] = true
+	}
+	for part := range rendered {
+		if unboundOK[part] {
+			continue
+		}
+		covered := false
+		for key := range keys {
+			if key == part || strings.HasPrefix(key, part+"/") {
+				covered = true
+				break
+			}
+		}
+		assert.True(t, covered,
+			"rendered data-part %q must prefix-match a bridge key or be allow-listed", part)
+	}
+}
+
 // TestSymbolWashesTrackState checks intensity encodings appear and
 // disappear with their driving flags.
 func TestSymbolWashesTrackState(t *testing.T) {
@@ -508,7 +571,6 @@ func TestSymbolWashesTrackState(t *testing.T) {
 	p.ReactorBuilding.Pressurizer.HeatersOn = false
 	assert.NotContains(t, renderPlant(t, &p), `fill="#ffb84d"`)
 }
-
 
 // TestContainmentHydrogenWash checks the dome wash ramps amber with
 // concentration below the alarm setpoint and turns red once the
