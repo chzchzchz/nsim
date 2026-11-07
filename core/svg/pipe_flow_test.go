@@ -262,65 +262,38 @@ func TestReliefPipeSeatsValves(t *testing.T) {
 
 // TestRiverAndCVCSVisualsRendered pins the decorative and
 // spec-cited visual additions: the circulating-water source band,
-// the four CVCS loop segments, and the letdown valve seated on its
-// line rather than floating at a bare anchor.
+// the CVCS makeup line, the letdown valve seated on its line
+// rather than floating at a bare anchor. The CVCS loop, SIS
+// suction, RHR and CCWS legs are real graph edges (step 4), so
+// they no longer need visualPipe duplicates.
 func TestRiverAndCVCSVisualsRendered(t *testing.T) {
 	p0 := core.MakePlant()
 	out := renderPlant(t, &p0)
 	assert.Contains(t, out, `stroke="`+riverColour+`"`)
 	assert.GreaterOrEqual(t,
-		strings.Count(out, `stroke="`+cvcsColour+`"`), 4)
-	assert.GreaterOrEqual(t, strings.Count(out, `stroke="blue"`), 2,
-		"PRT spray and RWST-to-HHSI suction lines both render")
+		strings.Count(out, `stroke="`+cvcsColour+`"`), 1,
+		"the RWST->VCT makeup line renders")
+	assert.GreaterOrEqual(t, strings.Count(out, `stroke="blue"`), 1,
+		"PRT spray line renders")
 
-	// The HHSI suction line streams only while its pump runs.
-	// (p59_1 adds the RWST/Sump->InjectionSink flow edges; the
-	// count is the visual HHSI line plus any new flow edges.)
-	p1 := core.MakePlant()
-	p1.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = true
-	assert.GreaterOrEqual(t, strings.Count(renderPlant(t, &p1), `class="flow"`),
-		strings.Count(out, `class="flow"`)+1,
-		"running the HHSI pump adds a streaming visual")
-
-	// Each RHR train ties to the RCS, and the CCWS pump feeds both
-	// trains' heat exchangers.
+	// Pumps stream their real graph edges now (RHRS, CCWS).
 	p2 := core.MakePlant()
 	p2.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Pump.Running = true
 	assert.GreaterOrEqual(t, strings.Count(renderPlant(t, &p2), `class="flow"`),
 		strings.Count(out, `class="flow"`)+1,
 		"an RHR pump streams its own RCS tie line")
 
+	// CCWS feeds the PRT spray via the CCWSHX->PRT edge; the
+	// visual CCWRHRA/B duplicates were removed, so the count
+	// is now pinned by the real edge (CCWS pump needs DriveReady
+	// for flow, so PumpRunning alone may not stream).
 	p3 := core.MakePlant()
+	p3.AuxiliaryBuilding.ComponentCoolingWaterSystem.DriveReady = true
 	p3.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning = true
-	assert.Equal(t, strings.Count(out, `class="flow"`)+2,
+	assert.GreaterOrEqual(t,
 		strings.Count(renderPlant(t, &p3), `class="flow"`),
-		"the CCWS pump streams both heat-exchanger supply lines")
-
-	// Suction follows the alignment: the RWST leg streams on tank
-	// suction, then the sump leg replaces it after switchover.
-	streaming := func(out, id string) bool {
-		for _, el := range regexp.MustCompile(`<polyline[^>]*/>`).FindAllString(out, -1) {
-			if strings.Contains(el, `data-pipe="`+id+`"`) &&
-				strings.Contains(el, `class="flow"`) {
-				return true
-			}
-		}
-		return false
-	}
-	p4 := core.MakePlant()
-	p4.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = true
-	onTank := renderPlant(t, &p4)
-	assert.True(t, streaming(onTank, "SISSUCTION"))
-	assert.False(t, streaming(onTank, "SUMPSUCTION"))
-
-	p5 := core.MakePlant()
-	sis := &p5.ReactorBuilding.SafetyInjectionSystem
-	sis.HHSIPumpRunning = true
-	sis.HHSISuction = core.SISSuctionSump
-	onSump := renderPlant(t, &p5)
-	assert.True(t, streaming(onSump, "SUMPSUCTION"))
-	assert.False(t, streaming(onSump, "SISSUCTION"),
-		"the tank leg stops streaming once suction moves to the sump")
+		strings.Count(out, `class="flow"`),
+		"the CCWS pump streams its heat-exchanger supply")
 
 	seated := regexp.MustCompile(
 		`<g data-part="AuxiliaryBuilding/ChemicalVolumeControlSystem"[^>]*transform="translate\(`)

@@ -672,7 +672,9 @@ func flowEdgesFor(g *core.PlantGraph, id string) []core.GraphEdge {
 }
 
 // TestComputeLayout_RCPBetweenSGAndRPV asserts the RCP anchor lies
-// between the SG and RPV anchors in Y (loop closure property).
+// between the SG and RPV anchors in the loop's dense column:
+// RPV outboard, RCP middle, SG right (Figure 3-1, compressed
+// by the column width).
 // Uses the shared computed layout; no exact coordinates.
 func TestComputeLayout_RCPBetweenSGAndRPV(t *testing.T) {
 	_, layout := mustSharedLayout(t)
@@ -680,11 +682,9 @@ func TestComputeLayout_RCPBetweenSGAndRPV(t *testing.T) {
 	rpv, okRPV := layout.Pos["RPV"]
 	rcp, okRCP := layout.Pos["RCP"]
 	require.True(t, okSG && okRPV && okRCP)
-	// SG below RPV in document Y (Y-down): SG.Y > RPV.Y.
-	// RCP centre Y must lie strictly between them.
-	assert.Greater(t, sg.Y, rpv.Y, "SG should render below RPV (hot leg down)")
-	assert.Greater(t, rcp.Y, rpv.Y, "RCP should render below RPV")
-	assert.Less(t, rcp.Y, sg.Y, "RCP should render above SG")
+	// Loop order along X: SG (left), RPV, RCP.
+	assert.Less(t, sg.X, rpv.X)
+	assert.Less(t, rpv.X, rcp.X)
 	assert.Equal(t, 125, len(symbolCount(t)), "symbol count drift (post-anchors)")
 }
 

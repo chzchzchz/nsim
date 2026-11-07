@@ -54,16 +54,20 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	{"RCFC_D", "cluster_containment", "RCFCUnit"},
 
 	// Pumps outside the fluid graph.
-	{"CWP", "cluster_turbine", "CirculatingWaterPump"},
+	{"CWP", "", "CirculatingWaterPump"},
 	{"CCWSPump", "cluster_auxiliary", "ComponentCoolingWaterPump"},
-	{"SFPPA", "cluster_containment", "SpentFuelPoolPump"},
-	{"SFPPB", "cluster_containment", "SpentFuelPoolPump"},
+	// Spent-fuel pool train lives in the fuel building adjacent
+	// to containment (Figure 1-5), not inside the primary loop.
+	{"SFPPA", "cluster_fuel", "SpentFuelPoolPump"},
+	{"SFPPB", "cluster_fuel", "SpentFuelPoolPump"},
 
 	// Heat-rejection boundary: the shared intake house and the
 	// essential service water header it feeds
-	// (plans/svg/circulating_water.md).
-	{"Intake", "cluster_turbine", "RiverIntake"},
-	{"SWSHeader", "cluster_auxiliary", "ServiceWaterHeader"},
+	// (plans/svg/circulating_water.md). Unclustered (the outside
+	// / heat-sink column is unclustered and emits leftmost, and
+	// Intake/CWP/SWSHeader anchor the CW tunnel there).
+	{"Intake", "", "RiverIntake"},
+	{"SWSHeader", "", "ServiceWaterHeader"},
 
 	// Safety injection completion: the refueling water storage
 	// tank and high-head injection pump beside the accumulators
@@ -74,10 +78,11 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	{"HHSI", "cluster_containment", "HHSIPump"},
 
 	// Containment spray train: borated-water and NaOH additive
-	// tanks plus the spray pumps (chapter_6/page_114.txt:55-63).
-	{"CSSTank", "cluster_auxiliary", "ContainmentSprayStorageTank"},
-	{"SATTank", "cluster_auxiliary", "SprayAdditiveTank"},
-	{"CSSPump", "cluster_auxiliary", "ContainmentSprayPump"},
+	// tanks plus the spray pumps (chapter_6/page_114.txt:55-63,
+	// Figure 6-4 spray ring headers at the containment top).
+	{"CSSTank", "cluster_containment", "ContainmentSprayStorageTank"},
+	{"SATTank", "cluster_containment", "SprayAdditiveTank"},
+	{"CSSPump", "cluster_containment", "ContainmentSprayPump"},
 
 	// CVCS skid: volume control tank and charging pump; the aux
 	// spray and letdown valves render via scalarValves.
@@ -110,11 +115,12 @@ var extraNodes = []struct{ id, cluster, kind string }{
 
 	// Second ESF-train diesel and its day tank; the model gives
 	// each train its own EDG (core/alarm.go annunciator loop).
-	{"DieselB", "cluster_auxiliary", "DieselGenerator"},
-	{"FuelTankB", "cluster_auxiliary", "FuelTank"},
+	// Diesels live with the ESF buses (Figures 11-1/11-2).
+	{"DieselB", "cluster_electrical", "DieselGenerator"},
+	{"FuelTankB", "cluster_electrical", "FuelTank"},
 
 	// Spent-fuel pool heat exchanger between the pool pumps.
-	{"SFPHX", "cluster_containment", "ComponentCoolingWaterSystem"},
+	{"SFPHX", "cluster_fuel", "ComponentCoolingWaterSystem"},
 
 	// Stator coil cooling water pump for the generator
 	// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:48-61)
@@ -177,7 +183,7 @@ var clusterFor = map[string]string{
 	"SG":               "cluster_containment",
 	"RCP":              "cluster_containment",
 	"SISAccumulators":  "cluster_containment",
-	"SFP":              "cluster_containment",
+	"SFP":              "cluster_fuel",
 
 	// Turbine / condensate / feedwater.
 	"Turbine":        "cluster_turbine",
@@ -189,14 +195,14 @@ var clusterFor = map[string]string{
 	"HPHeaterDrain":  "cluster_turbine",
 	"MainFeedValve":  "cluster_turbine",
 
-	// Auxiliary (EFWS, CCWS, RHRS, diesel, transformer).
+	// Auxiliary (EFWS, CCWS, RHRS, BRS).
 	"EFWSTank":    "cluster_auxiliary",
 	"CCWSHX":      "cluster_auxiliary",
 	"RHRS_A":      "cluster_auxiliary",
 	"RHRS_B":      "cluster_auxiliary",
-	"Diesel":      "cluster_auxiliary",
-	"Transformer": "cluster_auxiliary",
-	"FuelTank":    "cluster_auxiliary",
+	"Transformer": "cluster_electrical",
+	"Diesel":      "cluster_electrical",
+	"FuelTank":    "cluster_electrical",
 	"BRS":         "cluster_auxiliary",
 
 	// Electrical / ESF buses and grid.
@@ -217,7 +223,10 @@ var clusterFor = map[string]string{
 // SISAccumulators, RHRS_A, RHRS_B (core/plant.go:3255,3258-3259).
 // True renderer-only extras (in extraNodes only):
 // RWST, HHSI, ChgPump, BTRS (layout.go extraNodes entries).
-var dockingExtrasForRPV = []string{"SISAccumulators", "RHRS_A", "RHRS_B", "RWST", "HHSI", "ChgPump", "BTRS"}
+// Since c23b3ec every former entry carries a real edge, so
+// only the truly isolated extras (if any are added later) need
+// docking; the connected[] guard makes stale entries dead code.
+var dockingExtrasForRPV = []string(nil)
 
 // BuildDot generates a DOT description of the plant graph with
 // layout clusters, node sizes, and optional pinned positions.
@@ -235,6 +244,7 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 	// Cluster definitions, keyed by cluster name.
 	clusters := map[string]*strings.Builder{
 		"cluster_containment": &strings.Builder{},
+		"cluster_fuel":        &strings.Builder{},
 		"cluster_turbine":     &strings.Builder{},
 		"cluster_auxiliary":   &strings.Builder{},
 		"cluster_electrical":  &strings.Builder{},
@@ -294,6 +304,7 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 
 	subgraphLabel := map[string]string{
 		"cluster_containment": "Containment / Nuclear Island",
+		"cluster_fuel":        "Fuel Building",
 		"cluster_turbine":     "Turbine Building",
 		"cluster_auxiliary":   "Auxiliary Building",
 		"cluster_electrical":  "Electrical / ESF",
@@ -305,8 +316,8 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 	// emits first only when it holds the intake/circulation
 	// heat-rejection parts, which sit outside the buildings
 	// (chapter_12/page_169.txt:29-34, Figure 1-4).
-	emitOrder := []string{"", "cluster_containment", "cluster_turbine",
-		"cluster_auxiliary", "cluster_electrical"}
+	emitOrder := []string{"", "cluster_containment", "cluster_fuel",
+		"cluster_turbine", "cluster_auxiliary", "cluster_electrical"}
 	// Row-chunk the bridge-connected-less nodes per building
 	// (layoutRows) and collect flow-relative orderings as dot
 	// subgraph ranks (layoutRankRows): the connected edges give
@@ -333,8 +344,34 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 			fmt.Fprintf(&b, `    fillcolor="#f8f8f8";`+"\n")
 		}
 		b.WriteString(body.String())
-		for _, r := range layoutRankRows(rows[name]) {
-			fmt.Fprintf(&b, "    {rank=same; %s}\n", joinStrings(r, " "))
+		if name == "cluster_electrical" {
+			// The explicit ESF train rows below replace the
+			// generic subsystem groups for this building.
+		} else {
+			for _, r := range layoutRankRows(rows[name]) {
+				fmt.Fprintf(&b, "    {rank=same; %s}\n", joinStrings(r, " "))
+			}
+		}
+		if name == "cluster_containment" {
+			// RCS loop reads left-to-right (Figure 3-1): RPV ->
+			// RCP -> SG. rankdir is global-TB, so order the
+			// connected loop by rank constraints instead.
+			fmt.Fprintf(&b, "    {rank=same; %q %q %q}\n", "RPV", "RCP", "SG")
+		}
+		if name == "cluster_electrical" {
+			// ESF trains read as two columns (Figures 11-1/11-2):
+			// Diesel/ESF A and Diesel B/ESF B side by side, with
+			// grid/transformer/inverter alongside rather than
+			// in one row. rankdir is global-TB, so the trains
+			// are parallel invisible chains, not one chain.
+			for _, r := range [][]string{
+				{"Diesel", "FuelTank"},
+				{"DieselB", "FuelTankB"},
+				{"ESF_A", "ESF_B"},
+				{"Grid", "Transformer", "INVERTER"},
+			} {
+				fmt.Fprintf(&b, "    {rank=same; %s}\n", joinStrings(quotedRankRow(r), " "))
+			}
 		}
 		b.WriteString("  }\n")
 	}
@@ -382,18 +419,23 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 
 // layoutRowOrder chains the building rows in rankdir=TB flow
 // order: containment first (the nuclear island of Figure 3-1,
-// chapter_3/page_043.txt:12-15), then turbine, auxiliary, and
-// electrical.
+// chapter_3/page_043.txt:12-15), then the fuel building
+// (Figure 1-5, adjacent via the fuel-handling path), turbine,
+// auxiliary, and electrical.
 var layoutRowOrder = []string{
-	"cluster_containment", "cluster_turbine",
-	"cluster_auxiliary", "cluster_electrical",
+	"cluster_containment", "cluster_fuel",
+	"cluster_turbine", "cluster_auxiliary", "cluster_electrical",
 }
 
 // layoutRowWidths caps each building's disconnected-node rows so
 // dot stacks several short rows instead of one drawing-width row.
 // The values roughly equalize the drawn row widths across
 // buildings; electrical holds only the two ESF buses, grid, and
-// inverter, so one row suffices.
+// inverter, so one row suffices. They are also the cluster
+// spread: narrower widths keep each building's rank blocks from
+// overlapping the neighbouring columns (dot lays the rank
+// groups side by side within one rank, verified empirically
+// against two clusters).
 //
 // Sorted ids alone interleave unrelated subsystems (diesels next
 // to spray tanks), because alphabetical order ignores the plant's
@@ -401,16 +443,17 @@ var layoutRowOrder = []string{
 // prefix so a row reads as one system (chapter_5/page_097.txt
 // safety-injection grouping, Figure 4.1-1 CVCS groups).
 var layoutRowWidths = map[string]int{
-	"cluster_containment": 6,
-	"cluster_turbine":     6,
-	"cluster_auxiliary":   8,
-	"cluster_electrical":  4,
+	"cluster_containment": 4,
+	"cluster_fuel":        2,
+	"cluster_turbine":     4,
+	"cluster_auxiliary":   6,
+	"cluster_electrical":  2,
 }
 
 // rowGroupRank orders disconnected-node sections so the turbine
 // and auxiliary buildings read in steam-path order: power
 // conversion first, then feed and cooling, then safety systems.
-var rowGroupRank = []string{"Turbine", "Generator", "Condenser", "HDT", "CST", "Exciter", "Diesel", "EFW", "RHR", "CVCS", "CSS", "BRS", "BTRS", "SFP", "SIS", "Containment"}
+var rowGroupRank = []string{"Turbine", "Generator", "Condenser", "HDT", "CST", "Exciter", "Diesel", "FuelTank", "EFW", "RHR", "CVCS", "CSS", "BRS", "BTRS", "SFP", "SIS", "Containment", "ESF", "Grid", "Transformer", "INVERTER"}
 
 
 // layoutRows chunks each cluster's bridge-disconnected nodes into
@@ -474,34 +517,54 @@ func layoutRowGroups(rowCh [][]string) [][]string {
 	return layoutRowGroupsSubsystem(rowCh)
 }
 
-// layoutRowGroupsSubsystem sorts each building's disconnected
-// nodes by subsystem prefix (rowGroupRank, then id), which pins
-// the sort to the plant's ticketing and keeps unrelated
-// subsystems from interleaving inside one row. Rows are NOT
-// re-chunked afterwards: graphviz scores long ranked groups
-// against the flow's own ranks and settles them as its fitting
-// basis, which reorders the flow's ranks around the group
-// (verified empirically). The alphabetical chunks stay small
-// and flow-sized instead.
+// layoutRowGroupsSubsystem folds the building's disconnected
+// nodes into single-subsystem rank groups: flatten the chunks,
+// sort by subsystem prefix (rowGroupRank, then id), then cut
+// the sorted sequence at subsystem boundaries. Each group is
+// capped so dot stacks several short rows instead of one
+// drawing-width row.
 func layoutRowGroupsSubsystem(rowCh [][]string) [][]string {
-	var groups [][]string
+	var all []string
 	for _, row := range rowCh {
-		if len(row) < 3 {
-			continue
-		}
-		ids := append([]string{}, row...)
-		sort.SliceStable(ids, func(i, j int) bool {
-			ri, rj := rowGroupRankOf(ids[i]), rowGroupRankOf(ids[j])
-			if ri != rj {
-				return ri < rj
-			}
-			return ids[i] < ids[j]
-		})
-		groups = append(groups, ids)
+		all = append(all, row...)
 	}
-	// Singleton chunks from the last partial row stay singletons:
-	// dot would merge a two-node platform onto a neighbour
-	// building's outline, so they drop out instead.
+	if len(all) == 0 {
+		return nil
+	}
+	sort.SliceStable(all, func(i, j int) bool {
+		ri, rj := rowGroupRankOf(all[i]), rowGroupRankOf(all[j])
+		if ri != rj {
+			return ri < rj
+		}
+		return all[i] < all[j]
+	})
+	// The cap comes from the original chunk width: rows were
+	// chunked at layoutRowWidths, so the fullest chunk is that
+	// width (and a partial last row never inflates it).
+	maxChunk := 0
+	for _, row := range rowCh {
+		if len(row) > maxChunk {
+			maxChunk = len(row)
+		}
+	}
+	width := len(all)
+	if maxChunk > 0 {
+		width = maxChunk
+	}
+	var groups [][]string
+	for i := 0; i < len(all); {
+		j := i + 1
+		for j < len(all) && rowGroupRankOf(all[j]) == rowGroupRankOf(all[i]) && (j-i) < width {
+			j++
+		}
+		// Groups of 2+ read as one subsystem (e.g. a diesel with
+		// its day tank, SFP with its pumps); singletons drop out
+		// so a lone id does not merge onto a neighbour row.
+		if j-i >= 2 {
+			groups = append(groups, all[i:j])
+		}
+		i = j
+	}
 	return groups
 }
 
@@ -534,13 +597,29 @@ func layoutRankRows(rowCh [][]string) [][]string {
 
 // layoutRankEdges orders the rank groups in flow order: each
 // group's head is constrained after the previous group's tail so
-// dot stacks the groups in chunk order, and cross-building links
-// keep the steam path RPV -> SG -> Condenser contiguous in rank
-// order.
+// dot stacks the groups in chunk order. Cross-building links
+// (the steam path RPV -> SG -> Condenser) keep the containment
+// and turbine outlines contiguous in rank order.
 func layoutRankEdges(rows map[string][][]string) [][2]string {
 	var edges [][2]string
 	var prevTail string
 	for _, name := range layoutRowOrder {
+		// Each building's rank block starts fresh: dot then places
+		// blocks side by side in emit order, so the buildings read
+		// as columns instead of one TB chain (D2: per-cluster
+		// rank blocks).
+		prevTail = ""
+		if name == "cluster_electrical" {
+			// Parallel ESF train chains (Figures 11-1/11-2):
+			// a single chain would stack A below B in one
+			// column, which is exactly the one-row failure
+			// this cluster must not repeat.
+			edges = append(edges,
+				[2]string{"Diesel", "ESF_A"},
+				[2]string{"DieselB", "ESF_B"},
+			)
+			continue
+		}
 		groups := layoutRowGroups(rows[name])
 		for _, ids := range groups {
 			if prevTail != "" {
@@ -552,14 +631,29 @@ func layoutRankEdges(rows map[string][][]string) [][2]string {
 			prevTail = ids[len(ids)-1]
 		}
 	}
-	// Steam-path order: keep the secondary loop flowing
-	// RPV -> SG -> Condenser in rank order so the containment and
-	// turbine outlines read as one path. The loop's return legs
-	// (condensate, feed, AFW) already constrain the turbine
-	// building above; these two links pin the containment
-	// building's row stack beside the steam line it serves.
-	edges = append(edges, [2]string{"SG", "Condenser"})
+	// Steam/feed rank order (Figures 1-2/15.3-1): the forward
+	// chain runs SG -> Turbine -> MSR -> Condenser -> LP
+	// heaters -> HDT -> feed pumps -> HP heaters -> SG. The
+	// real graph carries the return legs; these invisible
+	// constraints keep the rank placement in chain order so
+	// dot routes the SG->Condenser polyline through Turbine/MSR
+	// instead of cutting a diagonal across both buildings.
+	// Edges are guarded by the same connected[] logic as
+	// docking: chains that already have a real edge are
+	// skipped by dot's rank repair, so the list is safe to
+	// extend. Only the forward steam leg is connected;
+	// everything else is invisible ordering.
+	edges = append(edges, [2]string{"SG", "Turbine"})
 	return edges
+}
+
+// quotedRankRow quotes DOT node ids for a rank=same subgraph.
+func quotedRankRow(ids []string) []string {
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = fmt.Sprintf("%q", id)
+	}
+	return out
 }
 
 func joinStrings(parts []string, sep string) string {

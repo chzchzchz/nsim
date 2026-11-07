@@ -165,6 +165,7 @@ var diagramParts = []diagramPart{
 // buildingLabels captions the cluster outlines drawn behind symbols.
 var buildingLabels = map[string]string{
 	"cluster_containment": "Containment",
+	"cluster_fuel":        "Fuel Building",
 	"cluster_turbine":     "Turbine Building",
 	"cluster_auxiliary":   "Auxiliary Building",
 	"cluster_electrical":  "Electrical / ESF",
@@ -721,15 +722,9 @@ var visualPipes = []visualPipe{
 		id: "PZRREL", from: "Pressurizer", to: "PRT", colour: "red",
 		flow: func(p *core.Plant) float64 { return p.ReactorBuilding.PORV.Open },
 	},
-	{
-		// Letdown taps reactor coolant for the volume control tank;
-		// charging returns it through the pump and BTRS beds.
-		// specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:6-10,66-67
-		id: "CVCSLETDOWN", from: "RPV", to: "VCT", colour: cvcsColour,
-	},
-	{id: "CVCSCHG1", from: "VCT", to: "ChgPump", colour: cvcsColour},
-	{id: "CVCSCHG2", from: "ChgPump", to: "BTRS", colour: cvcsColour},
-	{id: "CVCSCHG3", from: "BTRS", to: "RPV", colour: cvcsColour},
+	// The CVCS letdown/charging loop and the RHR/CCWS legs are
+	// real graph edges now; their visualPipes were removed
+	// (plan svg/layout-improvements step 4).
 	{
 		// Makeup to the RCS can come from "the refueling water
 		// storage tank as a backup" when VCT level drops.
@@ -743,77 +738,6 @@ var visualPipes = []visualPipe{
 		id: "PRTSPRAYLINE", from: "CCWSHX", to: "PRT", colour: "blue",
 		flow: func(p *core.Plant) float64 {
 			return p.ReactorBuilding.PRTSprayValve.Open
-		},
-	},
-	{
-		// HHSI takes suction directly from the RWST - until the
-		// alignment switches, so this leg streams only while the
-		// pump runs on tank suction.
-		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
-		id: "SISSUCTION", from: "RWST", to: "HHSI", colour: "blue",
-		flow: func(p *core.Plant) float64 {
-			sis := p.ReactorBuilding.SafetyInjectionSystem
-			if sis.HHSISuction == core.SISSuctionRWST && sis.HHSIPumpRunning {
-				return 1
-			}
-			return 0
-		},
-	},
-	{
-		// After switchover the pumps draw from containment:
-		// "both the HHSI and RHR pumps for each subsystem take
-		// suction directly from one of the two containment sump
-		// recirculation lines."
-		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:172-177
-		id: "SUMPSUCTION", from: "CIS", to: "HHSI", colour: "blue",
-		flow: func(p *core.Plant) float64 {
-			sis := p.ReactorBuilding.SafetyInjectionSystem
-			if sis.HHSISuction == core.SISSuctionSump && sis.HHSIPumpRunning {
-				return 1
-			}
-			return 0
-		},
-	},
-	{
-		// Post-shutdown decay heat removal: "The RHR pumps are
-		// started." Each train ties to the RCS independently.
-		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:46
-		id: "RHRRCSA", from: "RHRS_A", to: "RPV", colour: "blue",
-		flow: func(p *core.Plant) float64 {
-			if p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Pump.Running {
-				return 1
-			}
-			return 0
-		},
-	},
-	{
-		id: "RHRRCSB", from: "RHRS_B", to: "RPV", colour: "blue",
-		flow: func(p *core.Plant) float64 {
-			if p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.Pump.Running {
-				return 1
-			}
-			return 0
-		},
-	},
-	{
-		// CCWS "provides cooling water to safeguards equipment such
-		// as the residual heat removal heat exchangers."
-		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:33-39
-		id: "CCWRHRA", from: "CCWSHX", to: "RHRS_A", colour: "blue",
-		flow: func(p *core.Plant) float64 {
-			if p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning {
-				return 1
-			}
-			return 0
-		},
-	},
-	{
-		id: "CCWRHRB", from: "CCWSHX", to: "RHRS_B", colour: "blue",
-		flow: func(p *core.Plant) float64 {
-			if p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning {
-				return 1
-			}
-			return 0
 		},
 	},
 }
@@ -855,8 +779,8 @@ var valvePlacements = map[string]valvePlacement{
 	"PZRPORV": {pipe: "PZRREL", shift: 0.30},
 	"PZRBLK":  {pipe: "PZRREL", shift: 0.62},
 	// Letdown isolation valve on the RCS-to-VCT line (chapter_4
-	// letdown/charging path, see visualPipes above).
-	"LTDVN": {pipe: "CVCSLETDOWN", shift: 0.45},
+	// letdown/charging path, now a real graph edge).
+	"LTDVN": {from: "RPV", to: "VCT", near: "RPV", shift: 0.45},
 	// Spray valve seated on its supply line from component cooling.
 	"PRTSPRAY": {pipe: "PRTSPRAYLINE", shift: 0.55},
 	// Makeup valve on the RWST backup supply line to the VCT.
@@ -1037,13 +961,31 @@ func (r *renderer) kindOf(id string) string {
 	return diagramKindByID[id]
 }
 
+// containmentDomeMembers are the containment enclosures that
+// define the dome outline: the primary loop plus the cold-leg
+// safety set and the pressurizer relief train (Figures 1-5/3-1).
+// The dome no longer spans every containment-cluster node:
+// wall-mounted units (RCFC) and the spray train ride the dome
+// box but do not stretch it, and the SFP train left containment
+// with the fuel building.
+var containmentDomeMembers = map[string]bool{
+	"RPV": true, "SG": true, "RCP": true, "Pressurizer": true,
+	"PRT": true, "SISAccumulators": true, "RWST": true, "HHSI": true,
+}
+
 // clusterBox returns the bounding rectangle in document space of
 // all laid-out nodes assigned to a cluster, padded so building
-// outlines enclose their symbols.
+// outlines enclose their symbols. For containment the dome
+// outline follows containmentDomeMembers, not the whole
+// cluster, so wall units cannot stretch the dome across the
+// canvas.
 func (r *renderer) clusterBox(name string) (x, y, w, h float64, ok bool) {
 	first := true
 	for id, a := range r.l.Pos {
 		if clusterAssignments[id] != name {
+			continue
+		}
+		if name == "cluster_containment" && !containmentDomeMembers[id] {
 			continue
 		}
 		sw, sh := r.size(r.kindOf(id))
@@ -1635,7 +1577,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// always enclose the symbols graphviz grouped together. The
 	// containment outline is the dome asset rather than a rect.
 	for _, name := range []string{
-		"cluster_containment", "cluster_turbine",
+		"cluster_containment", "cluster_fuel", "cluster_turbine",
 		"cluster_auxiliary", "cluster_electrical",
 	} {
 		bx, by, bw, bh, ok := r.clusterBox(name)
@@ -1654,19 +1596,13 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		// caption directly beneath stays collision-aware.
 		// data-cluster lets embedders hit-test buildings without
 		// re-deriving cluster geometry Go-side.
-		fmt.Fprintf(&b, `<g data-cluster="%s">`+"\n", name)
+	fmt.Fprintf(&b, `<g data-cluster="%s">`+"\n", name)
 		if name == "cluster_containment" {
-			// MSIV penetration: main steam lines route through a
-			// containment penetration (chapter_15/page_214.txt:45-47,
-			// 71-76). The SG→Condenser polyline crosses the
-			// containment bbox; the MSIV glyph (valvePlacements
-			// "SGMSIV", shift 0.08 near SG) sits at that crossing,
-			// so draw the outline gap there, before the caption.
-			// Symbol geometry, not a coordinate nudge.
-			penX, penY := bx+bw, by+bh*0.62
-			fmt.Fprintf(&b,
-				`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" fill="none" stroke="var(--pid-stroke,#999)" stroke-width="3" stroke-dasharray="0 999"/>`+"\n",
-				penX-3.0, penY-6.0, 6.0, 12.0)
+			// The dome asset is a 400x400 viewBox (square wall,
+			// hemispherical top) drawn to a rectangle; members
+			// spread with graphviz, so a square asset reads as a
+			// rounded rect. The enclosure is still the dome
+			// membership box (D1), not the asset's aspect.
 			writePartEl("ReactorBuilding/ContainmentBuilding", "",
 				useAt("containment-dome", bx+bw/2, by+bh/2, bw, bh))
 			// Over-pressure wash: above the 60 psig containment
@@ -1706,7 +1642,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			//    hemispherical top closure and stepped flat
 			//    bottom."
 			//    specs/the_westinghouse_pressurized_water_react/chapter_1/page_025.txt:35-38
-			writeLabel(bx+bw/2, by+18, captionMaxUnits, buildingLabels[name]+" (hemispherical top)")
+			writeLabel(bx+bw/2, by+18, scaledFont(bh*0.04), buildingLabels[name]+" (hemispherical top)")
 		} else {
 			fmt.Fprintf(&b, `<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" `+
 				`fill="%s" stroke="%s" stroke-width="1.5"/>`+"\n",
@@ -1726,8 +1662,11 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// "water may be a river, lake, ocean, or cooling tower ...
 	// Water enters the system through an intake house"
 	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:29-34
-	// Drawn under everything as a wide band through the intake,
-	// circulating-water pumps, and cooling tower anchors.
+	// Circulating water tunnel runs under the turbine hall from
+	// the intake structure to the condensers (Figure 1-4). The
+	// tunnel path is Intake -> CWP -> below the turbine box ->
+	// Condenser, clipped at the box edge so the band never
+	// visibly crosses the turbine hall.
 	if ia, ok := r.anchor("Intake"); ok {
 		var pts []Anchor
 		if cwp, okC := r.anchor("CWP"); okC {
@@ -1737,6 +1676,18 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			Anchor{X: ia.X + 80, Y: ia.Y + 34})
 		if ct, okCT := r.anchor("CoolingTower"); okCT {
 			pts = append(pts, Anchor{X: ct.X - 20, Y: ct.Y + 62})
+		}
+		if ct, okCT := r.anchor("Condenser"); okCT {
+			// Route under the turbine box: clip the final leg at
+			// the box bottom edge instead of crossing it.
+			if tbx, tby, tbw, tbh, okTB := r.clusterBox("cluster_turbine"); okTB {
+				pts = append(pts, Anchor{X: ct.X, Y: tby + tbh + 10})
+				pts = append(pts, Anchor{X: ct.X - 40, Y: ct.Y + 30})
+				_ = tbx
+				_ = tbw
+			} else {
+				pts = append(pts, Anchor{X: ct.X - 40, Y: ct.Y + 30})
+			}
 		}
 		var pp strings.Builder
 		for i, p := range pts {
@@ -1750,11 +1701,12 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			pp.String(), riverColour)
 	}
 
-	// Containment internals: spray headers sized relative to the
-	// dome footprint, skipped where they would collide with a real
-	// part. RCFC units are real diagramParts placed by dot.
+	// Containment internals: spray ring headers (Figure 6-4)
+	// sit in the dome top where the CSS train members rank,
+	// skipped where they would collide with a real part. RCFC
+	// units are real diagramParts placed by dot.
 	if cx, cy, cw, ch, ok := r.clusterBox("cluster_containment"); ok {
-		sx, sy, sw2, sh2 := cx+cw*0.62, cy+ch*0.20, cw*0.35, ch*0.16
+		sx, sy, sw2, sh2 := cx+cw*0.5, cy+ch*0.12, cw*0.6, ch*0.14
 		if !r.overlapsPart(sx-sw2/2, sy-sh2/2, sw2, sh2) {
 			writePartEl("ReactorBuilding/ContainmentBuilding", "",
 				useAt("css-spray-headers", sx, sy, sw2, sh2))
@@ -1784,9 +1736,9 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// endpoint symbols' boundaries and stream while their flow
 	// open fraction is positive; seated valves read their polyline.
 	// They stay straight (no graphviz routing) because the fluid
-	// graph never positions their intermediates, and dimming them
-	// via DrawPipePathIdle keeps the 500-unit CVCS/RHR diagonals
-	// from reading as process lines over building outlines.
+	// graph never positions their intermediates; the survivors
+	// are the unmodeled annotations (PORV relief, RWST makeup,
+	// PRT spray), dimmed by DrawPipePathIdle when idle.
 	visRoutes := map[string][]Anchor{}
 	for _, vp := range visualPipes {
 		fa, okF := r.anchor(vp.from)
@@ -2393,7 +2345,7 @@ func DebugLayout(w io.Writer, g *core.PlantGraph, pos map[string]Anchor) error {
 		DocumentWidth, DocumentHeight, DocumentWidth, DocumentHeight)
 	b.WriteString(`<g id="debug-layout">` + "\n")
 	for _, name := range []string{
-		"cluster_containment", "cluster_turbine",
+		"cluster_containment", "cluster_fuel", "cluster_turbine",
 		"cluster_auxiliary", "cluster_electrical",
 	} {
 		x, y, bw, bh, ok := r.clusterBox(name)

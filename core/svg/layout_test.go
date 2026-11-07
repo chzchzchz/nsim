@@ -270,6 +270,35 @@ func TestComputeFit(t *testing.T) {
 	})
 }
 
+// TestComputeLayout_ESFAndFuelColumns asserts the step-3
+// cluster-block acceptance: the electrical building reads as two
+// ESF train columns (Diesel/ESF A and Diesel B/ESF B side by
+// side, grid alongside) and the fuel building gets its own rank
+// block (SFP with its pump train), per Figures 11-1/11-2 and
+// 1-5. Uses the shared computed layout; no exact coordinates.
+func TestComputeLayout_ESFAndFuelColumns(t *testing.T) {
+	_, layout := mustSharedLayout(t)
+	pos := func(id string) Anchor {
+		a, ok := layout.Pos[id]
+		require.True(t, ok, "want position for node %q", id)
+		return a
+	}
+	// Train columns: A left of B for both the diesels and the buses.
+	assert.Less(t, pos("Diesel").X, pos("DieselB").X)
+	assert.Less(t, pos("ESF_A").X, pos("ESF_B").X)
+	// Same rank, so the diesels share a row (Y within node height).
+	assert.InDelta(t, pos("Diesel").Y, pos("DieselB").Y, 40)
+	// The day tank rides with its diesel on the same rank.
+	assert.InDelta(t, pos("Diesel").Y, pos("FuelTank").Y, 40)
+	assert.InDelta(t, pos("DieselB").Y, pos("FuelTankB").Y, 40)
+	// Each diesel feeds its own bus on the next rank down.
+	assert.Greater(t, pos("ESF_A").Y, pos("Diesel").Y)
+	assert.Greater(t, pos("ESF_B").Y, pos("DieselB").Y)
+	// Fuel block: SFP with its pump train, SFP above the pumps.
+	assert.Less(t, pos("SFP").Y, pos("SFPPA").Y)
+	assert.InDelta(t, pos("SFPPA").Y, pos("SFPPB").Y, 40)
+}
+
 // TestNodeSize_Defaults checks that unknown kinds fall back to
 // the default half-inch box.
 func TestNodeSize_Defaults(t *testing.T) {
