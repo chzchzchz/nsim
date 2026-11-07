@@ -1079,8 +1079,7 @@ func (t *TurbineBuilding) StepWithSteam(dt time.Duration,
 	// feedwater heaters are cascaded back to the condenser."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:88-90,
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:1-2
-	ret.Condenser.HotwellLevel = Volume{Val: ret.Condenser.HotwellLevel.Float() +
-		lp.DrainLevel.Float(), Unit: u.Gallon}
+	ret.Condenser.creditHotwell(lp.DrainLevel.Float())
 	lp.DrainLevel = Volume{Val: 0, Unit: u.Gallon}
 	ret.LowPressureHeater = lp
 
@@ -1089,7 +1088,7 @@ func (t *TurbineBuilding) StepWithSteam(dt time.Duration,
 	// feedwater system."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:62-63
 	msrDrain := ret.Turbine.MoistureSeparatorReheater.DrainFlow.Float()
-	ret.Condenser.HotwellLevel = Volume{Val: ret.Condenser.HotwellLevel.Float() + msrDrain, Unit: u.Gallon}
+	ret.Condenser.creditHotwell(msrDrain)
 
 	// HP train: two stages.
 	hp := ret.HighPressureHeater
@@ -1151,8 +1150,9 @@ func (t *TurbineBuilding) StepWithSteam(dt time.Duration,
 		dumped := min(HDTDumpFlow*dtSec,
 			hdt-HeaterDrainTankCapacityGal*HDTHighLevelFraction)
 		hdt -= dumped
-		ret.Condenser.HotwellLevel = Volume{Val: ret.Condenser.HotwellLevel.Float() +
-			dumped, Unit: u.Gallon}
+		// Dump adds to the hotwell through the shared clamp; the
+		// tech-manual citation is already on the block comment.
+		ret.Condenser.creditHotwell(dumped)
 	}
 	ret.HeaterDrainTank.Level = Volume{Val: hdt, Unit: u.Gallon}
 
@@ -2099,10 +2099,12 @@ func (p *Plant) Step(dt time.Duration) {
 	sgDrawn := p.nextPlant.ReactorBuilding.SteamGenerator.VentFlow.Float() +
 		p.nextPlant.ReactorBuilding.SteamGenerator.DrainFlow.Float()
 	if sgDrawn > 0 {
-		p.nextPlant.TurbineBuilding.Condenser.HotwellLevel = vol(
-			p.nextPlant.TurbineBuilding.Condenser.HotwellLevel,
-			p.nextPlant.TurbineBuilding.Condenser.HotwellLevel.Float()+sgDrawn)
+		p.nextPlant.TurbineBuilding.Condenser.creditHotwell(sgDrawn)
 	}
+	// Residual invariant: every production credit now routes through
+	// creditHotwell, except simulateFluidFlow's setLevel (graph.go:140)
+	// which only debits; the exhaustive writer sweep (CHECK_SKILL §9)
+	// shows no unrouted positive writer remains.
 
 	// Condenser-effluent radiation monitor: updated here, after
 	// StepWithSteam (which runs Condenser.Step), because the

@@ -291,7 +291,8 @@ type TurbineBuilding struct {
 	RejectValve      Valve
 	RecirculateValve Valve
 
-	// Hotwell	Tank
+	// Hotwell	Tank (capacity owner: Condenser.creditHotwell,
+	// plans/p64_1.txt)
 
 	CondensatePump Pump
 

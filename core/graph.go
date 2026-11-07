@@ -121,9 +121,21 @@ func (p *Pressurizer) capacity() Volume   { return p.Volume }
 // so pressure() reads zero: with the pump secured the edge sees no
 // differential and moves nothing, and a running pump lifts the full
 // pump head. capacity() reads zero so the simulator's room clamps
-// stay disabled — hotwell growth stays visible as unbounded inflow
-// rather than silently pinning at a fabricated capacity — which also
-// disables the simulator's low-level suction clamp, so setLevel
+// stay disabled: the graph has no hotwell ceiling — it is a deltaP
+// audit-only edge, and the simulator must not invent one (see below).
+// The hotwell capacity ceiling lives in Condenser.creditHotwell
+// (plans/p64_1.txt), which every Step credit routes through. The
+// only graph-side ceiling is the per-edge room clamp applied to
+// finite-capacity nodes (Tank, SteamGenerator, Pressurizer —
+// capacity() > 0, graph.go:313-348); Condenser is zero-capacity so
+// that clamp never fires on it, by design. The only graph write to
+// the hotwell is the Condenser -> HDT edge's setLevel on its
+// from-node (the condensate-pump suction deltaP debit, graph.go:3489
+// edge definition); it only subtracts what the pump head lifts,
+// which the Step's own delivery debit (plant.go:2204) does not
+// double-move because simulateFluidFlow runs last (graph.go:59-62).
+// Because the from-node is zero-capacity, dropping capacity() to
+// zero disables the simulator's low-level suction clamp, so setLevel
 // clamps at zero itself: an empty hotwell stops delivering.
 // "The condensate pumps take suction from the condenser hotwell
 //

@@ -71,6 +71,9 @@ func (c *Condenser) Step(dt time.Duration, cwIn Temperature, vacuumPumpRunning, 
 		ret.Pressure = Pressure(pressure)
 		ret.CWOut = cwIn
 		ret.CondensingRate = Volume{Val: 0, Unit: u.Gallon}
+		// Loss of CW still clamps the hotwell: the early return
+		// must not skip the capacity ceiling.
+		ret.creditHotwell(steamMass)
 		return ret
 	}
 
@@ -103,7 +106,10 @@ func (c *Condenser) Step(dt time.Duration, cwIn Temperature, vacuumPumpRunning, 
 	cwDelta := CondenserCWRise * (CondenserDesignCWFlowGPM / cwFlowGpm)
 	ret.CWOut = Temperature{Val: cwIn.Float() + cwDelta, Unit: u.Fahrenheit}
 
-	// 5) Hotwell level. Accumulates the per-step condensed steam.
+	// 5) Hotwell level. Accumulates the per-step condensed steam
+	// through creditHotwell, which clamps at
+	// CondenserHotwellCapacityGal and books the excess to
+	// HotwellOverflow (plans/p64_1.txt).
 	// HotwellLevel is the only condenser ledger that downstream
 	// consumers read onward (condensate pump suction, feedwater
 	// delivery). Level (above) is a mirror of the same mass for
@@ -115,8 +121,7 @@ func (c *Condenser) Step(dt time.Duration, cwIn Temperature, vacuumPumpRunning, 
 	// "The condensate pumps take suction from the condenser
 	// hotwell [...]."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-42
-	newLevel := ret.HotwellLevel.Float() + steamMass
-	ret.HotwellLevel = Volume{Val: newLevel, Unit: u.Gallon}
+	ret.creditHotwell(steamMass)
 
 	ret.CondensingRate = Volume{Val: 0, Unit: u.Gallon}
 	return ret
@@ -155,8 +160,14 @@ func (c *Condenser) Step(dt time.Duration, cwIn Temperature, vacuumPumpRunning, 
 type Condenser struct {
 	Part
 	Pressure
-	Level              Volume
-	HotwellLevel       Volume
+	Level        Volume
+	HotwellLevel Volume
+	// HotwellOverflow is the cumulative volume of condensate that
+	// spilled out of the hotwell because the level reached capacity
+	// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:14-20).
+	// Exported for Plant.Step accounting and JSON round-trip; never
+	// decremented.
+	HotwellOverflow Volume
 	// HotwellRadiation is the normalized condenser-effluent
 	// radiation reading (1 = trip level), driven by leaked primary
 	// water that condensed into the hotwell. Diagnostic-only: it
@@ -168,6 +179,27 @@ type Condenser struct {
 	CirculatingWaterIn Temperature
 	CWOut              Temperature
 	CondensingRate     Volume
+}
+
+// creditHotwell adds gal gallons to the hotwell, clamping at
+// CondenserHotwellCapacityGal. Excess increments HotwellOverflow
+// (the drain-sink spill, see plans/p64_1.txt) and the Level mirror
+// follows HotwellLevel so the two ledgers cannot diverge after the
+// clamp. It is the only writer of the overflow ledger: Condenser
+// Step (both the step-5 path and the no-CW early return) and every
+// Plant.Step credit route through it.
+func (c *Condenser) creditHotwell(gal float64) {
+	newLevel := c.HotwellLevel.Float() + gal
+	if newLevel > CondenserHotwellCapacityGal {
+		spill := newLevel - CondenserHotwellCapacityGal
+		newLevel = CondenserHotwellCapacityGal
+		c.HotwellOverflow = Volume{
+			Val:  c.HotwellOverflow.Float() + spill,
+			Unit: u.Gallon,
+		}
+	}
+	c.HotwellLevel = Volume{Val: newLevel, Unit: u.Gallon}
+	c.Level = c.HotwellLevel
 }
 
 // AtmosphericPressure is the standard sea-level pressure the
@@ -217,6 +249,15 @@ const (
 	CondenserCWRise                  float64  = 15
 	CondenserDesignCWFlowGPM         float64  = 20000
 	CondenserDesignSteamLoadGalPer   float64  = 100
+	// CondenserHotwellCapacityGal bounds the hotwell level. Derived,
+	// not spec: the primary spec states no hotwell volume. The
+	// 5-minute full-load buffer is sized from the code's own full-load
+	// rate: the per-SG spec rate is 3,813,000 lb/hr = 480 kg/s
+	// (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:49-56),
+	// and the model's CondenserDesignSteamLoadGalPer = 100 gal/step at
+	// DefaultTimeStep = 1 ms (above, core/units.go:47) is already
+	// 100,000 gal/s, so 100,000 x 300 s = 30,000,000 gal.
+	CondenserHotwellCapacityGal float64 = 30_000_000.0
 	StopValveCloseDelay                       = 50 * time.Millisecond
 	CondenserVacuumTimeConstant      float64  = 2.0
 	CondenserNoCWDegradeTimeConstant float64  = 5.0
