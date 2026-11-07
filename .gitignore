@@ -1,6 +1,5 @@
 plans
 specs
-skills
 cmd/nsim/nsim
 cmd/nsimrun/nsimrun
 *.swp
