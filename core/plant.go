@@ -687,6 +687,32 @@ func (t *TurbineBuilding) StepWithSteam(dt time.Duration,
 ) TurbineBuilding {
 	ret := *t
 
+	// Feedwater recirculation (plans/p59_1.txt §3): the bridge-only
+	// RecirculateValve now has a Step effect. Derived rate sized
+	// so the full-open path moves one design full-load steam
+	// load per second, matching the HDT suction rate. CST lives
+	// on Outside (outside.go:14) and is wired by Plant.Step as
+	// nextPlant.CSTForRecirc; the in-TurbineBuilding path keeps
+	// the CSTLevel credit here so a test that steps the building
+	// directly still sees conservation.
+	if ret.RecirculateValve.Open > 0 {
+		moved := min(FeedPumpSuctionFlow*ret.RecirculateValve.Open*dt.Seconds(),
+			ret.Condenser.HotwellLevel.Float())
+		ret.Condenser.HotwellLevel = vol(ret.Condenser.HotwellLevel,
+			ret.Condenser.HotwellLevel.Float()-moved)
+		if ret.CSTForRecirc != nil {
+			*ret.CSTForRecirc = vol(*ret.CSTForRecirc,
+				ret.CSTForRecirc.Float()+moved)
+		}
+	}
+	// RejectValve: hotwell -> drain sink, loses secondary inventory.
+	if ret.RejectValve.Open > 0 {
+		dump := min(FeedPumpSuctionFlow*ret.RejectValve.Open*dt.Seconds(),
+			ret.Condenser.HotwellLevel.Float())
+		ret.Condenser.HotwellLevel = vol(ret.Condenser.HotwellLevel,
+			ret.Condenser.HotwellLevel.Float()-dump)
+	}
+
 	cwIn := ret.Condenser.CirculatingWaterIn
 	c := ret.Condenser.Step(dt, cwIn, ret.Condenser.VacuumPumpRunning, cwPumpRunning)
 	ret.Condenser = c
@@ -1967,6 +1993,8 @@ func (p *Plant) Step(dt time.Duration) {
 	if p.nextPlant.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationActuated {
 		p.nextPlant.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open = 0
 	}
+	// RecirculateValve credits the CST on Outside (plans/p59_1.txt §3).
+	p.TurbineBuilding.CSTForRecirc = &p.nextPlant.Outside.CondensateStorageTank.Level
 	p.nextPlant.TurbineBuilding = p.TurbineBuilding.StepWithSteam(dt,
 		p.nextPlant.ReactorBuilding.SteamGenerator.Pressure,
 		tavgAfterStep,
@@ -3189,6 +3217,9 @@ func MakePlant() Plant {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-52
 	p.TurbineBuilding.MainFeedwaterPump.Running = true
 	p.TurbineBuilding.MainFeedwaterControlValve = Valve{Open: 0}
+	// The regulator's first Step latches the healthy-lineup position
+	// from ValveDemand; a zero at construction would block the
+	// HDT->SG edge that now carries inventory (plans/p59_1.txt).
 	p.TurbineBuilding.FeedwaterRegulator = FeedwaterRegulator{
 		LevelSetpoint: FeedwaterLevelSetpoint,
 		Running:       false,
@@ -3220,6 +3251,9 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	}
 	edge := func(from, to string, valve *Valve, pump *Pump) {
 		g.Edges = append(g.Edges, GraphEdge{From: from, To: to, Valve: valve, Pump: pump})
+	}
+	flowEdge := func(from, to string, valve *Valve, pump *Pump, flow func(time.Duration) float64) {
+		g.Edges = append(g.Edges, GraphEdge{From: from, To: to, Valve: valve, Pump: pump, Flow: flow})
 	}
 
 	add("RPV", "ReactorPressureVessel", &target.ReactorBuilding.ReactorPressureVessel)
@@ -3292,7 +3326,6 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 
 	// Standalone nodes without simulation edges, included so the
 	// P&ID graph and Graphviz layout are complete.
-	add("SISAccumulators", "SafetyInjectionSystem", nil)
 	add("EFWSTank", "EmergencyFeedwaterSystem", &target.AuxiliaryBuilding.EmergencyFeedwaterSystem)
 	add("CCWSHX", "ComponentCoolingWaterSystem", &target.AuxiliaryBuilding.ComponentCoolingWaterSystem)
 	add("RHRS_A", "ResidualHeatRemovalSystem", &target.AuxiliaryBuilding.ResidualHeatRemovalSystem)
@@ -3305,6 +3338,158 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	add("ESF_A", "ESFBus", &target.Electrical.ESFBusA)
 	add("ESF_B", "ESFBus", &target.Electrical.ESFBusB)
 	add("Grid", "OffsiteGrid", &target.ReactorBuilding.Grid)
+
+	// --- p59_1: Step-owned flow edges (audit-only, plans/p59_1.txt) ---
+	// Flow edges are attached only for the integer-layout build;
+	// their inventory is already moved by the per-part Steps and
+	// simulateFluidFlow runs last (plant.go:2362), so moving it
+	// again here would double-count. Wiring captures the ledger's
+	// pointers through target, so simulateFluidFlow records on
+	// the sink without moving inventory.
+	aux := &target.AuxiliaryBuilding
+	sis := &target.ReactorBuilding.SafetyInjectionSystem
+	cvcs := &aux.ChemicalVolumeControlSystem
+	css := &aux.ContainmentSpraySystem
+	efws := &aux.EmergencyFeedwaterSystem
+	rhrs := &aux.ResidualHeatRemovalSystem
+
+	// Adapter nodes (nodes.go).
+	add("RWST", "RefuelingWaterStorageTank", &rwstNode{vol: &sis.RWSTLevel})
+	add("Sump", "ContainmentSump", &sumpNode{vol: &sis.Sump})
+	add("VCT", "VolumeControlTank", &vctNode{vol: &cvcs.VCTLevel})
+	add("CSSTank", "ContainmentSprayStorageTank", &csstNode{vol: &css.CSSTLevel})
+	add("SATTank", "SprayAdditiveTank", &satNode{vol: &css.SATLevel})
+	add("EFWSTankA", "EmergencyFeedwaterSystem", &efwsTankNode{tank: &efws.SubsystemA.Tank})
+	add("EFWSTankB", "EmergencyFeedwaterSystem", &efwsTankNode{tank: &efws.SubsystemB.Tank})
+	add("SISAccumulators", "SafetyInjectionSystem", &accNode{vol: &sis.Accumulator.Level, capVol: &sis.Accumulator.Capacity})
+	add("PRT", "PressurizerReliefTank", &target.ReactorBuilding.PressurizedReliefTank)
+	add("CIS", "ContainmentIsolationSystem", &cisSink{})
+	add("InjectionSink", "InjectionSink", &injectionSink{})
+
+	// EFWS per-subsystem flow edges (replaces Outside AFW edges
+	// CST->AFWPump->SG; specs/the_westinghouse_pressurized_water_
+	// react/chapter_5/page_099.txt:12-21 — EFWS pumps take
+	// suction from the primary tanks, not CST). Teaches the
+	// renderer the real topology; Step ledger already debits
+	// the tanks (efws.go:117-208).
+	flowEdge("EFWSTankA", "SG", &efws.SubsystemA.MotorPump.FlowModulatingValve,
+		&efws.SubsystemA.MotorPump.Pump, func(time.Duration) float64 {
+			if efws.SubsystemA.MotorPump.Pump.IsRunning() {
+				return EFWSMotorPumpFlow.Float() * efws.SubsystemA.MotorPump.FlowModulatingValve.Open
+			}
+			return 0
+		})
+	flowEdge("EFWSTankA", "SG", &efws.SubsystemA.TurbinePump.FlowModulatingValve,
+		&efws.SubsystemA.TurbinePump.Pump, func(time.Duration) float64 {
+			if efws.SubsystemA.TurbinePump.Pump.IsRunning() {
+				return EFWSTurbinePumpFlow.Float() * efws.SubsystemA.TurbinePump.FlowModulatingValve.Open
+			}
+			return 0
+		})
+	flowEdge("EFWSTankB", "SG", &efws.SubsystemB.MotorPump.FlowModulatingValve,
+		&efws.SubsystemB.MotorPump.Pump, func(time.Duration) float64 {
+			if efws.SubsystemB.MotorPump.Pump.IsRunning() {
+				return EFWSMotorPumpFlow.Float() * efws.SubsystemB.MotorPump.FlowModulatingValve.Open
+			}
+			return 0
+		})
+	flowEdge("EFWSTankB", "SG", &efws.SubsystemB.TurbinePump.FlowModulatingValve,
+		&efws.SubsystemB.TurbinePump.Pump, func(time.Duration) float64 {
+			if efws.SubsystemB.TurbinePump.Pump.IsRunning() {
+				return EFWSTurbinePumpFlow.Float() * efws.SubsystemB.TurbinePump.FlowModulatingValve.Open
+			}
+			return 0
+		})
+
+	// SIS accumulator edge (passive, no pump).
+	flowEdge("SISAccumulators", "InjectionSink", nil, nil, func(time.Duration) float64 {
+		return sis.AccumulatorInjectionFlow.Float()
+	})
+
+	// HHSI RWST / Sump phase edges share one guard shape; they
+	// differ only in the suction source being aligned.
+	hsiiGuard := func(src SISSuctionSource) bool {
+		return sis.HHSISuction == src && sis.HHSIPumpRunning && sis.HHSIDriveReady
+	}
+	flowEdge("RWST", "InjectionSink", nil, nil, func(time.Duration) float64 {
+		if hsiiGuard(SISSuctionRWST) {
+			return sis.HHSIInjectionFlow.Float()
+		}
+		return 0
+	})
+	flowEdge("Sump", "InjectionSink", nil, nil, func(time.Duration) float64 {
+		if hsiiGuard(SISSuctionSump) {
+			return sis.HHSIInjectionFlow.Float()
+		}
+		return 0
+	})
+
+	// RHRS train edges. ReturnFlow is per-step gallons
+	// (rhrs.go:76-78 accumulates * dt.Seconds()); dividing
+	// by dt.Seconds() yields gal/s so recordGraphFlow's
+	// * dt.Seconds() lands the per-step amount exactly once
+	// (CHECK_SKILL.md §2: one scale per sum).
+	flowEdge("RHRS_A", "InjectionSink", nil, &rhrs.TrainA.Pump, func(dt time.Duration) float64 {
+		if rhrs.TrainA.SuctionValves[0].Open == 1 && rhrs.TrainA.SuctionValves[1].Open == 1 {
+			// ReturnFlow is per-step gallons (rhrs.go:76-78
+			// accumulates * dt.Seconds()); convert to gal/s so
+			// recordGraphFlow's * dt.Seconds() lands the per-step
+			// amount exactly once (CHECK_SKILL.md §2: one scale
+			// per sum).
+					return rhrs.TrainA.ReturnFlow.Float() / dt.Seconds()
+		}
+		return 0
+	})
+	flowEdge("RHRS_B", "InjectionSink", nil, &rhrs.TrainB.Pump, func(dt time.Duration) float64 {
+		if rhrs.TrainB.SuctionValves[0].Open == 1 && rhrs.TrainB.SuctionValves[1].Open == 1 {
+			// Per-step gallons -> gal/s (see TrainA above).
+					return rhrs.TrainB.ReturnFlow.Float() / dt.Seconds()
+		}
+		return 0
+	})
+
+	// CVCS letdown / charging / makeup.
+	flowEdge("Pressurizer", "VCT", nil, nil, func(time.Duration) float64 {
+		if cvcs.LetdownValveOpen {
+			return cvcs.LetdownFlow.Float()
+		}
+		return 0
+	})
+	flowEdge("VCT", "InjectionSink", nil, nil, func(time.Duration) float64 {
+		if cvcs.ChargingPumpRunning {
+			return cvcs.ChargingFlow.Float()
+		}
+		return 0
+	})
+	flowEdge("RWST", "VCT", nil, nil, func(time.Duration) float64 {
+		return target.ReactorBuilding.ReactorMakeupControlValve.Flow.Float()
+	})
+
+	// CSS CSST/SAT to containment spray.
+	flowEdge("CSSTank", "CIS", nil, nil, func(time.Duration) float64 {
+		if css.SprayHeaderOpen && css.Running && css.DriveReady {
+			return css.SprayFlow
+		}
+		return 0
+	})
+	flowEdge("SATTank", "CIS", nil, nil, func(time.Duration) float64 {
+		if css.SATIsolationValveBOpen && css.SprayHeaderOpen && css.Running && css.DriveReady {
+			return css.SprayFlow * (SATCapacity.Float() / CSSTCapacity.Float())
+		}
+		return 0
+	})
+
+	// Pressurizer relief to PRT (PRT is a Tank, already fluidNode).
+	flowEdge("Pressurizer", "PRT", nil, nil, func(time.Duration) float64 {
+		open := max(target.ReactorBuilding.PORV.Open, target.ReactorBuilding.SafetyValve.Open) * target.ReactorBuilding.BlockValve.Open
+		if open <= 0 {
+			return 0
+		}
+		return PressurizerReliefDischargeGalPerSec * open
+	})
+	flowEdge("CCWSHX", "PRT", nil, nil, func(time.Duration) float64 {
+		return PressurizedReliefTankSprayGPS * target.ReactorBuilding.PRTSprayValve.Open
+	})
 
 	return g
 }

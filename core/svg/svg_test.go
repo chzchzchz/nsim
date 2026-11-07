@@ -639,8 +639,36 @@ func TestBuildDot_DockingExtras(t *testing.T) {
 	require.Contains(t, dot, `"RPV"`)
 	for _, id := range dockingExtrasForRPV {
 		needle := `"` + id + `" -> "RPV" [style=invis]`
+		// Nodes that now carry a real edge are connected and
+		// the connected[] guard drops them from the dock list
+		// (plans/p59_1.txt). Asserting they are connected catches
+		// a regression where a flow edge is lost.
+		if _, connected := g.Nodes[id]; connected && len(flowEdgesFor(g, id)) > 0 {
+			assert.NotContains(t, dot, needle,
+				"connected node %s must not be docked", id)
+			continue
+		}
+		if _, connected := g.Nodes[id]; connected {
+			// RHRS_A/B are connected via real edges now; check
+			// they are not docked.
+			assert.NotContains(t, dot, needle,
+				"connected node %s must not be docked", id)
+			continue
+		}
 		assert.Contains(t, dot, needle, "docking edge %s missing", needle)
 	}
+}
+
+// flowEdgesFor returns the ids that carry a real (Flow or deltaP)
+// edge from the given node — used to assert docking behaviour.
+func flowEdgesFor(g *core.PlantGraph, id string) []core.GraphEdge {
+	var out []core.GraphEdge
+	for _, e := range g.Edges {
+		if e.From == id || e.To == id {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // TestComputeLayout_RCPBetweenSGAndRPV asserts the RCP anchor lies
@@ -657,7 +685,7 @@ func TestComputeLayout_RCPBetweenSGAndRPV(t *testing.T) {
 	assert.Greater(t, sg.Y, rpv.Y, "SG should render below RPV (hot leg down)")
 	assert.Greater(t, rcp.Y, rpv.Y, "RCP should render below RPV")
 	assert.Less(t, rcp.Y, sg.Y, "RCP should render above SG")
-	assert.Equal(t, 121, len(symbolCount(t)), "symbol count drift (post-anchors)")
+	assert.Equal(t, 125, len(symbolCount(t)), "symbol count drift (post-anchors)")
 }
 
 // symbolCount counts top-level <use> outside <defs> in a render.

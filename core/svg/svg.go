@@ -1240,7 +1240,13 @@ func classifyPipe(g *core.PlantGraph, e core.GraphEdge) pipeWater {
 	if e.Valve != nil && e.Valve.Open <= 0 {
 		return pipeBlocked
 	}
-	if e.Pump != nil && e.Pump.Running && e.Pump.Velocity > 0 {
+	if e.Pump != nil && e.Pump.Running {
+		return pipeFlowing
+	}
+	// Step-owned Flow edges (plans/p59_1.txt): the Step already
+	// moved the volume, so a positive rate means the pipe is
+	// wet even when the pressure snapshot does not differ.
+	if e.Flow != nil && e.Flow(core.DefaultTimeStep) > 0 {
 		return pipeFlowing
 	}
 	fLevel, fPress, fOK := g.Nodes[e.From].FluidState()

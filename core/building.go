@@ -28,10 +28,10 @@ type ReactorBuilding struct {
 	ReactorCoolantPump Pump
 
 	Pressurizer           `json:"Pressurizer"`
-	SafetyValve            Valve
-	BlockValve             Valve
-	PORV                   Valve
-	PressurizedReliefTank  Tank
+	SafetyValve           Valve
+	BlockValve            Valve
+	PORV                  Valve
+	PressurizedReliefTank Tank
 
 	// PRTRuptureDiscBurst latches once the PRT fills to capacity:
 	// "A rupture disc vents the tank to the containment if design
@@ -273,7 +273,7 @@ type ReactorBuilding struct {
 
 // Turbine building holds the secondary loop, excluding the steam generator.
 type TurbineBuilding struct {
-	Turbine  `json:"Turbine"`
+	Turbine   `json:"Turbine"`
 	Generator PowerGenerator
 
 	// SteamOfftakeFraction is the steam mass drawn from the
@@ -286,7 +286,7 @@ type TurbineBuilding struct {
 	// CondensingRate.
 	SteamOfftakeFraction float64
 
-	Condenser `json:"Condenser"`
+	Condenser        `json:"Condenser"`
 	MakeupValve      Valve
 	RejectValve      Valve
 	RecirculateValve Valve
@@ -306,6 +306,16 @@ type TurbineBuilding struct {
 	// regulators within their control range."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:73-76
 	MainFeedwaterControlValve Valve
+
+	// CSTForRecirc points at Outside.CondensateStorageTank.Level
+	// so the RecirculateValve ledger in StepWithSteam can credit
+	// the CST (plans/p59_1.txt §3). Wired by Plant.Step before
+	// each StepWithSteam call; nil on a standalone building step.
+	// json:"-" so a round-trip never revives a detached pointer
+	// (CHECK_SKILL.md §1: a pointer re-pointed per tick
+	// deserializes as a detached duplicate; nil re-wires on the
+	// next Plant.Step).
+	CSTForRecirc *Volume `json:"-"`
 
 	// FeedwaterRegulator is the three-element feedwater level
 	// regulator. The simplified model collapses the spec's

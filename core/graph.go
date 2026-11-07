@@ -54,6 +54,15 @@ type GraphEdge struct {
 	To    string
 	Valve *Valve
 	Pump  *Pump
+	// Flow, when set, is the Step's rated transfer rate (gal/s)
+	// for a Step-owned edge (see plans/p59_1.txt §1, option B):
+	// simulateFluidFlow runs last, after those Steps already
+	// moved the inventory, so a Flow edge is audit-only and
+	// records the post-Step volume on the sink (see
+	// flowRecorder) without moving it again. simulateFluidFlow
+	// prefers Flow over deltaP on such edges. Wiring captures
+	// the ledger's pointers, so Plant is not needed here.
+	Flow func(time.Duration) float64
 }
 
 // PlantGraph is a directed graph of fluid-bearing parts.
@@ -117,7 +126,9 @@ func (p *Pressurizer) capacity() Volume   { return p.Volume }
 // disables the simulator's low-level suction clamp, so setLevel
 // clamps at zero itself: an empty hotwell stops delivering.
 // "The condensate pumps take suction from the condenser hotwell
-//  [...]."
+//
+//	[...]."
+//
 // specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-42
 func (c *Condenser) pressure() Pressure { return 0 }
 func (c *Condenser) level() Volume      { return c.HotwellLevel }
@@ -159,6 +170,44 @@ const flowCoefficient = 1.0 // gal per second per psi
 // comment block in cmd/nsim/main.go:34-39).
 const pumpHead = 1472.0
 
+// flowRecorder optionally records credited volume on a sink node
+// (InjectionSink, CIS, ...), which cannot store inventory itself.
+// The recorded value is adapter-local (plans/p59_1.txt §5) and
+// never feeds back into any Step ledger.
+type flowRecorder interface {
+	recordFlow(gal float64)
+}
+
+func recordGraphFlow(g *PlantGraph, e GraphEdge, dt time.Duration) {
+	tn, ok := g.Nodes[e.To]
+	if !ok {
+		return
+	}
+	rec, ok := tn.Ref.(flowRecorder)
+	if !ok {
+		return
+	}
+	// Audit-only (plans/p59_1.txt §1, option B): the Step
+	// already moved the inventory. The Flow closure is invoked
+	// with the post-Step plant and the dt the Step just ran
+	// on; the sink records that tick's volume.
+	rate := 0.0
+	if e.Flow != nil {
+		rate = e.Flow(dt)
+		if rate < 0 {
+			rate = 0
+		}
+	}
+	// A closed valve or secured pump delivers nothing this tick.
+	if e.Valve != nil && e.Valve.Open <= 0 {
+		rate = 0
+	}
+	if e.Pump != nil && !e.Pump.IsRunning() {
+		rate = 0
+	}
+	rec.recordFlow(rate * dt.Seconds())
+}
+
 // simulateFluidFlow advances every edge in g by dt. It mutates the
 // parts pointed at by g.Nodes in place.
 //
@@ -172,6 +221,10 @@ const pumpHead = 1472.0
 //
 //	transfer `flow` from from.Level to to.Level, clamped so neither
 //	tank drops below zero.
+//
+// Edges with a Flow field are Step-owned and audit-only: they
+// move nothing here (the Step already did) and only record the
+// Step's volume on the sink node.
 //
 // Spec justification for the per-edge rule: the spec frames flow in
 // terms of pressure differential, pumps, and valves
@@ -193,6 +246,16 @@ func simulateFluidFlow(g *PlantGraph, dt time.Duration) {
 		if !ok {
 			continue
 		}
+		// Step-owned flow edges are audit-only (plans/p59_1.txt
+		// §1, option B): the owning Step already moved the volume
+		// and simulateFluidFlow runs last (plant.go:2362), so moving
+		// it here would count the same gallons twice. Record the
+		// tick's volume on the sink instead and skip deltaP.
+		if e.Flow != nil {
+			recordGraphFlow(g, e, dt)
+			continue
+		}
+
 		from, fok := fn.Ref.(fluidNode)
 		to, tok := tn.Ref.(fluidNode)
 		if !fok || !tok {
