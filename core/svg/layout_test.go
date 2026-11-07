@@ -299,6 +299,25 @@ func TestComputeLayout_ESFAndFuelColumns(t *testing.T) {
 	assert.InDelta(t, pos("SFPPA").Y, pos("SFPPB").Y, 40)
 }
 
+// TestComputeLayout_CVCSBlock asserts the step-5 CVCS clustering
+// (Figure 4.1-1): letdown valve, VCT and charging pump share one
+// rank on the cold-leg side, not scattered among EFWS/RHR rows.
+// Uses the shared computed layout; no exact coordinates.
+func TestComputeLayout_CVCSBlock(t *testing.T) {
+	_, layout := mustSharedLayout(t)
+	pos := func(id string) Anchor {
+		a, ok := layout.Pos[id]
+		require.True(t, ok, "want position for node %q", id)
+		return a
+	}
+	// One rank: same anchor row within a node height.
+	assert.InDelta(t, pos("VCT").Y, pos("ChgPump").Y, 40)
+	assert.InDelta(t, pos("VCT").Y, pos("LTDVN").Y, 40)
+	// The block sits at the RPV inlet side, next to the loop
+	// rather than down among the auxiliary safety systems.
+	assert.InDelta(t, pos("VCT").Y, pos("RPV").Y, 80)
+}
+
 // TestNodeSize_Defaults checks that unknown kinds fall back to
 // the default half-inch box.
 func TestNodeSize_Defaults(t *testing.T) {

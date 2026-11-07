@@ -353,10 +353,23 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 			}
 		}
 		if name == "cluster_containment" {
-			// RCS loop reads left-to-right (Figure 3-1): RPV ->
-			// RCP -> SG. rankdir is global-TB, so order the
-			// connected loop by rank constraints instead.
+			// RCS loop reads as one horizontal rank (Figure 3-1):
+			// RPV, RCP and SG share a rank so their anchors
+			// align, with the pressurizer above the hot leg.
+			// rankdir is global-TB, so the same-rank group is
+			// the horizontal mechanism; the listing order does
+			// not set X (probed: dot minimizes edge crossings,
+			// and SG's eight feedwater inbound edges from the
+			// left columns pin it leftmost regardless).
 			fmt.Fprintf(&b, "    {rank=same; %q %q %q}\n", "RPV", "RCP", "SG")
+		}
+		if name == "cluster_auxiliary" {
+			// CVCS reads as one block on the cold-leg side
+			// (Figure 4.1-1): letdown valve, VCT and charging
+			// pump share a rank, docked together by the real
+			// Pressurizer->VCT / RWST->VCT / VCT->InjectionSink
+			// edges rather than scattered among EFWS/RHR rows.
+			fmt.Fprintf(&b, "    {rank=same; %q %q %q}\n", "LTDVN", "VCT", "ChgPump")
 		}
 		if name == "cluster_electrical" {
 			// ESF trains read as two columns (Figures 11-1/11-2):
@@ -453,7 +466,13 @@ var layoutRowWidths = map[string]int{
 // rowGroupRank orders disconnected-node sections so the turbine
 // and auxiliary buildings read in steam-path order: power
 // conversion first, then feed and cooling, then safety systems.
-var rowGroupRank = []string{"Turbine", "Generator", "Condenser", "HDT", "CST", "Exciter", "Diesel", "FuelTank", "EFW", "RHR", "CVCS", "CSS", "BRS", "BTRS", "SFP", "SIS", "Containment", "ESF", "Grid", "Transformer", "INVERTER"}
+// Prefixes must match the actual node ids (EFWS pumps are EA*/EB*,
+// CVCS parts are VCT/ChgPump/LTDVN, RHR valves RA*/RB*, CCWS is
+// CCWS*): a prefix naming the system instead of the ids ("CVCS",
+// "EFW") matches nothing and scatters its parts into the tail
+// group. "CCWS" precedes "CSS" so CCWS* ids win over the CSS tank
+// prefix they superficially resemble.
+var rowGroupRank = []string{"Turbine", "Generator", "Condenser", "HDT", "CST", "Exciter", "Diesel", "FuelTank", "EFW", "EA", "EB", "RA", "RB", "RHRS", "VCT", "Chg", "LTD", "BTRS", "CCWS", "CSS", "SAT", "SOLID", "BRS", "SFP", "SIS", "Containment", "ESF", "Grid", "Transformer", "INVERTER", "MSR", "Main", "SCCW", "AUX"}
 
 
 // layoutRows chunks each cluster's bridge-disconnected nodes into
