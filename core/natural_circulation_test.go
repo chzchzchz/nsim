@@ -95,6 +95,10 @@ func TestPlant_NaturalCirculationLegsSeparateAndRestartRecovers(t *testing.T) {
 	forced := newTrippedPlant()
 	natural := newTrippedPlant()
 	natural.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(false)
+	for _, pu := range natural.ReactorBuilding.ReactorCoolantPumps.All() {
+		pu.Velocity = 0
+	}
+	natural.ReactorBuilding.ReactorCoolantPump.Velocity = 0
 	require.Zero(t, natural.ReactorCoolantPump.Velocity,
 		"pumpless leg starts from secured pumps")
 

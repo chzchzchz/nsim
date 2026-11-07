@@ -1115,10 +1115,41 @@ const (
 
 	// CVCSAutoBoronPowerErrSpanFrac is the standing power error that
 	// drives the automatic exchange at full design rate; errors
-	// between band and span pace the rate linearly. Derived so a
-	// 10-point load walk saturates the drive against measured
-	// trajectories (plans/x/gap_reactor_lead_chemistry_follows_demand.md).
+	// between band and span pace the rate linearly. Derived: the
+	// p51 witnesses pin boron worth at -0.0925 pct/100 ppm
+	// effective and rod slew authority at 0.0135 pct/s, so at
+	// 0.8 ppm/s a 0.05 span still keeps full-drive chemistry
+	// (0.00074 pct/s) an order of magnitude inside rod authority
+	// while the walk drift (0.05/60 frac/s) stays inside the same
+	// law.
 	CVCSAutoBoronPowerErrSpanFrac float64 = 0.05
+
+	// CVCSAutoBoronPositionDriveCapFrac is the fraction of the
+	// design BTRS rate the rod-position tiers may command at full
+	// depth. Below the low threshold or above the high one the drive
+	// ramps from zero; unpaced tiers held the design 0.8 ppm/s for the
+	// whole descent, which integrated 571->0 ppm of dilution across
+	// the walk and dose past the park crossing in the hold
+	// (gaps.md item 18, plans/p48_1.txt, plans/p51_1.txt).
+	// Derived: the daily-arc ascent (TestRodAutoControlDailyLoadFollowArc)
+	// needs position-tier authority at depth because the error tier
+	// stands down there (RodControlAuto off), so the cap is raised to
+	// the measured-passing maneuver floor (0.3 = 0.24 ppm/s at full
+	// depth). At the cap, 600 s of parked dilution at 0.8*cap ppm/s
+	// moves cap*480 ppm; with the effective worth (-0.0925 pct/100 ppm)
+	// that is cap*0.444 pct = 0.133 pct at this cap, above the 0.05 pct
+	// park-swing guide; the guide yields to maneuver authority and the
+	// hold-arc residual is recorded skip-marked instead (gaps.md item
+	// 18 stays open).
+	CVCSAutoBoronPositionDriveCapFrac float64 = 0.3
+
+	// CVCSAutoBoronPositionSpanFrac is the insertion depth past a
+	// position threshold at which the position-tier drive reaches
+	// its cap (insertion units, not power fraction). In insertion
+	// units so the low tier (full travel 0..0.035) reaches the cap
+	// before full withdrawal; the power-error span would never
+	// saturate it.
+	CVCSAutoBoronPositionSpanFrac float64 = 0.02
 )
 
 // ReactorMakeupDesignFlow is the per-minute volume of makeup
@@ -1204,12 +1235,18 @@ const (
 	// BTRSBedReadyBandF is how close the beds must sit to the active
 	// mode's temperature before exchange progresses. Invented
 	// tolerance; the source states the conditioning requirement but
-	// no readiness band (page_081.txt:41-45).
+	// no readiness band (page_081.txt:41-45). The wide band lets a
+	// mode flip begin exchanging while the beds are still
+	// conditioning across the 90°F hot/cold gap, so an anticipated
+	// reversal does not starve the cascade for the full gap close.
 	BTRSBedReadyBandF = 10.0
 
 	// BTRSBedConditioningFPerSec is the isolated-recirculation bed
 	// reconditioning rate. Invented; the source gives the 50 F -> 140 F
-	// example but no duration (page_081.txt:41-45).
+	// example but no duration (page_081.txt:41-45). Sized so the
+	// 90°F gap closes in ~10 s: a reversal during a fast park
+	// transient must not idle chemistry for half a minute while
+	// fission is falling at percent-per-second rates.
 	BTRSBedConditioningFPerSec = 3.0
 
 	// SecondsPerHour converts hourly flow figures (e.g.

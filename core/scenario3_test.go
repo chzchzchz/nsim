@@ -23,6 +23,12 @@ import (
 
 func scenario3ColdPlant() *Plant {
 	p := MakePlant()
+	// Cold plant: the full-power seed spins the rotors; secure
+	// them so the first stage starts from the stopped state.
+	for _, pu := range p.ReactorBuilding.ReactorCoolantPumps.All() {
+		pu.Running = false
+		pu.Velocity = 0
+	}
 	rpv := &p.ReactorBuilding.ReactorPressureVessel
 	rpv.Inlet = Temperature{Val: 138, Unit: u.Fahrenheit}
 	rpv.Outlet = Temperature{Val: 138, Unit: u.Fahrenheit}

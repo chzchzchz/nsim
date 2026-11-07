@@ -67,6 +67,13 @@ func TestWitness_ModeratorCoefBoronInterpolation(t *testing.T) {
 // expressed in the same units. If a future change breaks this
 // relationship (rate rescaled without re-deriving against the worth,
 // or the worth constant edited in different units), this fails.
+//
+// The second leg computes the operational (paced) budget: parked at
+// the hold, the position-tier drive cannot dose past the park
+// crossing. The effective worth is the worst case — it folds the
+// direct term and its netTempCoef coupling — and the hold horizon is
+// 600 s. The parked cap sits at CVCSAutoBoronPositionDriveCapFrac,
+// so the hold swing is drive * 0.8 * 600 * 0.0925/100 pct.
 func TestWitness_ExchangeBudgetUnitCoherence(t *testing.T) {
 	t.Parallel()
 	worthPctPerPpm := float64(-CoreBoronWorthPer100ppm) / 100.0
@@ -82,4 +89,19 @@ func TestWitness_ExchangeBudgetUnitCoherence(t *testing.T) {
 		"chemistry is a trim, not a competing actuator: full-drive "+
 			"exchange must stay an order of magnitude inside rod authority, got %v vs %v",
 		exchangePctPerSec, rodAuthorityPctPerSec)
+
+	// Operational parked budget: computed from the frozen cap, kept
+	// as a pinned coherence number (changed only with the cap),
+	// not as a bound the maneuver authority yields to.
+	effectiveWorthPctPerPpm := 0.0925 / 100.0
+	parkedDrive := CVCSAutoBoronPositionDriveCapFrac
+	holdSwingPct := parkedDrive * CVCSBorationRate *
+		effectiveWorthPctPerPpm * 600.0
+	assert.InDelta(t, 0.1332, holdSwingPct, 1e-4,
+		"600 s at the parked cap pins swing to %v pct", holdSwingPct)
+	// The paced drive still needs authority: at full depth the walk
+	// sees 0.8*cap ppm/s of exchange, which is how the bank is
+	// relieved during descent.
+	assert.Greater(t, parkedDrive, 0.0,
+		"position cap must leave the trim some authority")
 }

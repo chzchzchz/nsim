@@ -910,6 +910,7 @@ func (t *TurbineBuilding) StepWithSteam(dt time.Duration,
 			ret.Turbine.DumpBypassKicked = true
 			ret.Turbine.DumpPressureIntegral = 1
 		}
+		ret.Turbine.DumpHoldTimer = 0
 		target = ret.Turbine.dumpModulationDemand(sgPressure, dt)
 	case tripped && reactorTripped:
 		if tcoldBlocksDump {
@@ -928,8 +929,10 @@ func (t *TurbineBuilding) StepWithSteam(dt time.Duration,
 	case ret.Turbine.DumpHoldTimer > 0:
 		// Rejection ride-through: the bypass pins fully open for
 		// the hold window as the short-term artificial load.
-		//   "The steam dump serves as a short-term artificial load"
-		//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:27-31
+		// "The steam dump serves as a short-term artificial load which
+		// allows the reactor control system time to automatically cut
+		// back power."
+		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:27-31
 		if tcoldBlocksDump {
 			target = 0
 			break
@@ -2473,6 +2476,20 @@ func MakePlant() Plant {
 	//  turbine."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:20-23
 	p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open = 1
+	// The full-load operating point spins the RCP rotors at rated
+	// speed: leaving them at zero would read as a loss of forced
+	// flow for the first spin-up seconds and stretch the per-pass
+	// temperature rise toward the floored 4x value. Fixtures that
+	// model a startup or pump trip drive the speed back down
+	// themselves.
+	// "Operating speed 1189 rpm"
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_056.txt:175-177
+	for _, pu := range p.ReactorBuilding.ReactorCoolantPumps.All() {
+		pu.Running = true
+		pu.Velocity = RCPRatedSpeed
+	}
+	p.ReactorBuilding.ReactorCoolantPump.Running = true
+	p.ReactorBuilding.ReactorCoolantPump.Velocity = RCPRatedSpeed
 
 	// Pressurizer design defaults: 60% liquid, 40% steam
 	// bubble, pressure held by the heaters at

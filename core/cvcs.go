@@ -457,9 +457,13 @@ func (c *CVCS) applyAutoBoronControl(
 	case rodInsertion < CVCSAutoBoronLowInsertionFrac:
 		c.Mode = CVCSDilution
 		c.BTRSRecirculationPumpRunning = true
+		c.AutoBoronDrive = pacedPositionDrive(
+			CVCSAutoBoronLowInsertionFrac - rodInsertion)
 	case rodInsertion > CVCSAutoBoronHighInsertionFrac:
 		c.Mode = CVCSBoration
 		c.BTRSRecirculationPumpRunning = true
+		c.AutoBoronDrive = pacedPositionDrive(
+			rodInsertion - CVCSAutoBoronHighInsertionFrac)
 	default:
 		c.Mode = CVCSVolumeControl
 		c.BTRSRecirculationPumpRunning = false
@@ -471,4 +475,27 @@ func (c *CVCS) applyAutoBoronControl(
 func (c *CVCS) pacedAutoBoronDrive(errAbs float64) float64 {
 	span := CVCSAutoBoronPowerErrSpanFrac - CVCSAutoBoronPowerErrBandFrac
 	return min(max((errAbs-CVCSAutoBoronPowerErrBandFrac)/span, 0), 1)
+}
+
+// pacedPositionDrive maps past-threshold rod travel onto the
+// position-tier drive: zero at the threshold (the tier still selects
+// its mode and starts the BTRS pump), linear to
+// CVCSAutoBoronPositionDriveCapFrac across
+// CVCSAutoBoronPositionSpanFrac, clamped past it. The depth argument
+// is insertion past the relevant threshold in the tier's direction:
+// the low tier passes (threshold - insertion), the high tier passes
+// (insertion - threshold), so the helper itself is not asymmetric.
+// Rods are fast and chemistry is slow; the tier cannot spend design
+// rate while out of travel. "The power control system automatically
+// adjusts power [...]" (page_129.txt:112-115) fixes the law
+// (mode and magnitude proportional to the mismatch, page_135.txt:58-68)
+// but gives no ppm/min figure, so the cap/span are derived calibration
+// recorded in core/parts.go.
+// The AFD tiers keep full drive: they preempt this cascade at the
+// target-band limits where a running xenon skew is the active
+// instability (page_231.txt:120-122), so pacing them would weaken the
+// spatial damping this chemistry exists to provide.
+func pacedPositionDrive(depth float64) float64 {
+	return min(max(depth/CVCSAutoBoronPositionSpanFrac, 0), 1) *
+		CVCSAutoBoronPositionDriveCapFrac
 }

@@ -48,6 +48,13 @@ func TestRCP_SequentialStartStagesFlow(t *testing.T) {
 	// simulation state (same discipline as TestRCP_Coastdown).
 	testDt := 10 * time.Millisecond
 	p := MakePlant()
+	// Cold start: the MakePlant full-power seed spins the rotors at
+	// rated speed, so secure them to the stopped state this
+	// sequential-start evolution begins from.
+	for _, pu := range p.ReactorBuilding.ReactorCoolantPumps.All() {
+		pu.Running = false
+		pu.Velocity = 0
+	}
 	for stage := 1; stage <= 4; stage++ {
 		p.ReactorBuilding.ReactorCoolantPumps.All()[stage-1].Running = true
 		want := float64(stage) / 4 * float64(RCPRatedSpeed)
@@ -165,6 +172,12 @@ func TestRCP_Coastdown(t *testing.T) {
 func TestRCP_HeatInputScalesWithSpeed(t *testing.T) {
 	t.Parallel()
 	p := MakePlant()
+	// Single-pump lineup: secure the others so only the driven
+	// rotor contributes heat.
+	for _, pu := range p.ReactorBuilding.ReactorCoolantPumps.All() {
+		pu.Running = false
+		pu.Velocity = 0
+	}
 	p.ReactorBuilding.ReactorCoolantPumps.LoopA.Running = true
 	p.ReactorBuilding.ReactorCoolantPumps.LoopA.Velocity = RCPRatedSpeed / 2
 	p.ReactorBuilding.ReactorPressureVessel.PumpHeatInput = 0

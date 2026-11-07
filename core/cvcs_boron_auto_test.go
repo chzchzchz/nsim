@@ -248,8 +248,42 @@ func TestCVCSAutoBoronDrivePacesWithError(t *testing.T) {
 	positional := CVCS{AutoBoronControl: true}
 	positional.applyAutoBoronControl(
 		CVCSAutoBoronLowInsertionFrac/2, 0, 0)
-	assert.InDelta(t, 1.0, positional.AutoBoronDrive, 1e-9,
-		"position-tier selections keep the design rate")
+	assert.InDelta(t, 0.875*CVCSAutoBoronPositionDriveCapFrac, positional.AutoBoronDrive, 1e-9,
+		"position tiers pace to the cap across the position span")
+}
+
+// The position tiers scale with depth past the threshold: zero at
+// the threshold (mode still selected, beds pre-position), rising to
+// the cap across CVCSAutoBoronPositionSpanFrac. Seeding axial offset
+// to zero keeps the AFD tiers out of this witness - they own full
+// drive.
+func TestAutoBoron_PositionTiersPaceWithDepthPastThreshold(t *testing.T) {
+	t.Parallel()
+	cap := CVCSAutoBoronPositionDriveCapFrac
+	span := CVCSAutoBoronPositionSpanFrac
+
+	atLow := CVCS{AutoBoronControl: true}
+	atLow.applyAutoBoronControl(CVCSAutoBoronLowInsertionFrac-1e-12, 0, 0)
+	assert.Equal(t, CVCSDilution, atLow.Mode)
+	assert.InDelta(t, 0.0, atLow.AutoBoronDrive, 1e-9,
+		"at the low threshold the drive is zero but the tier acts")
+
+	atHigh := CVCS{AutoBoronControl: true}
+	atHigh.applyAutoBoronControl(CVCSAutoBoronHighInsertionFrac+1e-12, 0, 0)
+	assert.Equal(t, CVCSBoration, atHigh.Mode)
+	assert.InDelta(t, 0.0, atHigh.AutoBoronDrive, 1e-9,
+		"at the high threshold the drive is zero but the tier acts")
+
+	half := CVCS{AutoBoronControl: true}
+	half.applyAutoBoronControl(CVCSAutoBoronLowInsertionFrac-span/2, 0, 0)
+	assert.InDelta(t, cap/2, half.AutoBoronDrive, 1e-9,
+		"halfway to the position span drives half the cap")
+
+	saturated := CVCS{AutoBoronControl: true}
+	saturated.applyAutoBoronControl(
+		CVCSAutoBoronHighInsertionFrac+span*4, 0, 0)
+	assert.InDelta(t, cap, saturated.AutoBoronDrive, 1e-9,
+		"past the position span the drive clamps at the cap")
 }
 
 // Zero-value coherence: with the trim disengaged, a diluted-mode lineup
