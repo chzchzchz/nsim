@@ -7,10 +7,13 @@ import {
     displayPart,
     groupByPrefix,
     isAlarmControl,
+    recordReturn,
+    takeReturn,
     sortBindings,
     topLevelPrefix,
     type Entry,
     type PartBinding,
+    type ReturnSlot,
 } from "./bindings";
 
 function part(part: string): PartBinding {
@@ -147,5 +150,28 @@ describe("groupByPrefix", () => {
 
     it("handles an empty binding list", () => {
         expect(groupByPrefix([])).toEqual([]);
+    });
+});
+
+describe("return slot (backtick)", () => {
+    it("records the prior position and returns it once", () => {
+        const slot: ReturnSlot = { y: null };
+        recordReturn(slot, 300, false);
+        expect(takeReturn(slot)).toEqual({ y: 300 });
+        expect(takeReturn(slot)).toBeNull();
+    });
+
+    it("skips recording when the target is already on screen", () => {
+        const slot: ReturnSlot = { y: null };
+        recordReturn(slot, 300, true);
+        expect(takeReturn(slot)).toBeNull();
+    });
+
+    it("drops the older position when a newer jump overwrites it", () => {
+        const slot: ReturnSlot = { y: null };
+        recordReturn(slot, 900, false);
+        recordReturn(slot, 1500, false);
+        expect(takeReturn(slot)).toEqual({ y: 1500 });
+        expect(takeReturn(slot)).toBeNull();
     });
 });

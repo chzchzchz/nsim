@@ -163,6 +163,85 @@ function openTip(btn: HTMLButtonElement, text: string): void {
 // needed, or unsupported).
 const SCROLL_SETTLE_FALLBACK_MS = 1200;
 
+// Jumps to a control row (from a P&ID click, a description link, or
+// an alarm row) move the page away from where the operator was
+// working. The previous scroll position is kept in a single slot so
+// the backtick key can return there; a newer jump overwrites the
+// slot, dropping the older position.
+export interface ScrollPosition {
+    x: number;
+    y: number;
+}
+
+// ReturnSlot is the module state for the one-slot return position.
+export interface ReturnSlot {
+    y: number | null;
+}
+
+const returnSlot: ReturnSlot = { y: null };
+
+// recordReturn stores where a jump is about to leave from unless the
+// target row is already visible, in which case no jump (and no
+// return) is needed. Pure and exported for unit testing.
+export function recordReturn(
+    slot: ReturnSlot,
+    scrollY: number,
+    targetVisible: boolean,
+): void {
+    if (targetVisible) return;
+    slot.y = scrollY;
+}
+
+// takeReturn removes and returns the stored position, or null when
+// there is none. Pure and exported for unit testing.
+export function takeReturn(slot: ReturnSlot): { y: number } | null {
+    if (slot.y === null) return null;
+    const y = slot.y;
+    slot.y = null;
+    return { y };
+}
+
+// rememberReturn records where we are so a later backtick press can
+// undo a jump that is about to move us away from this spot.
+function rememberReturn(row: HTMLElement): void {
+    const rect = row.getBoundingClientRect();
+    const visible =
+        rect.top >= 0 && rect.bottom <= window.innerHeight;
+    recordReturn(returnSlot, window.scrollY, visible);
+}
+
+// jumpBack undoes the most recent recorded jump, if any. It is the
+// behaviour bound to the backtick key.
+export function jumpBack(): boolean {
+    const pos = takeReturn(returnSlot);
+    if (!pos) return false;
+    window.scrollTo({ top: pos.y, behavior: "smooth" });
+    return true;
+}
+
+// bindReturnKey routes the backtick key to jumpBack. Holding the key
+// must not walk back repeatedly, so auto-repeat is ignored. While
+// the operator is typing in a form field the key must keep its
+// literal meaning, so editable targets are ignored.
+export function bindReturnKey(): void {
+    window.addEventListener("keydown", (ev) => {
+        if (ev.code !== "Backquote" || ev.repeat) return;
+        const target = ev.target as HTMLElement | null;
+        if (
+            target &&
+            (target.tagName === "INPUT" ||
+                target.tagName === "TEXTAREA" ||
+                target.tagName === "SELECT" ||
+                target.isContentEditable)
+        ) {
+            return;
+        }
+        if (jumpBack()) {
+            ev.preventDefault();
+        }
+    });
+}
+
 // flashRow scrolls a rendered row into view and highlights it
 // briefly; both reveal helpers share it. For off-screen targets the
 // highlight starts only after the scroll settles: starting it early
@@ -178,6 +257,7 @@ function flashRow(row: HTMLElement): void {
         start();
         return;
     }
+    rememberReturn(row);
     row.scrollIntoView({ behavior: "smooth", block: "center" });
     // scrollend fires when the smooth jump settles; browsers
     // without it (or jumps that scroll nowhere) fall back to the

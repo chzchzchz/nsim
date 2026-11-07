@@ -8,7 +8,13 @@ import { renderPanel } from "./controls";
 import { renderReadout, refreshSensors, type SensorRow } from "./sensors";
 import { renderAlarms, type AlarmEntry, type AlarmPanel } from "./alarms";
 import { initConsole, type ConsolePanel } from "./console";
-import { buildBindings, displayPart, groupByPrefix, type PartBinding } from "./bindings";
+import {
+    bindReturnKey,
+    buildBindings,
+    displayPart,
+    groupByPrefix,
+    type PartBinding,
+} from "./bindings";
 import { enablePanelSwaps } from "./grid";
 import { makeTile, applyMinimized } from "./tile";
 import { copyText } from "./clipboard";
@@ -62,6 +68,10 @@ async function main(): Promise<void> {
     // chosen scenario's starting state.
     let currentScenarioId = "";
     const sim = new Sim(() => newPlant(currentScenarioId));
+
+    // Backtick returns to the view shared by a control jump (e.g.
+    // clicking a P&ID component); see bindings.ts.
+    bindReturnKey();
 
     // Drag a tile by its prefix heading to swap it with a
     // neighbour; see grid.ts for the gesture thresholds.
