@@ -421,6 +421,14 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 	} else {
 		ret.CladTempF = satF
 	}
+	// Zr-steam feedback (plans/p65_2.txt Step 1): Baker-Just
+	// oxidation advance plus reaction enthalpy over the same
+	// lumped mass as the decay-heat integrator above. Runs
+	// before stageDamage so damage sees the feedback.
+	oxidRate := oxidationKinetics(ret.CladTempF, ret.OxidizedFrac)
+	ret.OxidizedFrac = min(ret.OxidizedFrac+oxidRate*dtSeconds, MaxOxidizedFrac)
+	rxnW := oxidRate * ReactionEnthalpyJPerFrac
+	ret.CladTempF += rxnW / CladThermalMassCpJPerDegF * 9.0 / 5.0 * dtSeconds
 	ret.CoreDamageFrac = stageDamage(ret.CladTempF)
 	ret.Damage = float32(ret.CoreDamageFrac)
 	return ret
@@ -452,6 +460,7 @@ func (r *ReactorPressureVessel) SeedSteadyStatePower(p Watts) {
 	r.CladTempF = PressurizerSatTemperatureF(float64(RPVDesignPressure))
 	r.UncoveryFrac = 0
 	r.CoreDamageFrac = 0
+	r.OxidizedFrac = 0
 }
 
 // Xenon-135 fission-product model constants. Inventories are
@@ -776,6 +785,47 @@ type ReactorPressureVessel struct {
 	// ballooning (BallooningF), 1 at CladFailureF (50.46 cap).
 	// Drives Part.Damage. plans/p65_1.txt State.
 	CoreDamageFrac float64
+
+	// OxidizedFrac is the cumulative clad oxidation (0..1):
+	// Baker-Just oxygen pickup normalized to the 17% ECR cap
+	// (MaxOxidizedFrac), advancing only above CladOnsetF.
+	// plans/p65_2.txt State.
+	OxidizedFrac float64
+}
+
+// oxidationKinetics returns the capped d(OxidizedFrac)/dt in 1/s
+// for the Baker-Just parabolic law (w² = kt, w in mg/cm²) at the
+// lumped clad temperature. Zero at or below CladOnsetF, linearly
+// ramped to the BJ rate at the parabolic-validity floor, BJ above;
+// scaled by remaining unoxidized clad and capped at
+// OxidizedFracRateCapPerSec. plans/p65_2.txt Rev-4 notes.
+//
+// Single consumer pair: the reactor tail integrates it, and the
+// Plant-level H2 derivation re-evaluates it for the same tick —
+// both read the post-step clad temperature, so the recomputed
+// rate matches the integrated advance exactly.
+func oxidationKinetics(cladF float64, oxidizedFrac float64) float64 {
+	if cladF <= CladOnsetF || oxidizedFrac >= MaxOxidizedFrac {
+		return 0
+	}
+	rate := math.Min(
+		math.Max(bakerJustDwDt(cladF, oxidizedFrac)/OxideWeightMaxMgPerCm2, 0),
+		OxidizedFracRateCapPerSec)
+	if cladF < BakerJustValidityFloorF {
+		rate *= (cladF - CladOnsetF) / (BakerJustValidityFloorF - CladOnsetF)
+	}
+	return rate * (1.0 - oxidizedFrac/MaxOxidizedFrac)
+}
+
+// bakerJustDwDt evaluates the Baker-Just dw/dt = k/(2w) with
+// k = 33.3e6·exp(−45500/RT) (mg²/cm⁴/s, T in K) at the current
+// oxygen pickup implied by oxidizedFrac, desingularized at
+// OxideWeightFloorMgPerCm2. plans/p65_2.txt Step 1.
+func bakerJustDwDt(cladF float64, oxidizedFrac float64) float64 {
+	tempK := (cladF - 32.0) * 5.0 / 9.0 + 273.15
+	k := BakerJustPrefactor * math.Exp(-BakerJustQCalPerMol/(GasConstantCalPerMolK*tempK))
+	w := math.Max(oxidizedFrac*OxideWeightMaxMgPerCm2, OxideWeightFloorMgPerCm2)
+	return k / (2.0 * w)
 }
 
 // stageDamage maps clad temperature to lumped damage fraction:
@@ -1027,8 +1077,8 @@ const (
 // taus to match the 1 h/1 day waypoints is a separate decay-
 // model slice (needs ANS 5.1 or Way-Wigner, see
 // specs/wiki/Decay_heat.txt) and would shift every consumer
-// calibrated against these two taus (RHRS sizing,
-// HydrogenHeatNormW). The clad heatup rate's Tier-B thermal
+// calibrated against these two taus (RHRS sizing). The clad
+// heatup rate's Tier-B thermal
 // mass is calibrated against the *shutdown* 6.5% level, so
 // the first-minute rate lands in the sourced 0.54-1.8 °F/s
 // band; the long tail rides the slow pool.

@@ -2028,5 +2028,14 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				float64(p.ReactorBuilding.ReactorPressureVessel.Damage)*100.0)
 		},
 	}
+	m["ReactorBuilding/ReactorPressureVessel/OxidizedFrac"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "OxidizedFrac",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				100.0*p.ReactorBuilding.ReactorPressureVessel.OxidizedFrac)
+		},
+	}
 
 }

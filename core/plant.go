@@ -1217,6 +1217,10 @@ func (p *Plant) Step(dt time.Duration) {
 	if p.nextPlant == nil {
 		p.nextPlant = &Plant{}
 	}
+	// Capture the pre-step oxidation before the RPV Step advances
+	// it, so the step-2 HDS derivation can read this step's
+	// Baker-Just advance (plans/p65_2.txt step 2).
+	priorOxidizedFrac := p.ReactorBuilding.ReactorPressureVessel.OxidizedFrac
 	// Step the electrical distribution first so the ESF bus
 	// Energized state for this step is visible to every
 	// downstream consumer (CW pump, SFPC pump, RHRS, CCWS,
@@ -1878,19 +1882,20 @@ func (p *Plant) Step(dt time.Duration) {
 	pzr := &p.nextPlant.ReactorBuilding.Pressurizer
 	var generationRate float64
 	inventoryFrac := rpv.BreakDischarged.Float() / RCSDrainableInventoryGal
-	coreHeatW := float64(rpv.TotalThermalPower())
 	superheatF := rpv.Outlet.Float() -
 		PressurizerSatTemperatureF(float64(pzr.Pressure))
 	if superheatF <= HydrogenSuperheatGateF && inventoryFrac < HydrogenInventoryGateFraction {
 		generationRate = 0.0
 	} else {
-		// HydrogenHeatNormW ~= decay heat shortly post-trip at rated
-		// power (3800 MWt rated, 6.5% shutdown decay fraction =
-		// ~247 MW at full trip). Reads ~0.49 initially, decaying
-		// toward ~0.11 by 4h (spec 1.5% decay at 1h); the conservative
-		// normalisation deliberately saturates at HydrogenHeatNormW.
-		generationRate = HydrogenGenerationRate *
-			min(max(inventoryFrac+max(coreHeatW/HydrogenHeatNormW, 0), 0), 1)
+		// Oxidation-driven rate (plans/p65_2.txt step 2): the
+		// Baker-Just advance this step mapped onto the G4
+		// HydrogenGenerationRate scale, so reaching the 17%
+		// oxidation cap accumulates the 50.46(c) 1% hypothetical
+		// maximum. SecondsPerHour: stepHydrogen consumes %/h,
+		// the rate is per second.
+		generationRate = oxidationKinetics(rpv.CladTempF, priorOxidizedFrac) *
+			SecondsPerHour * (MaxH2CladReactionFrac / MaxOxidizedFrac) *
+			HydrogenGenerationRate
 	}
 	// Containment vent isolation (Table 7-1): with either phase
 	// latched, the atmosphere-exchange path through the wall is

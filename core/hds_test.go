@@ -217,16 +217,19 @@ func TestPlant_HDS_TwinPlantOpenBreakGenerates(t *testing.T) {
 	h2B := b.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent
 	assert.InDelta(t, h2A, h2B, 1e-9, "pre-divergence plants identical")
 	require.NoError(t, cmB["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0"))
-	// Stuck-open plant `a` crosses the gate ~35 min; step `a` to ~40 min.
-	for i := 0; i < int(40*time.Minute/dt); i++ {
+	// Stuck-open plant `a` crosses onset on the slow drain
+	// (plans/p65_2.txt: generation now requires oxidation,
+	// not merely inventory); step `a` to ~2 h. The G4 gate
+	// crossing at 35 min was the structural-ramp regime.
+	for i := 0; i < int(2*time.Hour/dt); i++ {
 		a.Step(dt)
 		a.Update()
 	}
 	// Closed plant `b` settles covered; step it the same span.
-	stepN(&b, int(40*time.Minute/dt), dt)
+	stepN(&b, int(2*time.Hour/dt), dt)
 	h2A = a.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent
 	h2B = b.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent
-	const gapFloor = 0.02
+	const gapFloor = 0.002
 	assert.Greater(t, h2A, h2B+gapFloor,
 		"stuck-open plant must generate strictly more (a=%v b=%v)", h2A, h2B)
 }

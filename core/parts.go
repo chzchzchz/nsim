@@ -5180,16 +5180,6 @@ const (
 	// plans/x/gap_hydrogen_kinetics.md §1.
 	HydrogenSuperheatGateF float64 = 5.0
 
-	// HydrogenHeatNormW normalises the decay-heat ramp term:
-	// coreHeatW/HydrogenHeatNormW reads ~0.49 at post-trip
-	// initial decay heat (3800 MWt rated, 6.5% shutdown decay
-	// fraction = ~247 MW), decaying toward ~0.11 by 4h (spec
-	// 1.5% decay at 1h). At full power the term saturates
-	// (3.8 GW/5e8 = 7.6), so any gate opening at power goes
-	// straight to the 1.0 %/hour ceiling; the ramp only exists
-	// post-trip. plans/x/gap_hydrogen_kinetics.md §1.
-	HydrogenHeatNormW = 5e8
-
 	// HydrogenRecombinerHysteresis is the volume percent
 	// above the alarm setpoint at which the recombiners
 	// activate; below (setpoint + hysteresis) they stay
@@ -5217,6 +5207,57 @@ const (
 	// pre-damage heatup band midpoint (~0.65 K/s, ~1.17 °F/s;
 	// specs/wiki/Nuclear_meltdown.txt) gives ≈2.5e8 J/°F.
 	CladThermalMassCpJPerDegF = 2.5e8
+
+	// Zr-steam kinetics (plans/p65_2.txt, stage 4 rapid
+	// oxidation). Baker-Just parabolic law w² = 33.3e6·t·
+	// exp(−45500/RT) (mg²/cm⁴, ANL-6548, as printed in
+	// specs/pdf/README.txt) with R = 1.987 cal/mol·K and
+	// Q = 45,500 cal/mol in the exponent; Cathcart's distinct
+	// Q = 39,930 cal/mol (specs/pdf/zwok-i-thermometry.txt:304)
+	// is not substituted into this correlation.
+	BakerJustPrefactor = 33.3e6
+	BakerJustQCalPerMol = 45500.0
+	GasConstantCalPerMolK = 1.987
+
+	// CladOnsetF is the detectable-oxidation gate at 1,472 °F
+	// (plans/x/gap_hydrogen_kinetics.md:57, the G4 anchor);
+	// below it the derived rate is zero, and the rate ramps
+	// linearly to the Baker-Just curve at 1,832 °F, the
+	// parabolic-validity floor (1000 °C). plans/p65_2.txt.
+	CladOnsetF = 1472.0
+	BakerJustValidityFloorF = 1832.0
+
+	// MaxOxidizedFrac is the 10 CFR 50.46 limit (b) cap, "Clad
+	// oxidation < 17% clad thickness" (specs/westinghouse_tech_
+	// manual/chapter_2/page_0209.txt:25-30), and
+	// MaxH2CladReactionFrac is limit (c), "H2 generation <1%
+	// hypothetical maximum". plans/p65_2.txt.
+	MaxOxidizedFrac = 0.17
+	MaxH2CladReactionFrac = 0.01
+
+	// OxideWeightMaxMgPerCm2 is the oxygen pickup at the 17%
+	// ECR cap that OxidizedFrac normalizes against; Tier-B
+	// derived because the tree carries no clad geometry
+	// (plans/p65_2.txt Rev-4 notes). OxideWeightFloorMgPerCm2
+	// desingularizes dw/dt = k/(2w) as w → 0, and
+	// OxidizedFracRateCapPerSec bounds the rate so the
+	// derived H2 rate stays at the HydrogenGenerationRate
+	// scale; both Tier-B derived.
+	OxideWeightMaxMgPerCm2 = 100.0
+	OxideWeightFloorMgPerCm2 = 1.0
+	OxidizedFracRateCapPerSec = 0.005
+
+	// ReactionEnthalpyJPerFrac is the lumped enthalpy release
+	// per unit OxidizedFrac. The per-mole reaction enthalpy is
+	// ΔH ≈ 140 kcal/mol (585 kJ/mol)
+	// (specs/pdf/zwok-i-thermometry.txt:509-510), but the tree
+	// carries no zirconium inventory to apply it against, so
+	// the lumped value is Tier-B derived: sized so reaction
+	// power at the rate cap (50 MW) exceeds post-scram decay
+	// heat in this tree's collapsed pools (few MW, the wiki
+	// stage-4 criterion) without explosive clad dT/dt against
+	// CladThermalMassCpJPerDegF. plans/p65_2.txt Rev-4 notes.
+	ReactionEnthalpyJPerFrac = 1e10
 )
 
 // ReactorProtectionSystem models the Reactor Protection System
