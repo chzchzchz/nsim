@@ -1,265 +1,62 @@
 # nsim-web
 
-Browser-based P&ID dashboard for the nsim PWR simulator.
-Compiles `core` + `bridge` to WebAssembly, drives the simulation
-in a `requestAnimationFrame` loop, and renders the live plant
-SVG alongside the bridge sensors and controls.
-
-## Layout
-
-```
-web/
-├── wasm/main.go              syscall/js entrypoint (//go:build js)
-├── public/                   static assets served by Vite / any host
-│   └── nsim.wasm             compiled simulator
-├── src/                      TypeScript sources
-│   ├── main.ts               bootstrap + tick loop
-│   ├── plant.ts              wasm handle wrapper
-│   ├── sim.ts                start / pause / step / reset state machine
-│   ├── svg.ts                SVG mount + part-name lookup
-│   ├── bindings.ts           map control/sensor keys → part names
-│   ├── controls.ts           build the control panel
-│   ├── sensors.ts            build + refresh the read-out table
-│   ├── alarms.ts             alarm panel (structured "alarm" sensor)
-│   ├── console.ts            command console + journal export
-│   ├── units.ts              display metadata for bridge Kind values
-│   ├── wasm.ts               loadWasm()
-│   ├── styles.css            shared stylesheet (linked from index.html)
-│   ├── vite-env.d.ts         Vite client types (import.meta.env)
-│   └── wasm_exec.js          Go runtime polyfill (copied from GOROOT, lives in js/)
-│                             (copied from $(go env GOROOT)/lib/wasm)
-├── index.html                dashboard skeleton
-├── package.json              vite + typescript dev deps
-├── tsconfig.json             ES2020, strict
-├── vite.config.ts            dev server on :5173
-├── Makefile                  build / wasm / dev / clean
-└── README.md                 this file
-```
-
-The wasm entrypoint lives in the same Go module as `core`,
-`bridge`, and `cmd/nsim` (the repo root). There is no second
-`go.mod`; the `//go:build js` build tag is what makes
-`web/wasm/main.go` only visible to `GOOS=js GOARCH=wasm`
-builds. The host (`go build ./...`) skips it.
+Browser-based P&ID dashboard for the nsim PWR simulator. Compiles `core` + `bridge` to WebAssembly, runs the simulation in a `requestAnimationFrame` loop, and renders the live plant SVG with controls, sensors, and alarms.
 
 ## Prerequisites
 
-* Go ≥ 1.23 (the wasm target needs `GOOS=js GOARCH=wasm`)
-* Node.js ≥ 18 and npm ≥ 9 (for `vite` and `tsc`)
-* A modern browser (anything shipping `WebAssembly.instantiateStreaming`)
-
-## Build
-
-```sh
-cd web
-make build         # wasm + tsc; copies wasm_exec.js into js/
-```
-
-`make build` is just three commands:
-
-```sh
-GOOS=js GOARCH=wasm go build -o public/nsim.wasm ./wasm
-mkdir -p js && cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" js/wasm_exec.js
-npx tsc --noEmit
-```
-
-The polyfill is imported by `src/wasm.ts` via `import "../js/wasm_exec.js"`
-and bundled by Vite into the JavaScript chunk; nothing else loads it.
-
-## Deploy bundle
-
-```sh
-cd web
-make bundle         # web.tgz — release: minified JS, stripped wasm
-make bundle-debug   # web-debug.tgz — readable JS + sourcemaps,
-                    # wasm keeps full debug info
-```
-
-Both tarballs extract to an `nsim-web/` directory that serves as
-static content from any path (asset URLs are relative):
-
-```sh
-mkdir /srv/www && tar xzf web.tgz -C /srv/www
-# then serve /srv/www/nsim-web/ with any static file server
-```
-
-The wasm build pulls `core`, `bridge`, and `core/svg` from
-the repo's own module path — there is no `replace` directive
-because `web/wasm` is part of the root module.
+* Go ≥ 1.27 (wasm target: `GOOS=js GOARCH=wasm`)
+* Node.js ≥ 18, npm ≥ 9
+* A modern browser with `WebAssembly.instantiateStreaming`
 
 ## Run
 
 ```sh
 cd web
-make dev           # serves http://localhost:5173
+make dev   # http://localhost:5173
 ```
 
-`vite` serves `index.html` from the project root, the wasm
-artefact from `public/`, and TypeScript sources from `src/`.
+Vite serves `index.html`, the wasm build from `public/`, and TypeScript from `src/`. For a plain static server instead: `make build`, then serve the directory (e.g. `npx serve .`). Only requirement: `nsim.wasm` reachable at the deploy base URL (Vite `base: "./"`); the Go runtime polyfill ships inside the JS bundle.
 
-To host with a plain static server instead:
+## Build / test
 
 ```sh
-make build
-npx serve .        # serves index.html, public/, src/
+make build         # wasm + tsc + descriptions.json
+make test          # vitest unit tests
+make typecheck     # tsc --noEmit
+make clean
 ```
 
-The only requirement is that `nsim.wasm` is reachable at the
-deploy base's URL (Vite's `base` option, honored by the
-`fetch()` inside `src/wasm.ts`); the polyfill ships inside the
-JavaScript bundle.
+## Deploy
+
+```sh
+make bundle        # web.tgz — minified JS, stripped wasm (release)
+make bundle-debug  # web-debug.tgz — readable JS + sourcemaps, unstripped wasm
+```
+
+Both extract to `nsim-web/` with relative asset URLs, ready for any static host:
+
+```sh
+mkdir /srv/www && tar xzf web.tgz -C /srv/www
+# serve /srv/www/nsim-web/
+```
+
+## How it works
+
+`web/wasm/main.go` is the `syscall/js` entrypoint, built only under `GOOS=js GOARCH=wasm` (`//go:build js`). It lives in the root Go module — there is no second `go.mod` or `replace` directive — so it reuses `core`, `bridge`, and `core/svg` directly. `make build` runs `GOOS=js GOARCH=wasm go build -o public/nsim.wasm ./wasm`, copies `wasm_exec.js` from GOROOT for bundling, and type-checks the TypeScript (`src/wasm.ts` loads the wasm with the Vite base URL).
 
 ## UI
 
-The dashboard has these regions:
-
-1. **Simulation control bar** (top, `position: sticky` — stays pinned
-   while the page scrolls):
-   * **Start / Pause** — toggle the tick loop
-   * **Step** — advance one tick rate while paused
-   * **Reset** — fresh plant, re-rendered SVG and panels
-   * **Frames/s** — interface refresh cadence (1–240); panel
-     read-outs repaint at most this often
-   * **Steps/s** — simulated milliseconds executed per real
-     second (0–1000000); the loop converts elapsed wall time to
-     an exact step count, so speed stays accurate despite frame
-     jitter. After a hidden-tab gap at most 1 s of sim time
-     executes immediately and the rest is dropped
-   * **steps/s** — actual plant steps per wall-clock second
-     versus the entered Steps/s target, refreshed every second;
-     a large gap means the browser cannot keep up
-   * **📋** — copy plant state JSON to the clipboard
-   * **Status** — `running @ N s simulated` / `paused @ N s simulated`
-
-2. **P&ID SVG** — the live plant diagram, refreshed at most once per
-   second and only when the markup actually changed. `<g
-   data-part="Part/Path">` wrappers match `bridge.Control.Part` /
-   `bridge.Sensor.Part` byte-for-byte so the front end binds by part
-   name without coordinate hacks.
-
-3. **Alarm panel** — structured rows from the "Plant/Alarms" sensor.
-   Click acknowledges one alarm (the row dims via its acknowledged
-   state), **Acknowledge All** clears the annunciator.
-
-4. **Control panel + Sensor read-out tiles** — every entry from
-   `bridge.GetControlMap` / `bridge.GetSensorMap` becomes a widget /
-   table row, grouped one tile per building prefix. Rejected control
-   values flash the widget red and log instead of failing silently.
-   Tiles rearrange by mouse: press a tile's prefix heading, drag
-   ~100 px toward a neighbour to mark it as the pending swap
-   (outlined tiles show the pair), drag back inside that band to
-   cancel, and release the button to apply the swap. The − button
-   at a heading's right edge minimizes the tile to just its header;
-   it becomes + and restores the full panel. Tile order and
-   minimized flags persist across browser sessions in localStorage
-   (`src/layout.ts`); a saved layout is discarded whenever its
-   schema version differs or its panel names no longer match the
-   current set, falling back to alphabetical defaults.
-
-5. **Command console** (bottom) — submit `TimeOffsetMs Part.Label Value`
-   lines that fire relative to the simulation clock; completed rows are
-   struck through, failures show their error. **⬇ Export log (.json)**
-   downloads every control change of the run for headless replay via
-   `nsimrun -cmd nsim-commands.json` (see cmd/nsimrun/README.md).
-
-6. **Scenario banner** (below the header, only when a scenario is
-   active) — names the active evolution and its objective, and lists
-   which end-state bounds are still unmet. Completion latches: once
-   every bound (and any milestone) holds the banner turns green,
-   reports the simulated met time, and offers **Choose next**.
-   Switching scenarios pauses the clock so exercises never blur
-   together.
+* **Control bar** — Start/Pause, Step, Reset, Frames/s, Steps/s (actual vs. target), copy state JSON, status.
+* **P&ID SVG** — live plant diagram; parts bind by name (`data-part` matches `bridge.Control.Part` / `bridge.Sensor.Part`).
+* **Alarm panel** — acknowledge single / all.
+* **Control & sensor tiles** — every entry from `bridge.GetControlMap` / `GetSensorMap`, grouped by building; drag headings to reorder, `−`/`+` to collapse; order persists in `localStorage`.
+* **Command console** — `TimeOffsetMs Part.Label Value` lines; export the journal as JSON for headless replay with `nsimrun -cmd`.
+* **Scenario banner** — active evolution, objective, unmet bounds; latches green when complete.
 
 ## Scenarios
 
-On load (and anytime via the 🧭 **Scenario** button) a selection
-screen lists all operator evolutions from the catalog
-(`core/scenarios.go`, mirroring plans/x/scenarios.txt items 1–29),
-grouped by catalog section. Picking an entry opens an
-acknowledgement dialog stating the starting condition and what the
-operator is supposed to do; **Begin scenario** rebuilds the plant
-with that evolution's minimal starting-state override through the
-same reset path as **Reset**, so panels, alarms, console, and P&ID
-all remount. **Reset** re-applies the chosen scenario; **Free play**
-runs the default full-power plant.
+The 🧭 Scenario picker lists the operator evolutions from `core/scenarios.go` (~38), grouped by section. Choosing one rebuilds the plant with that start state through the same reset path as Reset; Reset re-applies it, Free play uses the default plant. Malfunctions script their trigger ~30 s in (`Scenario.Script`), and console exports embed the scenario id so `nsimrun -cmd session.json` reproduces the run.
 
-Malfunction evolutions open on their healthy lineup and schedule the
-trigger 30 simulated seconds in (`Scenario.Script`), so the operator
-watches the steady plant first; scripted actions are journaled like
-operator input, and the console export embeds the scenario id, so
-`nsimrun -cmd session.json` alone rebuilds the same starting state
-(see cmd/nsimrun/README.md).
-   Reset clears the queue and journal together with the old plant.
+## Extending
 
-## Wiring new controls / sensors
-
-The wasm surface (`plant.controlKeys`, `plant.sensorKeys`)
-reflects whatever the bridge factory exposes. Add entries in
-`core/bridge.go` to surface more parts; the web UI picks them
-up on the next reset.
-
-The `Kind` field on each `bridge.Control` / `bridge.Sensor`
-selects the widget: `bool` renders a checkbox, `enum` a labelled
-select (when `Control.Enum` is populated), `string` a text input,
-and everything else a bounded numeric input. Display metadata for
-kinds lives in `src/units.ts`; `buildBindings` warns on kinds the
-table does not cover, so adding a kind in `bridge/convert.go`
-without a units.ts entry surfaces at load instead of rendering
-silently wrong.
-
-## Troubleshooting (symptom: works in `make dev`, broken in `web.tgz`)
-
-The most common cause is a stale `.js` file shadowing a `.ts` source
-in `src/`. The project's canonical sources are `.ts`, but running
-`tsc` without `--noEmit` (or `npm run build`) writes `.js` twins
-next to them. Node/Rollup resolve `.js` before `.ts`, so the
-production bundle may contain outdated logic while the dev server
-serves the live `.ts` transpilation.
-
-Quick checks:
-
-- `ls src/*.js` — any output means stale
-  artifacts exist; delete them. (`wasm_exec.js` lives in `js/` now.)
-- `git status --short | grep 'src/.*\.js$'` — untracked `.js` files
-  in `src/` are almost always shadows.
-- `grep -o 'fetch("[^"]*")' dist/assets/index-*.js | grep '^fetch("\/'`
-  — root-absolute fetch paths in the bundle break subpath hosting.
-
-All runtime asset fetches (`nsim.wasm`, `descriptions.json`, etc.)
-must be relative or built from `import.meta.env.BASE_URL`. The
-canonical `wasm.ts` already shows the correct pattern; the same
-discipline applies to any new `fetch()` added by features or fixes.
-
-For the full diagnosis methodology, the directory contracts, and
-the step-by-step reproduction workflow, read
-`plans/WEBBUILD-SKILL.md`.
-
-## Testing
-
-The wasm build is verified by `make build` succeeding. Pure-logic
-modules (layout persistence validation, kind display metadata,
-prefix grouping) have unit tests under `src/*.test.ts` run via:
-
-```sh
-make test           # npx vitest run
-```
-
-DOM behaviour (drag-to-swap, widgets, alarm rows) stays covered by
-the manual loop in `make dev`, which remains the canonical test for
-anything the browser renders:
-
-1. Open `http://localhost:5173`
-2. Click **Start** — sensor read-out updates at 60 Hz
-3. Click **Pause**, click **Step** — read-out jumps one simulated
-   millisecond
-4. Toggle `ReactorBuilding/ReactorCoolantPump/Running` — the
-   RCP RPM overlay changes within one frame
-5. Enter an out-of-range value in a numeric control — the
-   widget flashes red and the console logs the rejection
-6. Submit `1000 ReactorBuilding.ReactorCoolantPump.Running 0`
-   in the command console — the row is struck through ≈1 sim-s
-   later; **⬇ Export log (.json)** downloads the journal
-7. Scroll the page — the simulation control bar stays pinned
-   at the top
-8. Click **Reset** — read-out, SVG, alarms, console list, and
-   journal all return to their initial state
+The wasm surface (`plant.controlKeys`, `plant.sensorKeys`) mirrors the bridge factory. Add entries in `core/bridge.go` to surface new parts; the web UI picks them up on the next reset. Help text lives in `assets/descriptions/**` and is bundled as `public/descriptions.json` by `make descriptions`.
