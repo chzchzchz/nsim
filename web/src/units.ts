@@ -32,6 +32,7 @@ export const UNITS: Record<string, UnitInfo> = {
     gallon:      { unit: "gal",  range: null,    numeric: true },
     gpm:         { unit: "gpm",  range: null,    numeric: true },
     watt:        { unit: "W",    range: null,    numeric: true },
+    mwh:         { unit: "MWh",  range: null,    numeric: true },
     mw:          { unit: "MW",   range: null,    numeric: true },
     ppm:         { unit: "ppm",  range: null,    numeric: true },
     volt:        { unit: "V",    range: null,    numeric: true },

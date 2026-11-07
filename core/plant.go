@@ -2234,6 +2234,12 @@ func (p *Plant) Step(dt time.Duration) {
 		p.nextPlant.TurbineBuilding.Generator.RealPower = Watts(net)
 		p.nextPlant.TurbineBuilding.Generator.ReactivePower = q
 	}
+	p.nextPlant.TurbineBuilding.Generator.CumulativeEnergy.
+		Add(p.nextPlant.TurbineBuilding.Generator.RealPower, dt)
+	p.nextPlant.TurbineBuilding.Turbine.CumulativeEnergy.
+		Add(p.nextPlant.TurbineBuilding.Turbine.RealPower, dt)
+	p.nextPlant.ReactorBuilding.ReactorPressureVessel.CumulativeThermalEnergy.
+		Add(p.nextPlant.ReactorBuilding.ReactorPressureVessel.TotalThermalPower(), dt)
 
 	// Synchronism check: the generator breaker may stay closed only
 	// while terminal frequency and voltage match the grid within
@@ -2253,6 +2259,18 @@ func (p *Plant) Step(dt time.Duration) {
 		}
 	}
 	p.closeDieselBreakersInSync()
+	// Diesel cumulative energy records delivered electrical energy:
+	// count it after the plant-level synchronizer sets BreakerClosed.
+	// A running but unconnected diesel has RealPower capability but
+	// delivers no energy to its ESF bus.
+	for _, diesel := range []*DieselGenerator{
+		&p.nextPlant.AuxiliaryBuilding.DieselGenerator,
+		&p.nextPlant.AuxiliaryBuilding.DieselGeneratorB,
+	} {
+		if diesel.Generator.BreakerClosed {
+			diesel.Generator.CumulativeEnergy.Add(diesel.Generator.RealPower, dt)
+		}
+	}
 
 	// Cross-building DriveReady wiring for the AFW pumps. The fluid
 	// graph (see simulateFluidFlow) treats `Running && DriveReady` as

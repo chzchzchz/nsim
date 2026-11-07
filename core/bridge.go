@@ -268,6 +268,20 @@ func addPlantOperationSensors(p *Plant, m bridge.SensorMap) {
 	}
 }
 
+// energySensor returns a bridge.Sensor for simulator-owned
+// cumulative-energy state. The bridge kind is MWh, while the
+// backing EnergyMeter stores joules.
+func energySensor(part, label string, meter func() EnergyMeter) *bridge.Sensor {
+	return &bridge.Sensor{
+		Part:  part,
+		Label: label,
+		Kind:  "mwh",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("mwh", meter().MWh())
+		},
+	}
+}
+
 // GetSensorMap returns a bridge.SensorMap populated with sensors for the
 // given plant. Each Get closure calls bridge.FormatSensorValue according to
 // Kind.

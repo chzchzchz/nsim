@@ -13,7 +13,33 @@ type Temperature UnitVal
 type Volume UnitVal
 
 type Watts float64
+type Joules float64
 type RPM float64
+
+// EnergyMeter is a reusable simulator-owned cumulative-energy
+// accumulator. Energy is stored in joules and reported in
+// megawatt-hours by the bridge. The caller controls when a
+// device's power is delivered; Add never infers a breaker or
+// operating state.
+type EnergyMeter struct {
+	Value Joules
+}
+
+// Add integrates instantaneous power over dt through the common
+// watt-second conversion.
+func (m *EnergyMeter) Add(power Watts, dt time.Duration) {
+	m.Value += Joules(float64(power) * dt.Seconds())
+}
+
+// MWh returns an energy in megawatt-hours.
+func (j Joules) MWh() float64 {
+	return float64(j) / JoulesPerMWh
+}
+
+// MWh returns the accumulated energy in megawatt-hours.
+func (m EnergyMeter) MWh() float64 {
+	return m.Value.MWh()
+}
 
 // DefaultTimeStep is the production tick (1 ms). Every Step method
 // takes an explicit dt time.Duration; production callers pass this

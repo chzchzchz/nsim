@@ -115,6 +115,13 @@ Checks:
   across the interface from the producer's accumulation rate; a
   consumer that cannot keep up by at most a stated design factor is
   mis-scaled.
+- **Cumulative-energy counters are monotonic state and need a ledger
+  invariant, not growth spot-checks.** When one counter divides power
+  between export and consumption, assert the connected plant's gross
+  increment equals the export plus consumption increments within
+  integration tolerance, intact after trips, breaker changes, and JSON
+  round-trips. A non-decreasing assertion alone passes the
+  stuck-at-zero bug it was meant to catch.
 - Sweep for thresholds compared against channels whose reachable range
   excludes them (a <400 psig entry condition on a channel floored at
   1500 psia never fires). Check against reachable min/max, not the

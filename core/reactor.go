@@ -590,6 +590,17 @@ type ReactorPressureVessel struct {
 	DecayHeatFast Watts
 	DecayHeatSlow Watts
 
+	// CumulativeThermalEnergy is the time integral of
+	// TotalThermalPower, accumulated by Plant.Step. It is the
+	// energy-side counterpart of the spec's burnup definition
+	// ("energy produced per unit weight of depleted fuel
+	// (MWD/MTU)"):
+	//   specs/the_westinghouse_pressurized_water_react/glossary.md:34
+	// The spec does not specify a cumulative-energy counter;
+	// this is sim instrumentation for the web UI and future
+	// burnup accounting.
+	CumulativeThermalEnergy EnergyMeter
+
 	// TimeSinceTrip is 0 while running and accumulates after Trip.
 	TimeSinceTrip time.Duration
 

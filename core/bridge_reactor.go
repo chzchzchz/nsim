@@ -1194,6 +1194,29 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Cumulative station-service (house load) energy since the
+	// start of the simulation (sim instrumentation). The spec
+	// describes the UAT/SAT supply split but specifies no
+	// cumulative counter.
+	// "supply power for its own auxiliaries."
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:57-58
+	m["ReactorBuilding/HouseLoad/CumulativeEnergy"] = energySensor(
+		"ReactorBuilding/HouseLoad", "CumulativeEnergy", func() EnergyMeter {
+			return p.ReactorBuilding.HouseLoad.CumulativeEnergy
+		})
+
+	// Cumulative thermal energy produced by the core since the
+	// start of the simulation (sim instrumentation; the energy-side
+	// counterpart of the spec's burnup definition).
+	// "burnup — A measure of fuel utilization expressed as the
+	// amount of energy produced per unit weight of depleted fuel
+	// (MWD/MTU)."
+	// specs/the_westinghouse_pressurized_water_react/glossary.md:34
+	m["ReactorBuilding/ReactorPressureVessel/CumulativeThermalEnergy"] = energySensor(
+		"ReactorBuilding/ReactorPressureVessel", "CumulativeThermalEnergy", func() EnergyMeter {
+			return p.ReactorBuilding.ReactorPressureVessel.CumulativeThermalEnergy
+		})
+
 	// Steam generator pressure:
 	m["ReactorBuilding/SteamGenerator/Pressure"] = &bridge.Sensor{
 		Part:  "ReactorBuilding/SteamGenerator",

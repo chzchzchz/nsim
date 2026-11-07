@@ -171,8 +171,10 @@ func (d *DieselGenerator) Step(dt time.Duration, swFlowGPM float64) DieselGenera
 	// (core/plant.go), which closes it against a live auxiliary source
 	// only once synchronized
 	// (specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:65-68),
-	// so this step only ramps the measured quantities. RealPower
-	// follows the mechanical RunningFraction scaled by DieselRatedkW.
+	// and Plant.Step integrates delivered energy afterward. RealPower
+	// here is mechanical/electrical capability following
+	// RunningFraction; it is not delivered energy until the plant-level
+	// breaker state is updated.
 	switch ret.State {
 	case DieselRunning:
 		ret.Generator.Voltage += DieselRatedVoltage * (dt.Seconds() / DieselFieldFlashingTime.Seconds())

@@ -600,6 +600,17 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Cumulative turbine mechanical energy since the start of
+	// the simulation (sim instrumentation; the spec describes
+	// turbine output power but no cumulative counter).
+	// "monitors output power ... to ensure that the limits of
+	// the generator are not exceeded."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
+	m["TurbineBuilding/Turbine/CumulativeEnergy"] = energySensor(
+		"TurbineBuilding/Turbine", "CumulativeEnergy", func() EnergyMeter {
+			return p.TurbineBuilding.Turbine.CumulativeEnergy
+		})
+
 	// Generator net real power (chapter 15):
 	// "The steam by rotating the blades of the turbine elements
 	// (cylinders) rotates the shaft of the generator. The
@@ -620,6 +631,13 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.TurbineBuilding.Generator.RealPower)
 		},
 	}
+
+	// Cumulative net electrical energy delivered to the grid
+	// since the start of the simulation (sim instrumentation).
+	m["TurbineBuilding/Generator/CumulativeEnergy"] = energySensor(
+		"TurbineBuilding/Generator", "CumulativeEnergy", func() EnergyMeter {
+			return p.TurbineBuilding.Generator.CumulativeEnergy
+		})
 
 	// Turbine state (chapter 15):
 	m["TurbineBuilding/Turbine/State"] = &bridge.Sensor{

@@ -35,6 +35,8 @@ func StrToBool(s string) (bool, error) {
 // ConvertControlValue parses and validates a raw string for the given Kind,
 // returning the canonical string representation accepted by the corresponding
 // SetControlFunc. The returned string is safe to pass directly to Set.
+// The mwh kind is sensor-only: cumulative-energy totals are written by
+// simulator state, never by operator controls.
 func ConvertControlValue(kind, raw string) (string, error) {
 	switch kind {
 	case "bool":
@@ -94,7 +96,7 @@ func FormatSensorValue(kind string, v any) (string, error) {
 			return "1", nil
 		}
 		return "0", nil
-	case "normalized", "percent", "signedpercent", "rpm", "psig", "psia", "fahrenheit", "gallon", "watt", "ppm", "volt", "hz", "gpm", "cps", "dpm", "pctpersec":
+	case "normalized", "percent", "signedpercent", "rpm", "psig", "psia", "fahrenheit", "gallon", "watt", "mwh", "ppm", "volt", "hz", "gpm", "cps", "dpm", "pctpersec":
 		f, err := toFloat(v)
 		if err != nil {
 			return "", err

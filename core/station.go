@@ -72,5 +72,6 @@ func (h *HouseLoad) Step(dt time.Duration,
 		f = min(max(f, 0), 1)
 		ret.TotalMW += ret.VariableMW * f
 	}
+	ret.CumulativeEnergy.Add(Watts(ret.TotalMW*WattsPerMW), dt)
 	return ret
 }

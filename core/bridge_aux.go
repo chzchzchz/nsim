@@ -1637,6 +1637,17 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Cumulative diesel electrical energy since the start of
+	// the simulation (sim instrumentation; the spec requires
+	// monitoring diesel output but specifies no totalizer).
+	// "Each diesel engine's ... generator output ... are equipped
+	// with instrumentation to monitor all important parameters."
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:97-101
+	m["AuxiliaryBuilding/DieselGenerator/Generator/CumulativeEnergy"] = energySensor(
+		"AuxiliaryBuilding/DieselGenerator/Generator", "CumulativeEnergy", func() EnergyMeter {
+			return p.AuxiliaryBuilding.DieselGenerator.Generator.CumulativeEnergy
+		})
+
 	// Spent Fuel Pool purification flow (chapter 12):
 	// "passing approximately 100 gpm (23 m3/hr) of each
 	// loop's flow through a filter and demineralizer."

@@ -167,6 +167,12 @@ type Turbine struct {
 	SteamLossTimer time.Duration
 	RealPower      Watts
 
+	// CumulativeEnergy is the time integral of turbine mechanical
+	// RealPower, accumulated by Plant.Step. The spec describes
+	// turbine output power but does not specify a cumulative-
+	// energy counter; this is sim instrumentation.
+	CumulativeEnergy EnergyMeter
+
 	// Setpoint is the operator-selected load demand as a
 	// fraction of TurbineRatedkW (0..1). "After generator
 	// breaker closure, the ability to increase or decrease
@@ -502,6 +508,11 @@ const (
 	// demand) into the Watt-based ratings used at the conversion
 	// boundary.
 	WattsPerMW float64 = 1e6
+
+	// JoulesPerMWh converts the Joule-based cumulative energies
+	// into megawatt-hours for the web UI: one megawatt-hour is
+	// one megawatt for one hour, that is, 1e6 W * 3600 s.
+	JoulesPerMWh float64 = 1e6 * 3600
 )
 
 // Turbine-generator grid-coupling and protective-control constants
@@ -1461,6 +1472,16 @@ type PowerGenerator struct {
 	// steam flow.
 	RealPower Watts
 
+	// CumulativeEnergy is the time integral of RealPower since
+	// simulation start. It is sim instrumentation, not a
+	// modeled revenue meter: the spec describes generator
+	// output power but does not specify a cumulative-energy
+	// counter.
+	// "monitors output power ... to ensure that the limits of
+	// the generator are not exceeded."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
+	CumulativeEnergy EnergyMeter
+
 	// ReactivePower is the reactive power output in vars,
 	// derived from RealPower and PowerFactor as
 	// RealPower * (1/PowerFactor - 1) (lagging convention). When
@@ -2254,6 +2275,12 @@ type HouseLoad struct {
 	// watts. The variable component is added when the
 	// generator is online and at the supplied load fraction.
 	TotalMW float64
+
+	// CumulativeEnergy is the time integral of TotalMW since
+	// simulation start. The spec describes auxiliary power
+	// flows but does not specify a cumulative counter; this is
+	// sim instrumentation, not a revenue meter.
+	CumulativeEnergy EnergyMeter
 }
 
 // CVCS models the Chemical and Volume Control System, the primary
