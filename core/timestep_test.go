@@ -13,6 +13,7 @@ import (
 // first-order lag, so equal simulated time must land on equal
 // temperatures regardless of step width.
 func TestCoarseStepMatchesFineStepping(t *testing.T) {
+	t.Parallel()
 	start := Temperature{Val: 120, Unit: u.Fahrenheit}
 	supply := Temperature{Val: 70, Unit: u.Fahrenheit}
 
@@ -36,6 +37,7 @@ func TestCoarseStepMatchesFineStepping(t *testing.T) {
 // in fifty 100 ms chunks. This is the property that lets long-span
 // tests widen the tick without changing what they observe.
 func TestReactorFissionPower_WidthInvariance(t *testing.T) {
+	t.Parallel()
 	run := func(dt time.Duration, steps int) float64 {
 		var rpv ReactorPressureVessel
 		rpv.SeedSteadyStatePower(CoreRatedThermalPower)

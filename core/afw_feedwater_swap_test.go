@@ -15,6 +15,7 @@ import (
 // feedwater system; the auxiliary feedwater system is secured",
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:45-50).
 func TestEFWSPumpControlDeliversWater(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	// Near-zero core power so the tiny AFW credit is not swamped
 	// by full-load boil-off in the default plant seed.
@@ -43,6 +44,7 @@ func TestEFWSPumpControlDeliversWater(t *testing.T) {
 // drives the main feedwater control valve open
 // (specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-76).
 func TestMainFeedwaterPumpControlRunsRegulator(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.SteamGenerator.Water = Volume{
 		Val:  40000,

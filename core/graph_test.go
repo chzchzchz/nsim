@@ -15,6 +15,7 @@ import (
 // without a floor the transfer drives HotwellLevel negative forever.
 // Physics-forced: stored inventory is non-negative.
 func TestGraph_CondensatePumpStopsAtEmptyHotwell(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.FissionPower =
 		CoreNeutronSourcePower
@@ -41,6 +42,7 @@ func TestGraph_CondensatePumpStopsAtEmptyHotwell(t *testing.T) {
 }
 
 func TestGraph_BuildsExpectedNodes(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	g := p.BuildGraph()
 
@@ -53,6 +55,7 @@ func TestGraph_BuildsExpectedNodes(t *testing.T) {
 }
 
 func TestGraph_BuildsExpectedEdges(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	g := p.BuildGraph()
 
@@ -78,6 +81,7 @@ func TestGraph_BuildsExpectedEdges(t *testing.T) {
 }
 
 func TestGraph_ExportDotRoundTrip(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	var buf bytes.Buffer
 	require.NoError(t, p.ExportDot(&buf))
@@ -94,6 +98,7 @@ func TestGraph_ExportDotRoundTrip(t *testing.T) {
 }
 
 func TestFluidFlow_ValveOpen_MovesWater(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	// Open the MakeupValve between SG and Condenser; pressurise the SG.
 	// Equalise the RPV and HDT pressures so the cold-leg and
@@ -119,6 +124,7 @@ func TestFluidFlow_ValveOpen_MovesWater(t *testing.T) {
 }
 
 func TestFluidFlow_ValveClosed_NoMovement(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	// Open == 0 must block flow across the valve edge. We also need to
 	// equalise pressures on every other edge so they don't drain the SG.
@@ -143,6 +149,7 @@ func TestFluidFlow_ValveClosed_NoMovement(t *testing.T) {
 }
 
 func TestFluidFlow_PumpRunning_DrivesFlowAlongEdge(t *testing.T) {
+	t.Parallel()
 	// The CondensatePump sits on the hotwell -> deaerator edge; the
 	// pump takes suction from the condenser hotwell, not the CST.
 	// Quiescent core so nothing else moves the hotwell during the
@@ -184,6 +191,7 @@ func TestFluidFlow_PumpRunning_DrivesFlowAlongEdge(t *testing.T) {
 }
 
 func TestFluidFlow_ValveHalfOpen_HalvesFlow(t *testing.T) {
+	t.Parallel()
 	run := func(open float64) float64 {
 		p := MakePlant()
 		// Equalise every other pressure so the only driving pressure is

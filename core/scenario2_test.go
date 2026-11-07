@@ -72,6 +72,7 @@ func heatToTarget(t *testing.T, p *Plant) {
 // steam bubble and drives pressure to the saturation proxy
 // (PressurizerHeaterTarget) inside the E1 band.
 func TestScenario2_BubbleFormationFromWaterSolid(t *testing.T) {
+	t.Parallel()
 	p := scenario2Plant()
 
 	heatToTarget(t, p)
@@ -91,6 +92,7 @@ func TestScenario2_BubbleFormationFromWaterSolid(t *testing.T) {
 // the heater/spray loop holds 2250 +/- 50 psia, without lifting the
 // PORV and without adding heat to the cold RCS.
 func TestScenario2_LetdownDrainToNoLoadHoldsPressure(t *testing.T) {
+	t.Parallel()
 	p := scenario2Plant()
 	heatToTarget(t, p)
 

@@ -18,6 +18,7 @@ import (
 // CoreRodWorthABCD x 100 pct: the scale the cascade's slew authority
 // competes against.
 func TestWitness_RodBankWorthPerInsertion(t *testing.T) {
+	t.Parallel()
 	low, high := MakePlant(), MakePlant()
 	for i, p := range []*Plant{&low, &high} {
 		insertion := []float64{0.10, 0.12}[i]
@@ -43,6 +44,7 @@ func TestWitness_RodBankWorthPerInsertion(t *testing.T) {
 // it. Pinning the anchors and the clamp keeps the coupling from
 // drifting under a future exchange retune.
 func TestWitness_ModeratorCoefBoronInterpolation(t *testing.T) {
+	t.Parallel()
 	atRef := netTempCoef(float64(CVCSInitialBoron))
 	assert.Equal(t, float64(CoreNetTempCoefAtRefBoronPcmPerDegF), atRef,
 		"rated-critical anchor must sit on the reference coefficient")
@@ -66,6 +68,7 @@ func TestWitness_ModeratorCoefBoronInterpolation(t *testing.T) {
 // relationship (rate rescaled without re-deriving against the worth,
 // or the worth constant edited in different units), this fails.
 func TestWitness_ExchangeBudgetUnitCoherence(t *testing.T) {
+	t.Parallel()
 	worthPctPerPpm := float64(-CoreBoronWorthPer100ppm) / 100.0
 	exchangePctPerSec := CVCSBorationRate * worthPctPerPpm
 

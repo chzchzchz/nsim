@@ -28,6 +28,7 @@ import (
 //   specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:65-69
 
 func TestSteamGenerator_BreakDischargeScalesWithHeader(t *testing.T) {
+	t.Parallel()
 	sg := MakePlant().ReactorBuilding.SteamGenerator
 	sg.HeatInput = SteamGeneratorFullLoadHeatInput
 
@@ -60,6 +61,7 @@ func TestSteamGenerator_BreakDischargeScalesWithHeader(t *testing.T) {
 }
 
 func TestSteamLineBreak_ProtectionResponse(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -137,6 +139,7 @@ func TestSteamLineBreak_ProtectionResponse(t *testing.T) {
 // share must be zero so every planned-evolution trajectory is
 // unchanged (plans/p34_1.txt).
 func TestSecondaryExcessDraw_SplitsFaultFromPacedPath(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
@@ -186,6 +189,7 @@ func TestSecondaryExcessDraw_SplitsFaultFromPacedPath(t *testing.T) {
 // "Therefore, coolant temperature and pressure will drop."
 // specs/pwr_sim/chapter_4/page_053.txt:11
 func TestPlant_SteamLineBreakOvercoolsPastProgramEnvelope(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)

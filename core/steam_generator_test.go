@@ -11,6 +11,7 @@ import (
 // Full-load HeatInput drives Pressure up toward SteamGeneratorShellPressure
 // within ~1 s of simulated time.
 func TestSteamGenerator_FullHeatInputRaisesPressure(t *testing.T) {
+	t.Parallel()
 	sg := SteamGenerator{
 		Volume:    Volume{Val: 1000, Unit: u.Gallon},
 		Water:     Volume{Val: 1000, Unit: u.Gallon},
@@ -27,6 +28,7 @@ func TestSteamGenerator_FullHeatInputRaisesPressure(t *testing.T) {
 // With HeatInput == 0 and zero initial Pressure, no phantom steam
 // generation occurs.
 func TestSteamGenerator_NoHeatInputNoSteam(t *testing.T) {
+	t.Parallel()
 	sg := SteamGenerator{
 		Volume: Volume{Val: 1000, Unit: u.Gallon},
 		Water:  Volume{Val: 1000, Unit: u.Gallon},
@@ -40,6 +42,7 @@ func TestSteamGenerator_NoHeatInputNoSteam(t *testing.T) {
 // Sustained full HeatInput against a small Water inventory: Water
 // depletes; once Water is gone Pressure decays back toward zero.
 func TestSteamGenerator_WaterDepletionDecaysPressure(t *testing.T) {
+	t.Parallel()
 	sg := SteamGenerator{
 		Volume:    Volume{Val: 1000, Unit: u.Gallon},
 		Water:     Volume{Val: 0.001, Unit: u.Gallon}, // tiny sliver
@@ -56,6 +59,7 @@ func TestSteamGenerator_WaterDepletionDecaysPressure(t *testing.T) {
 
 // A pressure above the design pressure is clamped — no run-away.
 func TestSteamGenerator_PressureClampedAtDesign(t *testing.T) {
+	t.Parallel()
 	sg := SteamGenerator{
 		Volume:    Volume{Val: 1000, Unit: u.Gallon},
 		Water:     Volume{Val: 1000, Unit: u.Gallon},
@@ -76,6 +80,7 @@ func TestSteamGenerator_PressureClampedAtDesign(t *testing.T) {
 // "Steam flow per steam generator: 3,813,000 lb/hr (480 kg/sec)"
 // specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56
 func TestSteamGenerator_BalancedDemandHoldsShellPressure(t *testing.T) {
+	t.Parallel()
 	for _, supply := range []float64{1.0, 0.5} {
 		sg := SteamGenerator{
 			// Design-scale inventory: the matched-demand window
@@ -100,6 +105,7 @@ func TestSteamGenerator_BalancedDemandHoldsShellPressure(t *testing.T) {
 // core serving house-load draw must not read as an infinite steam
 // source pinned at the shell pressure.
 func TestSteamGenerator_UndersupplySagsHeader(t *testing.T) {
+	t.Parallel()
 	sg := SteamGenerator{
 		Volume:    Volume{Val: 1000, Unit: u.Gallon},
 		Water:     Volume{Val: 1000, Unit: u.Gallon},

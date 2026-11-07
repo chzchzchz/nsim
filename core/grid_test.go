@@ -17,6 +17,7 @@ import (
 //     disturbances."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:59-60
 func TestGrid_StepPreservesFrequencyAndVoltage(t *testing.T) {
+	t.Parallel()
 	g := Grid{
 		Frequency: GridRatedFrequency,
 		Voltage:   GridRatedVoltage,
@@ -34,6 +35,7 @@ func TestGrid_StepPreservesFrequencyAndVoltage(t *testing.T) {
 // Here we verify the grid holds whatever Frequency the operator
 // applies.
 func TestGrid_OperatorCanApplyFrequencyStep(t *testing.T) {
+	t.Parallel()
 	g := Grid{
 		Frequency: 60.0,
 		Voltage:   GridRatedVoltage,
@@ -62,6 +64,7 @@ func TestGrid_OperatorCanApplyFrequencyStep(t *testing.T) {
 //   - The spec does not state a numeric droop; 4% is a standard
 //     nuclear-turbine setting.
 func TestTurbine_DroopGovernorRaisesSetpointOnUnderFrequency(t *testing.T) {
+	t.Parallel()
 	tr := Turbine{
 		State:         TurbineRunning,
 		Velocity:      TurbineRatedSpeed,
@@ -84,6 +87,7 @@ func TestTurbine_DroopGovernorRaisesSetpointOnUnderFrequency(t *testing.T) {
 // per-step bias is capped at −0.05, so one step lands at
 // Setpoint = 0.95.
 func TestTurbine_DroopGovernorLowersSetpointOnOverFrequency(t *testing.T) {
+	t.Parallel()
 	tr := Turbine{
 		State:         TurbineRunning,
 		Velocity:      TurbineRatedSpeed,
@@ -104,6 +108,7 @@ func TestTurbine_DroopGovernorLowersSetpointOnOverFrequency(t *testing.T) {
 // With grid frequency exactly at the rated value the droop
 // governor applies zero bias; Setpoint is unchanged.
 func TestTurbine_DroopGovernorZeroBiasAtRatedFrequency(t *testing.T) {
+	t.Parallel()
 	tr := Turbine{
 		State:         TurbineRunning,
 		Velocity:      TurbineRatedSpeed,

@@ -19,6 +19,7 @@ import (
 //     in operation."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
 func TestRHRS_StartRequiresTempAndPressureThresholds(t *testing.T) {
+	t.Parallel()
 	rcsAbove := Temperature{Val: RHRSTempThreshold + 1, Unit: u.Fahrenheit}
 	rcsAt := Temperature{Val: RHRSTempThreshold, Unit: u.Fahrenheit}
 	rcsBelow := Temperature{Val: RHRSTempThreshold - 10, Unit: u.Fahrenheit}
@@ -52,6 +53,7 @@ func TestRHRS_StartRequiresTempAndPressureThresholds(t *testing.T) {
 //     in operation."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
 func TestRHRS_DoesNotStartAboveTempThreshold(t *testing.T) {
+	t.Parallel()
 	r := RHRS{
 		TrainA: RHRSTrain{
 			Pump:          Pump{Running: true},
@@ -91,6 +93,7 @@ func TestRHRS_DoesNotStartAboveTempThreshold(t *testing.T) {
 //     lines from the RCS are opened [...]."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:26-32
 func TestRHRS_WarmupTimerKeepsSuctionClosed(t *testing.T) {
+	t.Parallel()
 	tr := RHRSTrain{
 		Pump:          Pump{Running: true},
 		DriveReady:    true,
@@ -125,6 +128,7 @@ func TestRHRS_WarmupTimerKeepsSuctionClosed(t *testing.T) {
 //     constant return flow to the RCS."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:65-66
 func TestRHRS_MinimumFlowRecircAlwaysPresent(t *testing.T) {
+	t.Parallel()
 	tr := RHRSTrain{
 		Pump:           Pump{Running: true},
 		DriveReady:     true,
@@ -155,6 +159,7 @@ func TestRHRS_MinimumFlowRecircAlwaysPresent(t *testing.T) {
 //     valve maintains constant return flow to the RCS."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:61-66
 func TestRHRS_BypassValveKeepsReturnFlowConstant(t *testing.T) {
+	t.Parallel()
 	rcsHot := Temperature{Val: 350, Unit: u.Fahrenheit}
 	ccw := Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit}
 	mk := func(open float64) *RHRSTrain {
@@ -209,6 +214,7 @@ func TestRHRS_BypassValveKeepsReturnFlowConstant(t *testing.T) {
 //     reactor shutdown."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_084.txt:31-32
 func TestRHRS_EndToEndCooldownTransfersHeatFromRCS(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.Outlet =
 		Temperature{Val: RHRSTempThreshold, Unit: u.Fahrenheit}
@@ -258,6 +264,7 @@ func TestRHRS_EndToEndCooldownTransfersHeatFromRCS(t *testing.T) {
 //     psig (28 bar), the RHR equipment is placed in operation."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
 func TestRHRS_EntryLatchesFromCooledPlantState(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.Trip = true
 	p.ReactorBuilding.ReactorPressureVessel.FissionPower = 0

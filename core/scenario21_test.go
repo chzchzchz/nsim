@@ -23,6 +23,7 @@ import (
 //     seven hours, and then slowly decays."
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:83-85
 func TestXenonBurnoutPacesReturnToPower(t *testing.T) {
+	t.Parallel()
 	rated := float64(CoreFissionPowerAtRated)
 
 	// Post-descent state: iodine still near its 90-percent equilibrium,
@@ -71,6 +72,7 @@ func TestXenonBurnoutPacesReturnToPower(t *testing.T) {
 //	 low Tavg deviation setpoint signal."
 //	specs/the_westinghouse_pressurized_water_react/chapter_16/page_232.txt:62-66
 func TestTurbineLowTavgDeviationStopsLoading(t *testing.T) {
+	t.Parallel()
 	newAscending := func() Turbine {
 		return Turbine{
 			State:              TurbineRunning,

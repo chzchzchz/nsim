@@ -17,6 +17,7 @@ import (
 // value."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:50-52
 func TestScenario11_BorationModeRaisesBoronAtRatedRate(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	start := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration
 
@@ -41,6 +42,7 @@ func TestScenario11_BorationModeRaisesBoronAtRatedRate(t *testing.T) {
 // Cold condition reference (<140 F):
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:95
 func TestScenario11_ColdShutdownMarginHoldsWithoutRodCredit(t *testing.T) {
+	t.Parallel()
 	const (
 		coldF        = 140.0
 		targetBoron  = 2140.0 // solves rho <= -1.0 pct with rods out

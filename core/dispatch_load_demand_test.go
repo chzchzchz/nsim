@@ -15,6 +15,7 @@ import (
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:44-46,
 // permissive: page_135.txt:10-12.
 func TestDispatchDemandLatchesUnderPermissive(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.PlantOperation.LoadFollowActive = true
 	p.ReactorBuilding.Grid.LoadDemand = 600
@@ -29,6 +30,7 @@ func TestDispatchDemandLatchesUnderPermissive(t *testing.T) {
 // Without the permissive the grid cannot move the turbine load
 // reference.
 func TestDispatchDemandBlockedWithoutPermissive(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.TurbineBuilding.Turbine.LoadDemandRef = 0.25
 	p.ReactorBuilding.Grid.LoadDemand = 900
@@ -44,6 +46,7 @@ func TestDispatchDemandBlockedWithoutPermissive(t *testing.T) {
 // PlantOperation layer owns it and force-clears outside PowerOperation
 // (ColdShutdown / HotStandby branches).
 func TestDispatchPermissiveClearsOutsidePowerOperation(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.PlantOperation.Mode = HotStandby
 	p.PlantOperation.LoadFollowActive = true

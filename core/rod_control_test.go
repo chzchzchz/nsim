@@ -20,6 +20,7 @@ import (
 //	load."
 //	specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:24-27
 func TestRodProgramAnchors(t *testing.T) {
+	t.Parallel()
 	assert.InDelta(t, RCSNoLoadTavgF, programmedRodTavg(0), 1e-9)
 	assert.InDelta(t, RCSFullLoadTavgF, programmedRodTavg(1), 1e-9)
 	assert.InDelta(t, RCSNoLoadTavgF, programmedRodTavg(-0.5), 1e-9,
@@ -38,6 +39,7 @@ func TestRodProgramAnchors(t *testing.T) {
 //	control deadband for use at reduced power levels [...]"
 //	specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:77-81
 func TestRodAutoControlDeadbandAndSlew(t *testing.T) {
+	t.Parallel()
 	fullTarget := programPowerFraction(programmedRodTavg(1))
 
 	// No-load program maps to hot zero power; carrying real power
@@ -81,6 +83,7 @@ func TestRodAutoControlDeadbandAndSlew(t *testing.T) {
 // With automatic control disengaged the demand is the operator's
 // alone; the simulator never rewrites it.
 func TestRodManualDemandUntouched(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0.25
@@ -98,6 +101,7 @@ func TestRodManualDemandUntouched(t *testing.T) {
 // through the RPS manual latch, the same operator path the bridge
 // exposes.
 func TestRodAutoControlFrozenWhileTripped(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.AutoControl = true
 	p.ReactorBuilding.ReactorProtectionSystem.ManualTrip = true
@@ -157,6 +161,7 @@ func TestRodAutoControlFrozenWhileTripped(t *testing.T) {
 //	the reactor to match the power demanded by the turbine [...]"
 //	specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:68-71
 func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
+	t.Parallel()
 	// simulation state.
 	testDt := 25 * time.Millisecond
 	p := MakePlant()
@@ -229,6 +234,7 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 //	"to overcome "power defect" during power ascension"
 //	specs/the_westinghouse_pressurized_water_react/chapter_16/page_232.txt:54-55
 func TestRodAutoControlPartialPowerPlateauAscent(t *testing.T) {
+	t.Parallel()
 	testDt := 25 * time.Millisecond
 	p := MakePlant()
 	// Forced flow for an at-power arc (see the plateau test above).
@@ -280,6 +286,7 @@ func TestRodAutoControlPartialPowerPlateauAscent(t *testing.T) {
 // reference day); multi-hour xenon evolution is covered by the
 // reserve-point and iodine/xenon tests.
 func TestRodAutoControlDailyLoadFollowArc(t *testing.T) {
+	t.Parallel()
 	// Width note: every channel here is width-safe after the
 	// anchoring. The program walk rides the fission update verified
 	// by TestReactorFissionPower_WidthInvariance; the automatic boron

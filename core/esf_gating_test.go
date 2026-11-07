@@ -31,6 +31,7 @@ import (
 // flow. DriveReady drops to false; the SWS Step zero-flow
 // gate fires.
 func TestESFGating_SWSNoFlowWithBusesOff(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false
@@ -47,6 +48,7 @@ func TestESFGating_SWSNoFlowWithBusesOff(t *testing.T) {
 // (OR gate across the two buses). The pump should develop
 // full design flow.
 func TestESFGating_SWSFlowsWithOneBusOn(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Outside.ServiceWaterSystem.PumpRunning = true
@@ -63,6 +65,7 @@ func TestESFGating_SWSFlowsWithOneBusOn(t *testing.T) {
 // outlet temperature tracks inlet (no recovery-lag
 // integration).
 func TestESFGating_CCWSNoRecoveryWithBusesOff(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false
@@ -85,6 +88,7 @@ func TestESFGating_CCWSNoRecoveryWithBusesOff(t *testing.T) {
 // AFWPump pattern: the Running flag preserves operator
 // intent while DriveReady gates effective flow.
 func TestESFGating_HHSINoFlowWithBusesOff(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false
@@ -113,6 +117,7 @@ func TestESFGating_HHSINoFlowWithBusesOff(t *testing.T) {
 // TrainB on BusB). With BusA off, TrainA cannot develop flow
 // even if Pump.Running=true; TrainB is unaffected.
 func TestESFGating_RHRTrainGatedByOwnBus(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	r := &p.AuxiliaryBuilding.ResidualHeatRemovalSystem
@@ -148,6 +153,7 @@ func TestESFGating_RHRTrainGatedByOwnBus(t *testing.T) {
 // (plans/x/uat_sat_gating.md); a blackout drops the bus so the
 // pump spins down and the cooling-tower fan stops.
 func TestESFGating_CWNoFlowWithBusesOff(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false
@@ -172,6 +178,7 @@ func TestESFGating_CWNoFlowWithBusesOff(t *testing.T) {
 // by an OR of the two ESF buses, so a single-bus supply keeps
 // the CW pump motors energised.
 func TestESFGating_CWFlowsWithOneBusOn(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Outside.CirculatingWaterPump.Running = true
@@ -190,6 +197,7 @@ func TestESFGating_CWFlowsWithOneBusOn(t *testing.T) {
 // cleared even though PumpRunning stays latched
 // (plans/x/uat_sat_gating.md).
 func TestESFGating_SFPCSNoFlowWithBusesOff(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false
@@ -213,6 +221,7 @@ func TestESFGating_SFPCSNoFlowWithBusesOff(t *testing.T) {
 // automatically: the Running latch was preserved during the
 // blackout, so the readiness gate alone gates flow.
 func TestESFGating_CWRecoversWhenPowerReturns(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false

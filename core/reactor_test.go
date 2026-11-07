@@ -14,6 +14,7 @@ import (
 // near rated (the simplified power-defect model loses some power
 // to the Doppler correction; we assert it stays in a sane band).
 func TestReactor_RunningProducesRatedPower(t *testing.T) {
+	t.Parallel()
 	r := ReactorPressureVessel{
 		ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
 		Inlet:       Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
@@ -55,6 +56,7 @@ func TestReactor_RunningProducesRatedPower(t *testing.T) {
 //     feedback effects inherent in the physics of a PWR"
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:69-71
 func TestReactor_DopplerShiftsReactivityWithBoron(t *testing.T) {
+	t.Parallel()
 	assert.Greater(t, netTempCoef(CVCSInitialBoron), netTempCoef(10),
 		"want net temperature coefficient higher at BOL boron than EOL boron")
 
@@ -91,6 +93,7 @@ func TestReactor_DopplerShiftsReactivityWithBoron(t *testing.T) {
 // keeps ThermalPower non-zero. The long-tail floor is reached
 // well within an hour of simulated time.
 func TestReactor_TripWithRodsOutKeepsDecayHeatFloor(t *testing.T) {
+	t.Parallel()
 	r := ReactorPressureVessel{
 		ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
 		Trip:        true,
@@ -115,6 +118,7 @@ func TestReactor_TripWithRodsOutKeepsDecayHeatFloor(t *testing.T) {
 // not the reference temperature), so Doppler stays near zero.
 // Allow a tiny tolerance for the single-step transient.
 func TestReactor_OutletAtReferenceGivesZeroDoppler(t *testing.T) {
+	t.Parallel()
 	r := ReactorPressureVessel{
 		ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
 		Outlet:      Temperature{Val: float64(CoreDopplerReferenceTempF), Unit: u.Fahrenheit},
@@ -135,6 +139,7 @@ func TestReactor_OutletAtReferenceGivesZeroDoppler(t *testing.T) {
 // With ThermalPower > 0 and RCP running, Outlet relaxes toward
 // CoreReferenceOutletF on the PrimaryThermalTimeConstant.
 func TestReactor_OutletTracksThermalPower(t *testing.T) {
+	t.Parallel()
 	r := ReactorPressureVessel{
 		ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
 		Outlet:      Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
@@ -156,6 +161,7 @@ func TestReactor_OutletTracksThermalPower(t *testing.T) {
 // After a trip the Outlet temperature decays along with the core
 // power — within a few hundred steps it should drop appreciably.
 func TestReactor_OutletDropsAfterTrip(t *testing.T) {
+	t.Parallel()
 	r := ReactorPressureVessel{
 		ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
 		Outlet:      Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
@@ -190,6 +196,7 @@ func TestReactor_OutletDropsAfterTrip(t *testing.T) {
 //     circulation flow if the RCPs are not operating"
 //     specs/westinghouse_tech_manual/chapter_3/page_0328.txt:31-32
 func TestReactor_InletFollowsProgramUnderNaturalCirculation(t *testing.T) {
+	t.Parallel()
 	r := ReactorPressureVessel{
 		ControlRods: ControlRods{Insertion: 1, DemandInsertion: 1, BoronConcentration: CVCSInitialBoron},
 		Inlet:       Temperature{Val: 420, Unit: u.Fahrenheit},
@@ -223,6 +230,7 @@ func TestReactor_InletFollowsProgramUnderNaturalCirculation(t *testing.T) {
 // current worth calibration holds a scrammed core subcritical;
 // that band is a model-calibration artifact, not a spec value.
 func TestReactor_TrippedPowerIgnoresReactivity(t *testing.T) {
+	t.Parallel()
 	mk := func(boron float64) ReactorPressureVessel {
 		r := ReactorPressureVessel{
 			ControlRods: ControlRods{Insertion: 1, DemandInsertion: 0, BoronConcentration: boron},
@@ -275,6 +283,7 @@ func TestReactor_TrippedPowerIgnoresReactivity(t *testing.T) {
 //     configuration and the initially low core activity."
 //   - specs/the_westinghouse_pressurized_water_react/chapter_2/page_041.txt:18-20
 func TestReactor_FissionRegrowsFromSourceAfterScram(t *testing.T) {
+	t.Parallel()
 	r := ReactorPressureVessel{
 		ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0,
 			// Near-full-dilution (end-of-life) boron: the net
@@ -325,6 +334,7 @@ func TestReactor_FissionRegrowsFromSourceAfterScram(t *testing.T) {
 // Spec: the cold startup initial condition holds "<140" F RCS coolant.
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:48-51
 func TestReactor_ZeroPowerHoldsTemperature(t *testing.T) {
+	t.Parallel()
 	r := ReactorPressureVessel{
 		ControlRods: ControlRods{BoronConcentration: CVCSInitialBoron},
 		Outlet:      Temperature{Val: 135, Unit: u.Fahrenheit},
@@ -350,6 +360,7 @@ func TestReactor_ZeroPowerHoldsTemperature(t *testing.T) {
 // Spec: "Primary plant heatup rate is limited to 50°F per hour."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:140-141
 func TestReactor_OutletProgramRateLimited(t *testing.T) {
+	t.Parallel()
 	hot := ReactorPressureVessel{}
 	hot.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
 	hot.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
@@ -402,6 +413,7 @@ func TestReactor_OutletProgramRateLimited(t *testing.T) {
 //
 // specs/pwr_sim/chapter_4/page_053.txt:9-11
 func TestReactor_FaultOvercoolBypassesProgramEnvelope(t *testing.T) {
+	t.Parallel()
 	hot := ReactorPressureVessel{}
 	hot.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
 	hot.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
@@ -443,6 +455,7 @@ func TestReactor_FaultOvercoolBypassesProgramEnvelope(t *testing.T) {
 // control."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:94-97
 func TestRPV_ColdPressureHoldsAtZeroPower(t *testing.T) {
+	t.Parallel()
 	rpv := ReactorPressureVessel{
 		Outlet:       Temperature{Val: 140, Unit: u.Fahrenheit},
 		FissionPower: CoreNeutronSourcePower,
@@ -464,6 +477,7 @@ func TestRPV_ColdPressureHoldsAtZeroPower(t *testing.T) {
 // RPV pressure baseline at the design point over the same time
 // constant (wiring check against the relaxation constant).
 func TestRPV_PressureStillRelaxesTowardDesignAtPower(t *testing.T) {
+	t.Parallel()
 	atPower := ReactorPressureVessel{Pressure: 2000}
 	atPower.SeedSteadyStatePower(CoreRatedThermalPower)
 	for range int(300 * time.Second / DefaultTimeStep) {

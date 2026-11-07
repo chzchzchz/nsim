@@ -13,6 +13,7 @@ import (
 // energising the heaters drives pressure toward PressurizerHeaterTarget
 // without overshooting it.
 func TestPressurizer_HeatersDrivePressureUp(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	// Equalise primary-loop pressures so the surge-line edges sit at
 	// zero deltaP and the graph does not drain the pressurizer over
@@ -39,6 +40,7 @@ func TestPressurizer_HeatersDrivePressureUp(t *testing.T) {
 // step bleeds pressure down toward the saturation floor for the
 // hot-leg coolant temperature.
 func TestPressurizer_SprayDrivesPressureDown(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	// Equalise primary-loop pressures so the surge-line edges are at
 	// zero deltaP.
@@ -88,6 +90,7 @@ func TestPressurizer_SprayDrivesPressureDown(t *testing.T) {
 //	 Volume Control System."
 //	specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65
 func TestPressurizer_InflowRaisesLevelWithoutMovingPressure(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.Pressurizer.Volume = Volume{Val: 1000, Unit: u.Gallon}
 	p.ReactorBuilding.Pressurizer.Water = Volume{Val: 800, Unit: u.Gallon}
@@ -116,6 +119,7 @@ func TestPressurizer_InflowRaisesLevelWithoutMovingPressure(t *testing.T) {
 
 // When pressure exceeds the PORV trip setpoint the valve opens.
 func TestPressurizer_PORVOpensOverTrip(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.Pressurizer.Volume = Volume{Val: 1000, Unit: u.Gallon}
 	p.ReactorBuilding.Pressurizer.Water = Volume{Val: 500, Unit: u.Gallon} // big bubble
@@ -137,6 +141,7 @@ func TestPressurizer_PORVOpensOverTrip(t *testing.T) {
 // from PressurizerHeaterRate and PressurizerBubbleStiffness, not an
 // independently sourced figure.
 func TestPressurizer_BubbleFormationFromWaterSolid(t *testing.T) {
+	t.Parallel()
 	hotLeg := Temperature{Val: CoreReferenceInletF + 3, Unit: u.Fahrenheit}
 	seed := float64(PressurizerSatPressure(hotLeg.Float()))
 	pz := Pressurizer{
@@ -171,6 +176,7 @@ func TestPressurizer_BubbleFormationFromWaterSolid(t *testing.T) {
 // heaters and/or pressurizer spray."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:28-29
 func TestPressurizer_LetdownDrainHoldsPressure(t *testing.T) {
+	t.Parallel()
 	pz := Pressurizer{
 		Volume:    Volume{Val: 1500, Unit: u.Gallon},
 		Water:     Volume{Val: 1200, Unit: u.Gallon},
@@ -204,6 +210,7 @@ func TestPressurizer_LetdownDrainHoldsPressure(t *testing.T) {
 // page's cooldown narrative is OCR-truncated mid-sentence; see
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:81-82)
 func TestPressurizer_IdleCooldownCondensesBubble(t *testing.T) {
+	t.Parallel()
 	hotLeg := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 	pz := Pressurizer{
 		Volume:   Volume{Val: 1500, Unit: u.Gallon},
@@ -231,6 +238,7 @@ func TestPressurizer_IdleCooldownCondensesBubble(t *testing.T) {
 // automatically energize."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:97-98
 func TestPressurizer_HeaterAutoControlRecoversSag(t *testing.T) {
+	t.Parallel()
 	pzr := Pressurizer{
 		Pressure:          Pressure(PressurizerHeaterTarget - 150),
 		Volume:            Volume{Val: 1500, Unit: u.Gallon},
@@ -257,6 +265,7 @@ func TestPressurizer_HeaterAutoControlRecoversSag(t *testing.T) {
 // and with it the saturation floor — cools down; without it the same
 // cooldown depressurizes freely.
 func TestPressurizer_HeaterAutoControlHoldsThroughCooldown(t *testing.T) {
+	t.Parallel()
 	newPzr := func(auto bool) Pressurizer {
 		return Pressurizer{
 			Pressure:          PressurizerHeaterTarget,
@@ -293,6 +302,7 @@ func TestPressurizer_HeaterAutoControlHoldsThroughCooldown(t *testing.T) {
 // curves."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:142-145
 func TestPressurizer_PressureSetpointRegulatesBand(t *testing.T) {
+	t.Parallel()
 	pzr := Pressurizer{
 		Pressure:          415,
 		Volume:            Volume{Val: 1500, Unit: u.Gallon},
@@ -318,6 +328,7 @@ func TestPressurizer_PressureSetpointRegulatesBand(t *testing.T) {
 // With a setpoint below the no-load target, even the manual heater
 // latch stops there instead of running to PressurizerHeaterTarget.
 func TestPressurizer_ManualHeatersHoldAtSetpoint(t *testing.T) {
+	t.Parallel()
 	pzr := Pressurizer{
 		Pressure:         300,
 		Volume:           Volume{Val: 1500, Unit: u.Gallon},
@@ -339,6 +350,7 @@ func TestPressurizer_ManualHeatersHoldAtSetpoint(t *testing.T) {
 // diverging independent relaxation would contradict every
 // operator-maintained program (chapter_7/page_136.txt:5-12).
 func TestPlant_RPVPressureTracksPressurizer(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.Pressurizer.Pressure = 2100
 
@@ -352,6 +364,7 @@ func TestPlant_RPVPressureTracksPressurizer(t *testing.T) {
 
 // The setpoint is operator-reachable on the bridge with the psia kind.
 func TestPressurizer_SetpointControlRoundTrip(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	m := GetControlMap(&p)
 	c, ok := m["ReactorBuilding/Pressurizer/PressureSetpoint"]
@@ -369,6 +382,7 @@ func TestPressurizer_SetpointControlRoundTrip(t *testing.T) {
 // "heater and spray valve control ... in automatic operation" loop.
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:57-58
 func TestPressurizer_AutoSprayRelievesOvershoot(t *testing.T) {
+	t.Parallel()
 	pzr := Pressurizer{
 		Pressure:          Pressure(PressurizerHeaterTarget + 200),
 		Volume:            Volume{Val: 1500, Unit: u.Gallon},
@@ -394,6 +408,7 @@ func TestPressurizer_AutoSprayRelievesOvershoot(t *testing.T) {
 // loops with spray flow connections."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:96-98
 func TestPressurizer_AutoSprayNeedsRCPFlow(t *testing.T) {
+	t.Parallel()
 	pzr := Pressurizer{
 		Pressure:          Pressure(PressurizerHeaterTarget + 200),
 		Volume:            Volume{Val: 1500, Unit: u.Gallon},
@@ -417,6 +432,7 @@ func TestPressurizer_AutoSprayNeedsRCPFlow(t *testing.T) {
 //
 // specs/wiki/Vapor_pressure_of_water.txt:793-795
 func TestPressurizerSatTemperatureF_SteamTableAnchors(t *testing.T) {
+	t.Parallel()
 	assert.InDelta(t, 212.0, PressurizerSatTemperatureF(14.7), 1.5,
 		"atmospheric boiling point")
 	assert.InDelta(t, 533.0, PressurizerSatTemperatureF(920), 5,

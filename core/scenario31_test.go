@@ -43,6 +43,7 @@ func scenario31Plant(t *testing.T) (Plant, time.Duration) {
 }
 
 func TestScenario31_DilutionLegLowersBoronAtRatedRate(t *testing.T) {
+	t.Parallel()
 	p, testDt := scenario31Plant(t)
 	setControl(t, &p,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode", "Dilution")
@@ -77,6 +78,7 @@ func TestScenario31_DilutionLegLowersBoronAtRatedRate(t *testing.T) {
 // subsequent boration mode"
 // specs/the_westinghouse_pressurized_water_react/chapter_4/page_081.txt:41-45
 func TestScenario31_IsolationIntervalConditionsWithoutExchanging(t *testing.T) {
+	t.Parallel()
 	p, testDt := scenario31Plant(t)
 	setControl(t, &p,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode", "Dilution")
@@ -107,6 +109,7 @@ func TestScenario31_IsolationIntervalConditionsWithoutExchanging(t *testing.T) {
 }
 
 func TestScenario31_BorationSetpointRoundTripsAndReleases(t *testing.T) {
+	t.Parallel()
 	p, testDt := scenario31Plant(t)
 	setControl(t, &p,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode", "Dilution")
@@ -160,6 +163,7 @@ func TestScenario31_BorationSetpointRoundTripsAndReleases(t *testing.T) {
 // the exchange back up.
 // specs/the_westinghouse_pressurized_water_react/chapter_4/page_081.txt:41-45
 func TestScenario31_UnconditionedOppositeModeHoldsUntilHot(t *testing.T) {
+	t.Parallel()
 	p, testDt := scenario31Plant(t)
 	setControl(t, &p,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode", "Dilution")

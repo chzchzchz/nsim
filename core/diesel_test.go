@@ -31,6 +31,7 @@ func stepN(p *Plant, n int, dt time.Duration) {
 }
 
 func TestDiesel_FSM_StartAndReachReady(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = true
 
@@ -51,6 +52,7 @@ func TestDiesel_FSM_StartAndReachReady(t *testing.T) {
 }
 
 func TestDiesel_NoStartWithoutSignal(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator = newDiesel(500)
 
@@ -60,6 +62,7 @@ func TestDiesel_NoStartWithoutSignal(t *testing.T) {
 }
 
 func TestDiesel_FuelOnlyDecreasesWhileRunning(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = true
 	p.AuxiliaryBuilding.DieselGenerator = newDiesel(500)
@@ -79,6 +82,7 @@ func TestDiesel_FuelOnlyDecreasesWhileRunning(t *testing.T) {
 }
 
 func TestDiesel_TripsOnFuelExhaustion(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = true
 	p.AuxiliaryBuilding.DieselGenerator = newDiesel(0.0001) // tiny sliver
@@ -89,6 +93,7 @@ func TestDiesel_TripsOnFuelExhaustion(t *testing.T) {
 }
 
 func TestDiesel_TripsOnCoolantOverTemp(t *testing.T) {
+	t.Parallel()
 	// Every channel here is width-exact or negligibly approximated
 	// at the widened tick: loss-of-cooling heatup is the constant
 	// dieselAmbientRate ramp scaled by dt, the ready deadline
@@ -135,6 +140,7 @@ func TestDiesel_TripsOnCoolantOverTemp(t *testing.T) {
 //   - "Diesel generator coolers" listed as a Service Water System load.
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89
 func TestDiesel_CoolantCoolsWhenServiceWaterFlows(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = true
 	p.AuxiliaryBuilding.DieselGenerator = newDiesel(500)
@@ -179,6 +185,7 @@ func TestDiesel_CoolantCoolsWhenServiceWaterFlows(t *testing.T) {
 //     buses."
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-80
 func TestDiesel_CoolantDoesNotCoolWhenBreakerOpen(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = true
 	// Open both ESF breakers so the SWS pump motors are unpowered.

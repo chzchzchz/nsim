@@ -18,6 +18,7 @@ import (
 // temperature."
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_129.txt:112-115
 func TestCVCSAutoBoronSelectsModeFromRodTravel(t *testing.T) {
+	t.Parallel()
 	low := CVCS{AutoBoronControl: true}
 	low.applyAutoBoronControl(CVCSAutoBoronLowInsertionFrac/2, 0, 0)
 	assert.Equal(t, CVCSDilution, low.Mode,
@@ -34,6 +35,7 @@ func TestCVCSAutoBoronSelectsModeFromRodTravel(t *testing.T) {
 // Mid-band travel restores the neutral volume-control lineup and
 // stops the BTRS pump.
 func TestCVCSAutoBoronNeutralMidBand(t *testing.T) {
+	t.Parallel()
 	mid := CVCS{
 		Mode:                         CVCSBoration,
 		BTRSRecirculationPumpRunning: true,
@@ -51,6 +53,7 @@ func TestCVCSAutoBoronNeutralMidBand(t *testing.T) {
 // mirrors as dilution. Band excursions outrank travel position.
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:120-123
 func TestCVCSAutoBoronAnswersAxialOffsetBand(t *testing.T) {
+	t.Parallel()
 	bottomSkew := CVCS{AutoBoronControl: true}
 	bottomSkew.applyAutoBoronControl(
 		(CVCSAutoBoronLowInsertionFrac+CVCSAutoBoronHighInsertionFrac)/2,
@@ -97,6 +100,7 @@ func TestCVCSAutoBoronAnswersAxialOffsetBand(t *testing.T) {
 // an identical twin with the latch engaged does respond, so the
 // assertion proves gating rather than a vacuous no-op.
 func TestCVCSAutoBoronManualOverride(t *testing.T) {
+	t.Parallel()
 	manual := MakePlant()
 	manual.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSVolumeControl
 	// Rated lineup insertion (~1 percent, trimming the no-load
@@ -128,6 +132,7 @@ func TestCVCSAutoBoronManualOverride(t *testing.T) {
 // the reactor power [...]"
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_129.txt:112-115
 func TestCVCSAutoBoronUnlocksDeepPlateau(t *testing.T) {
+	t.Parallel()
 	// Width note: the descent is a program walk over the anchored
 	// fission update (verified by
 	// TestReactorFissionPower_WidthInvariance) plus fixed-rate boron
@@ -179,6 +184,7 @@ func TestCVCSAutoBoronUnlocksDeepPlateau(t *testing.T) {
 // enough, the BTRS is switched to the proper mode".
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:58-65
 func TestCVCSAutoBoronAnswersPowerError(t *testing.T) {
+	t.Parallel()
 	midInsertion := (CVCSAutoBoronLowInsertionFrac +
 		CVCSAutoBoronHighInsertionFrac) / 2
 
@@ -222,6 +228,7 @@ func TestCVCSAutoBoronAnswersPowerError(t *testing.T) {
 // (spec says only "large enough"), so this pins the declared shape of
 // the pacing law, not spec'd numbers.
 func TestCVCSAutoBoronDrivePacesWithError(t *testing.T) {
+	t.Parallel()
 	c := CVCS{AutoBoronControl: true}
 	c.applyAutoBoronControl(0.04, 0, CVCSAutoBoronPowerErrBandFrac*1.01)
 	assert.InDelta(t, 0, c.AutoBoronDrive, 1e-2,
@@ -250,6 +257,7 @@ func TestCVCSAutoBoronDrivePacesWithError(t *testing.T) {
 // its zero value - operator chemistry never inherits the automatic
 // pacing scalar.
 func TestCVCSDilutionRateFullWithoutAutoTrim(t *testing.T) {
+	t.Parallel()
 	testDt := time.Second
 	c := MakePlant().AuxiliaryBuilding.ChemicalVolumeControlSystem
 	require.False(t, c.AutoBoronControl)

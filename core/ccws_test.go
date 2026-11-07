@@ -13,6 +13,7 @@ import (
 // sits at the steady-state setpoint (105°F), and the surge tank
 // is full.
 func TestCCWS_InitialStateIsIdle(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	ccws := p.AuxiliaryBuilding.ComponentCoolingWaterSystem
 	assert.False(t, ccws.PumpRunning,
@@ -34,6 +35,7 @@ func TestCCWS_InitialStateIsIdle(t *testing.T) {
 // With the pumps off the inlet temperature freezes and the
 // outlet equals the inlet (no flow, no heat transfer).
 func TestCCWS_PumpsOffFreezeInletAndOutletEqualInlet(t *testing.T) {
+	t.Parallel()
 	c := CCWS{
 		PumpRunning: false,
 		InletTemp:   Temperature{Val: 110.0, Unit: u.Fahrenheit},
@@ -60,6 +62,7 @@ func TestCCWS_PumpsOffFreezeInletAndOutletEqualInlet(t *testing.T) {
 //     after four hours."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112
 func TestCCWS_PumpsRunningInletRecoversTowardSetpoint(t *testing.T) {
+	t.Parallel()
 	c := CCWS{
 		PumpRunning: true,
 		DriveReady:  true,
@@ -85,6 +88,7 @@ func TestCCWS_PumpsRunningInletRecoversTowardSetpoint(t *testing.T) {
 // representation of the heat load imposed by the cooled
 // components.
 func TestCCWS_PumpsRunningOutletAboveInletByApproachTemp(t *testing.T) {
+	t.Parallel()
 	c := CCWS{
 		PumpRunning: true,
 		DriveReady:  true,
@@ -110,6 +114,7 @@ func TestCCWS_PumpsRunningOutletAboveInletByApproachTemp(t *testing.T) {
 //     after four hours."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112
 func TestCCWS_InletRecoversWithinFourHours(t *testing.T) {
+	t.Parallel()
 	// The recovery tau is one hour, orders of magnitude wider than
 	// the step, and Step folds the closed-form lag on every call,
 	// so a coarse step cannot distort the relaxation toward the
@@ -144,6 +149,7 @@ func TestCCWS_InletRecoversWithinFourHours(t *testing.T) {
 // to service water supply + approach (110°F at 100°F supply),
 // so the inlet moves above 105°F instead of holding.
 func TestCCWS_HotRiverRaisesInletTarget(t *testing.T) {
+	t.Parallel()
 	c := CCWS{
 		PumpRunning: true,
 		DriveReady:  true,
@@ -170,6 +176,7 @@ func TestCCWS_HotRiverRaisesInletTarget(t *testing.T) {
 //     after four hours."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112
 func TestCCWS_LossOfServiceWaterSoaksLoopAndZeroesDuty(t *testing.T) {
+	t.Parallel()
 	c := CCWS{
 		PumpRunning: true,
 		DriveReady:  true,
@@ -214,6 +221,7 @@ func TestCCWS_EndToEndSafetyInjectionStartsPumps(t *testing.T) {
 // it, doubling the recovery-lag rate (single-writer discipline,
 // plans/CHECK_SKILL.md section 5).
 func TestCCWS_SteppedOncePerPlantStep(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	ccws := &p.AuxiliaryBuilding.ComponentCoolingWaterSystem
 	ccws.PumpRunning = true

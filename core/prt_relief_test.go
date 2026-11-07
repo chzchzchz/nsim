@@ -40,6 +40,7 @@ func holdPressure(p *Plant, psia float64, steps int) {
 // ASME-code safety valves will open."
 // specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:30-32
 func TestPressurizer_SafetyValveAutoActuates(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	setPressurizerPsi(&p, float64(PressurizerSafetySetpoint)+50)
 	p.Step(DefaultTimeStep)
@@ -55,6 +56,7 @@ func TestPressurizer_SafetyValveAutoActuates(t *testing.T) {
 // The rate constant is derived; this pins that opening relief moves
 // pressure down, not up or nowhere.
 func TestPressurizer_ReliefLowersPressure(t *testing.T) {
+	t.Parallel()
 	hotLeg := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 	prz := Pressurizer{
 		Volume: Volume{Val: 1200, Unit: u.Gallon},
@@ -78,6 +80,7 @@ func TestPressurizer_ReliefLowersPressure(t *testing.T) {
 // Acceptance 3: relief fills the PRT and containment pressure does not
 // move from relief alone while the rupture disc holds.
 func TestRelief_RoutesToPRTNotContainment(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	startLevel := p.ReactorBuilding.PressurizedReliefTank.Level.Float()
 	holdPressure(&p, float64(PressurizerPORVTrip)+50,
@@ -98,6 +101,7 @@ func TestRelief_RoutesToPRTNotContainment(t *testing.T) {
 // "A rupture disc vents the tank to the containment if design pressure
 // is exceeded." specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:37-38
 func TestRelief_RuptureDiscBurstVentsAndCSSCatches(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
@@ -137,6 +141,7 @@ func TestRelief_RuptureDiscBurstVentsAndCSSCatches(t *testing.T) {
 // are provided to isolate these relief valves should excessive leakage
 // occur." specs/the_westinghouse_pressurized_water_react/chapter_3/page_072.txt:44-47
 func TestBlockValve_GatesReliefDischarge(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.BlockValve = Valve{}
 	startLevel := p.ReactorBuilding.PressurizedReliefTank.Level.Float()
@@ -152,6 +157,7 @@ func TestBlockValve_GatesReliefDischarge(t *testing.T) {
 
 // Acceptance 6: the PRT spray adds inventory only while open.
 func TestPRTSpray_AddsInventoryWhileOpen(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.PRTSprayValve = Valve{Open: 1}
 	startLevel := p.ReactorBuilding.PressurizedReliefTank.Level.Float()

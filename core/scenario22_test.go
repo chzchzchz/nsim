@@ -16,6 +16,7 @@ import (
 // specs/the_westinghouse_pressurized_water_react/
 // chapter_13/page_185.txt:53-54
 func TestScenario22_CavityFloodControlRaisesDepth(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.RefuelingOperations.Phase = RefuelingPhasePreparation
 
@@ -39,6 +40,7 @@ func TestScenario22_CavityFloodControlRaisesDepth(t *testing.T) {
 // specs/the_westinghouse_pressurized_water_react/
 // chapter_13/page_186.txt:113-116
 func TestScenario22_DrainCommandClearsFloodCommand(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.RefuelingOperations.Phase = RefuelingPhaseReassembly
 	setControl(t, &p,
@@ -62,6 +64,7 @@ func TestScenario22_DrainCommandClearsFloodCommand(t *testing.T) {
 // specs/the_westinghouse_pressurized_water_react/
 // chapter_13/page_185.txt:130-135
 func TestScenario22_BatchTransferAtFuelHandlingMidpoint(t *testing.T) {
+	t.Parallel()
 	mid := RefuelingPhaseDurations[RefuelingPhaseFuelHandling] / 2.0
 	r := RefuelingOperations{
 		Phase:                RefuelingPhaseFuelHandling,
@@ -90,6 +93,7 @@ func TestScenario22_BatchTransferAtFuelHandlingMidpoint(t *testing.T) {
 // chapter_13/page_183.txt:32-34; head lift/drain sequencing at
 // chapter_13/page_185.txt:51-58 and chapter_13/page_186.txt:101-116.
 func TestScenario22_PhaseWalkLatchesAndCompletion(t *testing.T) {
+	t.Parallel()
 	// Disassembly entry latches head and internals out underwater.
 	r := RefuelingOperations{Phase: RefuelingPhaseDisassembly}
 	r = r.Step(DefaultTimeStep)

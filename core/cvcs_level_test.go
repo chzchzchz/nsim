@@ -29,6 +29,7 @@ func autoCVCS() *CVCS {
 //	varies with RCS average coolant temperature."
 //	specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
 func TestPzrLevelProgramAnchors(t *testing.T) {
+	t.Parallel()
 	fullLoadTavg := Temperature{
 		Val:  (CoreReferenceInletF + CoreReferenceOutletF) / 2,
 		Unit: u.Fahrenheit,
@@ -60,6 +61,7 @@ func TestPzrLevelProgramAnchors(t *testing.T) {
 //	letdown flow."
 //	specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:9-12
 func TestPzrLevelControllerBalancesFlows(t *testing.T) {
+	t.Parallel()
 	noLoad := Temperature{Val: RCSNoLoadTavgF, Unit: u.Fahrenheit}
 
 	low := autoCVCS().Step(DefaultTimeStep, Volume{}, noLoad, 0.05, 0)
@@ -90,6 +92,7 @@ func TestPzrLevelControllerBalancesFlows(t *testing.T) {
 // control engaged, so a lost charging pump is observable as an unmet
 // demand rather than phantom injection.
 func TestPzrLevelControllerRespectsLatches(t *testing.T) {
+	t.Parallel()
 	noLoad := Temperature{Val: RCSNoLoadTavgF, Unit: u.Fahrenheit}
 
 	c := autoCVCS()
@@ -108,6 +111,7 @@ func TestPzrLevelControllerRespectsLatches(t *testing.T) {
 // Manual lineup (AutoLevelControl zero value) keeps the latch-driven
 // design flows from before the controller existed.
 func TestCVCSManualLineupUnchangedByLevelControl(t *testing.T) {
+	t.Parallel()
 	hot := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 	c := &CVCS{
 		VCTLevel:            Volume{Val: VCTDesignLevel, Unit: u.Gallon},
@@ -132,6 +136,7 @@ func TestCVCSManualLineupUnchangedByLevelControl(t *testing.T) {
 //	value which varies with RCS average coolant temperature."
 //	specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
 func TestPzrAutoControlHoldsPlantLevel(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	// Forced flow for the rated-power seed: pumpless full power
 	// thermally expands the coolant and surges the pressurizer,
@@ -196,6 +201,7 @@ func TestPzrAutoControlHoldsPlantLevel(t *testing.T) {
 // unmet: ChargingFlow stays zero instead of phantom injection holding
 // the program.
 func TestPzrAutoControlChargingPumpLossObservable(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.Pressurizer.Water = Volume{
 		Val:  0.4 * p.ReactorBuilding.Pressurizer.Volume.Float(),

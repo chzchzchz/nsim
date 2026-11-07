@@ -14,6 +14,7 @@ import (
 // ejectors or vacuum pumps."
 // specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:19-22
 func TestCondenser_VacuumPumpsRestoreVacuum(t *testing.T) {
+	t.Parallel()
 	c := Condenser{
 		Pressure:           AtmosphericPressure,
 		VacuumPumpRunning:  true,
@@ -31,6 +32,7 @@ func TestCondenser_VacuumPumpsRestoreVacuum(t *testing.T) {
 // With the CW pumps off, the condenser loses its heat sink and
 // the back-pressure rises toward atmospheric within a few seconds.
 func TestCondenser_NoCWDegradesToAtmospheric(t *testing.T) {
+	t.Parallel()
 	c := Condenser{
 		Pressure:           CondenserDesignVacuum,
 		VacuumPumpRunning:  true,
@@ -57,6 +59,7 @@ func TestCondenser_NoCWDegradesToAtmospheric(t *testing.T) {
 //     the turbine."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:32-33
 func TestCondenser_TripOpensDumpValveAndReclosesOnAdmission(t *testing.T) {
+	t.Parallel()
 	// Post-trip stored heat: Tavg well above the no-load value, so
 	// the Tavg-modulated trip dump demands full open.
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:70-77
@@ -103,6 +106,7 @@ func TestCondenser_TripOpensDumpValveAndReclosesOnAdmission(t *testing.T) {
 // Condenser.Level. After several steps with non-zero condensing
 // rate, the level rises by the integrated mass.
 func TestCondenser_LevelAccumulatesCondensingRate(t *testing.T) {
+	t.Parallel()
 	c := Condenser{
 		Pressure:           CondenserDesignVacuum,
 		VacuumPumpRunning:  true,
@@ -130,6 +134,7 @@ func TestCondenser_LevelAccumulatesCondensingRate(t *testing.T) {
 //     hotwell [...]."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-42
 func TestCondenser_HotwellAccumulates(t *testing.T) {
+	t.Parallel()
 	c := Condenser{
 		Pressure:           CondenserDesignVacuum,
 		VacuumPumpRunning:  true,

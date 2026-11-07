@@ -15,6 +15,7 @@ import (
 // (CirculatingWaterPumpCount), the total flow equals the
 // design flow rate and PumpsInService is the full count.
 func TestCirculatingWaterPumpRunning(t *testing.T) {
+	t.Parallel()
 	c := CirculatingWaterSystem{}
 	c = c.Step(DefaultTimeStep, true, true, CirculatingWaterPumpCount,
 		Temperature{Val: 70.0, Unit: u.Fahrenheit}, nil)
@@ -29,6 +30,7 @@ func TestCirculatingWaterPumpRunning(t *testing.T) {
 // With the CW pump stopped the total flow is zero and
 // PumpsInService is zero.
 func TestCirculatingWaterPumpStopped(t *testing.T) {
+	t.Parallel()
 	c := CirculatingWaterSystem{}
 	c = c.Step(DefaultTimeStep, false, true, 0,
 		Temperature{Val: 70.0, Unit: u.Fahrenheit}, nil)
@@ -43,6 +45,7 @@ func TestCirculatingWaterPumpStopped(t *testing.T) {
 // tracks the source temperature directly (no approach
 // applied).
 func TestCirculatingWaterInletTempRiver(t *testing.T) {
+	t.Parallel()
 	c := CirculatingWaterSystem{SourceIsCoolingTower: false}
 	source := Temperature{Val: 65.0, Unit: u.Fahrenheit}
 	c = c.Step(DefaultTimeStep, true, true, CirculatingWaterPumpCount, source, nil)
@@ -55,6 +58,7 @@ func TestCirculatingWaterInletTempRiver(t *testing.T) {
 // tower basin, so the inlet temperature is the live cold-basin
 // temperature regardless of fan state.
 func TestCirculatingWaterInletTempCoolingTower(t *testing.T) {
+	t.Parallel()
 	c := CirculatingWaterSystem{SourceIsCoolingTower: true}
 	ct := &CoolingTower{
 		FanRunning: true,
@@ -77,6 +81,7 @@ func TestCirculatingWaterInletTempCoolingTower(t *testing.T) {
 // pumps lose suction: FlowGPM and PumpsInService drop to zero
 // even though the pump latch is on.
 func TestCirculatingWaterLosesSuctionWhenBasinEmpty(t *testing.T) {
+	t.Parallel()
 	c := CirculatingWaterSystem{SourceIsCoolingTower: true}
 	ct := &CoolingTower{
 		Basin: Tank{Level: Volume{
@@ -97,6 +102,7 @@ func TestCirculatingWaterLosesSuctionWhenBasinEmpty(t *testing.T) {
 // the upstream drive is ready; without drive power the fan is
 // forced off.
 func TestCoolingTowerFanRunning(t *testing.T) {
+	t.Parallel()
 	wetBulb := Temperature{Val: 75.0, Unit: u.Fahrenheit}
 	hot := Temperature{Val: 93.0, Unit: u.Fahrenheit}
 	ct := CoolingTower{}
@@ -114,6 +120,7 @@ func TestCoolingTowerFanRunning(t *testing.T) {
 // running CW pump: FlowGPM matches the design flow and
 // InletTemp tracks RiverTemp.
 func TestPlant_CirculatingWaterSystem_InitialState(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
@@ -136,6 +143,7 @@ func TestPlant_CirculatingWaterSystem_InitialState(t *testing.T) {
 // zero on the next step; the condenser falls back to its
 // no-CW path.
 func TestPlant_CirculatingWaterSystem_PumpStop(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.CirculatingWaterPump.Running = false
 	p.Step(DefaultTimeStep)
@@ -170,6 +178,7 @@ func towerFixture(hotF float64) CoolingTower {
 // to wet-bulb + approach. The approach constant is a modeling
 // convention; this pins the relaxation wiring, not the value.
 func TestCoolingTowerSteadyStateApproach(t *testing.T) {
+	t.Parallel()
 	ct := towerFixture(93.0)
 	ct.ColdBasinTemp = Temperature{Val: 90.0, Unit: u.Fahrenheit}
 	wetBulb := Temperature{Val: 75.0, Unit: u.Fahrenheit}
@@ -192,6 +201,7 @@ func TestCoolingTowerSteadyStateApproach(t *testing.T) {
 // than the design tower under identical load and weather.
 // Physics-forced direction; the magnitudes are conventions.
 func TestCoolingTowerDegradedApproachRunsHotter(t *testing.T) {
+	t.Parallel()
 	wetBulb := Temperature{Val: 75.0, Unit: u.Fahrenheit}
 	hot := Temperature{Val: 93.0, Unit: u.Fahrenheit}
 	steps := int(5 * time.Minute / DefaultTimeStep)
@@ -217,6 +227,7 @@ func TestCoolingTowerDegradedApproachRunsHotter(t *testing.T) {
 // hot return water on the cooling-tower time constant, while
 // fans-on keeps it at the approach target.
 func TestCoolingTowerFanLossHotSoak(t *testing.T) {
+	t.Parallel()
 	wetBulb := Temperature{Val: 75.0, Unit: u.Fahrenheit}
 	hot := Temperature{Val: 95.0, Unit: u.Fahrenheit}
 	ct := towerFixture(95.0)
@@ -243,6 +254,7 @@ func TestCoolingTowerFanLossHotSoak(t *testing.T) {
 // basin level slope matches the evaporation + blowdown rate
 // computed from flow, range, and the derived fractions within 5%.
 func TestCoolingTowerEvaporationDepletesBasin(t *testing.T) {
+	t.Parallel()
 	wetBulb := Temperature{Val: 75.0, Unit: u.Fahrenheit}
 	hot := Temperature{Val: 93.0, Unit: u.Fahrenheit}
 	ct := towerFixture(93.0)
@@ -281,6 +293,7 @@ func TestCoolingTowerEvaporationDepletesBasin(t *testing.T) {
 // basin at CoolingTowerMakeupFlowGPM when open, clamped at
 // capacity.
 func TestCoolingTowerMakeupRefillsBasin(t *testing.T) {
+	t.Parallel()
 	wetBulb := Temperature{Val: 75.0, Unit: u.Fahrenheit}
 	hot := Temperature{Val: 93.0, Unit: u.Fahrenheit}
 	ct := towerFixture(93.0)
@@ -302,6 +315,7 @@ func TestCoolingTowerMakeupRefillsBasin(t *testing.T) {
 // through Plant.Step, and restoring inventory recovers flow —
 // the loss-of-UHS path for a tower-cooled configuration.
 func TestPlant_CoolingTower_UHSLossEndToEnd(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.CirculatingWaterSystem.SourceIsCoolingTower = true
 
@@ -327,6 +341,7 @@ func TestPlant_CoolingTower_UHSLossEndToEnd(t *testing.T) {
 // Acceptance 8: the new tower state survives the plant JSON
 // round trip.
 func TestPlantJSONRoundTripCoolingTower(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.CoolingTower.Basin.Level.Val = 4_000_000
 	p.Outside.CoolingTower.MakeupValve.Open = 0.25

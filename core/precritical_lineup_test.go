@@ -23,6 +23,7 @@ import (
 //     supplying cooling water to the NSSS systems."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:113-115
 func TestCCWS_AutoLatchesOnESFBusPower(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	require.True(t, p.Electrical.ESFBusA.BreakerClosed)
 	stepN(&p, 2, DefaultTimeStep)
@@ -54,6 +55,7 @@ func TestCCWS_AutoLatchesOnESFBusPower(t *testing.T) {
 //     flow to the letdown flow."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:10-12
 func TestPrecriticalLineup_DutyCycleBalancesChargingLetdown(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	// Cold-shutdown primary conditions per the scenario start state:
 	// water-solid pressurizer, subcritical core on inserted rods with
@@ -156,6 +158,7 @@ func TestPrecriticalLineup_DutyCycleBalancesChargingLetdown(t *testing.T) {
 // backup."
 // specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:1-4
 func TestMakeup_AutoInitiatesOnVCTLowLevel(t *testing.T) {
+	t.Parallel()
 	// Level drift, flow delivery, and the initiation latch are
 	// linear in dt; crossing detection shifts by at most one tick
 	// against 30 s windows and band assertions built for slack. Must
@@ -220,6 +223,7 @@ func TestMakeup_AutoInitiatesOnVCTLowLevel(t *testing.T) {
 // involved in maintenance."
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:114-118
 func TestRPS_ChannelTestSuppressesTestedChannel(t *testing.T) {
+	t.Parallel()
 	lowSteamline := RPSLowSteamlinePressureTrip - 10
 
 	tested := ReactorProtectionSystem{ChannelTest: RPSSteamlineChannelInTest}
@@ -252,6 +256,7 @@ func TestRPS_ChannelTestSuppressesTestedChannel(t *testing.T) {
 
 // The scenario-1 gap-closure controls round-trip through the bridge.
 func TestBridge_Scenario1GapControlsRoundTrip(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	cm := GetControlMap(&p)
 

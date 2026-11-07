@@ -60,6 +60,7 @@ func rpcReactorLeadPlant() Plant {
 // ramps at exactly that rate; entering zero holds the integrator.
 // Pure integrator test - no plant physics involved.
 func TestRPC_RateClampOnOperatorEntry(t *testing.T) {
+	t.Parallel()
 	rpv := &ReactorPressureVessel{}
 	turbine := &Turbine{}
 
@@ -102,6 +103,7 @@ func TestRPC_RateClampOnOperatorEntry(t *testing.T) {
 // the dilution overswing is borated back, and settles inside the band
 // by t~1220 s.
 func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
+	t.Parallel()
 	// The descent ramps at the entered 0.02 %/s over ten minutes
 	// under the demanded-setpoint rate limit
 	// (specs/pwr_sim/chapter_2/page_024.txt:3-12), and the
@@ -237,6 +239,7 @@ func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
 // Zero-value RPC state (turbine lead, auto off) leaves rod demand
 // untouched: every pre-RPC behavior and scenario artifact survives.
 func TestRPC_DefaultStateLeavesRodsManual(t *testing.T) {
+	t.Parallel()
 	rpv := &ReactorPressureVessel{}
 	rpv.ControlRods.DemandInsertion = 0.42
 	turbine := &Turbine{}
@@ -259,6 +262,7 @@ func TestRPC_DefaultStateLeavesRodsManual(t *testing.T) {
 // the rods alone. The deadband direction checks then pin regions B
 // and D.
 func TestRPC_BumplessEngagementAndDeadbandDirection(t *testing.T) {
+	t.Parallel()
 	newRPV := func() *ReactorPressureVessel {
 		rpv := &ReactorPressureVessel{
 			FissionPower: Watts(0.9 * float64(CoreFissionPowerAtRated)),
@@ -319,6 +323,7 @@ func TestRPC_BumplessEngagementAndDeadbandDirection(t *testing.T) {
 // The four controls and three sensors resolve through the bridge
 // maps; enum values round-trip through ConvertControlValue.
 func TestRPC_BridgeControlsAndSensorsRoundTrip(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	cm := p.GetControlMap()
 	for _, path := range []string{
@@ -391,6 +396,7 @@ func TestRPC_BridgeControlsAndSensorsRoundTrip(t *testing.T) {
 // boration direction. specs/the_westinghouse_pressurized_water_react/
 // chapter_7/page_135.txt:58-62.
 func TestPowerErrorSensor_SignMatchesControlConvention(t *testing.T) {
+	t.Parallel()
 	p := fullPowerLineup()
 	p.PlantOperation.LeadLagMode = TurbineLead
 	p.TurbineBuilding.Turbine.Setpoint = 0.05
@@ -416,6 +422,7 @@ func absF(v float64) float64 { return max(v, -v) }
 // RPC tests use). Regression: the word forms errored out, which made
 // the mode unreachable from the web console and command files.
 func TestBridge_LeadLagModeAcceptsEnumWords(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	cm := GetControlMap(&p)
 	c := cm["PlantOperation/LeadLagMode"]
@@ -440,6 +447,7 @@ func TestBridge_LeadLagModeAcceptsEnumWords(t *testing.T) {
 // quadratically with load and parked Tavg up to tens of F above the
 // program away from full power.
 func TestRPV_PartLoadLineTracksTavgProgram(t *testing.T) {
+	t.Parallel()
 	for _, load := range []float64{0.35, 0.5, 0.7, 1.0} {
 		var rpv ReactorPressureVessel
 		p := Watts(load * float64(CoreRatedThermalPower))
@@ -471,6 +479,7 @@ func TestRPV_PartLoadLineTracksTavgProgram(t *testing.T) {
 //
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:68-76
 func TestRodControl_MeasuredTavgTrimsPowerTarget(t *testing.T) {
+	t.Parallel()
 	newRods := func() ControlRods {
 		return ControlRods{
 			DemandInsertion:       0.4,
@@ -510,6 +519,7 @@ func TestRodControl_MeasuredTavgTrimsPowerTarget(t *testing.T) {
 // any commanded change). specs/the_westinghouse_pressurized_water_react/
 // chapter_7/page_130.txt:69-71.
 func TestDemandedPowerSetpointSensor_ReadsTurbineDemandInTurbineLead(t *testing.T) {
+	t.Parallel()
 	p := fullPowerLineup()
 	p.PlantOperation.LeadLagMode = TurbineLead
 	p.TurbineBuilding.Turbine.Setpoint = 0.05
@@ -528,6 +538,7 @@ func TestDemandedPowerSetpointSensor_ReadsTurbineDemandInTurbineLead(t *testing.
 // setpoint, not the shadowed integrator. specs/pwr_sim/chapter_2/
 // page_024.txt:13-16.
 func TestTrefSensor_ReadsDemandProgrammedReferenceInTurbineLead(t *testing.T) {
+	t.Parallel()
 	p := fullPowerLineup()
 	p.PlantOperation.LeadLagMode = TurbineLead
 	p.TurbineBuilding.Turbine.Setpoint = 0.05

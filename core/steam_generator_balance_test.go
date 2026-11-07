@@ -99,6 +99,7 @@ func lossOfFeedPlant() Plant {
 // spuriously collapses the fresh-plant header); overrideTimeStep
 // mutates global state, so this test must not run in parallel.
 func TestPlant_FeedwaterRegulatesLevelAtFullPower(t *testing.T) {
+	t.Parallel()
 	testDt := 100 * time.Millisecond
 	p := scenario10FullPowerPlant()
 	p.TurbineBuilding.MainFeedwaterPump.Running = true
@@ -129,6 +130,7 @@ func TestPlant_FeedwaterRegulatesLevelAtFullPower(t *testing.T) {
 // Same widened-tick rationale as the regulation test above; must not
 // run in parallel.
 func TestPlant_LossOfFeedReachesEFWSLowLowTrigger(t *testing.T) {
+	t.Parallel()
 	testDt := 100 * time.Millisecond
 	p := lossOfFeedPlant()
 
@@ -167,6 +169,7 @@ func TestPlant_LossOfFeedReachesEFWSLowLowTrigger(t *testing.T) {
 //
 // Same widened-tick rationale as above; must not run in parallel.
 func TestPlant_EFWHoldsDecayHeatBoil(t *testing.T) {
+	t.Parallel()
 	testDt := 100 * time.Millisecond
 	p := scenario10FullPowerPlant()
 	cm := GetControlMap(&p)

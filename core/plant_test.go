@@ -28,6 +28,7 @@ import (
 // first Step: the steam bubble is the vapor space above the liquid
 // inventory, so Water + SteamBubble must equal Volume exactly.
 func TestPlant_MakePlantPressurizerSeedCoherent(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	pzr := p.ReactorBuilding.Pressurizer
 	assert.Equal(t, pzr.Volume.Float(),
@@ -68,6 +69,7 @@ func TestPlant_MakePlantIdlesAtHotStandby(t *testing.T) {
 }
 
 func TestPlant_ReactorTripCascadesToTurbine(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	// Bring the reactor to rated power; let the SG build pressure.
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
@@ -94,6 +96,7 @@ func TestPlant_ReactorTripCascadesToTurbine(t *testing.T) {
 //     ejectors or vacuum pumps."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:19-22
 func TestPlant_CondenserVacuumRecoversAfterTrip(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.TurbineBuilding.Condenser.VacuumPumpRunning = true
 	p.TurbineBuilding.Condenser.Pressure = AtmosphericPressure
@@ -120,6 +123,7 @@ func TestPlant_CondenserVacuumRecoversAfterTrip(t *testing.T) {
 //     feedwater heaters falls below the minimum."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:28-31
 func TestPlant_MinFlowRecirculationToDeaerator(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.TurbineBuilding.MainFeedwaterPump.Running = false
 	before := p.TurbineBuilding.HeaterDrainTank.Level.Float()
@@ -143,6 +147,7 @@ func TestPlant_MinFlowRecirculationToDeaerator(t *testing.T) {
 //     pressure heaters then into the steam generators."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-51
 func TestPlant_HeaterTrainRaisesFeedwaterTemperature(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.TurbineBuilding.LowPressureHeater.DrainValve = Valve{Open: 1.0}
 	p.TurbineBuilding.HighPressureHeater.DrainValve = Valve{Open: 1.0}
@@ -189,6 +194,7 @@ func synchronizeAndCloseBreaker(p *Plant) {
 //     valves to close."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:28-34
 func TestPlant_ReactorTripOpensBreaker(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -212,6 +218,7 @@ func TestPlant_ReactorTripOpensBreaker(t *testing.T) {
 //     limits of the generator are not exceeded."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
 func TestPlant_BreakerOpenZerosRealPower(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -236,6 +243,7 @@ func TestPlant_BreakerOpenZerosRealPower(t *testing.T) {
 //   - "supply power for its own auxiliaries."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:57-58
 func TestPlant_BreakerCloseEnergizesUATAndSubtractsHouseLoad(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -281,6 +289,7 @@ func TestPlant_BreakerCloseEnergizesUATAndSubtractsHouseLoad(t *testing.T) {
 //     loss of power"
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:58-59
 func TestPlant_ReactorTripTransfersHouseLoadToSAT(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -311,6 +320,7 @@ func TestPlant_ReactorTripTransfersHouseLoadToSAT(t *testing.T) {
 //     be cooled down and depressurized."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:79-86
 func TestPlantOperation_ColdShutdownResetsRamping(t *testing.T) {
+	t.Parallel()
 	po := PlantOperation{
 		RampingUp:         true,
 		RampingDown:       true,
@@ -345,6 +355,7 @@ func TestPlantOperation_ColdShutdownResetsRamping(t *testing.T) {
 //     Residual Heat Removal System (RHRS) is in service."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:104-108
 func TestPlantOperation_HotStandbyRCPCap(t *testing.T) {
+	t.Parallel()
 	po := PlantOperation{}
 	withRHRS := po.Step(DefaultTimeStep,
 		HotStandby,
@@ -380,6 +391,7 @@ func TestPlantOperation_HotStandbyRCPCap(t *testing.T) {
 //     system."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:129-133
 func TestPlantOperation_AuxToMainFeedwaterTransition(t *testing.T) {
+	t.Parallel()
 	po := PlantOperation{}
 	below := po.Step(DefaultTimeStep,
 		PowerOperation,
@@ -413,6 +425,7 @@ func TestPlantOperation_AuxToMainFeedwaterTransition(t *testing.T) {
 //     exceed 5 percent of full power per minute."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:148-150
 func TestPlantOperation_PowerRaiseRateLimit(t *testing.T) {
+	t.Parallel()
 	po := PlantOperation{}
 	// Plant at zero power; target setpoint = full load.
 	// Demand delta = CoreRatedThermalPower ≫ one tick of ramp.
@@ -434,6 +447,7 @@ func TestPlantOperation_PowerRaiseRateLimit(t *testing.T) {
 // the regulator settles: neither RampingUp nor RampingDown is set
 // and StartupPhase is latched at 100.
 func TestPlantOperation_PowerOperationSettles(t *testing.T) {
+	t.Parallel()
 	po := PlantOperation{}
 	tinyDelta := OpPowerRaiseRate * float64(CoreRatedThermalPower) *
 		DefaultTimeStep.Seconds() / 2
@@ -460,6 +474,7 @@ func TestPlantOperation_PowerOperationSettles(t *testing.T) {
 //   - "ramp changes of 5 percent of rated power per minute."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:112
 func TestPlantOperation_PowerLowerRateLimit(t *testing.T) {
+	t.Parallel()
 	po := PlantOperation{}
 	out := po.Step(DefaultTimeStep,
 		PowerOperation,
@@ -488,6 +503,7 @@ func TestPlantOperation_PowerLowerRateLimit(t *testing.T) {
 //     percent of rated power."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_230.txt:62-65
 func TestPlantOperation_LoadFollow15To100(t *testing.T) {
+	t.Parallel()
 	po := PlantOperation{}
 	for _, frac := range []float64{0.15, 0.50, 1.00} {
 		out := po.Step(DefaultTimeStep,
@@ -507,6 +523,7 @@ func TestPlantOperation_LoadFollow15To100(t *testing.T) {
 // positive ceiling, negLimit*dt when desired delta falls below
 // the negative floor, and the raw delta otherwise.
 func TestClampRate_Positive(t *testing.T) {
+	t.Parallel()
 	dt := time.Second
 	got := ClampRate(0, 100, 5, -5, dt)
 	assert.InDelta(t, 5.0, got, 1e-9,
@@ -514,6 +531,7 @@ func TestClampRate_Positive(t *testing.T) {
 }
 
 func TestClampRate_Negative(t *testing.T) {
+	t.Parallel()
 	dt := time.Second
 	got := ClampRate(0, -100, 5, -5, dt)
 	assert.InDelta(t, -5.0, got, 1e-9,
@@ -521,6 +539,7 @@ func TestClampRate_Negative(t *testing.T) {
 }
 
 func TestClampRate_Passthrough(t *testing.T) {
+	t.Parallel()
 	dt := time.Second
 	got := ClampRate(0, 3, 5, -5, dt)
 	assert.InDelta(t, 3.0, got, 1e-9,
@@ -531,6 +550,7 @@ func TestClampRate_Passthrough(t *testing.T) {
 // apply the resulting gating. With Mode=ColdShutdown,
 // AuxFeedwaterInUse must end up true after the step.
 func TestPlant_StepPropagatesPlantOperation(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.PlantOperation.Mode = ColdShutdown
 	stepN(&p, 1, DefaultTimeStep)
@@ -550,6 +570,7 @@ func TestPlant_StepPropagatesPlantOperation(t *testing.T) {
 //   - hot standby is a distinct operator-selected condition
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:79-86
 func TestPlant_StepAdvancesConfiguredHotStandby(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.PlantOperation.Mode = HotStandby
 	require.False(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.Running,
@@ -570,6 +591,7 @@ func TestPlant_StepAdvancesConfiguredHotStandby(t *testing.T) {
 //   - DEHM supports "automatic synchronizers" as remote equipment.
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:90-92
 func TestPlant_BreakerCloseRequiresSyncTolerance(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -591,6 +613,7 @@ func TestPlant_BreakerCloseRequiresSyncTolerance(t *testing.T) {
 //     valves"
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:6-7
 func TestPlant_LoadRejectOpensDumpAndRoutesSteam(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -629,6 +652,7 @@ func TestPlant_LoadRejectOpensDumpAndRoutesSteam(t *testing.T) {
 //     certain power level initiates a reactor trip"
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:33-34
 func TestPlant_StopValveClosureHoldsDumpUntilReset(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -690,6 +714,7 @@ func TestPlant_StopValveClosureHoldsDumpUntilReset(t *testing.T) {
 //     atmospheric dump valves."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:33-36
 func TestPlant_AtmosphericDumpRelievesSGOnly(t *testing.T) {
+	t.Parallel()
 	run := func(atmOpen float64) (Pressure, Volume) {
 		p := MakePlant()
 		p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
@@ -722,6 +747,7 @@ func TestPlant_AtmosphericDumpRelievesSGOnly(t *testing.T) {
 //     limits of the generator are not exceeded."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
 func TestPowerGenerator_MVAEnforced(t *testing.T) {
+	t.Parallel()
 	gen := PowerGenerator{RatedMVA: GeneratorRatedMVA}
 	p := 1.5e9
 	q := 0.7e9
@@ -751,6 +777,7 @@ func TestPowerGenerator_MVAEnforced(t *testing.T) {
 //     certain power level initiates a reactor trip"
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:33-34
 func TestPlant_TurbineTripAtPowerScramsSupersedingStepback(t *testing.T) {
+	t.Parallel()
 	testDt := 10 * time.Millisecond
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
@@ -793,6 +820,7 @@ func TestPlant_TurbineTripAtPowerScramsSupersedingStepback(t *testing.T) {
 //     pumps flows [...] into the steam generators."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-52
 func TestPlant_MainFeedwaterReplenishesSGFromHotwell(t *testing.T) {
+	t.Parallel()
 	run := func(pumpOn bool) (float64, float64) {
 		p := MakePlant()
 		p.ReactorBuilding.SteamGenerator.Water =
@@ -822,6 +850,7 @@ func TestPlant_MainFeedwaterReplenishesSGFromHotwell(t *testing.T) {
 // the steam offtake drain the generator into its low-level trips and
 // the protection cascade behind them.
 func TestPlant_FreshAtPowerIdlesWithoutSpuriousTrips(t *testing.T) {
+	t.Parallel()
 	// simulation state. The 250 ms step keeps the regulator's
 	// discrete integration honest while covering an hour of idle.
 	testDt := 250 * time.Millisecond
@@ -861,6 +890,7 @@ func TestPlant_FreshAtPowerIdlesWithoutSpuriousTrips(t *testing.T) {
 //     coolant contraction" (the surge coupling, either sign).
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:70-72
 func TestPlant_PressurizerSurgeTracksCoolantExpansion(t *testing.T) {
+	t.Parallel()
 	// Heatup runs through dt-scaled thermal lags and the surge
 	// coupling integrates expansion linearly in dt; the conservation
 	// ledger holds by construction at any width. Directional
@@ -908,6 +938,7 @@ func TestPlant_PressurizerSurgeTracksCoolantExpansion(t *testing.T) {
 //     rated speed."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
 func TestTurbine_RollingSteamDrawScalesWithSpeed(t *testing.T) {
+	t.Parallel()
 	base := Turbine{
 		State:          TurbineRunning,
 		Velocity:       TurbineRatedSpeed / 2,
@@ -943,6 +974,7 @@ func TestTurbine_RollingSteamDrawScalesWithSpeed(t *testing.T) {
 //     automatically to reduce steam pressure"
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:34-38
 func TestPlant_SGSafetyValvePopsAndReseats(t *testing.T) {
+	t.Parallel()
 	pop := MakePlant().ReactorBuilding.SteamGenerator
 	pop.HeatInput = SteamGeneratorFullLoadHeatInput
 	pop.Water = Volume{Val: 80000, Unit: u.Gallon}
@@ -977,6 +1009,7 @@ func TestPlant_SGSafetyValvePopsAndReseats(t *testing.T) {
 //     exceed 5 percent of full power per minute":
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:63-67
 func TestPlant_FullLoadHoldsShellPressureAndRatedOutput(t *testing.T) {
+	t.Parallel()
 	// Steady-state balance: fission rides the rated cap (a pinned
 	// state, insensitive to tick width), the SG header relaxes toward
 	// its anchor through dt-scaled lags, and every assertion is a
@@ -1018,6 +1051,7 @@ func TestPlant_FullLoadHoldsShellPressureAndRatedOutput(t *testing.T) {
 //   - SG pressure must stay far above the low-steamline trip:
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt
 func TestPlant_TripBypassModulatesAndHoldsHeaderPressure(t *testing.T) {
+	t.Parallel()
 	// Stepback demand ramps linearly in dt and bypass valve travel is
 	// linear too; the header envelope is asserted against wide bounds
 	// (880 psia floor, safety-valve ceiling) rather than per-step
@@ -1082,6 +1116,7 @@ func TestPlant_TripBypassModulatesAndHoldsHeaderPressure(t *testing.T) {
 // of each must yield the same live state as seeding both, and a
 // stale divergent mirror must not win.
 func TestPlant_UnmarshalReconcilesBoronStorage(t *testing.T) {
+	t.Parallel()
 	const seeded = 2140.0
 
 	doc := `{

@@ -12,6 +12,7 @@ import (
 // At construction the alarm aggregator reports no active
 // conditions and the operator hasn't acknowledged anything.
 func TestPlant_Alarms_EmptyAtConstruction(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	assert.Empty(t, p.Alarms(),
 		"want empty alarm list at startup, got %v", p.Alarms())
@@ -20,6 +21,7 @@ func TestPlant_Alarms_EmptyAtConstruction(t *testing.T) {
 // Pressing the manual-trip pushbutton (chapter 7) raises a
 // trip-severity reactor-trip alarm and the annunciator rings.
 func TestPlant_Alarms_ReactorTripAppears(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
@@ -49,6 +51,7 @@ func TestPlant_Alarms_ReactorTripAppears(t *testing.T) {
 // exercise it separately by raising Velocity above
 // TurbineOPCALarmFraction * rated.
 func TestPlant_Alarms_OPCAlarmAndTrip(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
@@ -83,6 +86,7 @@ func TestPlant_Alarms_OPCAlarmAndTrip(t *testing.T) {
 // the next step (otherwise DieselTripped transitions back to
 // DieselOff at zero speed and zero start signal).
 func TestPlant_Alarms_DieselTripped(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
@@ -105,6 +109,7 @@ func TestPlant_Alarms_DieselTripped(t *testing.T) {
 // SCCW flow lost with the pump commanded running trips the
 // generator; the alarm list surfaces this as AlarmIDSCCWNoFlow.
 func TestPlant_Alarms_SCCWAlarm(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
@@ -134,6 +139,7 @@ func TestPlant_Alarms_SCCWAlarm(t *testing.T) {
 // underlying condition has cleared. Trip-severity alarms keep
 // the annunciator latched even after acknowledgement.
 func TestPlantControlRoom_ResetAlarm_ClearsAcknowledged(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
@@ -155,6 +161,7 @@ func TestPlantControlRoom_ResetAlarm_ClearsAcknowledged(t *testing.T) {
 // AnnunciatorAlarm is true iff at least one trip-severity
 // alarm is active and unacknowledged.
 func TestPlantControlRoom_AlarmSet_AnnunciatorLatch(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
@@ -187,6 +194,7 @@ func TestPlantControlRoom_AlarmSet_AnnunciatorLatch(t *testing.T) {
 // AcknowledgeAll latches every entry at once; common operator
 // pattern after a transient alarm burst.
 func TestPlantControlRoom_AcknowledgeAll(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
@@ -209,6 +217,7 @@ func TestPlantControlRoom_AcknowledgeAll(t *testing.T) {
 // The bridge sensor serialises the alarm list as JSON; the HMI
 // is responsible for decoding it back into objects.
 func TestBridge_AlarmsActiveSensor_JSONShape(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
@@ -225,6 +234,7 @@ func TestBridge_AlarmsActiveSensor_JSONShape(t *testing.T) {
 // The bridge reset control routes an AlarmID through to the
 // control room.
 func TestBridge_AlarmsResetControl(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
@@ -246,6 +256,7 @@ func TestBridge_AlarmsResetControl(t *testing.T) {
 // is a sanity check on the diesel coolant trip threshold being
 // derived from the same constant as the trip latch.
 func TestPlant_Alarms_DieselCoolantWarning(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
@@ -270,6 +281,7 @@ func TestPlant_Alarms_DieselCoolantWarning(t *testing.T) {
 // simulation clock at the step that detected it, so the
 // operator sees when the condition came in.
 func TestPlantControlRoom_AlarmSet_TimestampsActivationTime(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
@@ -298,6 +310,7 @@ func TestPlantControlRoom_AlarmSet_TimestampsActivationTime(t *testing.T) {
 // The Plant/Alarms bridge sensor carries the activation time in
 // its time_s field so the HMI can render when each alarm fired.
 func TestBridge_PlantAlarms_TimeSReflectsActivation(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()

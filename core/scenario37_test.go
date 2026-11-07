@@ -43,6 +43,7 @@ func hdsScenarioPlant(pct float64) Plant {
 // on a benign lineup: a LOCA-sensed plant isolates its vent (Table
 // 7-1) and falls back to the recombiner-only arc covered above.
 func TestScenario37_VentilationControlDeepensRemoval(t *testing.T) {
+	t.Parallel()
 	// Width note: the hydrogen state integrates linear streams, and
 	// probes at 1/5/10 ms all reproduced the closed-form decline
 	// exactly while the baseline froze to 1e-9 - the spurious diesel
@@ -92,6 +93,7 @@ func TestScenario37_VentilationControlDeepensRemoval(t *testing.T) {
 // operator's acknowledgement; the detector still re-latches on a later
 // excursion so acknowledgement cannot silence the channel.
 func TestScenario37_AlarmAcknowledgementClearsBelowSetpoint(t *testing.T) {
+	t.Parallel()
 	testDt := time.Second
 	p := hdsScenarioPlant(3.0)
 	cm := p.GetControlMap()
@@ -125,6 +127,7 @@ func TestScenario37_AlarmAcknowledgementClearsBelowSetpoint(t *testing.T) {
 // lower hysteresis band, and the percentage never reads negative even
 // with every removal stream active against zero generation.
 func TestScenario37_RecombinersDeactivateInLowerBand(t *testing.T) {
+	t.Parallel()
 	testDt := time.Minute
 	h := HydrogenDetectionSuppression{
 		HydrogenVolumePercent: 3.0,
@@ -158,6 +161,7 @@ func TestScenario37_RecombinersDeactivateInLowerBand(t *testing.T) {
 // Manual actuation of Phase A isolation"
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:51-54
 func TestScenario37_VentIsolationStopsExchange(t *testing.T) {
+	t.Parallel()
 	// Production tick throughout: at widened ticks the hot-standby
 	// header crashes through the low-steamline SI trigger within a
 	// couple of steps and the fixture stops being benign.

@@ -11,6 +11,7 @@ import (
 // false and both ExciterOutput and PilotExciterFrequency
 // are zero.
 func TestGeneratorExcitationShaftStopped(t *testing.T) {
+	t.Parallel()
 	e := GeneratorExcitationSystem{}
 	e = e.Step(DefaultTimeStep, 0)
 	assert.False(t, e.ExciterActive,
@@ -28,6 +29,7 @@ func TestGeneratorExcitationShaftStopped(t *testing.T) {
 // active and the WTA-300 regulator drives it to full output.
 // The pilot-exciter frequency scales with shaft speed.
 func TestGeneratorExcitationShaftRunning(t *testing.T) {
+	t.Parallel()
 	e := GeneratorExcitationSystem{}
 	e = e.Step(DefaultTimeStep, float64(TurbineRatedSpeed))
 	assert.True(t, e.ExciterActive,
@@ -44,6 +46,7 @@ func TestGeneratorExcitationShaftRunning(t *testing.T) {
 // When the SCCW pump is running the closed-loop flow sits at
 // GeneratorSCCWDesignFlow.
 func TestGeneratorSCCWFlowRunning(t *testing.T) {
+	t.Parallel()
 	c := GeneratorCoolingSystem{SCCWPumpRunning: true}
 	c = c.Step(DefaultTimeStep, 1.0)
 	assert.InDelta(t, GeneratorSCCWDesignFlow, c.SCCWFlow, 1e-9,
@@ -54,6 +57,7 @@ func TestGeneratorSCCWFlowRunning(t *testing.T) {
 // When the SCCW pump is stopped the cooling-circuit flow is
 // zero.
 func TestGeneratorSCCWFlowStopped(t *testing.T) {
+	t.Parallel()
 	c := GeneratorCoolingSystem{SCCWPumpRunning: false}
 	c = c.Step(DefaultTimeStep, 1.0)
 	assert.Zero(t, c.SCCWFlow,
@@ -63,6 +67,7 @@ func TestGeneratorSCCWFlowStopped(t *testing.T) {
 // All four hydrogen coolers are at full effectiveness when
 // the shaft-driven blower is at rated speed.
 func TestGeneratorCoolingFourCoolersInService(t *testing.T) {
+	t.Parallel()
 	c := GeneratorCoolingSystem{}
 	c = c.Step(DefaultTimeStep, 1.0)
 	for i := 0; i < GeneratorNumHydrogenCoolers; i++ {
@@ -75,6 +80,7 @@ func TestGeneratorCoolingFourCoolersInService(t *testing.T) {
 // At reduced blower fraction the cooler effectiveness scales
 // linearly with the fraction.
 func TestGeneratorCoolingEffectivenessScalesWithBlower(t *testing.T) {
+	t.Parallel()
 	c := GeneratorCoolingSystem{}
 	c = c.Step(DefaultTimeStep, 0.5)
 	for i := 0; i < GeneratorNumHydrogenCoolers; i++ {
@@ -88,6 +94,7 @@ func TestGeneratorCoolingEffectivenessScalesWithBlower(t *testing.T) {
 // flow has fallen below the minimum stable threshold; the
 // trip is asserted only on total flow loss.
 func TestSCCWAlarm_Gating(t *testing.T) {
+	t.Parallel()
 	// Pump off: neither alarm nor trip.
 	st := SCCWAlarm(false, 0)
 	assert.False(t, st.Alarm,
@@ -125,6 +132,7 @@ func TestSCCWAlarm_Gating(t *testing.T) {
 // simplified model keeps in sync with the embedded
 // SCCWAlarm helper.
 func TestGeneratorSCCWTripOpensBreaker(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	// Pre-stamp the breaker closed and verify the helper
 	// flags a trip when the pump is on but flow is zero.
@@ -146,6 +154,7 @@ func TestGeneratorSCCWTripOpensBreaker(t *testing.T) {
 // With the SCCW pump running at design flow the alarm and
 // trip flags are both clear.
 func TestGeneratorSCCWNoAlarmAtDesignFlow(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.TurbineBuilding.CondensatePump.Running = true
 	p.Step(DefaultTimeStep)
@@ -166,6 +175,7 @@ func TestGeneratorSCCWNoAlarmAtDesignFlow(t *testing.T) {
 // is stopped, with all four coolers at full effectiveness and
 // design hydrogen pressure.
 func TestPlant_Generator_InitialState(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	g := p.TurbineBuilding.Generator
 	assert.False(t, g.ExciterActive,

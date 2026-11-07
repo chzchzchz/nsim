@@ -14,6 +14,7 @@ import (
 // mode out of the zero-valued nextPlant copy, collapsing any loaded
 // Mode to ColdShutdown on the first tick.
 func TestScenario6_ModeSurvivesFirstStep(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.PlantOperation.Mode = PowerOperation
 
@@ -33,6 +34,7 @@ func TestScenario6_ModeSurvivesFirstStep(t *testing.T) {
 // system."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:45-48
 func TestScenario6_AuxToMainFeedwaterGating(t *testing.T) {
+	t.Parallel()
 	temp := Temperature{Val: 558, Unit: u.Fahrenheit}
 
 	cases := []struct {
@@ -63,6 +65,7 @@ func TestScenario6_AuxToMainFeedwaterGating(t *testing.T) {
 //
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:175-177
 func TestScenario6_MainFeedwaterControlsDeliverInventory(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	sg := &p.ReactorBuilding.SteamGenerator
 	// Start below the 50-percent level program: the feedwater

@@ -21,6 +21,7 @@ import (
 //   - "Operating speed 1189 rpm"
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_056.txt:175-177
 func TestRCP_Startup(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	stepN(&p, int(5*time.Second/DefaultTimeStep), DefaultTimeStep)
@@ -43,6 +44,7 @@ func TestRCP_Startup(t *testing.T) {
 //     may be secured."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:104-108
 func TestRCP_SequentialStartStagesFlow(t *testing.T) {
+	t.Parallel()
 	// simulation state (same discipline as TestRCP_Coastdown).
 	testDt := 10 * time.Millisecond
 	p := MakePlant()
@@ -78,6 +80,7 @@ func TestRCP_SequentialStartStagesFlow(t *testing.T) {
 //     6600-volt engineered safety features buses."
 //   - specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:72-74
 func TestPlant_RCPDriveReadyFollowsESFBreaker(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false
@@ -104,6 +107,7 @@ func TestPlant_RCPDriveReadyFollowsESFBreaker(t *testing.T) {
 //     flow during pump trips."
 //     specs/the_westinghouse_pressurized_water_react/chapter_1/page_020.txt:83-84
 func TestRCP_Coastdown(t *testing.T) {
+	t.Parallel()
 	// The pump lag integrates v -= v*dt/tau with tau = 10 s
 	// (RCPCoastdownTimeConstant, sized from the flywheel's "long
 	// coastdown" description,
@@ -159,6 +163,7 @@ func TestRCP_Coastdown(t *testing.T) {
 //     reactor coolant pump heat input and a steam dump system..."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:109-111
 func TestRCP_HeatInputScalesWithSpeed(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPumps.LoopA.Running = true
 	p.ReactorBuilding.ReactorCoolantPumps.LoopA.Velocity = RCPRatedSpeed / 2
@@ -174,6 +179,7 @@ func TestRCP_HeatInputScalesWithSpeed(t *testing.T) {
 // TestRCP_HeatInputOff verifies the per-step PumpHeatInput is zero
 // when the pump is stopped (velocity = 0).
 func TestRCP_HeatInputOff(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(false)
 	for _, pu := range p.ReactorBuilding.ReactorCoolantPumps.All() {
@@ -200,6 +206,7 @@ func TestRCP_HeatInputOff(t *testing.T) {
 //     core cooling flow during pump trips."
 //     specs/the_westinghouse_pressurized_water_react/chapter_1/page_020.txt:83-84
 func TestRCP_HeadScalesWithVelocity(t *testing.T) {
+	t.Parallel()
 	runFlow := func(vel Velocity) float64 {
 		from := &Tank{
 			Pressure: Pressure(0),
@@ -239,6 +246,7 @@ func TestRCP_HeadScalesWithVelocity(t *testing.T) {
 
 // TestPumpLabel_RPM verifies the DOT label reports the running RPM.
 func TestPumpLabel_RPM(t *testing.T) {
+	t.Parallel()
 	p := &Pump{Velocity: 1189, Running: true}
 	got := pumpLabel(p)
 	assert.Contains(t, got, "1189",

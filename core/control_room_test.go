@@ -11,6 +11,7 @@ import (
 // active, control inputs are accepted, and no alarm is
 // sounding.
 func TestControlRoom_InitialStateHasPowerAndOperational(t *testing.T) {
+	t.Parallel()
 	c := PlantControlRoom{
 		PowerAvailable: true,
 	}
@@ -41,6 +42,7 @@ func TestControlRoom_InitialStateHasPowerAndOperational(t *testing.T) {
 // control is dark, and the safety-system stations are not
 // reporting.
 func TestControlRoom_NoPowerDegradesAllSubsystems(t *testing.T) {
+	t.Parallel()
 	c := PlantControlRoom{
 		PowerAvailable: false,
 	}
@@ -70,6 +72,7 @@ func TestControlRoom_NoPowerDegradesAllSubsystems(t *testing.T) {
 // across the acknowledgement transition for the alarm to
 // stay latched.
 func TestControlRoom_AlarmLatchesAndAcknowledges(t *testing.T) {
+	t.Parallel()
 	c := PlantControlRoom{PowerAvailable: true}
 	c = c.Step(DefaultTimeStep, true, nil, true, true)
 	assert.True(t, c.AnnunciatorAlarm,
@@ -89,6 +92,7 @@ func TestControlRoom_AlarmLatchesAndAcknowledges(t *testing.T) {
 // re-triggers the alarm (the operator must re-acknowledge
 // the new condition).
 func TestControlRoom_NewAlarmAfterAckRetriggers(t *testing.T) {
+	t.Parallel()
 	c := PlantControlRoom{PowerAvailable: true}
 	c = c.Step(DefaultTimeStep, true, nil, true, true)
 	c.AcknowledgeAlarm()
@@ -109,6 +113,7 @@ func TestControlRoom_NewAlarmAfterAckRetriggers(t *testing.T) {
 // Safety-system stations are available when the auxiliary
 // panels are powered and at least one ESF bus is energized.
 func TestControlRoom_SafetyStationsTrackESFBuses(t *testing.T) {
+	t.Parallel()
 	c := PlantControlRoom{PowerAvailable: true}
 	c = c.Step(DefaultTimeStep, false, nil, false, true)
 	assert.True(t, c.SafetySystemStationsAvailable,
@@ -124,6 +129,7 @@ func TestControlRoom_SafetyStationsTrackESFBuses(t *testing.T) {
 // the initial offsite-healthy state leaves the control room
 // fully operational with no active alarm.
 func TestPlant_ControlRoom_InitialStatePreserved(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()

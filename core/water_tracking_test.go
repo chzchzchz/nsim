@@ -53,6 +53,7 @@ func isolateCVCSVolume(p *Plant) {
 //     condense the steam."
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:32-34
 func TestPRT_AccumulatesPORVDischarge(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	forcePORVOpen(&p)
 	isolateCVCSVolume(&p)
@@ -98,6 +99,7 @@ func TestPRT_AccumulatesPORVDischarge(t *testing.T) {
 //     pressure is exceeded."
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:37-38
 func TestPRT_RuptureDiscLatchesOnFull(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	forcePORVOpen(&p)
 	isolateCVCSVolume(&p)
@@ -131,6 +133,7 @@ func TestPRT_RuptureDiscLatchesOnFull(t *testing.T) {
 //     system."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:33-37
 func TestSG_AtmosphericDumpDebitsInventory(t *testing.T) {
+	t.Parallel()
 	const seededWater = 60000.0
 	run := func(atmOpen float64) float64 {
 		sg := SteamGenerator{
@@ -163,6 +166,7 @@ func TestSG_AtmosphericDumpDebitsInventory(t *testing.T) {
 //     diverts letdown flow to the Boron Recycle"
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:19-21
 func TestCVCS_LetdownDivertsToHoldupWhenVCTFull(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	isolateCVCSVolume(&p)
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = true
@@ -205,6 +209,7 @@ func TestCVCS_LetdownDivertsToHoldupWhenVCTFull(t *testing.T) {
 // Volume Control System.",
 // specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65).
 func TestCVCS_ChargeLetdownMovesPressurizerWater(t *testing.T) {
+	t.Parallel()
 	chargeOnly := MakePlant()
 	isolateCVCSVolume(&chargeOnly)
 	steadyPressurizer(&chargeOnly)
@@ -242,6 +247,7 @@ func TestCVCS_ChargeLetdownMovesPressurizerWater(t *testing.T) {
 //     tank as a backup."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:1-4
 func TestCVCS_MakeupDepletesRWST(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	isolateCVCSVolume(&p)
 	p.ReactorBuilding.ReactorMakeupControlValve.Open = 1.0
@@ -277,6 +283,7 @@ func TestCVCS_MakeupDepletesRWST(t *testing.T) {
 //     depleted as indicated by the boron concentration meter."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:11-13
 func TestCVCS_BedSaturationHaltsBoration(t *testing.T) {
+	t.Parallel()
 	spent := (&CVCS{
 		Mode:                         CVCSBoration,
 		BoronConcentration:           CVCSInitialBoron,
@@ -309,6 +316,7 @@ func TestCVCS_BedSaturationHaltsBoration(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:88-90,
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:1-2
 func TestTurbineBuilding_LPHeaterDrainsCascadeToHotwell(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	silenceHotwellFlows(&p)
 	p.TurbineBuilding.LowPressureHeater.DrainLevel =
@@ -350,6 +358,7 @@ func silenceHotwellFlows(p *Plant) {
 //     tanks to condenser A on a high level in either tank."
 //     specs/westinghouse_tech_manual/chapter_7/page_0636.txt:36-38
 func TestTurbineBuilding_HDTDumpValveCapsLevel(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	silenceHotwellFlows(&p)
 	p.TurbineBuilding.HeaterDrainTank.Level =
@@ -375,6 +384,7 @@ func TestTurbineBuilding_HDTDumpValveCapsLevel(t *testing.T) {
 //     deaerator, and supply the main feedwater pumps."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:46-49
 func TestTurbineBuilding_FeedPumpDrawsDownHDT(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	silenceHotwellFlows(&p)
 	p.TurbineBuilding.HeaterDrainTank.Level =

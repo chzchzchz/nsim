@@ -27,6 +27,7 @@ func enoughFuel() DieselGenerator {
 // Clearing it back to None after the engine is running eventually returns
 // it to Off.
 func TestDieselStartSafetyInjection(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = true
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
@@ -54,6 +55,7 @@ func TestDieselStartSafetyInjection(t *testing.T) {
 // voltage and frequency, the breaker has closed, and RealPower matches
 // rated kW.
 func TestDieselGeneratorReachesRatedOutputIn10s(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = true
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
@@ -75,6 +77,7 @@ func TestDieselGeneratorReachesRatedOutputIn10s(t *testing.T) {
 // within ~10 s of StartSignal, and the motor-driven AFW pump's
 // DriveReady follows the bus.
 func TestESFBusEnergizedByDiesel(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = true
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
@@ -96,6 +99,7 @@ func TestESFBusEnergizedByDiesel(t *testing.T) {
 // preserved on the diesel-driven AFW pump, but DriveReady=false means
 // fluid flow (computed by the consumer) is gated to zero.
 func TestDieselAFWPumpGatedByDiesel(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.Outside.DieselAFWPump.Running = true // operator request
@@ -126,6 +130,7 @@ func TestDieselAFWPumpGatedByDiesel(t *testing.T) {
 //     to the main steam line from a steam generator."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:42-47
 func TestTurbineAFWPumpGatedBySGVesselPressure(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.TurbineAFWPump.Running = true
 	p.Outside.TurbineAFWPump.DriveSource = DriveSteam

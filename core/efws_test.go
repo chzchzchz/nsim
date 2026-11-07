@@ -12,6 +12,7 @@ import (
 // the primary tank is full at EFWSPrimaryTankCapacity, and the
 // EFWS is not active. The auto-start logic has not fired.
 func TestEFWS_InitialStateIsIdle(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	efws := p.AuxiliaryBuilding.EmergencyFeedwaterSystem
 	assert.False(t, efws.Active,
@@ -50,6 +51,7 @@ func TestEFWS_InitialStateIsIdle(t *testing.T) {
 //   - "Safety injection / Motor driven pumps."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:94-98
 func TestEFWS_MotorPumpsStartOnSafetyInjection(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
@@ -84,6 +86,7 @@ func TestEFWS_MotorPumpsStartOnSafetyInjection(t *testing.T) {
 //     two steam generators / Turbine drive pumps."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:82-92
 func TestEFWS_TurbinePumpsStartOnLowLowSGLevel(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.SteamGenerator.Water =
 		Volume{Val: EFWSLevelLowLow - 100, Unit: u.Gallon}
@@ -118,6 +121,7 @@ func TestEFWS_TurbinePumpsStartOnLowLowSGLevel(t *testing.T) {
 //     the plant to 350°F (176.7°C)."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:52-56
 func TestEFWS_PrimaryTankDepletesWhilePumpsRunning(t *testing.T) {
+	t.Parallel()
 	e := EFWS{
 		Active: true,
 		SubsystemA: EFWSSubsystem{
@@ -166,6 +170,7 @@ func TestEFWS_PrimaryTankDepletesWhilePumpsRunning(t *testing.T) {
 // their rated flow to the delivered stream, so the tank loss is
 // the sum of the two contributions.
 func TestEFWS_TankDrawSumsBothRunningPumps(t *testing.T) {
+	t.Parallel()
 	e := EFWS{
 		Active: true,
 		SubsystemA: EFWSSubsystem{
@@ -216,6 +221,7 @@ func TestEFWS_TankDrawSumsBothRunningPumps(t *testing.T) {
 //     (RHRS) is activated and the EFWS is secured."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:91-96
 func TestEFWS_SecuredWhenHotLegBelow350FAndRHRSActive(t *testing.T) {
+	t.Parallel()
 	e := EFWS{
 		Active: true,
 		SubsystemA: EFWSSubsystem{
@@ -270,6 +276,7 @@ func TestEFWS_SecuredWhenHotLegBelow350FAndRHRSActive(t *testing.T) {
 //     is secured."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:101-104
 func TestEFWS_SecuresManuallyStartedPumpsToo(t *testing.T) {
+	t.Parallel()
 	e := EFWS{
 		SubsystemA: EFWSSubsystem{
 			Tank: EFWSTank{
@@ -323,6 +330,7 @@ func TestEFWS_SecuresManuallyStartedPumpsToo(t *testing.T) {
 //     steam generators"
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:23-26
 func TestEFWS_EndToEndSafetyInjectionStartsFeedwaterDelivery(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
@@ -362,6 +370,7 @@ func TestEFWS_EndToEndSafetyInjectionStartsFeedwaterDelivery(t *testing.T) {
 //     on loss of air or electrical power."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:42-47
 func TestEFWS_TurbineSteamAdmissionValveOpensWithSGPressure(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
 
@@ -394,6 +403,7 @@ func TestEFWS_TurbineSteamAdmissionValveOpensWithSGPressure(t *testing.T) {
 //     valves.]"
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_102.txt:14-18
 func TestEFWS_ThrottledValveScalesTankDrawdown(t *testing.T) {
+	t.Parallel()
 	e := EFWS{
 		SubsystemA: EFWSSubsystem{
 			Tank: EFWSTank{
@@ -425,6 +435,7 @@ func TestEFWS_ThrottledValveScalesTankDrawdown(t *testing.T) {
 // A running pump without its drive ready delivers nothing and
 // draws nothing from the tank.
 func TestEFWS_NoDrawdownWithoutDriveReady(t *testing.T) {
+	t.Parallel()
 	e := EFWS{
 		SubsystemA: EFWSSubsystem{
 			Tank: EFWSTank{
@@ -453,6 +464,7 @@ func TestEFWS_NoDrawdownWithoutDriveReady(t *testing.T) {
 // inventory: that remainder is credited as delivery, and once
 // dry both the tank and the reported flow sit at zero.
 func TestEFWS_DryTankStopsDeliveryAtRemainingInventory(t *testing.T) {
+	t.Parallel()
 	dt := DefaultTimeStep.Seconds()
 	remaining := 0.5 * EFWSMotorPumpFlow.Float() * dt
 	e := EFWS{
@@ -495,6 +507,7 @@ func TestEFWS_DryTankStopsDeliveryAtRemainingInventory(t *testing.T) {
 //     into the main feedwater piping [...]"
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:12-17
 func TestPlant_EFWSReportedFlowMatchesTankDrawdown(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	efws := &p.AuxiliaryBuilding.EmergencyFeedwaterSystem
 	for _, sub := range []*EFWSSubsystem{&efws.SubsystemA, &efws.SubsystemB} {

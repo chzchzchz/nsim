@@ -37,6 +37,7 @@ import (
 const scenario15Tick = 10 * time.Millisecond
 
 func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
+	t.Parallel()
 	// Width note: the latching logic (trip, reset, scram release),
 	// the speed ramp, and the dispatcher setpoint walk are exact at any
 	// tick width; the scram fold trajectory is width-sensitive but its

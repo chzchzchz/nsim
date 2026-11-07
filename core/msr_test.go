@@ -17,6 +17,7 @@ import (
 //   - "reheat the steam to over 100°F (55°C) superheat"
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:54-55
 func TestMSR_FullQualityReachesReheatTarget(t *testing.T) {
+	t.Parallel()
 	inlet := Temperature{Val: 560.0, Unit: u.Fahrenheit}
 	reheatFlow := Volume{Val: FeedwaterDesignFlow.Float(), Unit: u.Gallon}
 	m := (&MoistureSeparatorReheater{}).Step(DefaultTimeStep,
@@ -41,6 +42,7 @@ func TestMSR_FullQualityReachesReheatTarget(t *testing.T) {
 //   - "the water is removed and drained to the feedwater system"
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:62-63
 func TestMSR_LowQualityIncreasesMoistureDrain(t *testing.T) {
+	t.Parallel()
 	reheatFlow := Volume{Val: FeedwaterDesignFlow.Float(), Unit: u.Gallon}
 	dry := (&MoistureSeparatorReheater{}).Step(DefaultTimeStep,
 		SteamGeneratorShellPressure,
@@ -66,6 +68,7 @@ func TestMSR_LowQualityIncreasesMoistureDrain(t *testing.T) {
 // outlet temperature rise within the linear range (below the
 // design extraction point).
 func TestMSR_ReheatScalesWithReheatSteamFlow(t *testing.T) {
+	t.Parallel()
 	inlet := Temperature{Val: 560.0, Unit: u.Fahrenheit}
 	// Pick flows below the design extraction point so we stay in
 	// the linear region of the model (the model caps at the
@@ -95,6 +98,7 @@ func TestMSR_ReheatScalesWithReheatSteamFlow(t *testing.T) {
 // load there is no extraction steam; at rated load the extraction
 // flow is the design fraction of FeedwaterDesignFlow.
 func TestTurbineExtractionSteamFlow_ScalesWithLoad(t *testing.T) {
+	t.Parallel()
 	sgP := SteamGeneratorShellPressure
 	condP := Pressure(0)
 	stopOpen := 1.0
@@ -138,6 +142,7 @@ func TestTurbineExtractionSteamFlow_ScalesWithLoad(t *testing.T) {
 //     two main feedwater pump turbines."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:81-83
 func TestMSR_HalfLoadPowerGivesSuperheatedLPInlet(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -166,6 +171,7 @@ func TestMSR_HalfLoadPowerGivesSuperheatedLPInlet(t *testing.T) {
 //     system"
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:62-63
 func TestMSR_DrainFlowsToHotwell(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)

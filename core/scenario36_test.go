@@ -44,6 +44,7 @@ func startScenario36Diesel(t *testing.T, signal string) (*Plant, time.Duration) 
 // automatic synchronizer close the breaker - leaving the ESF bus served
 // by its normal offsite source, paralleled beside the diesel.
 func TestScenario36_TestStartParallelsWithLiveBus(t *testing.T) {
+	t.Parallel()
 	p, testDt := startScenario36Diesel(t, "4")
 
 	stepN(p, 900, testDt) // 9 s at the 10 ms tick: before the deadline
@@ -72,6 +73,7 @@ func TestScenario36_TestStartParallelsWithLiveBus(t *testing.T) {
 // source gone the bus is dead, so the breaker closes dead-bus the moment
 // the engine is ready to load and the bus transfers onto the diesel.
 func TestScenario36_DeadBusClosesAtReadyWithoutSync(t *testing.T) {
+	t.Parallel()
 	p, testDt := startScenario36Diesel(t, "4")
 	p.ReactorBuilding.PlantElectricalSystems.OffsitePowerAvailable = false
 
@@ -93,6 +95,7 @@ func TestScenario36_DeadBusClosesAtReadyWithoutSync(t *testing.T) {
 // A closed breaker dragged out of its synchronization band pops,
 // mirroring the main-generator out-of-step protection.
 func TestScenario36_OutOfSyncBreakerPops(t *testing.T) {
+	t.Parallel()
 	p, testDt := startScenario36Diesel(t, "4")
 	stepN(p, 1100, testDt) // 11 s at the 10 ms tick: paralleled
 	require.True(t, p.AuxiliaryBuilding.DieselGenerator.Generator.BreakerClosed,
@@ -111,6 +114,7 @@ func TestScenario36_OutOfSyncBreakerPops(t *testing.T) {
 // it. Voltage is sagged just before the deadline to simulate a
 // regulator that has not settled.
 func TestScenario36_BreakerWaitsForSyncBand(t *testing.T) {
+	t.Parallel()
 	p, testDt := startScenario36Diesel(t, "4")
 	d := &p.AuxiliaryBuilding.DieselGenerator
 
@@ -141,6 +145,7 @@ func TestScenario36_BreakerWaitsForSyncBand(t *testing.T) {
 // ESF buses: the engine stops, the breaker opens, the offsite feed
 // continues uninterrupted.
 func TestScenario36_ClearingSignalEndsTestCleanly(t *testing.T) {
+	t.Parallel()
 	p, testDt := startScenario36Diesel(t, "4")
 	stepN(p, 1100, testDt) // 11 s at the 10 ms tick: paralleled
 	require.True(t, p.Electrical.ESFBusA.Energized, "precondition: bus energized")

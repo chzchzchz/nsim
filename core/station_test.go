@@ -19,6 +19,7 @@ import (
 //     voltage, normally 6600 volts"
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:42-44
 func TestStationTransformer_UATEnergizedOnBreakerClose(t *testing.T) {
+	t.Parallel()
 	s := (&StationTransformer{}).Step(DefaultTimeStep,
 		float64(GeneratorRatedVoltage),
 		GridRatedVoltage,
@@ -44,6 +45,7 @@ func TestStationTransformer_UATEnergizedOnBreakerClose(t *testing.T) {
 //     sources of power"
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:64-66
 func TestStationTransformer_BreakerOpenTransfersToSAT(t *testing.T) {
+	t.Parallel()
 	s := (&StationTransformer{}).Step(DefaultTimeStep,
 		0,
 		GridRatedVoltage,
@@ -65,6 +67,7 @@ func TestStationTransformer_BreakerOpenTransfersToSAT(t *testing.T) {
 // With both generator and grid unavailable, neither transformer
 // is energised and house load cannot be supplied (black-out).
 func TestStationTransformer_BothSourcesDownYieldsBlackOut(t *testing.T) {
+	t.Parallel()
 	s := (&StationTransformer{}).Step(DefaultTimeStep, 0, 0, false)
 	assert.False(t, s.UATEnergized,
 		"want UAT not energised with no generator, got true")
@@ -83,6 +86,7 @@ func TestStationTransformer_BothSourcesDownYieldsBlackOut(t *testing.T) {
 //   - "supply power for its own auxiliaries."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:57-58
 func TestHouseLoad_VariableScalesWithGeneratorFraction(t *testing.T) {
+	t.Parallel()
 	h := HouseLoad{
 		FixedMW:    HouseLoadFixed,
 		VariableMW: HouseLoadFixed * HouseLoadVariableFraction,
@@ -107,6 +111,7 @@ func TestHouseLoad_VariableScalesWithGeneratorFraction(t *testing.T) {
 // / 24 kV. After one Plant.Step (with the turbine offline but the
 // grid available), the SAT is energised and supplies house load.
 func TestPlant_GridAndStationDefaultsMatchSpec(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	g := p.ReactorBuilding.Grid
 	assert.InDelta(t, 60.0, g.Frequency, 1e-9,

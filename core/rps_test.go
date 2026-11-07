@@ -17,6 +17,7 @@ import (
 //     operator action in the control room."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:8-9
 func TestRPS_InitialStateHasNoTrip(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	rps := p.ReactorBuilding.ReactorProtectionSystem
 	assert.False(t, rps.ReactorTripped,
@@ -44,6 +45,7 @@ func TestRPS_InitialStateHasNoTrip(t *testing.T) {
 //     signals out of 4 indicate a trip condition."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:119-121
 func TestRPS_TwoTripConditionsDeclareReactorTrip(t *testing.T) {
+	t.Parallel()
 	r := ReactorProtectionSystem{}
 	// One trip: low SG level (15%) alone should not trip.
 	r1 := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 10, CoreReferenceInletF, 0, 1, 1, 0,
@@ -70,6 +72,7 @@ func TestRPS_TwoTripConditionsDeclareReactorTrip(t *testing.T) {
 //     operator action in the control room."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:8-9
 func TestRPS_ManualTripOverridesVoting(t *testing.T) {
+	t.Parallel()
 	r := ReactorProtectionSystem{ManualTrip: true}
 	r2 := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
 		CoreReferenceInletF, 0, 1, 1, 0,
@@ -87,6 +90,7 @@ func TestRPS_ManualTripOverridesVoting(t *testing.T) {
 //     operator action.
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:132-133
 func TestRPS_ReactorTripLatches(t *testing.T) {
+	t.Parallel()
 	r := ReactorProtectionSystem{ReactorTripped: true}
 	r2 := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
 		CoreReferenceInletF, 0, 1, 1, 0,
@@ -109,6 +113,7 @@ func TestRPS_ReactorTripLatches(t *testing.T) {
 //     least 2 signals out of 4 indicate a trip condition."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:119-121
 func TestRPS_HighContainmentPressureActuatesESFAS(t *testing.T) {
+	t.Parallel()
 	r := ReactorProtectionSystem{}
 	// Drive 2 trips: high containment pressure + low steamline
 	// pressure.
@@ -135,6 +140,7 @@ func TestRPS_HighContainmentPressureActuatesESFAS(t *testing.T) {
 //     trip occurs."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:10-11
 func TestRPS_TurbineTripFollowsReactorTrip(t *testing.T) {
+	t.Parallel()
 	r := ReactorProtectionSystem{}
 	// Drive 2 trips: low steamline pressure + low SG level.
 	r2 := r.Step(DefaultTimeStep, 100, PressurizerHeaterTarget, RPSLowSteamGeneratorLevelTrip-1,
@@ -158,6 +164,7 @@ func TestRPS_TurbineTripFollowsReactorTrip(t *testing.T) {
 // above a certain power level initiates a reactor trip"
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:33-34
 func TestRPS_TurbineTripInitiatesReactorTripAbovePermissive(t *testing.T) {
+	t.Parallel()
 	idle := ReactorProtectionSystem{}
 	belowPermissive := idle.Step(DefaultTimeStep, SteamGeneratorShellPressure,
 		PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 50,
@@ -189,6 +196,7 @@ func TestRPS_TurbineTripInitiatesReactorTripAbovePermissive(t *testing.T) {
 // the reactor in case of rod ejection or accidental rod drop"
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:56-63
 func TestRPS_HighNeutronFluxTripDirectInitiation(t *testing.T) {
+	t.Parallel()
 	idle := ReactorProtectionSystem{}
 	// Raw fractions of rated thermal: full-power fission is 93.5
 	// percent of rated (the seed splits fission from decay heat),
@@ -229,6 +237,7 @@ func TestRPS_HighNeutronFluxTripDirectInitiation(t *testing.T) {
 // and high-level trip signals initiate a reactor trip"
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:19-21
 func TestRPS_HighPressurizerPressureTripDirectInitiation(t *testing.T) {
+	t.Parallel()
 	idle := ReactorProtectionSystem{}
 	benign := idle.Step(DefaultTimeStep, SteamGeneratorShellPressure,
 		2380, 50, CoreReferenceInletF, 0, 1, 1, 50,
@@ -259,6 +268,7 @@ func TestRPS_HighPressurizerPressureTripDirectInitiation(t *testing.T) {
 // high containment pressure or manual; manual trip is a separate
 // operator action).
 func TestRPS_ManualTripDoesNotStartContainmentSpray(t *testing.T) {
+	t.Parallel()
 	r := ReactorProtectionSystem{ManualTrip: true}
 	r2 := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
 		CoreReferenceInletF, 0, 1, 1, 0,
@@ -278,6 +288,7 @@ func TestRPS_ManualTripDoesNotStartContainmentSpray(t *testing.T) {
 //     safety injection or low steam generator level.
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:42-44
 func TestRPS_LowSGLevelStartsAuxFeedPumps(t *testing.T) {
+	t.Parallel()
 	r := ReactorProtectionSystem{}
 	r2 := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget,
 		RPSLowSteamGeneratorLevelTrip-1,
@@ -301,6 +312,7 @@ func TestRPS_LowSGLevelStartsAuxFeedPumps(t *testing.T) {
 //     reactor trips are now enabled."
 //     specs/westinghouse_plant_operations/chapter_19/page_018.txt:3-7
 func TestRPS_LowTcoldBlockedBelowAtPowerPermissive(t *testing.T) {
+	t.Parallel()
 	r := ReactorProtectionSystem{}
 	coldTcold := 140.0
 	belowPermissive := RPSAtPowerPermissiveFraction / 2
@@ -341,6 +353,7 @@ func TestRPS_LowTcoldBlockedBelowAtPowerPermissive(t *testing.T) {
 // ReactorPressureVessel.Trip flag is latched by the RPS so the
 // RPV drops rods this same step.
 func TestPlant_RPS_LatchesReactorPressureVesselTrip(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	// Drive two trip conditions: low steamline pressure and low
 	// SG level.
@@ -364,6 +377,7 @@ func TestPlant_RPS_LatchesReactorPressureVesselTrip(t *testing.T) {
 //     withdrawn back to criticality.
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:24-26
 func TestRPS_ResetClearsLatchesAndRevotes(t *testing.T) {
+	t.Parallel()
 	r := ReactorProtectionSystem{}
 	// Drive two channels (low steamline pressure + high
 	// containment pressure) so the trip and its ESFAS outputs
@@ -414,6 +428,7 @@ func TestRPS_ResetClearsLatchesAndRevotes(t *testing.T) {
 //     of containment spray."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:68-80
 func TestPlant_RPSResetReleasesContainmentIsolation(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	// Latch SI and both CIS phases via their Table 7-1 triggers:
 	// high containment pressure drives SI, spray, and Phase B;
@@ -465,6 +480,7 @@ func TestPlant_RPSResetReleasesContainmentIsolation(t *testing.T) {
 // planned descents arm the blocks before crossing
 // (specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:108-110).
 func TestRPS_LowSteamlineVoteFollowsAtPowerPermissive(t *testing.T) {
+	t.Parallel()
 	idle := ReactorProtectionSystem{}
 	cold := idle.Step(DefaultTimeStep, 100, PressurizerHeaterTarget,
 		50, CoreReferenceInletF, 0, 0, 1, 0,
@@ -491,6 +507,7 @@ func TestRPS_LowSteamlineVoteFollowsAtPowerPermissive(t *testing.T) {
 // high-level trip signals initiate a reactor trip"
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:19-21
 func TestRPS_HighPzrLevelVoteFollowsAtPowerPermissive(t *testing.T) {
+	t.Parallel()
 	idle := ReactorProtectionSystem{}
 	waterSolidCold := idle.Step(DefaultTimeStep, SteamGeneratorShellPressure,
 		PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 100,

@@ -13,6 +13,7 @@ import (
 // xenon storage): the stored Xenon135 is the physical concentration,
 // so the rated equilibrium is asserted through xenonNormalized.
 func TestXenon_MakePlantSeedsEquilibrium(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	rpv := p.ReactorBuilding.ReactorPressureVessel
 	assert.InDelta(t, 1.0, rpv.Iodine135, 1e-9,
@@ -27,6 +28,7 @@ func TestXenon_MakePlantSeedsEquilibrium(t *testing.T) {
 // balances destruction by construction of the normalization.
 // Regression (physical-xenon storage): asserted on the worth scale.
 func TestXenon_EquilibriumHoldsAtRated(t *testing.T) {
+	t.Parallel()
 	var rpv ReactorPressureVessel
 	rpv.SeedSteadyStatePower(CoreRatedThermalPower)
 	for range 8 {
@@ -54,6 +56,7 @@ func TestXenon_EquilibriumHoldsAtRated(t *testing.T) {
 // hour half-life."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:164-165
 func TestXenon_PostShutdownPeakTimingAndBound(t *testing.T) {
+	t.Parallel()
 	var rpv ReactorPressureVessel
 	rpv.SeedSteadyStatePower(CoreRatedThermalPower)
 	rpv.FissionPower = CoreNeutronSourcePower
@@ -88,6 +91,7 @@ func TestXenon_PostShutdownPeakTimingAndBound(t *testing.T) {
 // Intentional update (physical-xenon storage): seeded at the physical
 // rated equilibrium and read on the worth scale.
 func TestXenon_InventoryRisesAfterPowerReduction(t *testing.T) {
+	t.Parallel()
 	var rpv ReactorPressureVessel
 	rpv.Iodine135 = 1
 	rpv.Xenon135 = xenonEquilibriumPhysical(1)
@@ -116,6 +120,7 @@ func TestXenon_InventoryRisesAfterPowerReduction(t *testing.T) {
 // concentration whose worth-scale reading matches the deviation under
 // test.
 func TestXenon_ReactivityFollowsInventoryDeviation(t *testing.T) {
+	t.Parallel()
 	eq := xenonEquilibriumPhysical(1)
 	mk := func(xe float64) float32 {
 		var rpv ReactorPressureVessel
@@ -149,6 +154,7 @@ func TestXenon_ReactivityFollowsInventoryDeviation(t *testing.T) {
 // Intentional update (physical-xenon storage): pins the acceptance
 // criterion xenonNormalized(xenonEquilibriumPhysical(1)) ~= 1.
 func TestXenon_NormalizationRoundTripAtRated(t *testing.T) {
+	t.Parallel()
 	assert.InDelta(t, 1.0, xenonNormalized(xenonEquilibriumPhysical(1)), 1e-3,
 		"rated physical equilibrium must normalize to 1")
 	assert.Less(t, xenonNormalized(xenonEquilibriumPhysical(0.5)), 1.0,

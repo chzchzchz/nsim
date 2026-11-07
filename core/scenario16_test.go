@@ -21,6 +21,7 @@ import (
 const scenario16Tick = 10 * time.Millisecond
 
 func TestScenario16_ReactorTripStabilizationAndRecovery(t *testing.T) {
+	t.Parallel()
 	// The fold trajectory is width-sensitive, so trip-side bands here
 	// are coarse and directional; the dump controller's headroom limiter
 	// and the rod clamp are latch/algebraic logic that tolerate the

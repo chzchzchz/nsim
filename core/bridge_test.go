@@ -12,6 +12,7 @@ import (
 // exists, returns the underlying plant state, and the control round-
 // trips through Set back into the field.
 func TestBridge_PumpSensorsExist(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	m := GetSensorMap(&p)
 	want := []string{
@@ -49,6 +50,7 @@ func TestBridge_PumpSensorsExist(t *testing.T) {
 // operator-visible: the BRS holdup level and BTRS bed saturation
 // sensors must be registered and readable.
 func TestBridge_WaterTrackingSensorsExist(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	m := GetSensorMap(&p)
 	for _, id := range []string{
@@ -66,6 +68,7 @@ func TestBridge_WaterTrackingSensorsExist(t *testing.T) {
 // Operator controls for the same pumps must round-trip: Set writes
 // the field, Get returns it.
 func TestBridge_PumpControlsRoundTrip(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	m := GetControlMap(&p)
 	for _, id := range []string{
@@ -96,6 +99,7 @@ func TestBridge_PumpControlsRoundTrip(t *testing.T) {
 // spec-justified in core/bridge.go. These tests verify each
 // entry exists and round-trips through Set/Get.
 func TestBridge_ReliefAndIsolationValveSensors(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	m := GetSensorMap(&p)
 	for _, id := range []string{
@@ -123,6 +127,7 @@ func TestBridge_ReliefAndIsolationValveSensors(t *testing.T) {
 // Kind; a Kind string outside the bridge taxonomy fails Get only when
 // the web interface renders the control.
 func TestBridge_AllSensorsGetWithoutError(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	m := GetSensorMap(&p)
 	require.NotEmptyf(t, m, "want non-empty sensor map")
@@ -134,6 +139,7 @@ func TestBridge_AllSensorsGetWithoutError(t *testing.T) {
 }
 
 func TestBridge_ReliefAndIsolationValveControls(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	m := GetControlMap(&p)
 	for _, id := range []string{

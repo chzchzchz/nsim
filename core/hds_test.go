@@ -10,6 +10,7 @@ import (
 // At construction the containment atmosphere has 0% hydrogen, no
 // alarm, and no active recombiners or ventilation.
 func TestHDS_InitialStateHasZeroHydrogenAndNoAlarm(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	hds := p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
 	assert.Zero(t, hds.HydrogenVolumePercent,
@@ -37,6 +38,7 @@ func TestHDS_InitialStateHasZeroHydrogenAndNoAlarm(t *testing.T) {
 //     reaction can result in the release of hydrogen gas."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:30-33
 func TestHDS_GenerationIncreasesHydrogen(t *testing.T) {
+	t.Parallel()
 	h := HydrogenDetectionSuppression{
 		GenerationActive: true,
 	}
@@ -58,6 +60,7 @@ func TestHDS_GenerationIncreasesHydrogen(t *testing.T) {
 //   - "Alarms at proper setpoints are provided."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:14-15
 func TestHDS_AlarmLatchesAtSetpoint(t *testing.T) {
+	t.Parallel()
 	h := HydrogenDetectionSuppression{
 		HydrogenVolumePercent: HydrogenAlarmSetpoint - 0.1,
 	}
@@ -73,6 +76,7 @@ func TestHDS_AlarmLatchesAtSetpoint(t *testing.T) {
 // Recombiners activate once the volume percent crosses the
 // setpoint + hysteresis band; they stay active.
 func TestHDS_RecombinersActivateAtSetpointPlusHysteresis(t *testing.T) {
+	t.Parallel()
 	h := HydrogenDetectionSuppression{
 		HydrogenVolumePercent: HydrogenAlarmSetpoint +
 			HydrogenRecombinerHysteresis + 0.1,
@@ -87,6 +91,7 @@ func TestHDS_RecombinersActivateAtSetpointPlusHysteresis(t *testing.T) {
 // (negative net flow from removal > generation when generation
 // is off).
 func TestHDS_RecombinersRemoveHydrogen(t *testing.T) {
+	t.Parallel()
 	h := HydrogenDetectionSuppression{
 		HydrogenVolumePercent: 3.0,
 		RecombinerActive:      true,
@@ -99,6 +104,7 @@ func TestHDS_RecombinersRemoveHydrogen(t *testing.T) {
 
 // The volume percent is clamped to zero (no negative values).
 func TestHDS_VolumePercentClampedAtZero(t *testing.T) {
+	t.Parallel()
 	h := HydrogenDetectionSuppression{
 		HydrogenVolumePercent: 0,
 		RecombinerActive:      true,
@@ -113,6 +119,7 @@ func TestHDS_VolumePercentClampedAtZero(t *testing.T) {
 // injection) flips GenerationActive on and the volume percent
 // begins to climb.
 func TestPlant_HDS_GenerationActivatesOnLOCA(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)

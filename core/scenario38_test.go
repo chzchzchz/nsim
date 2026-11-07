@@ -41,6 +41,7 @@ func outageScenarioPlant() Plant {
 // is an invented convention (A-2, plans/x/scenario/38.txt) asserted as a
 // hold-band, not an exact value.
 func TestScenario38_ReducedRHRHoldsShutdownTemperature(t *testing.T) {
+	t.Parallel()
 	testDt := time.Second
 	p := outageScenarioPlant()
 	cm := p.GetControlMap()
@@ -68,6 +69,7 @@ func TestScenario38_ReducedRHRHoldsShutdownTemperature(t *testing.T) {
 // only through completion within the window, while the header cap is
 // physics-forced (a laid-up shell must not pressurise from filling).
 func TestScenario38_WetLayupFillsShellToTheVents(t *testing.T) {
+	t.Parallel()
 	testDt := time.Second
 	p := outageScenarioPlant()
 	sg := &p.ReactorBuilding.SteamGenerator
@@ -101,6 +103,7 @@ func TestScenario38_WetLayupFillsShellToTheVents(t *testing.T) {
 // PressurizerHeaterRate is a wiring check against production constants,
 // marked as such.
 func TestScenario38_SolidPlantReliefTrimsHeaterTestOverpressure(t *testing.T) {
+	t.Parallel()
 	testDt := time.Second
 	p := outageScenarioPlant()
 	cm := p.GetControlMap()
@@ -153,6 +156,7 @@ func TestScenario38_SolidPlantReliefTrimsHeaterTestOverpressure(t *testing.T) {
 // (chapter_16/page_228.txt:53-55; chapter_19/page_018.txt:3-7;
 // chapter_7/page_140.txt:37,73-76), asserted hard on both sides.
 func TestScenario38_SGLevelChannelsRespectAtPowerPermissive(t *testing.T) {
+	t.Parallel()
 	r := ReactorProtectionSystem{}
 	idle := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 95,
 		CoreReferenceInletF, 0, 0, 1, 0,

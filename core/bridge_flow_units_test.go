@@ -16,6 +16,7 @@ import (
 // fields already stored in true gpm are listed as pass-throughs so the
 // next auditor does not re-derive them.
 func TestBridge_FlowSensorsPresentGPM(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingFlow =
@@ -96,6 +97,7 @@ func TestBridge_FlowSensorsPresentGPM(t *testing.T) {
 // trio (containment design 60 psig, SFPC header 55-75 psig, bearing oil
 // 25 psig) stays. Values pass through unscaled - the badge is the fix.
 func TestBridge_PressureSensorsDeclareStoredUnit(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.Pressurizer.Pressure = Pressure(2250)
 	p.ReactorBuilding.SteamGenerator.Pressure = Pressure(920)

@@ -66,6 +66,7 @@ const scenario7Tick = 100 * time.Millisecond
 // effects inherent in the physics of a PWR",
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:69-71).
 func TestScenario7_WideRangeRollReachesSynchronous(t *testing.T) {
+	t.Parallel()
 	p := newScenario7Plant(t)
 	testDt := scenario7Tick
 
@@ -107,6 +108,7 @@ func TestScenario7_WideRangeRollReachesSynchronous(t *testing.T) {
 // Spec: DEHM supports "automatic synchronizers" as remote equipment.
 // specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:90-92
 func TestScenario7_BreakerHoldsInSyncAndPopsOutOfSync(t *testing.T) {
+	t.Parallel()
 	run := func(spin Velocity) bool {
 		p := newScenario7Plant(t)
 		testDt := scenario7Tick
@@ -136,6 +138,7 @@ func TestScenario7_BreakerHoldsInSyncAndPopsOutOfSync(t *testing.T) {
 // A close at synchronous speed locks the rotor on the infinite bus and
 // dispatch escalation walks the load at the controlled selectable rate.
 func TestScenario7_SynchronizedUnitEscalatesAtControlledRate(t *testing.T) {
+	t.Parallel()
 	p := newScenario7Plant(t)
 	testDt := scenario7Tick
 	p.TurbineBuilding.Turbine.Velocity = TurbineRatedSpeed

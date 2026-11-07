@@ -53,6 +53,7 @@ func scenario14FullPowerPlant() Plant {
 // a uniform 10 ms tick). The compounding is now anchored to
 // DefaultTimeStep (see TestReactorFissionPower_WidthInvariance), so
 func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
+	t.Parallel()
 	// The descent is one coupled maneuver (rod loop, chemistry, dump
 	// modulation) with no passive windows, sampled against measured
 	testDt := 10 * time.Millisecond
@@ -244,6 +245,7 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 //     zero power):
 //     specs/the_westinghouse_pressurized_water_react/back_matter/page_244.txt:60-62
 func TestScenario14_HZPCriticalityExpressible(t *testing.T) {
+	t.Parallel()
 	const hzpBoron = 975.7 // solves rho = 0 at 558 F, rods out, xe at rated eq
 
 	r := ReactorPressureVessel{

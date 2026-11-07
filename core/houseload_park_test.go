@@ -46,6 +46,7 @@ func runDumpRig(tb *TurbineBuilding, tavg Temperature, seconds int, dt time.Dura
 // below the pressure-mode arm point, so any opening here is restoration
 // simulation state.
 func TestSteamDump_RestorationTermTracksProgramExcess(t *testing.T) {
+	t.Parallel()
 	testDt := 10 * time.Millisecond
 
 	hot := dumpRig(t, 0.05)
@@ -67,6 +68,7 @@ func TestSteamDump_RestorationTermTracksProgramExcess(t *testing.T) {
 // term is self-disabling there: no phantom heat-sink draw may compete
 // with the governor.
 func TestSteamDump_AtPowerOnProgramHoldsBypassShut(t *testing.T) {
+	t.Parallel()
 	testDt := 10 * time.Millisecond
 
 	rig := dumpRig(t, 1.0)
@@ -88,6 +90,7 @@ func TestSteamDump_AtPowerOnProgramHoldsBypassShut(t *testing.T) {
 // starts quiet - neither rod position nor axial offset fires it here
 // (both seeded mid-band).
 func TestAutoBoron_TurbineLeadErrorKeysOnTurbineSetpoint(t *testing.T) {
+	t.Parallel()
 	newArmed := func(mode LeadLagMode) *Plant {
 		p := fullPowerLineup()
 		op := &p.PlantOperation
@@ -146,6 +149,7 @@ func TestAutoBoron_TurbineLeadErrorKeysOnTurbineSetpoint(t *testing.T) {
 //
 // The widened tick stretches the walk; state bands carry assertions.
 func TestHouseLoadDescent_PacedWalkTracksProgramWithoutTrip(t *testing.T) {
+	t.Parallel()
 	testDt := 10 * time.Millisecond
 	p := fullPowerLineup()
 	p.PlantOperation.RodControlAuto = true

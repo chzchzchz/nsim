@@ -63,6 +63,7 @@ func outletF(p *Plant) float64 {
 // balance (TotalThermalPower, RCSMassKg, SpecificHeatWater) the takeover
 // branch integrates.
 func TestRHRSTakeover_SecuredPumpsHeatAtDecayRate(t *testing.T) {
+	t.Parallel()
 	p := coldShutdownPlant()
 	require.False(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Pump.Running)
 	require.False(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.Pump.Running)
@@ -86,6 +87,7 @@ func TestRHRSTakeover_SecuredPumpsHeatAtDecayRate(t *testing.T) {
 // With one train running and its suction open the RHRS rejects more than
 // the decay input, so the plant cools instead of relaxing toward no-load.
 func TestRHRSTakeover_RunningTrainCoolsPlant(t *testing.T) {
+	t.Parallel()
 	p := coldShutdownPlant()
 	p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.Pump.Running = true
 
@@ -104,6 +106,7 @@ func TestRHRSTakeover_RunningTrainCoolsPlant(t *testing.T) {
 // A secured-RHRS cold plant must not drift back to the no-load anchor;
 // minutes of sim time leave it within a few degrees of its start.
 func TestRHRSTakeover_NoRelaxationToNoLoadWhenSecured(t *testing.T) {
+	t.Parallel()
 	p := coldShutdownPlant()
 	stepN(p, int(20*time.Second/time.Millisecond), DefaultTimeStep)
 	assert.Less(t, outletF(p), 210.0,

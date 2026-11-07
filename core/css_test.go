@@ -13,6 +13,7 @@ import (
 // closed, and no spray is flowing. Suction is on the CSST (not
 // sump) and sump pH has not yet been adjusted.
 func TestCSS_InitialStateIsIdle(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	css := p.AuxiliaryBuilding.ContainmentSpraySystem
 	assert.False(t, css.Running,
@@ -48,6 +49,7 @@ func TestCSS_InitialStateIsIdle(t *testing.T) {
 //     the SAT providing sodium hydroxide solution."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:61-63
 func TestCSS_CSSTDepletesWhileRunning(t *testing.T) {
+	t.Parallel()
 	c := ContainmentSpraySystem{
 		Running:                true,
 		DriveReady:             true,
@@ -75,6 +77,7 @@ func TestCSS_CSSTDepletesWhileRunning(t *testing.T) {
 //     conducive to the entrainment of iodine."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:64-66
 func TestCSS_SATDepletesProportionallyWithCSST(t *testing.T) {
+	t.Parallel()
 	c := ContainmentSpraySystem{
 		Running:                true,
 		DriveReady:             true,
@@ -101,6 +104,7 @@ func TestCSS_SATDepletesProportionallyWithCSST(t *testing.T) {
 //     flow limiting orifice."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:20-22
 func TestCSS_MiniflowReducesCSSTDrainWhenHeaderClosed(t *testing.T) {
+	t.Parallel()
 	openHeader := ContainmentSpraySystem{
 		Running:                true,
 		DriveReady:             true,
@@ -137,6 +141,7 @@ func TestCSS_MiniflowReducesCSSTDrainWhenHeaderClosed(t *testing.T) {
 //     water."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:40-49
 func TestCSS_SumpPHAdjustedLatchesBelowLoLo(t *testing.T) {
+	t.Parallel()
 	c := ContainmentSpraySystem{
 		Running:                true,
 		DriveReady:             true,
@@ -164,6 +169,7 @@ func TestCSS_SumpPHAdjustedLatchesBelowLoLo(t *testing.T) {
 //   - "Spray additive is not injected during this mode."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:69-70
 func TestCSS_SwitchoverToSumpStopsCSSTDrain(t *testing.T) {
+	t.Parallel()
 	c := ContainmentSpraySystem{
 		Running:                true,
 		DriveReady:             true,
@@ -192,6 +198,7 @@ func TestCSS_SwitchoverToSumpStopsCSSTDrain(t *testing.T) {
 // SprayFlow tracks CSSDesignFlow when the spray header is open,
 // and zero otherwise.
 func TestCSS_SprayFlowTracksHeaderState(t *testing.T) {
+	t.Parallel()
 	c := ContainmentSpraySystem{
 		Running:                true,
 		DriveReady:             true,
@@ -225,6 +232,7 @@ func TestCSS_SprayFlowTracksHeaderState(t *testing.T) {
 //     long-term sump pH to a level adequate [...]"
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:40-49
 func TestCSS_ClosedSATIsolationValvesFreezeAdditiveAndPHCredit(t *testing.T) {
+	t.Parallel()
 	open := ContainmentSpraySystem{
 		Running:                true,
 		DriveReady:             true,
@@ -260,6 +268,7 @@ func TestCSS_ClosedSATIsolationValvesFreezeAdditiveAndPHCredit(t *testing.T) {
 //     signal."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-57
 func TestCSS_EndToEndHighContainmentPressureStartsCSS(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection

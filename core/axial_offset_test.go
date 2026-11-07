@@ -50,6 +50,7 @@ func settleAxial(r *ReactorPressureVessel, horizon time.Duration) {
 // unrodded anchor with no rods and must not drift: the deviation ODEs
 // have no source when flux shares are equal.
 func TestAxialOffset_SymmetricCoreHoldsAnchor(t *testing.T) {
+	t.Parallel()
 	r := axialFixture(0, 1.0)
 	settleAxial(&r, 24*time.Hour)
 	assert.InDelta(t, CoreAxialOffsetUnroddedPct, r.AxialOffset, 1e-9)
@@ -65,6 +66,7 @@ func TestAxialOffset_SymmetricCoreHoldsAnchor(t *testing.T) {
 // between them. Settling long enough to expose the steady line keeps
 // the assertion independent of the transient.
 func TestAxialOffset_OperationalWindowStaysInTargetBand(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name        string
 		insertion   float64
@@ -102,6 +104,7 @@ func TestAxialOffset_OperationalWindowStaysInTargetBand(t *testing.T) {
 //	"the power distribution is forced to the opposite end of the core"
 //	specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:85-93
 func TestAxialOffset_SkewRestoresAfterLoadDrop(t *testing.T) {
+	t.Parallel()
 	r := axialFixture(0.04362222, 0.47)
 	settleAxial(&r, 30*time.Minute)
 	require.Positive(t, r.Xenon135AxialDeviation,
@@ -122,6 +125,7 @@ func TestAxialOffset_SkewRestoresAfterLoadDrop(t *testing.T) {
 // to the lumped xenon form: the two-node extension may not move any
 // calibrated operating point until an actual skew develops.
 func TestAxialOffset_ZeroDeviationReducesToLumpedReactivity(t *testing.T) {
+	t.Parallel()
 	r := axialFixture(0.04222222, 1.0)
 	r.BoronConcentration = loadFollowBoron
 	r.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
@@ -148,6 +152,7 @@ func TestAxialOffset_ZeroDeviationReducesToLumpedReactivity(t *testing.T) {
 // the halves: X_eff = X + a*dXe/2. Locks the weighted-mean arithmetic
 // so a refactor cannot silently unweight the poison.
 func TestAxialOffset_SkewWeightsXenonWorthByFluxShare(t *testing.T) {
+	t.Parallel()
 	aofrac, dev := -0.04, -2e-3
 	r := axialFixture(0.05, 0.5)
 	r.AxialOffset = 100 * aofrac
@@ -168,6 +173,7 @@ func TestAxialOffset_SkewWeightsXenonWorthByFluxShare(t *testing.T) {
 // planted off-balance insertion shows up as negative AO motion within
 // seconds of simulated time.
 func TestAxialOffset_StepPathAdvancesObservable(t *testing.T) {
+	t.Parallel()
 	r := axialFixture(0.05, 1.0)
 	start := r.AxialOffset
 	for range int(20 * time.Second / DefaultTimeStep) {

@@ -77,6 +77,7 @@ func stepSeconds(p *Plant, seconds int, dt time.Duration) {
 // initiation signal manually blocked and accumulators isolated."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:11-13
 func TestStartupLineup_BlockedCrossingHoldsAcross1900Psig(t *testing.T) {
+	t.Parallel()
 	p := newGatePlant(Pressure(15))
 	setGateControls(t, p, map[string]string{
 		"ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock":    "1",
@@ -109,6 +110,7 @@ func TestStartupLineup_BlockedCrossingHoldsAcross1900Psig(t *testing.T) {
 // "steam generator pressure must be greater than 585 psig (41 bar)"
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:150-153
 func TestStartupGate_WarmSecondaryPermitsUnblockedCrossing(t *testing.T) {
+	t.Parallel()
 	p := newGatePlant(Pressure(RPSLowSteamlinePressureTrip + 110))
 	setGateControls(t, p, map[string]string{
 		"ReactorBuilding/Pressurizer/HeatersOn": "1",

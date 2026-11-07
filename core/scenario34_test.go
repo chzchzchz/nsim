@@ -32,6 +32,7 @@ import (
 // setpoint so the standby pump starts; isolating the leak recovers the
 // header into the maintained band with the standby still running.
 func TestScenario34_LeakAutoStartsStandbyAndIsolationRecovers(t *testing.T) {
+	t.Parallel()
 	testDt := time.Second
 	p := MakePlant()
 	cm := p.GetControlMap()
@@ -74,6 +75,7 @@ func TestScenario34_LeakAutoStartsStandbyAndIsolationRecovers(t *testing.T) {
 // flow immediately; the standby clears because no normal-loop lineup
 // persists without the pumps.
 func TestScenario34_PumpControlSecuresLoopsAndPurification(t *testing.T) {
+	t.Parallel()
 	testDt := time.Second
 	p := MakePlant()
 	cm := p.GetControlMap()
@@ -94,6 +96,7 @@ func TestScenario34_PumpControlSecuresLoopsAndPurification(t *testing.T) {
 // alone cleans slowly, and realigning the refueling water purification
 // pump beside the demineralizer roughly doubles the cleanup rate.
 func TestScenario34_CrudBurstCleanupRateTracksPurificationStreams(t *testing.T) {
+	t.Parallel()
 	testDt := 10 * time.Second
 	p := MakePlant()
 	cm := p.GetControlMap()
@@ -130,6 +133,7 @@ func TestScenario34_CrudBurstCleanupRateTracksPurificationStreams(t *testing.T) 
 // restored cooling relaxes it monotonically back toward the design
 // temperature without undershoot.
 func TestScenario34_UncooledPoolSoaksToBoilCapAndCoolingRecovers(t *testing.T) {
+	t.Parallel()
 	testDt := 30 * time.Minute
 	sf := SpentFuelPoolCoolingSystem{
 		LoopAPumpRunning: true,
@@ -168,6 +172,7 @@ func TestScenario34_UncooledPoolSoaksToBoilCapAndCoolingRecovers(t *testing.T) {
 // The uncooled heatup rate matches the decay-heat balance closed form
 // over an hour-scale window.
 func TestScenario34_UncooledHeatupMatchesDecayHeatBalance(t *testing.T) {
+	t.Parallel()
 	testDt := time.Minute
 	sf := SpentFuelPoolCoolingSystem{
 		LoopAPumpRunning: true,
@@ -200,6 +205,7 @@ func timeFactor(elapsedS float64, tauS float64) float64 {
 // into the normal band - all through real dynamics, with purification
 // uninterrupted (plans/p44_1.txt).
 func TestSFPC_SingleLoopTripSagsAndStandbyPicksUp(t *testing.T) {
+	t.Parallel()
 	s := SpentFuelPoolCoolingSystem{
 		LoopAPumpRunning: true,
 		LoopBPumpRunning: true,

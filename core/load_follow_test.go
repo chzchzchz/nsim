@@ -70,6 +70,7 @@ func loadFollowFixture(insertion, boron, outletF float64, seedPower Watts) React
 // constants the model uses, so this catches wiring mistakes (wrong rod
 // worth scaling, coef interpolation regressions), not model errors.
 func TestLoadFollow_ProgrammedOperatingPointsAreCritical(t *testing.T) {
+	t.Parallel()
 	full := loadFollowFixture(loadFollowRodsFull, loadFollowBoron,
 		CoreReferenceInletF+(CoreReferenceOutletF-CoreReferenceInletF), // 621 F
 		CoreRatedThermalPower)
@@ -101,6 +102,7 @@ func TestLoadFollow_ProgrammedOperatingPointsAreCritical(t *testing.T) {
 // -> 614.17) does not. Locks the correction into the repo so a future
 // refactor cannot silently drop the coef shift.
 func TestLoadFollow_NaiveBorationLeavesCoreSupercritical(t *testing.T) {
+	t.Parallel()
 	halfT := CoreReferenceInletF + 0.5*(CoreReferenceOutletF-CoreReferenceInletF)
 	naive := loadFollowFixture(loadFollowRodsFull, 612.6, halfT,
 		Watts(0.5*float64(CoreRatedThermalPower)))
@@ -131,6 +133,7 @@ func TestLoadFollow_NaiveBorationLeavesCoreSupercritical(t *testing.T) {
 // was already carried in the rod/boron calibration. Locks both facts
 // into the repo.
 func TestLoadFollow_XenonActiveReservePointBoration(t *testing.T) {
+	t.Parallel()
 	halfT := CoreReferenceInletF + 0.5*(CoreReferenceOutletF-CoreReferenceInletF)
 	mk := func(boron float64) ReactorPressureVessel {
 		r := ReactorPressureVessel{
@@ -201,6 +204,7 @@ func loadFollowFixedPoint(boron, outletF float64, seedPower Watts) ReactorPressu
 // perturbation an order of magnitude faster and stronger than the
 // temperature feedback it is meant to expose.
 func TestLoadFollow_StabilitySignFlipsWithBoron(t *testing.T) {
+	t.Parallel()
 	assert.Negative(t, netTempCoef(loadFollowBoron),
 		"maneuvering chemistry must carry a negative net coefficient")
 	assert.Positive(t, netTempCoef(900.0),
@@ -223,6 +227,7 @@ func TestLoadFollow_StabilitySignFlipsWithBoron(t *testing.T) {
 // the critical insertion under fixed rods, which is the slow channel
 // the automatic rod controller exists to trim.
 func TestLoadFollow_PlateauHoldsOnTotalThermalPower(t *testing.T) {
+	t.Parallel()
 	halfT := CoreReferenceInletF + 0.5*(CoreReferenceOutletF-CoreReferenceInletF)
 	seed := Watts(0.5 * float64(CoreRatedThermalPower))
 	r := loadFollowFixedPoint(loadFollowBoronPlateau, halfT+0.25, seed)

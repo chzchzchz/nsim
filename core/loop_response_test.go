@@ -24,6 +24,7 @@ import (
 //   - ready to accept load within 10 s, rated load within 30 s:
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:48-51
 func TestPlant_LoopDeclarationTransfersESFBusesToDiesel(t *testing.T) {
+	t.Parallel()
 	testDt := 100 * time.Millisecond
 
 	p := MakePlant()
@@ -89,6 +90,7 @@ func TestPlant_LoopDeclarationTransfersESFBusesToDiesel(t *testing.T) {
 // while low-steamline pressure is an SI trigger
 // (specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt).
 func TestPlant_TrippedDumpRestoresTavgWithoutCollapsingHeader(t *testing.T) {
+	t.Parallel()
 	testDt := 50 * time.Millisecond
 
 	p := MakePlant()
@@ -130,6 +132,7 @@ func TestPlant_TrippedDumpRestoresTavgWithoutCollapsingHeader(t *testing.T) {
 //     power decay transient."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:80-84
 func TestPlant_LoopTripsReactorCoolantPumpsUntilOperatorRestart(t *testing.T) {
+	t.Parallel()
 	testDt := 100 * time.Millisecond
 
 	p := MakePlant()
@@ -176,6 +179,7 @@ func TestPlant_LoopTripsReactorCoolantPumpsUntilOperatorRestart(t *testing.T) {
 // after the declaration they read zero
 // (specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:103-105).
 func TestPlant_OffsiteAvailabilityGatesSourceVoltage(t *testing.T) {
+	t.Parallel()
 	testDt := 100 * time.Millisecond
 
 	p := MakePlant()

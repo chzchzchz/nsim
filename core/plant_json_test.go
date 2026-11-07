@@ -9,6 +9,7 @@ import (
 )
 
 func TestPlantMarshalUnmarshal(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Electrical.ESFBusA.Energized = true
 	p.Electrical.OffsiteSourceA.Voltage = DieselRatedVoltage
@@ -49,10 +50,11 @@ func TestPlantMarshalUnmarshal(t *testing.T) {
 // the rejection decision belongs to commands written after the load,
 // not to whatever the file happens to carry.
 //
-//   "These valves open under a sudden reduction in turbine-generator
-//    load (in excess of 10%) or a turbine trip."
-//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:9-11
+//	"These valves open under a sudden reduction in turbine-generator
+//	 load (in excess of 10%) or a turbine trip."
+//	specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:9-11
 func TestPlant_UnmarshalResumesWithoutSetpointEdge(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	b, err := json.Marshal(p)

@@ -16,6 +16,7 @@ import (
 //     charging flow to the letdown flow."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
 func TestCVCS_VolumeControlKeepsBoronSteady(t *testing.T) {
+	t.Parallel()
 	c := (&CVCS{
 		Mode:                CVCSVolumeControl,
 		VCTLevel:            Volume{Val: VCTDesignLevel, Unit: u.Gallon},
@@ -42,6 +43,7 @@ func TestCVCS_VolumeControlKeepsBoronSteady(t *testing.T) {
 //     (60°C), to the thermal regeneration demineralizers."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:16-19
 func TestCVCS_BorationIncreasesBoronConcentration(t *testing.T) {
+	t.Parallel()
 	c := (&CVCS{
 		Mode:                         CVCSBoration,
 		VCTLevel:                     Volume{Val: VCTDesignLevel, Unit: u.Gallon},
@@ -67,6 +69,7 @@ func TestCVCS_BorationIncreasesBoronConcentration(t *testing.T) {
 //     to the thermal regeneration demineralizers."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:26-30
 func TestCVCS_DilutionDecreasesBoronConcentration(t *testing.T) {
+	t.Parallel()
 	c := (&CVCS{
 		Mode:                         CVCSDilution,
 		VCTLevel:                     Volume{Val: VCTDesignLevel, Unit: u.Gallon},
@@ -96,6 +99,7 @@ func TestCVCS_DilutionDecreasesBoronConcentration(t *testing.T) {
 //     tanks."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:5-9
 func TestCVCS_HighVCTLevelSwitchesToLetdownMode(t *testing.T) {
+	t.Parallel()
 	c := (&CVCS{
 		Mode:                CVCSVolumeControl,
 		VCTLevel:            Volume{Val: VCTHighLevel + 1, Unit: u.Gallon},
@@ -125,6 +129,7 @@ func TestCVCS_HighVCTLevelSwitchesToLetdownMode(t *testing.T) {
 //     Chemical and Volume Control System."
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65
 func TestCVCS_VCTLevelAccumulates(t *testing.T) {
+	t.Parallel()
 	initial := VCTDesignLevel
 	steps := int(1 * time.Second / DefaultTimeStep)
 	// Charging pump only.
@@ -180,6 +185,7 @@ func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 //     significantly with fuel depletion"
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
 func TestCVCS_BorationIncreasesBoronAtExpectedRate(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -209,6 +215,7 @@ func TestCVCS_BorationIncreasesBoronAtExpectedRate(t *testing.T) {
 //     to the thermal regeneration demineralizers."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:26-30
 func TestCVCS_DilutionDecreasesBoronAtExpectedRate(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -240,6 +247,7 @@ func TestCVCS_DilutionDecreasesBoronAtExpectedRate(t *testing.T) {
 //   - "The reactor makeup control system dilution is [...]"
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_082.txt:17
 func TestCVCS_MakeupValveRaisesVCTLevel(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -274,6 +282,7 @@ func TestCVCS_MakeupValveRaisesVCTLevel(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_103.txt:11-13,
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:73-80
 func TestCVCS_ChargingPumpIndependentOfRCP(t *testing.T) {
+	t.Parallel()
 	// Charging pump on, RCP off.
 	c := (&CVCS{
 		Mode:                CVCSVolumeControl,

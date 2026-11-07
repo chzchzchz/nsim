@@ -13,6 +13,7 @@ import (
 // the river source temperature. HeatTransferRate is
 // initialised to zero and gets computed on the first Step call.
 func TestRCFC_InitialStateAllUnitsRunning(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	for i := 0; i < RCFCUnitCount; i++ {
 		u0 := p.AuxiliaryBuilding.RCFCUnits[i]
@@ -54,6 +55,7 @@ func TestRCFC_InitialStateAllUnitsRunning(t *testing.T) {
 // (to protect against reverse flow), and tracks the coil
 // inlet/outlet temperatures as equal.
 func TestRCFC_StoppedUnitRejectsNoHeat(t *testing.T) {
+	t.Parallel()
 	r := RCFCUnit{
 		Running:             false,
 		BackdraftDamperOpen: true,
@@ -77,6 +79,7 @@ func TestRCFC_StoppedUnitRejectsNoHeat(t *testing.T) {
 //     steam-air mixture."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:54-57
 func TestRCFC_LOCASensedSwitchesToLowSpeed(t *testing.T) {
+	t.Parallel()
 	r := RCFCUnit{
 		Running:             true,
 		LowSpeed:            false,
@@ -92,6 +95,7 @@ func TestRCFC_LOCASensedSwitchesToLowSpeed(t *testing.T) {
 // containment atmosphere and coil inlet, clamped to the design
 // rating above design ΔT.
 func TestRCFC_HeatTransferScalesWithDeltaT(t *testing.T) {
+	t.Parallel()
 	r := RCFCUnit{
 		Running:             true,
 		BackdraftDamperOpen: true,
@@ -125,6 +129,7 @@ func TestRCFC_HeatTransferScalesWithDeltaT(t *testing.T) {
 //     service water system."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:86-87
 func TestRCFC_NoServiceWaterFlowStopsHeatRejection(t *testing.T) {
+	t.Parallel()
 	r := RCFCUnit{
 		Running:             true,
 		BackdraftDamperOpen: true,
@@ -145,6 +150,7 @@ func TestRCFC_NoServiceWaterFlowStopsHeatRejection(t *testing.T) {
 
 // RCFCUnitsRunning returns the count of units with Running=true.
 func TestRCFC_RCFCUnitsRunningCountsRunningUnits(t *testing.T) {
+	t.Parallel()
 	var units [RCFCUnitCount]RCFCUnit
 	units[0].Running = true
 	units[1].Running = true
@@ -158,6 +164,7 @@ func TestRCFC_RCFCUnitsRunningCountsRunningUnits(t *testing.T) {
 // net heat input minus RCFC heat sink; pressure is derived via
 // the ideal-gas law (P_containment increases with temperature).
 func TestContainmentBuilding_TemperatureAndPressureTrackHeatBalance(t *testing.T) {
+	t.Parallel()
 	c := ContainmentBuilding{
 		Pressure:       AtmosphericPressure,
 		Temperature:    Temperature{Val: 120, Unit: u.Fahrenheit},
@@ -188,6 +195,7 @@ func TestContainmentBuilding_TemperatureAndPressureTrackHeatBalance(t *testing.T
 // speed; the RCFC sink keeps the containment atmosphere from
 // runaway heating.
 func TestRCFC_EndToEndLOCAStartsLowSpeed(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection

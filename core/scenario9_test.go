@@ -28,6 +28,7 @@ import (
 // bridge BoronSetpoint path ramps on the BTRS flow clock and is
 // covered by its own test.
 func TestScenario9_BorationShiftsReactivityWithXenonPinned(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	rpv := &p.ReactorBuilding.ReactorPressureVessel
 	stepN(&p, 1, DefaultTimeStep)
@@ -57,6 +58,7 @@ func TestScenario9_BorationShiftsReactivityWithXenonPinned(t *testing.T) {
 // the demand and the drive slews toward it, pulling reactivity negative
 // without tripping the protection system.
 func TestScenario9_RodDemandManeuversReactorDown(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	stepN(&p, 1, DefaultTimeStep)
 	before := p.ReactorBuilding.ReactorPressureVessel.Reactivity

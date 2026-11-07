@@ -25,6 +25,7 @@ import (
 // into SG.HeatInput, so a 4-loop lumped plant sees the full
 // 3.8 GW through one SG instead of 1.08 GW.
 func TestBug_RPVHeatInputRoutesToSGRatedPerLoop(t *testing.T) {
+	t.Parallel()
 	// Drive the plant at rated power, then look at what the
 	// SteamGenerator actually receives. Both before and after
 	// any SG-level trip suppression the HeatInput should sit
@@ -48,6 +49,7 @@ func TestBug_RPVHeatInputRoutesToSGRatedPerLoop(t *testing.T) {
 // SteamGeneratorFullLoadHeatInput and the bug is that
 // SG.HeatInput > 3× that value at rated thermal power.
 func TestBug_SGHeatInputEqualsOneSGRatedAtCoreRated(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
@@ -80,6 +82,7 @@ func TestBug_SGHeatInputEqualsOneSGRatedAtCoreRated(t *testing.T) {
 //	 depletion and removal of shim boron"
 //	specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:119-121
 func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
+	t.Parallel()
 	feedbackTerm := func(boron float64) float32 {
 		hot := ReactorPressureVessel{
 			ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: boron},
@@ -123,6 +126,7 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 // universal initial condition.
 // specs/the_westinghouse_pressurized_water_react//chapter_3/page_065.txt:60-61
 func TestBug_MakePlantPreservesCallerRPVTemperatures(t *testing.T) {
+	t.Parallel()
 	// We build a "loaded" plant state by hand at cold-shutdown
 	// temperatures and then check that MakePlant does not
 	// stomp the temperatures back to 621°F/558°F. The current
@@ -191,6 +195,7 @@ func TestBug_MakePlantPreservesCallerRPVTemperatures(t *testing.T) {
 //     significantly with fuel depletion."
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:118-122
 func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
+	t.Parallel()
 	// Boron integrates linearly in dt and the asserted swing is a
 	// settled reactivity band, so the widened step preserves both
 	// legs' trajectories while cutting step count 100x..
@@ -239,6 +244,7 @@ func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
 // Table 3.4-1).  The secondary-side inventory must never exceed
 // that shell volume.
 func TestBug_SGWaterExceedsVolume(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	p.ReactorBuilding.Pressurizer.HeatersOn = true
@@ -269,6 +275,7 @@ func TestBug_SGWaterExceedsVolume(t *testing.T) {
 //     [...] The link connecting the two cycles is the steam generator."
 //   - specs/the_westinghouse_pressurized_water_react/chapter_3/page_064.txt:20-27
 func TestPlant_SGInventoryNotToppedUpFromPrimary(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	p.ReactorBuilding.Pressurizer.HeatersOn = true

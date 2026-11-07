@@ -25,6 +25,7 @@ import (
 //     turbine."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:32-33
 func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
+	t.Parallel()
 	// Rejection latching is snapshot-based (one operator write past
 	// LoadRejectDetectFraction = 0.10), the valves stroke fully in
 	// 0.5 s at SteamDumpValveTravelRate = 2.0/s against the 5 s
@@ -109,6 +110,7 @@ func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
 // a certain power level initiates a reactor trip"
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:33-34
 func TestTurbineTripAtPowerInitiatesReactorTrip(t *testing.T) {
+	t.Parallel()
 	p := fullPowerLineup()
 	p.TurbineBuilding.Turbine.TripByVacuum = true
 
@@ -140,6 +142,7 @@ func TestTurbineTripAtPowerInitiatesReactorTrip(t *testing.T) {
 // startup, full power, and shutdown operations."
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:56-63
 func TestPlant_HighNeutronFluxScramsDirectly(t *testing.T) {
+	t.Parallel()
 	p := fullPowerLineup()
 	p.ReactorBuilding.ReactorPressureVessel.FissionPower =
 		Watts(1.25 * float64(CoreRatedThermalPower))
@@ -174,6 +177,7 @@ func TestPlant_HighNeutronFluxScramsDirectly(t *testing.T) {
 // and high-level trip signals initiate a reactor trip"
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:19-21
 func TestPlant_HighPressurizerPressureScramsBeforeRelief(t *testing.T) {
+	t.Parallel()
 	p := fullPowerLineup()
 	p.ReactorBuilding.Pressurizer.Pressure = 2420
 
@@ -209,6 +213,7 @@ func TestPlant_HighPressurizerPressureScramsBeforeRelief(t *testing.T) {
 // line pressure or on a high-high containment pressure signal [...]"
 // specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:71-75
 func TestSteamlineIsolationClosesMSIVAndKillsOfftake(t *testing.T) {
+	t.Parallel()
 	p := fullPowerLineup()
 	p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open = 0.5
 
@@ -253,6 +258,7 @@ func TestSteamlineIsolationClosesMSIVAndKillsOfftake(t *testing.T) {
 // water carryover into the turbine."
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:27-29
 func TestTurbineTripOutputTripsMachineOnHighSGLevel(t *testing.T) {
+	t.Parallel()
 	p := fullPowerLineup()
 	p.ReactorBuilding.SteamGenerator.Water.Val = 92000
 
@@ -302,6 +308,7 @@ func TestTurbineTripOutputTripsMachineOnHighSGLevel(t *testing.T) {
 // Spec: "Block Steam Dump: Low Tcold"
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:48-49
 func TestLowTcoldBlocksAutomaticDumpDemand(t *testing.T) {
+	t.Parallel()
 	p := postTripLineup()
 	// Asymmetric post-cooldown state: cold leg below the setpoint,
 	// hot leg high enough that the Tavg restoration term still
@@ -350,6 +357,7 @@ func TestLowTcoldBlocksAutomaticDumpDemand(t *testing.T) {
 // injection, Coincidence of reactor trip and low Tcold"
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:73-76
 func TestFeedwaterIsolationShutsMainFeed(t *testing.T) {
+	t.Parallel()
 	p := fullPowerLineup()
 	// Hold the regulator in a DEMANDING state (level below its
 	// setpoint): without the isolation consumer the open-valve

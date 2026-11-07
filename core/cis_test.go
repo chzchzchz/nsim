@@ -10,6 +10,7 @@ import (
 // manual flags are false, and the design-qualification flags
 // (MissileProtected, SeismicClass1) are recorded as true.
 func TestCIS_InitialStateHasNeitherPhaseLatched(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	cis := p.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem
 	assert.False(t, cis.PhaseAIsolated,
@@ -39,6 +40,7 @@ func TestCIS_InitialStateHasNeitherPhaseLatched(t *testing.T) {
 //   - "Containment Isolation Phase A: Safety injection, Manual."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_141.txt:74-76
 func TestCIS_PhaseALatchesOnSafetyInjection(t *testing.T) {
+	t.Parallel()
 	cis := ContainmentIsolationSystem{}
 	// First step with safety injection active.
 	s1 := cis.Step(DefaultTimeStep, true, 0)
@@ -67,6 +69,7 @@ func TestCIS_PhaseALatchesOnSafetyInjection(t *testing.T) {
 //   - "Containment Isolation Phase A: Safety injection, Manual."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_141.txt:74-76
 func TestCIS_PhaseALatchesOnManual(t *testing.T) {
+	t.Parallel()
 	cis := ContainmentIsolationSystem{
 		ManualPhaseA: true,
 	}
@@ -92,6 +95,7 @@ func TestCIS_PhaseALatchesOnManual(t *testing.T) {
 //     Manual actuation of containment spray."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_141.txt:64-67
 func TestCIS_PhaseBLatchesOnHighPressure(t *testing.T) {
+	t.Parallel()
 	cis := ContainmentIsolationSystem{}
 	hi := CISPhaseBSetpoint + 1
 	// Step with pressure above the setpoint.
@@ -115,6 +119,7 @@ func TestCIS_PhaseBLatchesOnHighPressure(t *testing.T) {
 //     Manual actuation of containment spray."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_141.txt:64-67
 func TestCIS_PhaseBLatchesOnManual(t *testing.T) {
+	t.Parallel()
 	cis := ContainmentIsolationSystem{
 		ManualPhaseB: true,
 	}
@@ -141,6 +146,7 @@ func TestCIS_PhaseBLatchesOnManual(t *testing.T) {
 //     radioactivity to the outside environment."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_113.txt:92-96
 func TestCIS_IsIsolatedReportsEitherPhase(t *testing.T) {
+	t.Parallel()
 	// Neither phase active.
 	cis := ContainmentIsolationSystem{}
 	assert.False(t, cis.IsIsolated(),
@@ -163,6 +169,7 @@ func TestCIS_IsIsolatedReportsEitherPhase(t *testing.T) {
 // signal latches Phase A and propagates into the
 // ContainmentBuilding field.
 func TestPlant_CIS_PhaseALatchesOnLOCA(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 	p.Step(DefaultTimeStep)

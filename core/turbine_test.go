@@ -36,6 +36,7 @@ func steamingTurbine() Turbine {
 }
 
 func TestTurbine_SteamFlowStartsRunning(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	for i := 0; i < 100; i++ {
 		tr = tr.Step(DefaultTimeStep, 1000, 0, Temperature{Val: 600}, false, openValve())
@@ -46,6 +47,7 @@ func TestTurbine_SteamFlowStartsRunning(t *testing.T) {
 }
 
 func TestTurbine_ShortSteamLossStaysRunning(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	for i := 0; i < 1000; i++ {
 		tr = tr.Step(DefaultTimeStep, 1000, 0, Temperature{Val: 600}, false, openValve())
@@ -71,6 +73,7 @@ func TestTurbine_ShortSteamLossStaysRunning(t *testing.T) {
 }
 
 func TestTurbine_SustainedSteamLossTrips(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	for i := 0; i < 1000; i++ {
 		tr = tr.Step(DefaultTimeStep, 1000, 0, Temperature{Val: 600}, false, openValve())
@@ -84,6 +87,7 @@ func TestTurbine_SustainedSteamLossTrips(t *testing.T) {
 }
 
 func TestTurbine_OverspeedTrips(t *testing.T) {
+	t.Parallel()
 	tr := Turbine{State: TurbineRunning, Velocity: TurbineRatedSpeed}
 	// Pre-load the rotor past the trip threshold; the Step must latch
 	// TurbineTripped on the very next tick.
@@ -94,6 +98,7 @@ func TestTurbine_OverspeedTrips(t *testing.T) {
 }
 
 func TestTurbine_TrippedRequiresReset(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	// Trip via sustained steam loss.
 	for i := 0; i < 1000; i++ {
@@ -131,6 +136,7 @@ func TestTurbine_TrippedRequiresReset(t *testing.T) {
 //     through the manual valve controllers."
 //   - specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:114-116
 func TestTurbine_ResetRequestRestartsFromTripped(t *testing.T) {
+	t.Parallel()
 	// Healthy operating lineup: without the lube-oil pump in service
 	// and open governing valves the machine cannot roll, and the
 	// steam-loss trip under test could not be reached.
@@ -165,6 +171,7 @@ func TestTurbine_ResetRequestRestartsFromTripped(t *testing.T) {
 // With the stop valve closed, no steam admission occurs regardless
 // of the upstream pressure; the turbine stays off.
 func TestTurbine_StopValveClosedBlocksSteam(t *testing.T) {
+	t.Parallel()
 	tr := Turbine{}
 	for i := 0; i < 1000; i++ {
 		tr = tr.Step(DefaultTimeStep, 1000, 0, Temperature{Val: 600}, false, closedValve())
@@ -178,6 +185,7 @@ func TestTurbine_StopValveClosedBlocksSteam(t *testing.T) {
 // reaches rated speed; closing the stop valve mid-run causes the
 // rotor to coast down and the turbine eventually trips.
 func TestTurbine_StopValveMidRunCoastsDown(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	// Reach rated speed.
 	for i := 0; i < 1000; i++ {
@@ -201,6 +209,7 @@ func TestTurbine_StopValveMidRunCoastsDown(t *testing.T) {
 // Nil stopValveOpen pointer preserves the legacy admission path:
 // steam flow is gated only by the upstream pressure differential.
 func TestTurbine_NilStopValveAllowsSteam(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	for i := 0; i < 100; i++ {
 		tr = tr.Step(DefaultTimeStep, 1000, 0, Temperature{Val: 600}, false, nil)
@@ -218,6 +227,7 @@ func TestTurbine_NilStopValveAllowsSteam(t *testing.T) {
 //     is extracted to the highest pressure feedwater heaters."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:31-32
 func TestTurbine_ExtractionOutputAtRatedLoad(t *testing.T) {
+	t.Parallel()
 	tr := Turbine{
 		State:              TurbineRunning,
 		Velocity:           TurbineRatedSpeed,
@@ -248,6 +258,7 @@ func TestTurbine_ExtractionOutputAtRatedLoad(t *testing.T) {
 //   - "OPC alarm (103%), OPC trip (110%)"
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:71-73
 func TestTurbine_OPCAlarmAssertsAbove103Percent(t *testing.T) {
+	t.Parallel()
 	tr := Turbine{
 		State:    TurbineRunning,
 		Velocity: Velocity(float64(TurbineRatedSpeed) * (TurbineOPCALarmFraction + 0.005)),
@@ -274,6 +285,7 @@ func TestTurbine_OPCAlarmAssertsAbove103Percent(t *testing.T) {
 //     valves [...]"
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:9-15
 func TestTurbine_OPCTripClosesStopValveAt110Percent(t *testing.T) {
+	t.Parallel()
 	tr := Turbine{
 		State:    TurbineRunning,
 		Velocity: Velocity(float64(TurbineRatedSpeed) * (TurbineOPCTripFraction + 0.01)),
@@ -299,6 +311,7 @@ func TestTurbine_OPCTripClosesStopValveAt110Percent(t *testing.T) {
 //     ratio signal."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:26-29
 func TestTurbine_LoadRunbackDecreasesSetpoint(t *testing.T) {
+	t.Parallel()
 	tr := Turbine{
 		State:       TurbineRunning,
 		Velocity:    TurbineRatedSpeed,
@@ -328,6 +341,7 @@ func TestTurbine_LoadRunbackDecreasesSetpoint(t *testing.T) {
 //     decrease electrical load at a controlled selectable rate."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:80-82
 func TestTurbine_SetpointClampsRealPower(t *testing.T) {
+	t.Parallel()
 	tr := Turbine{
 		State:              TurbineRunning,
 		Velocity:           TurbineRatedSpeed,
@@ -357,6 +371,7 @@ func TestTurbine_SetpointClampsRealPower(t *testing.T) {
 //   - "Power factor: 0.9, short circuit ratio: 0.58"
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:19
 func TestPowerGenerator_DefaultsMatchSpec(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	g := p.TurbineBuilding.Generator
 	assert.False(t, g.BreakerClosed,
@@ -379,6 +394,7 @@ func TestPowerGenerator_DefaultsMatchSpec(t *testing.T) {
 //     limits of the generator are not exceeded."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_204.txt:33-36
 func TestPowerGenerator_ReactivePowerMatchesPowerFactor(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -399,6 +415,7 @@ func TestPowerGenerator_ReactivePowerMatchesPowerFactor(t *testing.T) {
 // Turning gear holds the rotor at a slow roll with no steam
 // admission instead of letting it coast to zero.
 func TestTurbine_TurningGearHoldsSlowRoll(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	tr.TurningGear = true
 	tr.Velocity = TurbineRatedSpeed
@@ -421,6 +438,7 @@ func TestTurbine_TurningGearHoldsSlowRoll(t *testing.T) {
 //     value at a controlled selectable rate."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-74
 func TestTurbine_SpeedDemandRampsToRated(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	tr.SpeedDemand = 1.0
 	for i := 0; i < int(10*time.Second/DefaultTimeStep); i++ {
@@ -444,6 +462,7 @@ func TestTurbine_SpeedDemandRampsToRated(t *testing.T) {
 //   - "Low vacuum trip"
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:26
 func TestTurbine_LowVacuumTrips(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	tr.State = TurbineRunning
 	tr.Velocity = TurbineRatedSpeed
@@ -460,6 +479,7 @@ func TestTurbine_LowVacuumTrips(t *testing.T) {
 //   - "Low bearing oil pressure trip"
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:25
 func TestTurbine_LowBearingOilTrips(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	tr.State = TurbineRunning
 	tr.Velocity = TurbineRatedSpeed
@@ -483,6 +503,7 @@ func TestTurbine_LowBearingOilTrips(t *testing.T) {
 //   - "Extraction line nonreturn valves."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:83
 func TestTurbine_TripClosesExtractionNRVs(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	tr.State = TurbineRunning
 	tr.Velocity = TurbineRatedSpeed
@@ -496,6 +517,7 @@ func TestTurbine_TripClosesExtractionNRVs(t *testing.T) {
 // Mechanical power tracks admitted steam energy: half admission
 // converges to half of rated power with no setpoint ceiling.
 func TestTurbine_RealPowerTracksSteamEnergy(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	tr.State = TurbineRunning
 	tr.Velocity = TurbineRatedSpeed
@@ -516,6 +538,7 @@ func TestTurbine_RealPowerTracksSteamEnergy(t *testing.T) {
 //   - "reference values established by the dispatcher"
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:37-41
 func TestTurbine_LoadDemandRefRampsSetpoint(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	tr.State = TurbineRunning
 	tr.Velocity = TurbineRatedSpeed
@@ -541,6 +564,7 @@ func TestTurbine_LoadDemandRefRampsSetpoint(t *testing.T) {
 //     paralleled on the grid."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:52-53
 func TestTurbine_SynchronizedSpeedHeldUnderThrottledAdmission(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	tr.State = TurbineRunning
 	tr.Synchronized = true
@@ -564,6 +588,7 @@ func TestTurbine_SynchronizedSpeedHeldUnderThrottledAdmission(t *testing.T) {
 //     decrease electrical load at a controlled selectable rate."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:80-82
 func TestTurbine_SynchronizedDrawFollowsLoadReference(t *testing.T) {
+	t.Parallel()
 	tr := steamingTurbine()
 	tr.State = TurbineRunning
 	tr.Velocity = TurbineRatedSpeed
@@ -591,6 +616,7 @@ func TestTurbine_SynchronizedDrawFollowsLoadReference(t *testing.T) {
 //     paralleled on the grid."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:52-53
 func TestGeneratorBreakerControlRegistered(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	c := GetControlMap(&p)["TurbineBuilding/Generator/BreakerClosed"]
 	require.NotNil(t, c, "want main generator breaker control registered")
@@ -608,6 +634,7 @@ func TestGeneratorBreakerControlRegistered(t *testing.T) {
 // themselves are declared tunings, specs/pwr_sim/chapter_3/
 // page_041.txt:40-42).
 func TestTurbine_DumpModulationDemandClosedForm(t *testing.T) {
+	t.Parallel()
 	turb := Turbine{}
 	err := (960.0 - float64(SteamGeneratorShellPressure)) /
 		float64(SteamGeneratorShellPressure)
@@ -639,6 +666,7 @@ func TestTurbine_DumpModulationDemandClosedForm(t *testing.T) {
 // the error flips sign, which is what keeps the modulating dump from
 // hysteresis around its own windup.
 func TestTurbine_DumpModulationIntegralClamps(t *testing.T) {
+	t.Parallel()
 	turb := Turbine{}
 	for range 10000 {
 		turb.dumpModulationDemand(SteamGeneratorShellPressure*2, time.Second)
@@ -657,6 +685,7 @@ func TestTurbine_DumpModulationIntegralClamps(t *testing.T) {
 // pinned the demand - and therefore the valve - at full travel
 // (measured Open=1.00 under the same forcing before the fix).
 func TestSteamDump_PressureModeModulatesInsteadOfPinning(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	for i := 0; i < 200; i++ {
 		// Re-arm the mode each tick: the forcing is a stand-in for

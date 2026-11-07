@@ -19,6 +19,7 @@ import (
 //     pressure."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:31-33
 func TestSIS_AccumulatorIdleAbovePrechargePressure(t *testing.T) {
+	t.Parallel()
 	s := (&SIS{
 		Accumulator: Accumulator{
 			Pressure: SISAccumulatorPrechargePressure,
@@ -57,6 +58,7 @@ func TestSIS_AccumulatorIdleAbovePrechargePressure(t *testing.T) {
 //     legs of the RCS."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:20-23
 func TestSIS_AccumulatorDischargesBelowPrecharge(t *testing.T) {
+	t.Parallel()
 	initial := SISAccumulatorPerTankCapacity.Float() *
 		float64(SISAccumulatorCount)
 	s := (&SIS{
@@ -120,6 +122,7 @@ func TestSIS_AccumulatorDischargesBelowPrecharge(t *testing.T) {
 //     deadheading of the HHSI pump."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_096.txt:26-30
 func TestSIS_HHSIPumpDepletesRWST(t *testing.T) {
+	t.Parallel()
 	s := (&SIS{
 		HHSIPumpRunning: true,
 		HHSIDriveReady:  true,
@@ -143,6 +146,7 @@ func TestSIS_HHSIPumpDepletesRWST(t *testing.T) {
 // cannot report flow from a dry tank while the switchover timer runs
 // (plans/p40_1.txt).
 func TestSIS_DryRWSTStarvesInjection(t *testing.T) {
+	t.Parallel()
 	s := (&SIS{
 		HHSIPumpRunning: true,
 		HHSIDriveReady:  true,
@@ -171,6 +175,7 @@ func TestSIS_DryRWSTStarvesInjection(t *testing.T) {
 //     isolation valves are automatically closed at this time."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:61-63
 func TestSIS_RecirculationSwitchoverAlignsToSump(t *testing.T) {
+	t.Parallel()
 	s := SIS{
 		HHSIPumpRunning: true,
 		HHSIDriveReady:  true,
@@ -209,6 +214,7 @@ func TestSIS_RecirculationSwitchoverAlignsToSump(t *testing.T) {
 //     directly from the RWST."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:24-25
 func TestSIS_SafetyInjectionSignalStartsHHSIPumps(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection

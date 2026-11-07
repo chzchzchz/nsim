@@ -23,6 +23,7 @@ import (
 //     specs/pwr_sim/chapter_3/page_036.txt:72-88
 
 func TestScenario13_ReactorLeadReturnToFullPower(t *testing.T) {
+	t.Parallel()
 	// Same width argument as the descent test in core/rodcontrol_test.go:
 	// the integrator is linear in dt, so a 10 ms tick lands on identical
 	// Runtime exceeds 5 s because the return leg itself is the subject

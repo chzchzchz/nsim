@@ -17,6 +17,7 @@ import (
 //     feedwater heaters to the deaerator."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-45
 func TestHeater_LPProducesTemperatureRise(t *testing.T) {
+	t.Parallel()
 	h := LowPressureHeater{
 		DrainValve: Valve{Open: 1.0},
 	}
@@ -35,6 +36,7 @@ func TestHeater_LPProducesTemperatureRise(t *testing.T) {
 // no temperature rise (the heat-exchange duty is zero in either
 // case).
 func TestHeater_LPNoSteamNoRise(t *testing.T) {
+	t.Parallel()
 	h := LowPressureHeater{
 		DrainValve: Valve{Open: 1.0},
 	}
@@ -51,6 +53,7 @@ func TestHeater_LPNoSteamNoRise(t *testing.T) {
 
 // LP heater drain accumulates when steam flows.
 func TestHeater_LPDrainAccumulates(t *testing.T) {
+	t.Parallel()
 	h := LowPressureHeater{
 		DrainValve: Valve{Open: 1.0},
 	}
@@ -66,6 +69,7 @@ func TestHeater_LPDrainAccumulates(t *testing.T) {
 // temperature rise (per the model, the per-stage rise is bounded
 // by HPTemperatureRisePerStage).
 func TestHeater_HPClampedAtPerStageMax(t *testing.T) {
+	t.Parallel()
 	h := HighPressureHeater{
 		DrainValve: Valve{Open: 1.0},
 	}
@@ -82,6 +86,7 @@ func TestHeater_HPClampedAtPerStageMax(t *testing.T) {
 // 120°F inlet should raise the cumulative outlet temperature
 // above the inlet.
 func TestHeater_LPTrainCumulativeRise(t *testing.T) {
+	t.Parallel()
 	h := LowPressureHeater{
 		DrainValve: Valve{Open: 1.0},
 	}
@@ -97,6 +102,7 @@ func TestHeater_LPTrainCumulativeRise(t *testing.T) {
 // End-to-end LP+HP train: 4 LP stages + 2 HP stages from 120°F
 // feedwater should produce a meaningful cumulative rise.
 func TestHeater_FullTrainCumulativeRise(t *testing.T) {
+	t.Parallel()
 	lp := LowPressureHeater{DrainValve: Valve{Open: 1.0}}
 	fwIn := Temperature{Val: 120.0, Unit: u.Fahrenheit}
 	for i := 0; i < 4; i++ {

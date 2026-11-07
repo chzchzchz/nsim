@@ -13,6 +13,7 @@ import (
 // regulator is stopped with the design level setpoint and zero
 // ValveDemand.
 func TestFeedwaterRegulator_InitialStateHasStoppedRegulator(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	reg := p.TurbineBuilding.FeedwaterRegulator
 	assert.False(t, reg.Running,
@@ -38,6 +39,7 @@ func TestFeedwaterRegulator_InitialStateHasStoppedRegulator(t *testing.T) {
 //     feedwater flow."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
 func TestFeedwaterRegulator_StoppedRegulatorHoldsZeroDemand(t *testing.T) {
+	t.Parallel()
 	r := FeedwaterRegulator{
 		LevelSetpoint: FeedwaterLevelSetpoint,
 		Level:         0,
@@ -57,6 +59,7 @@ func TestFeedwaterRegulator_StoppedRegulatorHoldsZeroDemand(t *testing.T) {
 // level error = 50% - 40% = 10%, the proportional term alone gives
 // Kp × e = 0.5 × 10 = 5.0 → clamped to 1.0.
 func TestFeedwaterRegulator_LowLevelOpensValve(t *testing.T) {
+	t.Parallel()
 	r := FeedwaterRegulator{
 		LevelSetpoint: FeedwaterLevelSetpoint,
 		Level:         40,
@@ -72,6 +75,7 @@ func TestFeedwaterRegulator_LowLevelOpensValve(t *testing.T) {
 // valve (negative proportional action). With level = 80%, setpoint
 // = 50%, e = -30, Kp*e = -15 → clamped to 0.
 func TestFeedwaterRegulator_HighLevelClosesValve(t *testing.T) {
+	t.Parallel()
 	r := FeedwaterRegulator{
 		LevelSetpoint: FeedwaterLevelSetpoint,
 		Level:         80,
@@ -88,6 +92,7 @@ func TestFeedwaterRegulator_HighLevelClosesValve(t *testing.T) {
 // proportional contribution is small (0.5 × 1 = 0.5) and the
 // integral term grows with each step.
 func TestFeedwaterRegulator_IntegralAccumulatesWhileRunning(t *testing.T) {
+	t.Parallel()
 	r := FeedwaterRegulator{
 		LevelSetpoint: FeedwaterLevelSetpoint,
 		Level:         49,
@@ -108,6 +113,7 @@ func TestFeedwaterRegulator_IntegralAccumulatesWhileRunning(t *testing.T) {
 // ValveDemand is always clamped to [0, 1] regardless of how large
 // the proportional or integral terms grow.
 func TestFeedwaterRegulator_ValveDemandClampedToUnitRange(t *testing.T) {
+	t.Parallel()
 	// Very low level to drive a large positive error.
 	hi := FeedwaterRegulator{
 		LevelSetpoint: FeedwaterLevelSetpoint,
@@ -139,6 +145,7 @@ func TestFeedwaterRegulator_ValveDemandClampedToUnitRange(t *testing.T) {
 // integrator freezes and Kp*e alone reopens the demand on the first
 // step below setpoint.
 func TestFeedwaterRegulator_AntiWindupAllowsRecovery(t *testing.T) {
+	t.Parallel()
 	r := FeedwaterRegulator{
 		LevelSetpoint: FeedwaterLevelSetpoint,
 		Level:         80,
@@ -169,6 +176,7 @@ func TestFeedwaterRegulator_AntiWindupAllowsRecovery(t *testing.T) {
 //     load transients."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:82-85
 func TestFeedwaterRegulator_SteamFlowFeedforward(t *testing.T) {
+	t.Parallel()
 	halfDesign := FeedwaterDesignFlow.Float() / 2.0
 	r := FeedwaterRegulator{
 		LevelSetpoint: FeedwaterLevelSetpoint,
@@ -194,6 +202,7 @@ func TestFeedwaterRegulator_SteamFlowFeedforward(t *testing.T) {
 // level, steam flow and feedwater flow."
 // specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
 func TestFeedwaterRegulator_FeedMismatchTrimsDemand(t *testing.T) {
+	t.Parallel()
 	// Half-design steaming keeps every variant inside the [0,1]
 	// clamp so the closed forms are observable, not saturated.
 	half := FeedwaterDesignFlow.Float() / 2
@@ -222,6 +231,7 @@ func TestFeedwaterRegulator_FeedMismatchTrimsDemand(t *testing.T) {
 // running, the main feedwater control valve is positioned at the
 // regulator's demand.
 func TestPlant_FeedwaterRegulatorDrivesControlValve(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.TurbineBuilding.MainFeedwaterPump.Running = true
 	sgVol := p.ReactorBuilding.SteamGenerator.Volume.Float()
@@ -253,6 +263,7 @@ func TestPlant_FeedwaterRegulatorDrivesControlValve(t *testing.T) {
 //
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:156-159
 func TestFeedwaterRegulator_ManualHoldsOperatorDemand(t *testing.T) {
+	t.Parallel()
 	// Small error so the anti-windup does not pin the integrator
 	// after retransfer (kp*e would exceed the output clamp).
 	r := FeedwaterRegulator{
@@ -279,6 +290,7 @@ func TestFeedwaterRegulator_ManualHoldsOperatorDemand(t *testing.T) {
 // The manual transfer is operator-reachable on the bridge and the
 // control valve follows the written demand instead of the PI law.
 func TestPlant_FeedwaterManualTransferHoldsValve(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.TurbineBuilding.MainFeedwaterPump.Running = true
 

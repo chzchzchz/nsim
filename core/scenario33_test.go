@@ -26,6 +26,7 @@ import (
 // cooldown maximum and never past it: the cap is a hard ceiling of the
 // relaxation, not a clamp bolted onto the output.
 func TestScenario33_NoServiceWaterSoaksToCooldownCap(t *testing.T) {
+	t.Parallel()
 	testDt := 10 * time.Second
 	c := CCWS{
 		InletTemp:   Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit},
@@ -46,6 +47,7 @@ func TestScenario33_NoServiceWaterSoaksToCooldownCap(t *testing.T) {
 // Restoring service water returns the inlet to the design value inside the
 // spec's four-hour allowance, approaching from above without undershoot.
 func TestScenario33_ServiceWaterRestorationRecoversByFourHours(t *testing.T) {
+	t.Parallel()
 	testDt := time.Minute
 	c := CCWS{
 		InletTemp:   Temperature{Val: CCWSInletMaxCooldownTemp, Unit: u.Fahrenheit},
@@ -72,6 +74,7 @@ func TestScenario33_ServiceWaterRestorationRecoversByFourHours(t *testing.T) {
 // plant re-latches a cleared pump latch on its own, so a pump failure does
 // not extend cooldown for want of a start signal.
 func TestScenario33_PumpLatchAutoReplacesWhileBusUp(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning = false
 

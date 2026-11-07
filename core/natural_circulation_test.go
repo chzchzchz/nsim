@@ -19,6 +19,7 @@ import (
 //     heat."
 //     specs/westinghouse_tech_manual/chapter_3/page_0328.txt:31-33
 func TestReactor_NaturalCirculationEmergesFromLoopHead(t *testing.T) {
+	t.Parallel()
 	hot := ReactorPressureVessel{
 		Inlet:  Temperature{Val: RCSNoLoadTavgF - 30, Unit: u.Fahrenheit},
 		Outlet: Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
@@ -58,6 +59,7 @@ func TestReactor_NaturalCirculationEmergesFromLoopHead(t *testing.T) {
 // removal of a shutdown reactor, not for power operation."
 // specs/westinghouse_tech_manual/chapter_3/page_0325.txt:14-15
 func TestReactor_NaturalCirculationSaturatesAtCapability(t *testing.T) {
+	t.Parallel()
 	r := ReactorPressureVessel{
 		Inlet:  Temperature{Val: RCSNoLoadTavgF, Unit: u.Fahrenheit},
 		Outlet: Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
@@ -78,6 +80,7 @@ func TestReactor_NaturalCirculationSaturatesAtCapability(t *testing.T) {
 // trajectory consequence is witnessed end-to-end in
 // TestPlant_NaturalCirculationLegsSeparateAndRestartRecovers.
 func TestPlant_NaturalCirculationLegsSeparateAndRestartRecovers(t *testing.T) {
+	t.Parallel()
 	testDt := 100 * time.Millisecond
 
 	newTrippedPlant := func() *Plant {

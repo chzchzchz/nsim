@@ -34,6 +34,7 @@ func loopFixture(t *testing.T) (*Plant, time.Duration) {
 //     power buses, is physically and electrically independent."
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:30-36
 func TestPlant_IndependentDieselsFeedIndependentTrains(t *testing.T) {
+	t.Parallel()
 	p, testDt := loopFixture(t)
 
 	for i := 0; i < 160; i++ {
@@ -72,6 +73,7 @@ func TestPlant_IndependentDieselsFeedIndependentTrains(t *testing.T) {
 //     of overload trip due to simultaneous starting loads."
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:52-55
 func TestPlant_DieselTransferSequencesLargeLoads(t *testing.T) {
+	t.Parallel()
 	p, testDt := loopFixture(t)
 
 	// Step until the diesels pick up their buses (ready 10 s +
@@ -116,6 +118,7 @@ func TestPlant_DieselTransferSequencesLargeLoads(t *testing.T) {
 //     operation and supply power for its own auxiliaries."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:55-58
 func TestPlant_IslandedUnitCarriesESFBusesWithoutDieselStart(t *testing.T) {
+	t.Parallel()
 	testDt := 100 * time.Millisecond
 	p := MakePlant()
 	// A synchronized, spinning unit with its exciter active holds
@@ -171,6 +174,7 @@ func TestPlant_IslandedUnitCarriesESFBusesWithoutDieselStart(t *testing.T) {
 // output is a modeling assumption (source is silent on a dedicated
 // isolation block).
 func TestRPS_SteamlineIsolationBlockGatesOnlySteamlineTrigger(t *testing.T) {
+	t.Parallel()
 	lowHeader := Pressure(RPSLowSteamlinePressureTrip - 100)
 	hotContainment := Pressure(RPSHighContainmentPressureTrip + 10)
 	nominalSl := Pressure(RPSLowSteamlinePressureTrip + 100)

@@ -37,6 +37,7 @@ func setControl(t *testing.T, p *Plant, path, value string) {
 // ejectors or vacuum pumps."
 // specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:21-22
 func TestScenario4_VacuumPumpControlEstablishesVacuum(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	// E1 vacuum establishment happens with the reactor offline: no
 	// fission or decay heat means no steam production, so the dump
@@ -74,6 +75,7 @@ func TestScenario4_VacuumPumpControlEstablishesVacuum(t *testing.T) {
 // "Low vacuum trip"
 // specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:26
 func TestScenario4_RollingWithVacuumHoldsBackpressure(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.TurbineBuilding.Condenser.VacuumPumpRunning = false
 	p.TurbineBuilding.Condenser.Pressure = AtmosphericPressure
@@ -100,6 +102,7 @@ func TestScenario4_RollingWithVacuumHoldsBackpressure(t *testing.T) {
 // trip: the condenser sits at atmospheric back-pressure, above the
 // trip plate.
 func TestScenario4_AdmittingSteamWithoutVacuumTrips(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.TurbineBuilding.Condenser.VacuumPumpRunning = false
 	p.TurbineBuilding.Condenser.Pressure = AtmosphericPressure
@@ -123,6 +126,7 @@ func TestScenario4_AdmittingSteamWithoutVacuumTrips(t *testing.T) {
 // (90-105°C), the steamline vents are closed [...]."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:118-122
 func TestScenario4_SteamlineVentDrawsSteamToHotwell(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	sgBefore := p.ReactorBuilding.SteamGenerator.Water.Float()
 	hotwellBefore := p.TurbineBuilding.Condenser.HotwellLevel.Float()
@@ -183,6 +187,7 @@ func TestScenario4_DrainValvePullsLevelToNormalBand(t *testing.T) {
 // FeedwaterMinFlow): a wiring check, asserted as a floor plus
 // conservation of the transferred volume.
 func TestScenario4_CondensatePumpMovesHotwellToDeaerator(t *testing.T) {
+	t.Parallel()
 	// Quiescent lineup: neutron-source power only, so no turbine
 	// exhaust condenses, no extraction feeds the heaters, and the
 	// only deaerator inflows are the minimum-flow recirculation

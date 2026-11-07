@@ -10,6 +10,7 @@ import (
 // format is available, SPDS is active, post-trip review has
 // not fired, and no alarm is sounding.
 func TestPlantComputer_InitialStateHasAllDisplaysAndSPDS(t *testing.T) {
+	t.Parallel()
 	c := PlantComputer{}
 	c = c.Step(DefaultTimeStep, true, false, false, false, true, false)
 	assert.True(t, c.DataAcquisitionAvailable,
@@ -49,6 +50,7 @@ func TestPlantComputer_InitialStateHasAllDisplaysAndSPDS(t *testing.T) {
 // When electrical power is unavailable, all six display
 // formats are dark and SPDS is not active.
 func TestPlantComputer_NoPowerDegradesAllDisplaysAndSPDS(t *testing.T) {
+	t.Parallel()
 	c := PlantComputer{}
 	c = c.Step(DefaultTimeStep, false, false, false, false, true, false)
 	assert.False(t, c.DataAcquisitionAvailable,
@@ -68,6 +70,7 @@ func TestPlantComputer_NoPowerDegradesAllDisplaysAndSPDS(t *testing.T) {
 // available; even with power on, SPDS drops if any major
 // safeguard is inoperable.
 func TestPlantComputer_SPDSRequiresSafetyAvailable(t *testing.T) {
+	t.Parallel()
 	c := PlantComputer{}
 	c = c.Step(DefaultTimeStep, true, false, false, false, false, false)
 	assert.False(t, c.SPCSActive,
@@ -79,6 +82,7 @@ func TestPlantComputer_SPDSRequiresSafetyAvailable(t *testing.T) {
 // the rising edge; the printer does not re-fire on
 // subsequent steps while the reactor remains tripped.
 func TestPlantComputer_PostTripReviewLatchesOnTrip(t *testing.T) {
+	t.Parallel()
 	c := PlantComputer{}
 	c = c.Step(DefaultTimeStep, true, true, true, false, true, false)
 	assert.True(t, c.PostTripReviewPrinted,
@@ -93,6 +97,7 @@ func TestPlantComputer_PostTripReviewLatchesOnTrip(t *testing.T) {
 // An alarm condition latches AlarmActive = true until the
 // operator acknowledges it via the control room.
 func TestPlantComputer_AlarmLatchesAndAcknowledges(t *testing.T) {
+	t.Parallel()
 	c := PlantComputer{}
 	c = c.Step(DefaultTimeStep, true, false, false, true, true, false)
 	assert.True(t, c.AlarmActive,
@@ -107,6 +112,7 @@ func TestPlantComputer_AlarmLatchesAndAcknowledges(t *testing.T) {
 // active only when both computer power and the safety-
 // system stations are available.
 func TestPlantComputer_BISIRequiresSafetyAvailable(t *testing.T) {
+	t.Parallel()
 	c := PlantComputer{}
 	c = c.Step(DefaultTimeStep, true, false, false, false, false, false)
 	assert.False(t, c.BypassedInoperableStatusIndication,
@@ -122,6 +128,7 @@ func TestPlantComputer_BISIRequiresSafetyAvailable(t *testing.T) {
 // initial offsite-healthy state leaves the computer fully
 // operational with SPDS active and no alarm.
 func TestPlant_PlantComputer_InitialStatePreserved(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()

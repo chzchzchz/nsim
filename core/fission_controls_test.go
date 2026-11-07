@@ -23,6 +23,7 @@ import (
 // rate-limited to that exact amount per call, not the full
 // 1.0. Step moves Insertion toward DemandInsertion.
 func TestControlRods_StepRateLimits(t *testing.T) {
+	t.Parallel()
 	c := ControlRods{Insertion: 0, DemandInsertion: 1}
 	out := c.Step(DefaultTimeStep)
 	want := RodInsertionSpeed * DefaultTimeStep.Seconds()
@@ -45,6 +46,7 @@ func TestControlRods_StepRateLimits(t *testing.T) {
 // out-of-range demand cannot drive Insertion outside the
 // physical rod travel.
 func TestControlRods_StepClamps(t *testing.T) {
+	t.Parallel()
 	high := ControlRods{Insertion: 0.5, DemandInsertion: 2.0}
 	for i := 0; i < int(60*time.Second/DefaultTimeStep); i++ {
 		high = high.Step(DefaultTimeStep)
@@ -76,6 +78,7 @@ func TestControlRods_StepClamps(t *testing.T) {
 // mask the rate-limit. We drive ControlRods.Step directly to
 // observe the bridge integration without that interaction.
 func TestBridge_RodInsertionControlClamps(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	rods := &p.ReactorBuilding.ReactorPressureVessel.ControlRods
 	rods.Insertion = 0.5
@@ -109,6 +112,7 @@ func TestBridge_RodInsertionControlClamps(t *testing.T) {
 // concentration toward the target through the BTRS dilution flow
 // path, releasing chemistry to volume control on arrival.
 func TestBridge_BoronSetpointWritable(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	c := GetControlMap(&p)["ReactorBuilding/ReactorPressureVessel/ControlRods/BoronSetpoint"]
 	require.NotNil(t, c, "want BoronSetpoint control registered")
@@ -135,6 +139,7 @@ func TestBridge_BoronSetpointWritable(t *testing.T) {
 // started manually (MakePlant leaves it off) before its speed
 // sensor reads non-zero.
 func TestBridge_SensorsReflectState(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	stepN(&p, int(15*time.Second/DefaultTimeStep), DefaultTimeStep)
@@ -183,6 +188,7 @@ func TestBridge_SensorsReflectState(t *testing.T) {
 // or neutron capability is near zero at the top and bottom
 // ends of the core" (specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:124-132).
 func TestThermal_RodWithdrawalRaisesReactivity(t *testing.T) {
+	t.Parallel()
 	steps := int(5 * time.Second / DefaultTimeStep)
 	const seedPower = CoreRatedThermalPower / 2
 
@@ -250,6 +256,7 @@ func TestThermal_RodWithdrawalRaisesReactivity(t *testing.T) {
 //     depletion and removal of shim boron"
 //     (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:119-121).
 func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
+	t.Parallel()
 	// Both legs run at the same tick width, so the per-step fission
 	// tail channel scales identically under them; boron integrates
 	// linearly in dt and every assertion compares the legs against
@@ -322,6 +329,7 @@ func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 // RPV.ControlRods.BoronConcentration (bridge.go:815-829),
 // plant.go:49-50 keeps them synchronised on every Plant.Step.
 func TestThermal_Fission4_BorationLowersOutlet(t *testing.T) {
+	t.Parallel()
 	// Boron marches linearly in dt and the outlet relaxes on a
 	// seconds-scale lag, so the widened step preserves both legs'
 	// trajectories while cutting step count 100x.

@@ -21,6 +21,7 @@ import (
 //   - Delivery within one minute of the actuation signal:
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:4-9
 func TestManualSIStartsEFWSMotorPumps(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	m := GetControlMap(&p)
 	c, ok := m["ReactorBuilding/ReactorProtectionSystem/ManualSI"]

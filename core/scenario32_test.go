@@ -43,6 +43,7 @@ func scenario32Temps() (Temperature, Temperature) {
 // elapsed AND the suction path is open; either gate alone holds duty at
 // zero while the pump keeps circulating.
 func TestScenario32_MiniflowWarmupGatesHxDuty(t *testing.T) {
+	t.Parallel()
 	testDt := time.Second
 	hot, ccw := scenario32Temps()
 	train := scenario32Train()
@@ -78,6 +79,7 @@ func TestScenario32_MiniflowWarmupGatesHxDuty(t *testing.T) {
 // The plant-level latch places the RHRS in operation at the entry line
 // and marks takeover on the first step that actually rejects heat.
 func TestScenario32_TakeoverLatchesOnFirstHeatRejection(t *testing.T) {
+	t.Parallel()
 	testDt := time.Second
 	hot, ccw := scenario32Temps()
 	ready := func() RHRSTrain {
@@ -113,6 +115,7 @@ func TestScenario32_TakeoverLatchesOnFirstHeatRejection(t *testing.T) {
 // the later bubble-formation and isolation steps.
 // specs/the_westinghouse_pressurized_water_react/chapter_4/page_087.txt:46-48
 func TestScenario32_StoppedButAlignedKeepsPathOpen(t *testing.T) {
+	t.Parallel()
 	testDt := time.Second
 	hot, ccw := scenario32Temps()
 	train := scenario32Train()

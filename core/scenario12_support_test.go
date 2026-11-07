@@ -15,6 +15,7 @@ import (
 // specs/wiki/Vapor_pressure_of_water.txt:793-795; the anchor points are
 // standard steam-table values, not recomputed from the same formula).
 func TestPressurizerSatPressure_SteamTableAnchors(t *testing.T) {
+	t.Parallel()
 	assert.InDelta(t, 14.7, float64(PressurizerSatPressure(212)), 0.5,
 		"saturation at the normal boiling point must be atmospheric")
 	assert.InDelta(t, 134.7, float64(PressurizerSatPressure(350)), 4,
@@ -36,6 +37,7 @@ func TestPressurizerSatPressure_SteamTableAnchors(t *testing.T) {
 // operation."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:127-131
 func TestPressurizer_DepressurizeTracksSaturationToRHRSGate(t *testing.T) {
+	t.Parallel()
 	pz := Pressurizer{
 		Volume:   Volume{Val: 1500, Unit: u.Gallon},
 		Water:    Volume{Val: 1500, Unit: u.Gallon},
@@ -71,6 +73,7 @@ func TestPressurizer_DepressurizeTracksSaturationToRHRSGate(t *testing.T) {
 // "Steam dumps are adjusted to start a 50°F/hr cooldown rate."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:73-74
 func TestRPV_SecondaryExcessCoolsOutlet(t *testing.T) {
+	t.Parallel()
 	// Sized so the unclamped m*cp drop stays inside the operational
 	// program envelope (50 F/hr x 60 s = 0.83 F).
 	excess := Watts(40e6)
@@ -105,6 +108,7 @@ func TestRPV_SecondaryExcessCoolsOutlet(t *testing.T) {
 // the secondary: the deficit's share of production weights it to near
 // zero, so at-power anchors stay put.
 func TestRPV_SecondaryExcessSuppressedAtPower(t *testing.T) {
+	t.Parallel()
 	excess := Watts(200e6)
 	atPower := ReactorPressureVessel{
 		Outlet: Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
@@ -127,6 +131,7 @@ func TestRPV_SecondaryExcessSuppressedAtPower(t *testing.T) {
 // signals are blocked."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:108-110
 func TestRPS_SafetyInjectionBlockGatesActuation(t *testing.T) {
+	t.Parallel()
 	lowSteamline := RPSLowSteamlinePressureTrip - 10
 
 	blocked := ReactorProtectionSystem{SafetyInjectionBlocked: true}
@@ -151,6 +156,7 @@ func TestRPS_SafetyInjectionBlockGatesActuation(t *testing.T) {
 // would discharge, the accumulator isolation valves are closed."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:111-113
 func TestSIS_AccumulatorIsolationShutBlocksDischarge(t *testing.T) {
+	t.Parallel()
 	belowPrecharge := float64(SISAccumulatorPrechargePressure) - 1
 
 	shut := SIS{Accumulator: Accumulator{
@@ -183,6 +189,7 @@ func TestSIS_AccumulatorIsolationShutBlocksDischarge(t *testing.T) {
 // the steam generators are filled to the vents for wet layup."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:144-145
 func TestSteamGenerator_WetLayupFillTopsToVents(t *testing.T) {
+	t.Parallel()
 	live := SteamGenerator{
 		Volume: Volume{Val: 100000, Unit: u.Gallon},
 		Water:  Volume{Val: 30000, Unit: u.Gallon},
@@ -222,6 +229,7 @@ func TestSteamGenerator_WetLayupFillTopsToVents(t *testing.T) {
 // controlled manually during plant startup and cooldown."
 // specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115-116
 func TestCVCS_ChargingFlowDemandThrottlesManualFlow(t *testing.T) {
+	t.Parallel()
 	hotTavg := Temperature{Val: 571, Unit: u.Fahrenheit}
 	c := CVCS{ChargingPumpRunning: true}
 	c = c.Step(DefaultTimeStep, Volume{}, hotTavg, 0.6, PressurizerHeaterTarget)
@@ -249,6 +257,7 @@ func TestCVCS_ChargingFlowDemandThrottlesManualFlow(t *testing.T) {
 // not available when reactor coolant pumps have been secured."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:100-104
 func TestCVCS_AuxSprayDriveRequiresChargingPump(t *testing.T) {
+	t.Parallel()
 	secured := CVCS{AuxSprayValveOpen: 1}
 	secured = secured.Step(DefaultTimeStep, Volume{}, Temperature{}, 0.5, PressurizerHeaterTarget)
 	assert.Zero(t, secured.AuxSprayDrive,
@@ -269,6 +278,7 @@ func TestCVCS_AuxSprayDriveRequiresChargingPump(t *testing.T) {
 // with spray flow connections."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:96-98
 func TestPressurizer_NormalSprayNeedsRCPFlow(t *testing.T) {
+	t.Parallel()
 	hotLeg := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 	steps := int(time.Second / DefaultTimeStep)
 
@@ -301,6 +311,7 @@ func TestPressurizer_NormalSprayNeedsRCPFlow(t *testing.T) {
 // steam bubble exists in the pressurizer."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:104-106
 func TestPressurizer_AuxSprayControlsPressureWithRCPsSecured(t *testing.T) {
+	t.Parallel()
 	hotLeg := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 	pz := Pressurizer{
 		Volume:   Volume{Val: 1500, Unit: u.Gallon},
@@ -329,6 +340,7 @@ func TestPressurizer_AuxSprayControlsPressureWithRCPsSecured(t *testing.T) {
 // pressure across the CVCS letdown orifices."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:135-139
 func TestCVCS_LetdownFallsWithLowRcsPressure(t *testing.T) {
+	t.Parallel()
 	open := func(pzrPressure Pressure) CVCS {
 		c := CVCS{LetdownValveOpen: true}
 		return c.Step(DefaultTimeStep, Volume{}, Temperature{}, 0.5, pzrPressure)
@@ -358,6 +370,7 @@ func TestCVCS_LetdownFallsWithLowRcsPressure(t *testing.T) {
 // and losses."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:115-122
 func TestRHRS_SolidPlantPressureValveHoldsSelectedPressure(t *testing.T) {
+	t.Parallel()
 	rhrs := RHRS{Running: true,
 		SolidPlantPressureSetpoint: Pressure(400)}
 	rhrs.SolidPlantPressureValve.Open = 1
@@ -391,6 +404,7 @@ func TestRHRS_SolidPlantPressureValveHoldsSelectedPressure(t *testing.T) {
 // The valve has no authority without a running RHR train to force flow
 // between the two systems.
 func TestRHRS_SolidPlantValveNeedsRHRRunning(t *testing.T) {
+	t.Parallel()
 	rhrs := RHRS{SolidPlantPressureSetpoint: Pressure(400)}
 	rhrs.SolidPlantPressureValve.Open = 1
 	solid := Pressurizer{
@@ -409,6 +423,7 @@ func TestRHRS_SolidPlantValveNeedsRHRRunning(t *testing.T) {
 // through the bridge and the auxiliary spray must actually move plant
 // pressure with the reactor coolant pumps secured.
 func TestBridge_GapClosureControlsRoundTrip(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	m := GetControlMap(&p)
 
@@ -429,6 +444,7 @@ func TestBridge_GapClosureControlsRoundTrip(t *testing.T) {
 }
 
 func TestPlant_AuxSprayMovesPressureWithRCPsSecured(t *testing.T) {
+	t.Parallel()
 	run := func(auxOpen string) float64 {
 		p := MakePlant()
 		cm := GetControlMap(&p)

@@ -64,6 +64,7 @@ func scenario3ColdPlant() *Plant {
 // decay-plus-pump-heat balance, which must begin heating and stay under
 // the 50 F/hr limit.
 func TestScenario3_SecuredRHRSHeatupUnderLimit(t *testing.T) {
+	t.Parallel()
 	p := scenario3ColdPlant()
 
 	window := 5 * time.Second
@@ -115,6 +116,7 @@ func TestScenario3_SecuredRHRSHeatupUnderLimit(t *testing.T) {
 // pressure onto the no-load setpoint while Tavg holds the no-load band
 // and the PORV stays shut throughout.
 func TestScenario3_FinalPressurizationReachesNoLoadBands(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	rpv := &p.ReactorBuilding.ReactorPressureVessel
 	// Post-transit condition from the scenario execution: Tavg just

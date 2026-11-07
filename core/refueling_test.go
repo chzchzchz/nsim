@@ -11,6 +11,7 @@ import (
 // borated water at the design concentration, and the core holds
 // FuelAssembliesPerReactor (193) assemblies.
 func TestRefueling_InitialStateHasCompletedCycleAndFullPit(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	r := p.ReactorBuilding.RefuelingOperations
 	assert.Equal(t, RefuelingPhaseComplete, r.Phase,
@@ -57,6 +58,7 @@ func TestRefueling_InitialStateHasCompletedCycleAndFullPit(t *testing.T) {
 //     water"
 //     specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:43-44
 func TestRefueling_CavityFloodsToMaxDepth(t *testing.T) {
+	t.Parallel()
 	r := RefuelingOperations{
 		Phase:          RefuelingPhasePreparation,
 		CavityFlooding: true,
@@ -75,6 +77,7 @@ func TestRefueling_CavityFloodsToMaxDepth(t *testing.T) {
 // HeadRemoved and InternalsRemoved are cleared on entry to the
 // reassembly phase.
 func TestRefueling_CavityDrainsOnReassembly(t *testing.T) {
+	t.Parallel()
 	r := RefuelingOperations{
 		Phase:            RefuelingPhaseReassembly,
 		CavityFlooding:   false,
@@ -109,6 +112,7 @@ func TestRefueling_CavityDrainsOnReassembly(t *testing.T) {
 //     phases."
 //     specs/the_westinghouse_pressurized_water_react/chapter_13/page_183.txt:32-34
 func TestRefueling_PhaseAdvancesOnTimer(t *testing.T) {
+	t.Parallel()
 	r := RefuelingOperations{Phase: RefuelingPhasePreparation}
 	totalSec := 0.0
 	for i := 0; i < 6; i++ {
@@ -147,6 +151,7 @@ func TestRefueling_FuelTransfersAtMidPhaseHandling(t *testing.T) {
 // HeadRemoved and InternalsRemoved are set true on entry to the
 // disassembly phase.
 func TestRefueling_HeadAndInternalsRemovedAtDisassembly(t *testing.T) {
+	t.Parallel()
 	r := RefuelingOperations{Phase: RefuelingPhaseDisassembly}
 	r = r.Step(DefaultTimeStep)
 	assert.True(t, r.HeadRemoved,
@@ -160,6 +165,7 @@ func TestRefueling_HeadAndInternalsRemovedAtDisassembly(t *testing.T) {
 // initial phase stays at RefuelingPhaseComplete and no cavity
 // flooding happens without operator action.
 func TestPlant_Refueling_InitialStatePreserved(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()

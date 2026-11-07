@@ -14,6 +14,7 @@ import (
 // the design maximum, and the inlet temperature equals the
 // river source temperature.
 func TestSWS_InitialStateHasAllPumpsRunning(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	sws := p.Outside.ServiceWaterSystem
 	assert.True(t, sws.PumpRunning,
@@ -33,6 +34,7 @@ func TestSWS_InitialStateHasAllPumpsRunning(t *testing.T) {
 // A stopped SWS has zero flow and tracks the outlet at the
 // inlet.
 func TestSWS_StoppedPumpsHaveZeroFlow(t *testing.T) {
+	t.Parallel()
 	s := ServiceWaterSystem{
 		PumpRunning: true,
 		Flow:        ServiceWaterDesignFlow,
@@ -50,6 +52,7 @@ func TestSWS_StoppedPumpsHaveZeroFlow(t *testing.T) {
 // the inlet by the heat load divided by the per-second water
 // mass flow.
 func TestSWS_OutletTempRisesWithHeatLoad(t *testing.T) {
+	t.Parallel()
 	s := ServiceWaterSystem{
 		PumpRunning: true,
 		DriveReady:  true,
@@ -71,6 +74,7 @@ func TestSWS_OutletTempRisesWithHeatLoad(t *testing.T) {
 // header pressure in the normal range, standby off, and
 // purification flow at the design 100 gpm.
 func TestSFPCS_InitialStateHasTwoPumpsRunning(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	sf := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
 	assert.True(t, sf.LoopAPumpRunning && sf.LoopBPumpRunning,
@@ -96,6 +100,7 @@ func TestSFPCS_InitialStateHasTwoPumpsRunning(t *testing.T) {
 //     of 50 psig (4.5 bar)"
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:47-48
 func TestSFPCS_StandbyStartsBelow50psig(t *testing.T) {
+	t.Parallel()
 	s := SpentFuelPoolCoolingSystem{
 		LoopAPumpRunning: true,
 		LoopBPumpRunning: true,
@@ -110,6 +115,7 @@ func TestSFPCS_StandbyStartsBelow50psig(t *testing.T) {
 
 // Header pressure at or above 50 psig leaves the standby off.
 func TestSFPCS_StandbyOffAbove50psig(t *testing.T) {
+	t.Parallel()
 	s := SpentFuelPoolCoolingSystem{
 		LoopAPumpRunning: true,
 		LoopBPumpRunning: true,
@@ -124,6 +130,7 @@ func TestSFPCS_StandbyOffAbove50psig(t *testing.T) {
 
 // A stopped SFPCS has no purification flow and the standby off.
 func TestSFPCS_StoppedPumpsZeroPurificationFlow(t *testing.T) {
+	t.Parallel()
 	s := SpentFuelPoolCoolingSystem{
 		PurificationFlow: SFPCPurificationFlow,
 	}
@@ -139,6 +146,7 @@ func TestSFPCS_StoppedPumpsZeroPurificationFlow(t *testing.T) {
 // End-to-end via Plant.Step: SWS and SFPCS run at construction;
 // the SWS outlet picks up the RCFC heat sink.
 func TestSWS_EndToEndSteadyState(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	stepN(&p, int(15*time.Second/DefaultTimeStep), DefaultTimeStep)
 	sws := p.Outside.ServiceWaterSystem
@@ -168,6 +176,7 @@ func TestSWS_EndToEndSteadyState(t *testing.T) {
 //   - SI starts diesel + HHSI; SWS follows the same bus path:
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:109-118
 func TestSWS_PumpAutoStartsOnSafetySignal(t *testing.T) {
+	t.Parallel()
 	for _, cause := range []DieselStartCause{
 		DieselStartSafetyInjection,
 		DieselStartLossOfOffsitePower,

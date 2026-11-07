@@ -33,6 +33,7 @@ func scenario35Plant(t *testing.T) (Plant, time.Duration) {
 }
 
 func TestScenario35_MakeupAndBleedCampaignFillsHoldupThroughDivert(t *testing.T) {
+	t.Parallel()
 	p, testDt := scenario35Plant(t)
 	setControl(t, &p,
 		"ReactorBuilding/ReactorMakeupControlValve/Open", "1")
@@ -62,6 +63,7 @@ func TestScenario35_MakeupAndBleedCampaignFillsHoldupThroughDivert(t *testing.T)
 }
 
 func TestScenario35_ReclaimTrainSplitsFeedIntoProducts(t *testing.T) {
+	t.Parallel()
 	p, testDt := scenario35Plant(t)
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BRSHoldupLevel =
 		Volume{Val: 2500, Unit: u.Gallon}
@@ -98,6 +100,7 @@ func TestScenario35_ReclaimTrainSplitsFeedIntoProducts(t *testing.T) {
 }
 
 func TestScenario35_CarryoverTripsAutoDivertAndReleaseResumesDelivery(t *testing.T) {
+	t.Parallel()
 	p, testDt := scenario35Plant(t)
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BRSHoldupLevel =
 		Volume{Val: 1500, Unit: u.Gallon}
@@ -151,6 +154,7 @@ func TestScenario35_CarryoverTripsAutoDivertAndReleaseResumesDelivery(t *testing
 }
 
 func TestScenario35_StarvedTrainDrawsRecirculatedInventoryFirst(t *testing.T) {
+	t.Parallel()
 	brs := BoronRecycleSystem{
 		FeedPumpRunning: true,
 		Recirculating:   Volume{Val: 50, Unit: u.Gallon},
@@ -171,6 +175,7 @@ func TestScenario35_StarvedTrainDrawsRecirculatedInventoryFirst(t *testing.T) {
 // train whose available inventory covers less than one step's draw
 // reports the throttled rate it actually achieved.
 func TestScenario35_StarvingTrainReportsThrottledFeedFlow(t *testing.T) {
+	t.Parallel()
 	brs := BoronRecycleSystem{
 		FeedPumpRunning: true,
 		Recirculating:   Volume{Val: 0.002, Unit: u.Gallon},
@@ -191,6 +196,7 @@ func TestScenario35_StarvingTrainReportsThrottledFeedFlow(t *testing.T) {
 // carryover cannot drive its signal while no distillate is being
 // produced; the trip becomes reachable only once the train runs.
 func TestScenario35_MonitorNeedsProductionToReachItsTrip(t *testing.T) {
+	t.Parallel()
 	idle := BoronRecycleSystem{Carryover: true}
 	for i := 0; i < 400; i++ {
 		idle = idle.Step(DefaultTimeStep, 500)
@@ -216,6 +222,7 @@ func TestScenario35_MonitorNeedsProductionToReachItsTrip(t *testing.T) {
 // train and the only inventory leaving is 4 wt% concentrate: the
 // holdup draw collapses to the concentrate rate.
 func TestScenario35_DivertedTrainConsumesOnlyConcentrate(t *testing.T) {
+	t.Parallel()
 	s := BoronRecycleSystem{
 		FeedPumpRunning:     true,
 		Carryover:           true,
@@ -240,6 +247,7 @@ func TestScenario35_DivertedTrainConsumesOnlyConcentrate(t *testing.T) {
 // and unit-bearing volume survives marshal/decode identically
 // (CHECK_SKILL section 1).
 func TestScenario35_StateRoundTripsThroughJSON(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	seed := &p.AuxiliaryBuilding.BoronRecycleSystem
 	seed.FeedPumpRunning = true

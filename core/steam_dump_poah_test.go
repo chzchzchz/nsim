@@ -18,6 +18,7 @@ import (
 // The header must stay far above the low-steamline SI threshold while
 // cycling.
 func TestSteamDumpPressureModeArmsAtPOAH(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	rpv := &p.ReactorBuilding.ReactorPressureVessel
 	rpv.FissionPower = CoreRatedThermalPower / 100
@@ -64,13 +65,14 @@ func TestSteamDumpPressureModeArmsAtPOAH(t *testing.T) {
 // The widened tick only stretches valve travel and thermal lag, both of
 // which move slower than the sampled checkpoints..
 func TestSteamDumpPressureModeModulatesUnderSmallSurplus(t *testing.T) {
+	t.Parallel()
 	testDt := 10 * time.Millisecond
 	p := fullPowerLineup()
 	cm := p.GetControlMap()
 
 	for _, sp := range []string{"0.91", "0.82", "0.73", "0.64", "0.55"} {
 		require.NoError(t, cm["TurbineBuilding/Turbine/Setpoint"].Set(sp))
-		for i := 0; i < int(20*time.Second/DefaultTimeStep); i++ {
+		for i := 0; i < int(20*time.Second/testDt); i++ {
 			p.Step(testDt)
 			p.Update()
 		}
@@ -78,7 +80,7 @@ func TestSteamDumpPressureModeModulatesUnderSmallSurplus(t *testing.T) {
 
 	travel, maxP := 0.0, 0.0
 	prev := -1.0
-	for i := 0; i < int(60*time.Second/DefaultTimeStep); i++ {
+	for i := 0; i < int(60*time.Second/testDt); i++ {
 		p.Step(testDt)
 		p.Update()
 		d := float64(p.TurbineBuilding.Turbine.DumpValve.Open)

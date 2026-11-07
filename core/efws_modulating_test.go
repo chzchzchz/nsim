@@ -27,6 +27,7 @@ func runningMotorPump() EFWSPump {
 // will be full open."
 // specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:36-39
 func TestEFWS_ValvesFullOpenInsideActuationWindow(t *testing.T) {
+	t.Parallel()
 	e := EFWS{
 		Active:           true,
 		AutoStartElapsed: EFWSFullOpenPeriod - 5*time.Second,
@@ -48,6 +49,7 @@ func TestEFWS_ValvesFullOpenInsideActuationWindow(t *testing.T) {
 // generator water levels within the narrow control range."
 // specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:29-34
 func TestEFWS_ValvesThrottleAfterActuationWindow(t *testing.T) {
+	t.Parallel()
 	newActive := func(elapsed time.Duration) *EFWS {
 		return &EFWS{
 			Active:           true,
@@ -83,6 +85,7 @@ func TestEFWS_ValvesThrottleAfterActuationWindow(t *testing.T) {
 // controlled by positioning the flow modulating valves."
 // specs/the_westinghouse_pressurized_water_react/chapter_5/page_102.txt:14-18
 func TestEFWS_ManualStartLeavesOperatorValvePosition(t *testing.T) {
+	t.Parallel()
 	e := EFWS{
 		Active:     false,
 		SubsystemA: EFWSSubsystem{MotorPump: runningMotorPump()},
@@ -103,6 +106,7 @@ func TestEFWS_ManualStartLeavesOperatorValvePosition(t *testing.T) {
 // generator water levels within the narrow control range."
 // specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:29-34
 func TestPlant_EFWSWindowStopsFillBeforeHighLevelTrip(t *testing.T) {
+	t.Parallel()
 	testDt := 50 * time.Millisecond
 	p := MakePlant()
 	rpv := &p.ReactorBuilding.ReactorPressureVessel

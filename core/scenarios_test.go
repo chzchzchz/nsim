@@ -16,6 +16,7 @@ import (
 // as they are implemented, so item numbers may skip ahead of work
 // still pending; the order itself must never regress.
 func TestScenarioCatalogIdentifiers(t *testing.T) {
+	t.Parallel()
 	seen := make(map[string]bool)
 	prev := 0
 	for _, s := range Scenarios() {
@@ -43,6 +44,7 @@ func TestScenarioCatalogIdentifiers(t *testing.T) {
 // cleanly from time zero; a short run catches wiring mistakes such as
 // latches that instantly trip or panic on zero-valued fields.
 func TestScenarioOverridesStepCleanly(t *testing.T) {
+	t.Parallel()
 	for _, s := range Scenarios() {
 		t.Run(s.ID, func(t *testing.T) {
 			p := MakePlant()
@@ -56,6 +58,7 @@ func TestScenarioOverridesStepCleanly(t *testing.T) {
 // tick zero instead of relying on the first Step to reconcile
 // contradictory seeds.
 func TestFullPowerScenarioLineupIsSynchronized(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	Scenarios()[7].Apply(&p)
 
@@ -68,6 +71,7 @@ func TestFullPowerScenarioLineupIsSynchronized(t *testing.T) {
 // Wiring check on the shared hot-standby fixture: source-level power,
 // inserted rods, water-solid inventory, SI blocked per its citation.
 func TestColdScenarioLineupStaysSubcriticalAndSolid(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	Scenarios()[0].Apply(&p)
 
@@ -82,6 +86,7 @@ func TestColdScenarioLineupStaysSubcriticalAndSolid(t *testing.T) {
 // Wiring check: the post-trip lineup must hold its latches through
 // steps, not just at construction (RPS re-drives RPV.Trip).
 func TestPostTripScenarioLineupHoldsTripState(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	Scenarios()[15].Apply(&p)
 	stepN(&p, 100, DefaultTimeStep)
@@ -97,6 +102,7 @@ func TestPostTripScenarioLineupHoldsTripState(t *testing.T) {
 // through a registered control at the shared pacing delay, so the
 // transient starts from the healthy lineup instead of time zero.
 func TestMalfunctionScenariosScheduleTheirTrigger(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		id    string
 		key   string
@@ -137,6 +143,7 @@ func TestMalfunctionScenariosScheduleTheirTrigger(t *testing.T) {
 // ApplyScript consumes exactly the commands whose offset has been
 // reached and leaves the rest pending.
 func TestApplyScriptFiresOnlyDueCommands(t *testing.T) {
+	t.Parallel()
 	script := []ScriptCommand{
 		{AtMs: 1000, ControlKey: "PlantOperation/RodControlAuto", Value: "true"},
 		{AtMs: 5000, ControlKey: "PlantOperation/RodControlAuto", Value: "false"},
@@ -157,6 +164,7 @@ func TestApplyScriptFiresOnlyDueCommands(t *testing.T) {
 }
 
 func TestRefuelingScenarioStartsCavityFlood(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	Scenarios()[21].Apply(&p)
 
@@ -168,6 +176,7 @@ func TestRefuelingScenarioStartsCavityFlood(t *testing.T) {
 // Every catalog entry must carry end-state bounds, and no evolution
 // may start with its objective already satisfied.
 func TestScenarioChecksCoverCatalogAndStartUnmet(t *testing.T) {
+	t.Parallel()
 	catalog := Scenarios()
 	require.Len(t, scenarioChecks, len(catalog),
 		"check table must cover the catalog exactly")
@@ -189,6 +198,7 @@ func TestScenarioChecksCoverCatalogAndStartUnmet(t *testing.T) {
 // Representative satisfaction cases across the lineup families: each
 // seeds the checked end state directly and expects Done.
 func TestScenarioChecksFlipDoneAtTheirEndStates(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		id    string
 		reach func(*Plant)
@@ -255,6 +265,7 @@ func TestScenarioChecksFlipDoneAtTheirEndStates(t *testing.T) {
 // changes. Operator-action evolutions are excluded on purpose: their
 // bounds only hold once the operator performs the procedure.
 func TestScriptedScenariosResolveWithoutOperatorAction(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		id     string
 		budget time.Duration
@@ -295,6 +306,7 @@ func TestScriptedScenariosResolveWithoutOperatorAction(t *testing.T) {
 
 // RunProgress latches completion and gates it behind milestones.
 func TestRunProgressLatchesAndGates(t *testing.T) {
+	t.Parallel()
 	s, ok := ScenarioByID("grid-synchronization")
 	require.True(t, ok)
 	p := MakePlant()
@@ -326,6 +338,7 @@ func TestRunProgressLatchesAndGates(t *testing.T) {
 // A milestone-gated scenario stays pending until the operator has
 // exercised its lever, even with the end-state bounds satisfied.
 func TestRunProgressMilestoneGating(t *testing.T) {
+	t.Parallel()
 	s, ok := ScenarioByID("load-follow")
 	require.True(t, ok)
 	p := MakePlant()
@@ -355,6 +368,7 @@ func TestRunProgressMilestoneGating(t *testing.T) {
 // recirculation switchover, and swapping spray suction at the CSST
 // Lo-Lo setpoint. Both run through legitimate operator controls only.
 func TestOperatorActionScenariosResolve(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		id     string
 		budget time.Duration

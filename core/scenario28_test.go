@@ -281,6 +281,7 @@ func TestScenario28_SwitchoverAtRWSTLowThenHotLegRealignment(t *testing.T) {
 //     saturation temperature of the liquid at the reduced pressure."
 //     specs/wiki/Flash_evaporation.txt:651
 func TestRPV_BlowdownCoolingTracksSaturationWhileDischarging(t *testing.T) {
+	t.Parallel()
 	r := &ReactorPressureVessel{}
 	r.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
 	r.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
@@ -353,6 +354,7 @@ func TestScenario28_BlowdownCoolsCoolantPastProgramEnvelope(t *testing.T) {
 //     the RCS cold legs without interruption."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:175-177
 func TestReactor_ECCSInjectionMixesStorageTemperature(t *testing.T) {
+	t.Parallel()
 	r := &ReactorPressureVessel{}
 	r.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
 	r.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
@@ -403,6 +405,7 @@ func TestReactor_ECCSInjectionMixesStorageTemperature(t *testing.T) {
 // by at most one tick; and the assertion is differential between twin
 // legs that share any residual discretization bias.
 func TestScenario28_ECCSCreditCoolsRefilledPrimary(t *testing.T) {
+	t.Parallel()
 	// tick other stepping tests read, and a concurrent leg changes
 	// where the blowdown lands (observed: RPV pressure parked exactly
 	// at the accumulator precharge in a sibling test).
@@ -448,6 +451,7 @@ func TestScenario28_ECCSCreditCoolsRefilledPrimary(t *testing.T) {
 //     lines."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:172-177
 func TestScenario28_SumpSpillsDrawsAndStarves(t *testing.T) {
+	t.Parallel()
 	// Unit: an empty sump starves sump-suction delivery outright.
 	dry := SIS{
 		HHSIPumpRunning: true,

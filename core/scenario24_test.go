@@ -45,6 +45,7 @@ func newScenario24Plant(t *testing.T) *Plant {
 // the training DISABLE, specs/pwr_sim/chapter_4/page_052.txt:59-63),
 // and stays clear for a fully secured lineup.
 func TestRPS_LowFlowTripVotesDirectTripAtPower(t *testing.T) {
+	t.Parallel()
 	r := ReactorProtectionSystem{}
 	// Establish healthy forced flow first - the bistable must be set
 	// before a degradation can actuate (a rising startup ramp passing
@@ -92,6 +93,7 @@ func TestRPS_LowFlowTripVotesDirectTripAtPower(t *testing.T) {
 // coastdown decays flow exponentially through the trip setpoint, and
 // the scram lands with rods fully inserted.
 func TestPlant_SinglePumpTripStepsBackThenScramsOnLowFlow(t *testing.T) {
+	t.Parallel()
 	testDt := 10 * time.Millisecond
 	p := newScenario24Plant(t)
 	preTrip := float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower)
@@ -142,6 +144,7 @@ func TestPlant_SinglePumpTripStepsBackThenScramsOnLowFlow(t *testing.T) {
 // both the runback and the scram arrive sooner than the single-pump
 // case, and the settled aggregate flow sits near N/4 staging.
 func TestPlant_TwoPumpLossScramsSoonerWithLowerSettledFlow(t *testing.T) {
+	t.Parallel()
 	testDt := 10 * time.Millisecond
 
 	scramTime := func(tripCount int) (time.Duration, Velocity) {
@@ -181,6 +184,7 @@ func TestPlant_TwoPumpLossScramsSoonerWithLowerSettledFlow(t *testing.T) {
 // anyway ("the reactor shutdown system (SDS) is always poised to act",
 // specs/pwr_sim/chapter_4/page_051.txt:8-9).
 func TestPlant_StepbackFailureStillScramsViaSDS(t *testing.T) {
+	t.Parallel()
 	testDt := 10 * time.Millisecond
 	p := newScenario24Plant(t)
 	setControl(t, p, "PlantOperation/StepbackFailed", "1")
@@ -210,6 +214,7 @@ func TestPlant_StepbackFailureStillScramsViaSDS(t *testing.T) {
 // and the per-pass temperature rise drives the outlet upward inside the
 // model's rate envelope.
 func TestPlant_UnprotectedLossOfFlowChallengesMargin(t *testing.T) {
+	t.Parallel()
 	testDt := 10 * time.Millisecond
 	p := newScenario24Plant(t)
 	setControl(t, p, "PlantOperation/StepbackFailed", "1")
@@ -241,6 +246,7 @@ func TestPlant_UnprotectedLossOfFlowChallengesMargin(t *testing.T) {
 // Restarting the tripped machine restores forced flow above the
 // initiation band and releases the stepback latch before any scram.
 func TestPlant_StepbackReleasesWhenFlowRestores(t *testing.T) {
+	t.Parallel()
 	testDt := 10 * time.Millisecond
 	p := newScenario24Plant(t)
 
@@ -272,6 +278,7 @@ func TestPlant_StepbackReleasesWhenFlowRestores(t *testing.T) {
 // (natural circulation) follows exactly the full-flow trajectory, since
 // the gated divisor leaves both anchored.
 func TestRPV_FlowDegradedTargetRaisesOutletOnlyWhenForced(t *testing.T) {
+	t.Parallel()
 	testDt := 10 * time.Millisecond
 
 	outletAfter := func(speed Velocity) float64 {

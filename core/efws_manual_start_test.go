@@ -17,6 +17,7 @@ import (
 // its floor. The operator retains throttling authority after the start:
 // the snap happens only on the starting edge.
 func TestEFWS_ManualStartOpensValveAndDelivers(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.SteamGenerator.Pressure = Pressure(920)
 	cm := GetControlMap(&p)
@@ -36,6 +37,7 @@ func TestEFWS_ManualStartOpensValveAndDelivers(t *testing.T) {
 // valve below full open holds that position across steps while the pump
 // runs.
 func TestEFWS_OperatorThrottlePersistsAfterStart(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.ReactorBuilding.SteamGenerator.Pressure = Pressure(920)
 	cm := GetControlMap(&p)

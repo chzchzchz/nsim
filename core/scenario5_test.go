@@ -60,6 +60,7 @@ func runReactivityApproach(t *testing.T, boron float64, restInsertion float64, h
 }
 
 func TestScenario5_DilutionWithRodsInsertedStaysSubcritical(t *testing.T) {
+	t.Parallel()
 	r := scenario5Vessel()
 	r.BoronConcentration = CVCSInitialBoron - 400
 	for range int(10 * time.Second / DefaultTimeStep) {
@@ -71,6 +72,7 @@ func TestScenario5_DilutionWithRodsInsertedStaysSubcritical(t *testing.T) {
 }
 
 func TestScenario5_EstimatedCriticalPositionStaysSubcritical(t *testing.T) {
+	t.Parallel()
 	samples := runReactivityApproach(t, 600, 0.05, 20*time.Second)
 	last := samples[len(samples)-1]
 	assert.Equal(t, CoreNeutronSourcePower, last,
@@ -90,6 +92,7 @@ func rAtRest(t *testing.T, boron float64, insertion float64) float32 {
 }
 
 func TestScenario5_CrossingStepYieldsSustainedRiseWithoutRodMotion(t *testing.T) {
+	t.Parallel()
 	const (
 		measure      = 2 * time.Second
 		boron        = 600.0
@@ -137,6 +140,7 @@ func TestScenario5_CrossingStepYieldsSustainedRiseWithoutRodMotion(t *testing.T)
 }
 
 func TestScenario5_SmallReinsertionRestoresNegativeReactivity(t *testing.T) {
+	t.Parallel()
 	before := rAtRest(t, 600, 0.0445)
 	after := rAtRest(t, 600, 0.046)
 	require.Positive(t, before)
@@ -153,6 +157,7 @@ func TestScenario5_SmallReinsertionRestoresNegativeReactivity(t *testing.T) {
 // counts."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:161-163
 func TestScenario5_InstrumentsReportCriticalityEvidence(t *testing.T) {
+	t.Parallel()
 	r := scenario5Vessel()
 	r.BoronConcentration = 600
 	for range int(5 * time.Second / DefaultTimeStep) {
@@ -202,6 +207,7 @@ func TestScenario5_InstrumentsReportCriticalityEvidence(t *testing.T) {
 // the estimated critical concentration."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:136-138
 func TestScenario5_BoronSetpointRampsThroughFlowPath(t *testing.T) {
+	t.Parallel()
 	c := CVCS{BoronConcentration: 1000}
 	c.BoronTargetConcentration = 900
 	c.BoronSetpointTracking = true
@@ -235,6 +241,7 @@ func TestScenario5_BoronSetpointRampsThroughFlowPath(t *testing.T) {
 // insertion limit [...]"
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:30-31
 func TestScenario5_InsertionLimitBlocksDeepRestingPositions(t *testing.T) {
+	t.Parallel()
 	c := ControlRods{
 		Insertion:             1,
 		DemandInsertion:       0.5,
@@ -265,6 +272,7 @@ func TestScenario5_InsertionLimitBlocksDeepRestingPositions(t *testing.T) {
 // criticality while observing proper bank overlap."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:125,155-157
 func TestScenario5_BankIndicationsShowSequenceAndOverlap(t *testing.T) {
+	t.Parallel()
 	tripped := ControlRods{Insertion: 1}
 	assert.InDelta(t, 1, tripped.ShutdownBankInsertion(), 1e-9,
 		"full aggregate insertion reads every bank inserted")

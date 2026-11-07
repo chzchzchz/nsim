@@ -24,6 +24,7 @@ import (
 
 // The SWS inlet temperature tracks the river every step.
 func TestRiverFeedsServiceWaterInlet(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.RiverTemp = Temperature{Val: 88, Unit: u.Fahrenheit}
 	stepN(&p, 1, DefaultTimeStep)
@@ -36,6 +37,7 @@ func TestRiverFeedsServiceWaterInlet(t *testing.T) {
 // The RCFC coil inlet follows the river with a one-step lag
 // (the coils read the prior-step service water state).
 func TestRiverFeedsRCFCCoilInlet(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.RiverTemp = Temperature{Val: 88, Unit: u.Fahrenheit}
 	stepN(&p, 2, DefaultTimeStep)
@@ -50,6 +52,7 @@ func TestRiverFeedsRCFCCoilInlet(t *testing.T) {
 // With the service water pumps stopped the RCFC coils run dry:
 // no unit rejects heat and the coil outlet tracks the inlet.
 func TestLossOfServiceWaterKillsRCFCCooling(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = false
 	stepN(&p, 3, DefaultTimeStep)
@@ -72,6 +75,7 @@ func TestLossOfServiceWaterKillsRCFCCooling(t *testing.T) {
 // value (target = supply + approach); at the nominal 75°F river
 // the loop holds the spec value.
 func TestHotRiverLiftsCCWInletTarget(t *testing.T) {
+	t.Parallel()
 	hot := MakePlant()
 	hot.Outside.RiverTemp = Temperature{Val: 100, Unit: u.Fahrenheit}
 	stepN(&hot, 2, DefaultTimeStep)
@@ -94,6 +98,7 @@ func TestHotRiverLiftsCCWInletTarget(t *testing.T) {
 // Without service water flow the CCW loop soaks toward the
 // cooldown maximum and rejects no duty across its HX.
 func TestLossOfServiceWaterSoaksCCWLoop(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = false
 	stepN(&p, 2, DefaultTimeStep)
@@ -114,6 +119,7 @@ func TestLossOfServiceWaterSoaksCCWLoop(t *testing.T) {
 //   - "Component cooling heat exchangers"
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:81
 func TestSWSTotalHeatLoadIncludesCCWDuty(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	stepN(&p, 2, DefaultTimeStep)
 	rcfcSum := 0.0
@@ -144,6 +150,7 @@ func TestSWSTotalHeatLoadIncludesCCWDuty(t *testing.T) {
 //     as drops of a borated sodium hydroxide solution."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:4-7
 func TestContainment_SprayCondensationCoolsAtmosphere(t *testing.T) {
+	t.Parallel()
 	steps := 5 * int(time.Second/DefaultTimeStep)
 
 	base := MakePlant()
@@ -171,6 +178,7 @@ func TestContainment_SprayCondensationCoolsAtmosphere(t *testing.T) {
 //   - "Diesel generator coolers"
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:89
 func TestSWS_HeatLoadIncludesDieselJacketDuty(t *testing.T) {
+	t.Parallel()
 	// The asserted SWS outlet rise is assigned algebraically from
 	// the current duty list every step (sws.go), and the 15 s
 	// windows exist only to pass the timer-based ready deadline,

@@ -51,6 +51,7 @@ func newScenario1Plant(t *testing.T) Plant {
 }
 
 func TestScenario1_PrecriticalLineupReplay(t *testing.T) {
+	t.Parallel()
 	p := newScenario1Plant(t)
 
 	require.True(t, p.Electrical.ESFBusA.BreakerClosed,

@@ -37,6 +37,7 @@ func carryingDiesel() *DieselGenerator {
 // offsite, the instrument inverters are powered, and there
 // is no station blackout.
 func TestElecSys_InitialStateHasOffsiteAndEnergizedBuses(t *testing.T) {
+	t.Parallel()
 	e := PlantElectricalSystems{}
 	{
 		busA, busB, da, db := pesStepIn(true, true, nil, nil)
@@ -65,6 +66,7 @@ func TestElecSys_InitialStateHasOffsiteAndEnergizedBuses(t *testing.T) {
 // While the ESF buses stay energized, diesel start
 // timers do not accumulate and the diesels stay stopped.
 func TestElecSys_DieselsStayStoppedWhileBusesHealthy(t *testing.T) {
+	t.Parallel()
 	e := PlantElectricalSystems{}
 	for i := 0; i < int(60.0/DefaultTimeStep.Seconds()); i++ {
 		{
@@ -90,6 +92,7 @@ func TestElecSys_DieselsStayStoppedWhileBusesHealthy(t *testing.T) {
 // diesel reports Running once it has carried rated load for
 // DieselRatedLoadTime (30 s).
 func TestElecSys_DieselsStartOnLossOfOffsite(t *testing.T) {
+	t.Parallel()
 	e := PlantElectricalSystems{}
 	d := carryingDiesel()
 	busA, busB, da, db := pesStepIn(false, false, d, d)
@@ -109,6 +112,7 @@ func TestElecSys_DieselsStartOnLossOfOffsite(t *testing.T) {
 // unpowered and station blackout is declared (buses dark,
 // neither diesel carrying yet).
 func TestElecSys_StationBlackoutBeforeDieselReady(t *testing.T) {
+	t.Parallel()
 	e := PlantElectricalSystems{}
 	cranking := &DieselGenerator{State: DieselCranking}
 	busA, busB, da, db := pesStepIn(false, false, cranking, cranking)
@@ -130,6 +134,7 @@ func TestElecSys_StationBlackoutBeforeDieselReady(t *testing.T) {
 // Once the diesel picks up its bus, the ESF bus is energized
 // from the diesel and the inverter power is restored.
 func TestElecSys_ESFBusEnergizedAfterDieselAndAutoTransfer(t *testing.T) {
+	t.Parallel()
 	e := PlantElectricalSystems{}
 	d := carryingDiesel()
 	busA, busB, _, _ := pesStepIn(true, true, d, d)
@@ -153,6 +158,7 @@ func TestElecSys_ESFBusEnergizedAfterDieselAndAutoTransfer(t *testing.T) {
 // When a bus re-energizes from a non-diesel source, its diesel
 // start timer resets.
 func TestElecSys_OffsiteReturnResetsDieselTimers(t *testing.T) {
+	t.Parallel()
 	e := PlantElectricalSystems{}
 	da, db := carryingDiesel(), carryingDiesel()
 	busA, busB, _, _ := pesStepIn(false, false, da, db)
@@ -171,6 +177,7 @@ func TestElecSys_OffsiteReturnResetsDieselTimers(t *testing.T) {
 // One ESF bus energised from its diesel is enough to power
 // the inverter supply for RPS/ESF instrumentation channels.
 func TestElecSys_InverterPoweredFromEitherESFBus(t *testing.T) {
+	t.Parallel()
 	e := PlantElectricalSystems{}
 	d := carryingDiesel()
 	busA, busB, _, _ := pesStepIn(true, false, d, d)
@@ -188,6 +195,7 @@ func TestElecSys_InverterPoweredFromEitherESFBus(t *testing.T) {
 // Plant.Step, the initial offsite-healthy state is preserved
 // and the buses remain energized.
 func TestPlant_PlantElectricalSystems_InitialStatePreserved(t *testing.T) {
+	t.Parallel()
 	p := MakePlant()
 	p.Step(DefaultTimeStep)
 	p.Update()
