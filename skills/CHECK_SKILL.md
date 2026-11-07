@@ -680,3 +680,56 @@ Change classification and conflicts:
   the high side passes with the wrong reader. Assert presence on
   the high input and absence when only the look-alike is high,
   so the wrong field fails by name. (§5)
+
+### Issue collection (`plans/x/check_issues.md`)
+
+The general patterns collected from CHECK runs live in the linked
+`plans/x/check_issues.md` ("CHECK bug classes") — that path is a
+symlink to the shared plans tree, so the file follows the `plans/`
+symlink rather than being committed twice. One class per section,
+each carrying its mechanism and the probe that has caught it. The
+facility exists so a generic failure mode is findable from this
+skill instead of buried in one run's transcript — and so a run
+checks classes for presence rather than re-deriving them:
+
+- **When to add a class:** a CHECK run surfaces a failure mode the
+  checklist itself was meant to catch (wrong scale, detached pointer,
+  swallowed graph edge, Inf record) that is not already in the log.
+  Add it the moment it is confirmed.
+- **What we track:** general problems that recur, never specific
+  instances — no per-occurrence OPEN/FIXED, no per-instance closure
+  rows, no Watch list. Specific instances are in code comments and
+  git history; here they are instances of a class, named only as
+  examples inside the class's probe line.
+- **Row format:** **Pattern** (one line), **Why it happens**
+  (mechanism in one paragraph), **How to look** (the concrete probe),
+  **Covered by** (the CHECK section that keeps it in view).
+- **When to drop:** never remove a class — history is the point. If
+  a class stops being reachable, mark it retired.
+- **Reading it back (before you look for bugs):** at the start of
+  every CHECK run, read `plans/x/check_issues.md` top to bottom.
+  Each CLASS is checked for presence — "no instance found" is a
+  finding you state, not a blank. Re-derive the class's probe over
+  the new code before trusting the tissue slice: a class that the
+  slice touches is the strongest signal for a sibling bug.
+  The collected classes are starting points, **not a bound on the
+  review**: the rest of the checklist remains authoritative, and a
+  run is expected to look **for issues the collected probes would
+  not detect** — deliberately hunt for mechanisms outside the
+  collected classes, not only instances of them. If an uncollected
+  pattern appears, add it as a new class rather than forcing it
+  into the closest existing one.
+- **Summarizing and collapsing (periodic):** the file tracks general
+  bug *patterns*, not per-instance state — there is no OPEN/FIXED,
+  no closure row, no Watch list. When two rows share a mechanism
+  they are collapsed into one class (keep separate rows only when
+  the probe differs), and when a class has no covering section in
+  this file it triggers a §10 promotion in the same commit so the
+  skill and the log never drift apart.
+
+The bug-classes file lives next to the other `plans/x/` reference
+tables. It is not a plan slice (`pN_M.txt`), so it stays under
+`plans/x/` with the gap ledgers, not in the numbered plan series.
+If a run surfaces no new failure mode, say so — silence is itself a
+consistency check (the run taught nothing new that the bug-classes
+file does not already carry).
