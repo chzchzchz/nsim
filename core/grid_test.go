@@ -21,7 +21,7 @@ func TestGrid_StepPreservesFrequencyAndVoltage(t *testing.T) {
 		Frequency: GridRatedFrequency,
 		Voltage:   GridRatedVoltage,
 	}
-	out := g.Step()
+	out := g.Step(DefaultTimeStep)
 	assert.Equal(t, GridRatedFrequency, out.Frequency,
 		"want Frequency unchanged, got %v", out.Frequency)
 	assert.Equal(t, GridRatedVoltage, out.Voltage,
@@ -39,11 +39,11 @@ func TestGrid_OperatorCanApplyFrequencyStep(t *testing.T) {
 		Voltage:   GridRatedVoltage,
 	}
 	g.Frequency = 59.5
-	out := g.Step()
+	out := g.Step(DefaultTimeStep)
 	assert.InDelta(t, 59.5, out.Frequency, 1e-9,
 		"want Frequency=59.5 after operator step, got %v", out.Frequency)
 	g.Frequency = 60.5
-	out = g.Step()
+	out = g.Step(DefaultTimeStep)
 	assert.InDelta(t, 60.5, out.Frequency, 1e-9,
 		"want Frequency=60.5 after operator step, got %v", out.Frequency)
 }
@@ -71,7 +71,7 @@ func TestTurbine_DroopGovernorRaisesSetpointOnUnderFrequency(t *testing.T) {
 		GridFrequency: 59.5,
 	}
 	open := 1.0
-	tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, &open)
+	tr = tr.Step(DefaultTimeStep, SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, &open)
 	assert.InDelta(t, TurbineDroopBiasLimit, tr.DroopBias, 1e-9,
 		"want DroopBias capped at TurbineDroopBiasLimit=%v, got %v",
 		TurbineDroopBiasLimit, tr.DroopBias)
@@ -93,7 +93,7 @@ func TestTurbine_DroopGovernorLowersSetpointOnOverFrequency(t *testing.T) {
 		GridFrequency: 60.5,
 	}
 	open := 1.0
-	tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, &open)
+	tr = tr.Step(DefaultTimeStep, SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, &open)
 	assert.Less(t, tr.Setpoint, 1.0,
 		"want Setpoint < 1.0 after over-frequency droop, got %v", tr.Setpoint)
 	assert.InDelta(t, 1.0-TurbineDroopBiasLimit, tr.Setpoint, 1e-9,
@@ -113,7 +113,7 @@ func TestTurbine_DroopGovernorZeroBiasAtRatedFrequency(t *testing.T) {
 		GridFrequency: GridRatedFrequency,
 	}
 	open := 1.0
-	tr = tr.Step(SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, &open)
+	tr = tr.Step(DefaultTimeStep, SteamGeneratorShellPressure, 0, Temperature{Val: 600}, false, &open)
 	assert.InDelta(t, 0.75, tr.Setpoint, 1e-9,
 		"want Setpoint unchanged at rated frequency, got %v", tr.Setpoint)
 	assert.Zero(t, tr.DroopBias,

@@ -2,20 +2,22 @@ package core
 
 import (
 	u "github.com/bcicen/go-units"
+	"time"
 )
 
-// Step advances the low-pressure feedwater heater by TimeStep. The
+// Step advances the low-pressure feedwater heater by ProductionStep. The
 // caller supplies the feedwater inlet temperature and the per-step
 // extraction steam mass flow.
 //
 // Model:
-//   Per-stage temperature rise is proportional to the ratio of the
-//   supplied extraction steam flow to the design extraction steam
-//   flow, capped at 2× the design per-stage rise. This is a "gain"
-//   model that captures the qualitative behaviour (more steam → more
-//   heat → larger rise) without modelling the explicit extraction-
-//   steam chest per turbine stage (which the spec describes but
-//   the simulator does not yet have a turbine-extraction model for).
+//
+//	Per-stage temperature rise is proportional to the ratio of the
+//	supplied extraction steam flow to the design extraction steam
+//	flow, capped at 2× the design per-stage rise. This is a "gain"
+//	model that captures the qualitative behaviour (more steam → more
+//	heat → larger rise) without modelling the explicit extraction-
+//	steam chest per turbine stage (which the spec describes but
+//	the simulator does not yet have a turbine-extraction model for).
 //
 // Spec justification for the upstream topology:
 //   - "The condensate pumps take suction from the condenser hotwell
@@ -31,9 +33,8 @@ import (
 // LPTemperatureRisePerStage. DrainValve gates the drain path; the
 // heater produces no useful rise when the valve is closed or no
 // extraction steam flows.
-func (h *LowPressureHeater) Step(fwInletF float64, steamFlowGalPerStep float64) LowPressureHeater {
+func (h *LowPressureHeater) Step(dt time.Duration, fwInletF float64, steamFlowGalPerStep float64) LowPressureHeater {
 	ret := *h
-	dt := TimeStep
 
 	ret.Inlet = Temperature{Val: fwInletF, Unit: u.Fahrenheit}
 
@@ -56,12 +57,12 @@ func (h *LowPressureHeater) Step(fwInletF float64, steamFlowGalPerStep float64) 
 	// Drain accumulation: condensed steam goes to drain level.
 	// LP heater drains cascade back to the condenser; this
 	// accumulation is consumed by TurbineBuilding.StepWithSteam.
-	ret.DrainLevel = Volume{Val: ret.DrainLevel.Float()+steamFlowGalPerStep*dt.Seconds(), Unit: u.Gallon}
+	ret.DrainLevel = Volume{Val: ret.DrainLevel.Float() + steamFlowGalPerStep*dt.Seconds(), Unit: u.Gallon}
 
 	return ret
 }
 
-// Step advances the high-pressure feedwater heater by TimeStep. The
+// Step advances the high-pressure feedwater heater by ProductionStep. The
 // model is identical to the LP heater but the per-stage rise is
 // smaller (HPTemperatureRisePerStage) because the feedwater is
 // already pre-heated by the LP train.
@@ -74,9 +75,8 @@ func (h *LowPressureHeater) Step(fwInletF float64, steamFlowGalPerStep float64) 
 //   - "Drains from the high-pressure feedwater heaters are routed
 //     to the deaerator."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:13-14
-func (h *HighPressureHeater) Step(fwInletF float64, steamFlowGalPerStep float64) HighPressureHeater {
+func (h *HighPressureHeater) Step(dt time.Duration, fwInletF float64, steamFlowGalPerStep float64) HighPressureHeater {
 	ret := *h
-	dt := TimeStep
 
 	ret.Inlet = Temperature{Val: fwInletF, Unit: u.Fahrenheit}
 
@@ -92,7 +92,7 @@ func (h *HighPressureHeater) Step(fwInletF float64, steamFlowGalPerStep float64)
 	deltaTF = min(deltaTF, HPTemperatureRisePerStage*2)
 	ret.TemperatureRise = Temperature{Val: deltaTF, Unit: u.Fahrenheit}
 
-	ret.DrainLevel = Volume{Val: ret.DrainLevel.Float()+steamFlowGalPerStep*dt.Seconds(), Unit: u.Gallon}
+	ret.DrainLevel = Volume{Val: ret.DrainLevel.Float() + steamFlowGalPerStep*dt.Seconds(), Unit: u.Gallon}
 
 	return ret
 }

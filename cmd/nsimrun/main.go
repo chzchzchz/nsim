@@ -144,17 +144,17 @@ func main() {
 		return cmds[i].TimeOffsetMs < cmds[j].TimeOffsetMs
 	})
 
-	steps := int(*seconds / core.TimeStep.Seconds())
+	steps := int(*seconds / core.DefaultTimeStep.Seconds())
 	cmdIndex := 0
 	for i := 0; i < steps; i++ {
-		elapsedMs := i * int(core.TimeStep.Milliseconds())
+		elapsedMs := i * int(core.DefaultTimeStep.Milliseconds())
 		for cmdIndex < len(cmds) && cmds[cmdIndex].TimeOffsetMs <= int64(elapsedMs) {
 			if err := cmdfile.Apply(controlMap, cmds[cmdIndex]); err != nil {
 				log.Printf("command error at %d ms: %v", cmds[cmdIndex].TimeOffsetMs, err)
 			}
 			cmdIndex++
 		}
-		p.Step()
+		p.Step(core.DefaultTimeStep)
 		p.Update()
 		if progress != nil {
 			progress.Observe(&p, int64(elapsedMs)*int64(time.Millisecond))
@@ -204,6 +204,6 @@ func main() {
 	// clean single JSON document for -plant chaining.
 	for _, a := range p.Alarms() {
 		fmt.Fprintf(os.Stderr, "alarm at %d ms: %s\n",
-			steps*int(core.TimeStep.Milliseconds()), a)
+			steps*int(core.DefaultTimeStep.Milliseconds()), a)
 	}
 }

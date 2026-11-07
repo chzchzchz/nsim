@@ -66,10 +66,10 @@ func TestXenonBurnoutPacesReturnToPower(t *testing.T) {
 // demand stays permitted. This is the automatic branch of the rods-only
 // return-to-power caveat.
 //
-//   "Tavg will continue to drop until turbine loading is stopped
-//    either by manual operation or automatically upon reaching the
-//    low Tavg deviation setpoint signal."
-//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_232.txt:62-66
+//	"Tavg will continue to drop until turbine loading is stopped
+//	 either by manual operation or automatically upon reaching the
+//	 low Tavg deviation setpoint signal."
+//	specs/the_westinghouse_pressurized_water_react/chapter_16/page_232.txt:62-66
 func TestTurbineLowTavgDeviationStopsLoading(t *testing.T) {
 	newAscending := func() Turbine {
 		return Turbine{
@@ -82,7 +82,7 @@ func TestTurbineLowTavgDeviationStopsLoading(t *testing.T) {
 			LubeOilPumpRunning: true,
 		}
 	}
-	minute := int(time.Minute / TimeStep)
+	minute := int(time.Minute / DefaultTimeStep)
 	open := 1.0
 
 	// Loading with Tavg tracking the program ascends freely and never
@@ -90,7 +90,7 @@ func TestTurbineLowTavgDeviationStopsLoading(t *testing.T) {
 	// 0.9 -> 1.0).
 	tracking := newAscending()
 	for i := 0; i < 2*minute; i++ {
-		tracking = tracking.Step(1000, 0,
+		tracking = tracking.Step(DefaultTimeStep, 1000, 0,
 			Temperature{Val: programmedRodTavg(tracking.Setpoint)},
 			false, &open)
 	}
@@ -104,7 +104,7 @@ func TestTurbineLowTavgDeviationStopsLoading(t *testing.T) {
 	sagging := newAscending()
 	coldTavg := programmedRodTavg(0.9) + TurbineLowTavgDeviationF - 1
 	for i := 0; i < minute; i++ {
-		sagging = sagging.Step(1000, 0,
+		sagging = sagging.Step(DefaultTimeStep, 1000, 0,
 			Temperature{Val: coldTavg}, false, &open)
 	}
 	assert.InDelta(t, 0.9, sagging.Setpoint, 1e-9,
@@ -115,7 +115,7 @@ func TestTurbineLowTavgDeviationStopsLoading(t *testing.T) {
 	// Recovery releases the hold and loading resumes toward the
 	// reference.
 	for i := 0; i < minute; i++ {
-		sagging = sagging.Step(1000, 0,
+		sagging = sagging.Step(DefaultTimeStep, 1000, 0,
 			Temperature{Val: programmedRodTavg(sagging.Setpoint)},
 			false, &open)
 	}
@@ -127,10 +127,10 @@ func TestTurbineLowTavgDeviationStopsLoading(t *testing.T) {
 	// Lowering the demand under an active hold stays permitted: the
 	// stop gates the ascent only.
 	held := newAscending()
-	held.Step(1000, 0, Temperature{Val: coldTavg}, false, &open)
+	held.Step(DefaultTimeStep, 1000, 0, Temperature{Val: coldTavg}, false, &open)
 	held.LoadDemandRef = 0.85
-	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		held = held.Step(1000, 0, Temperature{Val: coldTavg}, false, &open)
+	for i := 0; i < int(10*time.Second/DefaultTimeStep); i++ {
+		held = held.Step(DefaultTimeStep, 1000, 0, Temperature{Val: coldTavg}, false, &open)
 	}
 	assert.Less(t, held.Setpoint, 0.9,
 		"descent toward a lowered demand must stay permitted under hold")

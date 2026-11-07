@@ -1348,7 +1348,7 @@ type ControlRods struct {
 // and the rate-limited target written into the returned copy.
 // The clamp at [0,1] mirrors the normalised-kind validation in
 // the bridge Set path.
-func (c ControlRods) Step() ControlRods {
+func (c ControlRods) Step(dt time.Duration) ControlRods {
 	ret := c
 	demand := ret.DemandInsertion
 	demand = min(max(demand, 0), 1)
@@ -1357,7 +1357,7 @@ func (c ControlRods) Step() ControlRods {
 		ret.DemandInsertion = demand
 	}
 	delta := demand - c.Insertion
-	maxStep := RodInsertionSpeed * TimeStep.Seconds()
+	maxStep := RodInsertionSpeed * dt.Seconds()
 	ret.Insertion = c.Insertion + min(max(delta, -maxStep), maxStep)
 	// The dropped bank sits below every reachable position: no drive
 	// motion recovers it, whatever the demand does.
@@ -4835,7 +4835,7 @@ const (
 // Refueling phase durations (hours). The spec does not state
 // exact per-phase times; the table below uses typical values for
 // a four-loop plant. Phase durations are wall-clock hours; the
-// phase timer advances TimeStep seconds per step.
+// phase timer advances ProductionStep seconds per step.
 //
 // Spec justification:
 //   - Five phases listed (timing not specified per-phase).
@@ -5731,7 +5731,7 @@ type PlantControlRoom struct {
 	// Plant.Step calls Step exactly once per tick, so the
 	// clock tracks simulation time and stamps each alarm's
 	// activation moment in AlarmSet.
-	SimTimeNs int64
+	SimTimeNs         int64
 	AlarmAcknowledged bool
 
 	// AlarmSet is the per-condition acknowledgement map keyed
@@ -6454,7 +6454,7 @@ type PlantOperation struct {
 	//    action initiated by the reactor control system ... However,
 	//    the reactor shutdown system (SDS) is always poised to act,
 	//    should those alarm limits reach the trip setpoint."
-		//   specs/pwr_sim/chapter_4/page_051.txt:5-9
+	//   specs/pwr_sim/chapter_4/page_051.txt:5-9
 	StepbackFailed bool
 
 	// StepbackFlowArmed is the runback's flow latch: it sets once
@@ -6507,7 +6507,7 @@ type PlantOperation struct {
 // trigger models the pump-trip response "The loss of one RC pump will
 // immediately initiate reactor power stepback"
 // (specs/pwr_sim/chapter_4/page_051.txt:44-46).
-func (po PlantOperation) Stepback(tstate TurbineState, flowFrac float64, rpv ReactorPressureVessel) PlantOperation {
+func (po PlantOperation) Stepback(dt time.Duration, tstate TurbineState, flowFrac float64, rpv ReactorPressureVessel) PlantOperation {
 	ret := po
 	if rpv.Trip {
 		ret.StepbackActive = false
@@ -6556,7 +6556,7 @@ func (po PlantOperation) Stepback(tstate TurbineState, flowFrac float64, rpv Rea
 	rhoTarget := -StepbackApproachBias * errFrac
 	rate := max(min(StepbackControlGain*(float64(rpv.Reactivity)-rhoTarget),
 		RodInsertionSpeed), -RodInsertionSpeed)
-	demand := ret.StepbackDemand + rate*TimeStep.Seconds()
+	demand := ret.StepbackDemand + rate*dt.Seconds()
 	ret.StepbackDemand = min(max(demand, 0), 1)
 	// Dilute for the whole hold: at fresh-fuel chemistry a part-load
 	// park does not self-arrest (the fold would otherwise sink toward
@@ -6566,7 +6566,7 @@ func (po PlantOperation) Stepback(tstate TurbineState, flowFrac float64, rpv Rea
 	//   "Dilute to maneuvering chemistry so the fold self-arrests"
 	//   core/scenario17_test.go (93fa73c); plans/x/scenario/15.txt gap A2
 	ret.StepbackCVCSDilute = true
-	ret.StepbackElapsed += TimeStep
+	ret.StepbackElapsed += dt
 	if ret.StepbackElapsed >= StepbackMaxHold {
 		// Xenon growth on the model's compressed timescale eventually
 		// exhausts rod trim authority (gap A2); hand back to the
@@ -6595,7 +6595,7 @@ func (po PlantOperation) Stepback(tstate TurbineState, flowFrac float64, rpv Rea
 //     steam flow, the steam generators feedwater supply is switched
 //     to the main feedwater system."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:129-133
-func (po *PlantOperation) Step(
+func (po *PlantOperation) Step(dt time.Duration,
 	mode PlantOperationalMode,
 	rcsTemp Temperature,
 	rcsPressure Pressure,
@@ -6648,12 +6648,12 @@ func (po *PlantOperation) Step(
 			normalisedPowerDelta*OpHeatupRateLimit,
 			OpHeatupRateLimit,
 			OpCooldownRateLimit,
-			TimeStep,
+			dt,
 		)
 		powerDemandDelta := targetLoadFraction*float64(ratedPower) -
 			float64(reactorPower)
 		absRate := OpPowerRaiseRate * float64(ratedPower) *
-			TimeStep.Seconds()
+			dt.Seconds()
 		switch {
 		case powerDemandDelta > absRate:
 			ret.RampingUp = true

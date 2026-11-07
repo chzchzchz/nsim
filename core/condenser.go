@@ -6,8 +6,7 @@ import (
 	u "github.com/bcicen/go-units"
 )
 
-
-// Step advances the main condenser by TimeStep.
+// Step advances the main condenser by ProductionStep.
 // Two coupled phenomena are modelled:
 //
 //  1. The condenser is normally held at sub-atmospheric vacuum by
@@ -37,16 +36,15 @@ import (
 // caller (Plant.Step), since those pumps live on the Outside and
 // Electrical structs respectively. The condenser itself is a passive
 // heat exchanger with no internal state machine.
-func (c *Condenser) Step(cwIn Temperature, vacuumPumpRunning, cwPumpRunning bool) Condenser {
+func (c *Condenser) Step(dt time.Duration, cwIn Temperature, vacuumPumpRunning, cwPumpRunning bool) Condenser {
 	ret := *c
-	dt := TimeStep
 
 	// 1) Steam mass balance. CondensingRate is set by
 	// TurbineBuilding.StepWithSteam before this call and represents
 	// the per-step steam mass condensed (in gallons). Convert to
 	// condensate level on the shell side.
 	steamMass := ret.CondensingRate.Float()
-	ret.Level = Volume{Val: ret.Level.Float()+steamMass, Unit: u.Gallon}
+	ret.Level = Volume{Val: ret.Level.Float() + steamMass, Unit: u.Gallon}
 
 	// 2) Heat sink: when the CW pump is off, the tube bundle has no
 	// flow. Condenser pressure relaxes toward atmospheric at the
@@ -93,7 +91,7 @@ func (c *Condenser) Step(cwIn Temperature, vacuumPumpRunning, cwPumpRunning bool
 	// is CondenserCWRise. Below design flow the delta-T scales
 	// inversely with the flow ratio.
 	cwDelta := CondenserCWRise * (CondenserDesignCWFlowGPM / cwFlowGpm)
-	ret.CWOut = Temperature{Val: cwIn.Float()+cwDelta, Unit: u.Fahrenheit}
+	ret.CWOut = Temperature{Val: cwIn.Float() + cwDelta, Unit: u.Fahrenheit}
 
 	// 5) Hotwell level. Accumulates the per-step condensed steam.
 	// Suction is the condensate pump's job and is drawn by
@@ -150,12 +148,14 @@ type Condenser struct {
 	CWOut              Temperature
 	CondensingRate     Volume
 }
+
 // AtmosphericPressure is the standard sea-level pressure the
 // condenser back-pressure relaxes toward when the vacuum pumps and
 // circulating-water pumps are unavailable. Not stated explicitly in
 // the Westinghouse PWR spec but used to bound the no-CW condenser
 // degradation.
 const AtmosphericPressure Pressure = 14.7
+
 // Condenser and main-steam system constants (plans/p9_1.txt).
 //
 // Spec justification:
@@ -239,8 +239,7 @@ const (
 
 	// CirculatingWaterDesignFlowGPM is the total CWS design
 	// flow when both pumps are in service (gal/min).
-	CirculatingWaterDesignFlowGPM =
-		CirculatingWaterPumpFlowGPM * CirculatingWaterPumpCount
+	CirculatingWaterDesignFlowGPM = CirculatingWaterPumpFlowGPM * CirculatingWaterPumpCount
 
 	// CoolingTowerApproachF is the steady-state difference
 	// between the tower cold-basin temperature and the ambient

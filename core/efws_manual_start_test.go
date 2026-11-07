@@ -22,7 +22,7 @@ func TestEFWS_ManualStartOpensValveAndDelivers(t *testing.T) {
 	cm := GetControlMap(&p)
 
 	require.NoError(t, cm["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePumpRunning"].Set("1"))
-	stepN(&p, 2)
+	stepN(&p, 2, DefaultTimeStep)
 
 	assert.Equal(t, 1.0,
 		float64(p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.FlowModulatingValve.Open),
@@ -42,7 +42,7 @@ func TestEFWS_OperatorThrottlePersistsAfterStart(t *testing.T) {
 
 	require.NoError(t, cm["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePumpRunning"].Set("1"))
 	require.NoError(t, cm["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/FlowModulatingValve/Open"].Set("0.3"))
-	stepN(&p, 5)
+	stepN(&p, 5, DefaultTimeStep)
 
 	assert.Equal(t, 0.3,
 		float64(p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.FlowModulatingValve.Open),

@@ -103,7 +103,7 @@ func TestEFWS_ManualStartLeavesOperatorValvePosition(t *testing.T) {
 // generator water levels within the narrow control range."
 // specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:29-34
 func TestPlant_EFWSWindowStopsFillBeforeHighLevelTrip(t *testing.T) {
-	overrideTimeStep(t, 50*time.Millisecond)
+	testDt := 50 * time.Millisecond
 	p := MakePlant()
 	rpv := &p.ReactorBuilding.ReactorPressureVessel
 	rpv.Insertion = 1
@@ -134,7 +134,7 @@ func TestPlant_EFWSWindowStopsFillBeforeHighLevelTrip(t *testing.T) {
 		}
 	}
 
-	stepN(&p, int(3*time.Minute/TimeStep))
+	stepN(&p, int(3*time.Minute/testDt), testDt)
 
 	waterPct := 100.0 * p.ReactorBuilding.SteamGenerator.Water.Float() /
 		p.ReactorBuilding.SteamGenerator.Volume.Float()

@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // Step advances the Refueling Operations state machine by one
 // timestep. The simplified model implements five state-machine
 // transitions and a cavity flood/drain ramp:
@@ -49,10 +51,10 @@ package core
 //   - First-core assembly count: "Of the 193 fuel assemblies
 //     contained in a fourloop reactor first core."
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_040.txt:37-39
-func (r *RefuelingOperations) Step() RefuelingOperations {
+func (r *RefuelingOperations) Step(dt time.Duration) RefuelingOperations {
 	ret := *r
 
-	dt := TimeStep.Seconds()
+	dtSec := dt.Seconds()
 
 	// Phase-relative actions: cavity flooding in preparation,
 	// head/internals removal in disassembly, fuel transfer in
@@ -64,7 +66,7 @@ func (r *RefuelingOperations) Step() RefuelingOperations {
 		// (feet per minute), converted to feet per second.
 		if ret.CavityFlooding {
 			ret.CavityFloodDepth += RefuelingCavityFloodRate *
-				dt / 60.0
+				dtSec / 60.0
 			if ret.CavityFloodDepth >= RefuelingCavityMaxDepth {
 				ret.CavityFloodDepth = RefuelingCavityMaxDepth
 				ret.CavityFlooded = true
@@ -95,7 +97,7 @@ func (r *RefuelingOperations) Step() RefuelingOperations {
 		ret.InternalsRemoved = false
 		if ret.CavityDraining {
 			ret.CavityFloodDepth -= RefuelingCavityDrainRate *
-				dt / 60.0
+				dtSec / 60.0
 			if ret.CavityFloodDepth <= 0 {
 				ret.CavityFloodDepth = 0
 				ret.CavityFlooded = false
@@ -112,7 +114,7 @@ func (r *RefuelingOperations) Step() RefuelingOperations {
 	// Advance phase timer. When the timer reaches the
 	// configured duration for the current phase, advance to
 	// the next phase and reset the timer.
-	ret.PhaseTimer += dt
+	ret.PhaseTimer += dtSec
 	if ret.Phase < RefuelingPhaseComplete {
 		if ret.PhaseTimer >= RefuelingPhaseDurations[ret.Phase] {
 			ret.Phase++
@@ -125,21 +127,21 @@ func (r *RefuelingOperations) Step() RefuelingOperations {
 
 // StepBy advances the Refueling Operations state machine by
 // the given elapsed wall-clock duration (seconds). It runs
-// Step() once per TimeStep, but skips whole phases whose
+// Step() once per ProductionStep, but skips whole phases whose
 // duration fits entirely within the remaining budget and
 // whose phase-relative actions do not need per-step
 // resolution (i.e. everything except cavity flood and
 // drain). For the cavity flood/drain phases the function
-// still calls Step() per TimeStep so the ramp integrates
+// still calls Step() per ProductionStep so the ramp integrates
 // correctly. Returns the state at the end of the elapsed
 // duration, or at RefuelingPhaseComplete if reached first.
-func (r *RefuelingOperations) StepBy(seconds float64) RefuelingOperations {
+func (r *RefuelingOperations) StepBy(dt time.Duration, seconds float64) RefuelingOperations {
 	ret := *r
-	dt := TimeStep.Seconds()
+	dtSec := dt.Seconds()
 	remaining := seconds
 	for remaining > 0 && ret.Phase < RefuelingPhaseComplete {
 		phase := ret.Phase
-		// Phases that use TimeStep-fine integration: skip
+		// Phases that use ProductionStep-fine integration: skip
 		// the cheap path and let the per-step loop below
 		// handle them.
 		needsPerStep := (phase == RefuelingPhasePreparation &&
@@ -153,8 +155,8 @@ func (r *RefuelingOperations) StepBy(seconds float64) RefuelingOperations {
 			ret.PhaseTimer = 0
 			continue
 		}
-		ret = ret.Step()
-		remaining -= dt
+		ret = ret.Step(dt)
+		remaining -= dtSec
 		if ret.Phase == RefuelingPhaseComplete {
 			break
 		}

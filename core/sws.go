@@ -2,6 +2,7 @@ package core
 
 import (
 	"math"
+	"time"
 
 	u "github.com/bcicen/go-units"
 )
@@ -9,21 +10,21 @@ import (
 // Step advances the Service Water System by one timestep. The
 // step function implements four state machines:
 //
-//   1. Inlet temperature. The inlet tracks Outside.RiverTemp
-//      every step; the service water pumps share the river
-//      intake house with the circulating water pumps.
-//   2. Pump running state. While PumpRunning is true, the lumped
-//      flow equals ServiceWaterPumpFlow × number of running
-//      pumps (capped at ServiceWaterEssentialPumpCount). The
-//      simplified model collapses the three physical pumps into
-//      a single boolean.
-//   3. Outlet temperature. The mixed service water outlet
-//      temperature rises above the source by the heat load
-//      divided by the per-second water mass flow, capped at the
-//      design rise to prevent instability at large timesteps.
-//   4. Nonessential isolation. The NonessentialIsolated flag is
-//      set by the operator during accident conditions to
-//      conserve water for safety-grade loads.
+//  1. Inlet temperature. The inlet tracks Outside.RiverTemp
+//     every step; the service water pumps share the river
+//     intake house with the circulating water pumps.
+//  2. Pump running state. While PumpRunning is true, the lumped
+//     flow equals ServiceWaterPumpFlow × number of running
+//     pumps (capped at ServiceWaterEssentialPumpCount). The
+//     simplified model collapses the three physical pumps into
+//     a single boolean.
+//  3. Outlet temperature. The mixed service water outlet
+//     temperature rises above the source by the heat load
+//     divided by the per-second water mass flow, capped at the
+//     design rise to prevent instability at large timesteps.
+//  4. Nonessential isolation. The NonessentialIsolated flag is
+//     set by the operator during accident conditions to
+//     conserve water for safety-grade loads.
 //
 // Spec justification:
 //   - Shared river intake: "serves one circulating water pump
@@ -41,7 +42,7 @@ import (
 //     branch headers that can be isolated from the main headers
 //     under accident conditions to conserve water."
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:23-26
-func (s *ServiceWaterSystem) Step(
+func (s *ServiceWaterSystem) Step(dt time.Duration,
 	riverTemp Temperature,
 	heatLoad Watts,
 ) ServiceWaterSystem {
@@ -73,7 +74,7 @@ func (s *ServiceWaterSystem) Step(
 		deltaF := float64(heatLoad) / (massKgPerS * cpWater) *
 			9.0 / 5.0
 		deltaF = max(deltaF, 0)
-		ret.OutletTemp = Temperature{Val: ret.InletTemp.Float()+deltaF, Unit: u.Fahrenheit}
+		ret.OutletTemp = Temperature{Val: ret.InletTemp.Float() + deltaF, Unit: u.Fahrenheit}
 	} else {
 		ret.OutletTemp = ret.InletTemp
 	}
@@ -84,21 +85,21 @@ func (s *ServiceWaterSystem) Step(
 // Step advances the Spent Fuel Pool Cooling System by one
 // timestep. The step function implements four state machines:
 //
-//   1. Header pressure. The supply header relaxes toward the
-//      running-pump target: the 55 psig band floor with the two
-//      normal pumps running, the 65 psig mid-band with the standby
-//      added, and depressurized with no pumps. A latched leak
-//      depresses the header below the standby auto-start setpoint.
-//   2. Standby pump auto-start. While the normal coolers run, a
-//      header pressure below SFPCStandbyStartPressure (50 psig)
-//      latches the third pump; it stays running.
-//   3. Purification and turbidity. Running loops pass the ~100 gpm
-//      filter/demineralizer sidestream; an aligned refueling water
-//      purification pump adds a parallel stream. Turbidity decays
-//      in proportion to total active purification flow.
-//   4. Pool temperature. Running loops relax the pool toward the
-//      design temperature; without them the stored fuel's decay
-//      heat warms the pool toward boiling.
+//  1. Header pressure. The supply header relaxes toward the
+//     running-pump target: the 55 psig band floor with the two
+//     normal pumps running, the 65 psig mid-band with the standby
+//     added, and depressurized with no pumps. A latched leak
+//     depresses the header below the standby auto-start setpoint.
+//  2. Standby pump auto-start. While the normal coolers run, a
+//     header pressure below SFPCStandbyStartPressure (50 psig)
+//     latches the third pump; it stays running.
+//  3. Purification and turbidity. Running loops pass the ~100 gpm
+//     filter/demineralizer sidestream; an aligned refueling water
+//     purification pump adds a parallel stream. Turbidity decays
+//     in proportion to total active purification flow.
+//  4. Pool temperature. Running loops relax the pool toward the
+//     design temperature; without them the stored fuel's decay
+//     heat warms the pool toward boiling.
 //
 // Spec justification:
 //   - "Normal operation requires two pumps with the third pump
@@ -122,9 +123,9 @@ func (s *ServiceWaterSystem) Step(
 // pumps produce zero flow even if PumpRunning was latched by
 // the standby auto-start; the latch is preserved so flow
 // recovers when power returns. See plans/x/uat_sat_gating.md.
-func (s *SpentFuelPoolCoolingSystem) Step(driveReady bool) SpentFuelPoolCoolingSystem {
+func (s *SpentFuelPoolCoolingSystem) Step(dt time.Duration, driveReady bool) SpentFuelPoolCoolingSystem {
 	ret := *s
-	dt := TimeStep.Seconds()
+	dtSec := dt.Seconds()
 	runningLoops := 0
 	if driveReady {
 		if ret.LoopAPumpRunning {
@@ -170,7 +171,7 @@ func (s *SpentFuelPoolCoolingSystem) Step(driveReady bool) SpentFuelPoolCoolingS
 	}
 	tau := max(SFPCPressureTimeConstant.Seconds(), 1)
 	ret.HeaderPressure += (target - ret.HeaderPressure) *
-		(1.0 - math.Exp(-dt/tau))
+		(1.0 - math.Exp(-dtSec/tau))
 
 	// Purification streams. The loop sidestream rides on cooler
 	// operation; the refueling water purification pump works
@@ -189,7 +190,7 @@ func (s *SpentFuelPoolCoolingSystem) Step(driveReady bool) SpentFuelPoolCoolingS
 	// with no stream running the water just stays cloudy.
 	cleanupTau := SFPCPurificationCleanupTimeConstant.Seconds() *
 		SFPCPurificationFlow / (sfpcFlow + rwpuFlow)
-	ret.Turbidity *= math.Exp(-dt / cleanupTau)
+	ret.Turbidity *= math.Exp(-dtSec / cleanupTau)
 
 	// Pool heat balance: cooled loops relax toward the design
 	// temperature, otherwise stored-fuel decay heat soaks the pool
@@ -198,13 +199,13 @@ func (s *SpentFuelPoolCoolingSystem) Step(driveReady bool) SpentFuelPoolCoolingS
 		coolTau := SFPCCoolingTimeConstant.Seconds()
 		gap := SFPCPoolDesignTemp.Float() - ret.PoolTemp.Float()
 		ret.PoolTemp = Temperature{Val: ret.PoolTemp.Float() +
-			gap*(1.0-math.Exp(-dt/coolTau)), Unit: u.Fahrenheit}
+			gap*(1.0-math.Exp(-dtSec/coolTau)), Unit: u.Fahrenheit}
 	} else {
 		massKg := SFPCPoolVolume.Float() * KilogramsPerGallon
 		riseF := float64(SFPStoredFuelDecayHeat) /
-			(massKg * SpecificHeatWater) * dt * 9.0 / 5.0
+			(massKg * SpecificHeatWater) * dtSec * 9.0 / 5.0
 		ret.PoolTemp = Temperature{
-			Val: min(ret.PoolTemp.Float()+riseF, SFPCPoolBoilingTemp),
+			Val:  min(ret.PoolTemp.Float()+riseF, SFPCPoolBoilingTemp),
 			Unit: u.Fahrenheit,
 		}
 	}

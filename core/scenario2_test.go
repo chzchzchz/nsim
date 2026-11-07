@@ -59,7 +59,7 @@ func heatToTarget(t *testing.T, p *Plant) {
 	t.Helper()
 	setControl(t, p, "ReactorBuilding/Pressurizer/HeatersOn", "1")
 	for i := 0; i < int(20*time.Second/time.Millisecond); i++ {
-		stepN(p, 1)
+		stepN(p, 1, DefaultTimeStep)
 		if float64(p.ReactorBuilding.Pressurizer.Pressure) >=
 			float64(PressurizerHeaterTarget) {
 			return
@@ -98,10 +98,10 @@ func TestScenario2_LetdownDrainToNoLoadHoldsPressure(t *testing.T) {
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen", "1")
 
 	const (
-		holdLowPsia  = 2200.0 // 2250 +/- 50 psia hold (page_224.txt:28-29)
-		holdHighPsia = 2300.0
-		noLoadGal    = 380.0 // stop draining just past the 25 percent mark
-		noLoadLowGal = 337.0 // 25 +/- 5 percent of 1500 gal (page_222.txt:62-67)
+		holdLowPsia   = 2200.0 // 2250 +/- 50 psia hold (page_224.txt:28-29)
+		holdHighPsia  = 2300.0
+		noLoadGal     = 380.0 // stop draining just past the 25 percent mark
+		noLoadLowGal  = 337.0 // 25 +/- 5 percent of 1500 gal (page_222.txt:62-67)
 		noLoadHighGal = 412.0
 		maxDrainSteps = int(60 * time.Second / time.Millisecond)
 	)
@@ -110,7 +110,7 @@ func TestScenario2_LetdownDrainToNoLoadHoldsPressure(t *testing.T) {
 	maxPORV, maxOutletF := 0.0, 0.0
 	reachedNoLoad := false
 	for i := 0; i < maxDrainSteps && !reachedNoLoad; i++ {
-		stepN(p, 1)
+		stepN(p, 1, DefaultTimeStep)
 		pzr := &p.ReactorBuilding.Pressurizer
 		levelPct := 100 * pzr.Water.Float() / pzr.Volume.Float()
 		minLevelPct = min(minLevelPct, levelPct)
@@ -129,7 +129,7 @@ func TestScenario2_LetdownDrainToNoLoadHoldsPressure(t *testing.T) {
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen", "0")
 	setControl(t, p,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning", "0")
-	stepFor(p, 2*time.Second)
+	stepFor(p, 2*time.Second, DefaultTimeStep)
 
 	final := &p.ReactorBuilding.Pressurizer
 	assert.GreaterOrEqual(t, minLevelPct, 20.0,

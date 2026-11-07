@@ -24,7 +24,7 @@ func TestScenario11_BorationModeRaisesBoronAtRatedRate(t *testing.T) {
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BoronMode", "Boration")
 	setControl(t, &p,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRSPump", "1")
-	stepFor(&p, 10*time.Second)
+	stepFor(&p, 10*time.Second, DefaultTimeStep)
 
 	got := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration
 	want := start + CVCSBorationRate*10.0
@@ -62,7 +62,7 @@ func TestScenario11_ColdShutdownMarginHoldsWithoutRodCredit(t *testing.T) {
 	rpv.DecayHeatSlow = 0
 	rpv.ControlRods.BoronConcentration = targetBoron
 
-	rpv = rpv.Step(RCPRatedSpeed, 0)
+	rpv = rpv.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 
 	assert.LessOrEqual(t, float64(rpv.Reactivity), marginTarget,
 		"cold shutdown margin must hold with no rod credit, rho=%v", rpv.Reactivity)

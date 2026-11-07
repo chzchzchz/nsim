@@ -26,14 +26,13 @@ import (
 //   - Refueling water purification beside the pool demineralizer:
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_171.txt:87-94
 
-// Must not run in parallel: overrideTimeStep mutates global simulation
 // state shared across the package tests.
 
 // A supply-header leak pulls the header below the 50 psig auto-start
 // setpoint so the standby pump starts; isolating the leak recovers the
 // header into the maintained band with the standby still running.
 func TestScenario34_LeakAutoStartsStandbyAndIsolationRecovers(t *testing.T) {
-	overrideTimeStep(t, time.Second)
+	testDt := time.Second
 	p := MakePlant()
 	cm := p.GetControlMap()
 
@@ -41,7 +40,7 @@ func TestScenario34_LeakAutoStartsStandbyAndIsolationRecovers(t *testing.T) {
 		cm["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/Leakage"].Set("1"))
 	sawLowHeader := false
 	for range 180 {
-		stepN(&p, 1)
+		stepN(&p, 1, testDt)
 		if p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.HeaderPressure <
 			SFPCStandbyStartPressure {
 			sawLowHeader = true
@@ -60,7 +59,7 @@ func TestScenario34_LeakAutoStartsStandbyAndIsolationRecovers(t *testing.T) {
 
 	require.NoError(t,
 		cm["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/Leakage"].Set("0"))
-	stepN(&p, 600)
+	stepN(&p, 600, testDt)
 	sf = p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
 	assert.InDelta(t, SFPCPressureStandbyTarget, sf.HeaderPressure, 1.0,
 		"isolation recovers the header toward the mid-band target")
@@ -75,7 +74,7 @@ func TestScenario34_LeakAutoStartsStandbyAndIsolationRecovers(t *testing.T) {
 // flow immediately; the standby clears because no normal-loop lineup
 // persists without the pumps.
 func TestScenario34_PumpControlSecuresLoopsAndPurification(t *testing.T) {
-	overrideTimeStep(t, time.Second)
+	testDt := time.Second
 	p := MakePlant()
 	cm := p.GetControlMap()
 
@@ -83,7 +82,7 @@ func TestScenario34_PumpControlSecuresLoopsAndPurification(t *testing.T) {
 		cm["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/LoopAPumpRunning"].Set("0"))
 	require.NoError(t,
 		cm["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/LoopBPumpRunning"].Set("0"))
-	stepN(&p, 5)
+	stepN(&p, 5, testDt)
 	sf := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
 	assert.False(t, sf.LoopAPumpRunning && sf.LoopBPumpRunning)
 	assert.Zero(t, sf.PurificationFlow,
@@ -95,7 +94,7 @@ func TestScenario34_PumpControlSecuresLoopsAndPurification(t *testing.T) {
 // alone cleans slowly, and realigning the refueling water purification
 // pump beside the demineralizer roughly doubles the cleanup rate.
 func TestScenario34_CrudBurstCleanupRateTracksPurificationStreams(t *testing.T) {
-	overrideTimeStep(t, 10 * time.Second)
+	testDt := 10 * time.Second
 	p := MakePlant()
 	cm := p.GetControlMap()
 
@@ -105,7 +104,7 @@ func TestScenario34_CrudBurstCleanupRateTracksPurificationStreams(t *testing.T) 
 	assert.InDelta(t, SFPCCrudBurstTurbidityPercent, sf.Turbidity, 0.01,
 		"the burst slugs turbidity to the design value")
 
-	stepN(&p, 60)
+	stepN(&p, 60, testDt)
 	singlePath := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.Turbidity
 	// Wiring checks: both expected values recompute from production
 	// constants; the tier-3 physics is the direction, dual streams
@@ -117,7 +116,7 @@ func TestScenario34_CrudBurstCleanupRateTracksPurificationStreams(t *testing.T) 
 
 	require.NoError(t,
 		cm["AuxiliaryBuilding/SpentFuelPoolCoolingSystem/RWPUPurifying"].Set("1"))
-	stepN(&p, 60)
+	stepN(&p, 60, testDt)
 	dualPath := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.Turbidity
 	wantDual := wantSingle *
 		timeFactor(60*10, SFPCPurificationCleanupTimeConstant.Seconds()/2)
@@ -131,7 +130,7 @@ func TestScenario34_CrudBurstCleanupRateTracksPurificationStreams(t *testing.T) 
 // restored cooling relaxes it monotonically back toward the design
 // temperature without undershoot.
 func TestScenario34_UncooledPoolSoaksToBoilCapAndCoolingRecovers(t *testing.T) {
-	overrideTimeStep(t, 30 * time.Minute)
+	testDt := 30 * time.Minute
 	sf := SpentFuelPoolCoolingSystem{
 		LoopAPumpRunning: true,
 		LoopBPumpRunning: true,
@@ -142,7 +141,7 @@ func TestScenario34_UncooledPoolSoaksToBoilCapAndCoolingRecovers(t *testing.T) {
 	sf.LoopAPumpRunning = false
 	sf.LoopBPumpRunning = false
 	for range 200 { // 100 h unattended
-		sf = sf.Step(true)
+		sf = sf.Step(testDt, true)
 		assert.LessOrEqual(t, sf.PoolTemp.Float(), SFPCPoolBoilingTemp,
 			"the pool can never exceed the boiling cap")
 	}
@@ -151,10 +150,10 @@ func TestScenario34_UncooledPoolSoaksToBoilCapAndCoolingRecovers(t *testing.T) {
 
 	sf.LoopAPumpRunning = true
 	sf.LoopBPumpRunning = true
-	overrideTimeStep(t, 10 * time.Minute)
+	testDt = 10 * time.Minute
 	prev := sf.PoolTemp.Float()
 	for range int(24 * time.Hour / (10 * time.Minute)) { // 24 h cooled
-		sf = sf.Step(true)
+		sf = sf.Step(testDt, true)
 		assert.Less(t, sf.PoolTemp.Float(), prev,
 			"restored cooling must cool the pool monotonically")
 		assert.GreaterOrEqual(t, sf.PoolTemp.Float(),
@@ -169,7 +168,7 @@ func TestScenario34_UncooledPoolSoaksToBoilCapAndCoolingRecovers(t *testing.T) {
 // The uncooled heatup rate matches the decay-heat balance closed form
 // over an hour-scale window.
 func TestScenario34_UncooledHeatupMatchesDecayHeatBalance(t *testing.T) {
-	overrideTimeStep(t, time.Minute)
+	testDt := time.Minute
 	sf := SpentFuelPoolCoolingSystem{
 		LoopAPumpRunning: true,
 		LoopBPumpRunning: true,
@@ -179,7 +178,7 @@ func TestScenario34_UncooledHeatupMatchesDecayHeatBalance(t *testing.T) {
 	sf.LoopBPumpRunning = false
 	start := sf.PoolTemp.Float()
 	for range 60 {
-		sf = sf.Step(true)
+		sf = sf.Step(testDt, true)
 	}
 	rise := sf.PoolTemp.Float() - start
 	wantRise := float64(SFPStoredFuelDecayHeat) /
@@ -209,7 +208,7 @@ func TestSFPC_SingleLoopTripSagsAndStandbyPicksUp(t *testing.T) {
 	}
 	// Settle both-loops at the normal band first.
 	for range int(SFPCPressureTimeConstant.Seconds()) {
-		s = s.Step(true)
+		s = s.Step(DefaultTimeStep, true)
 	}
 	require.False(t, s.StandbyRunning, "precondition: standby off")
 
@@ -217,8 +216,8 @@ func TestSFPC_SingleLoopTripSagsAndStandbyPicksUp(t *testing.T) {
 	// crossing the standby-start setpoint on the way down.
 	s.LoopBPumpRunning = false
 	sawSagBelowStart := false
-	for range int(2 * SFPCPressureTimeConstant.Seconds() / TimeStep.Seconds()) {
-		s = s.Step(true)
+	for range int(2 * SFPCPressureTimeConstant.Seconds() / DefaultTimeStep.Seconds()) {
+		s = s.Step(DefaultTimeStep, true)
 		if s.HeaderPressure < SFPCStandbyStartPressure && !s.StandbyRunning {
 			sawSagBelowStart = true
 		}

@@ -17,7 +17,7 @@ func TestScenario6_ModeSurvivesFirstStep(t *testing.T) {
 	p := MakePlant()
 	p.PlantOperation.Mode = PowerOperation
 
-	stepFor(&p, 10*time.Millisecond)
+	stepFor(&p, 10*time.Millisecond, DefaultTimeStep)
 
 	assert.Equal(t, PowerOperation, p.PlantOperation.Mode,
 		"loaded operational mode must survive the first Step")
@@ -47,7 +47,7 @@ func TestScenario6_AuxToMainFeedwaterGating(t *testing.T) {
 	}
 	for _, tc := range cases {
 		po := PlantOperation{}
-		got := po.Step(tc.mode, temp, 2250, 0, CoreRatedThermalPower,
+		got := po.Step(DefaultTimeStep, tc.mode, temp, 2250, 0, CoreRatedThermalPower,
 			false, 1, tc.steamFrc, 0)
 		assert.Equal(t, tc.want, got.AuxFeedwaterInUse, tc.name)
 	}
@@ -58,7 +58,9 @@ func TestScenario6_AuxToMainFeedwaterGating(t *testing.T) {
 // SG graph path delivers inventory into the steam generator.
 //
 // "Conventional condensate and feedwater systems startup procedures
-//  would be followed."
+//
+//	would be followed."
+//
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:175-177
 func TestScenario6_MainFeedwaterControlsDeliverInventory(t *testing.T) {
 	p := MakePlant()
@@ -73,7 +75,7 @@ func TestScenario6_MainFeedwaterControlsDeliverInventory(t *testing.T) {
 
 	setControl(t, &p, "TurbineBuilding/CondensatePump/Running", "1")
 	setControl(t, &p, "TurbineBuilding/MainFeedwaterPump/Running", "1")
-	stepFor(&p, 5*time.Second)
+	stepFor(&p, 5*time.Second, DefaultTimeStep)
 
 	assert.Greater(t, sg.Water.Float(), start,
 		"running main feedwater pumps must deliver SG inventory")

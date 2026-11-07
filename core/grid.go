@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // Step advances the grid by one timestep. For an infinite-bus
 // model the only dynamics are the operator-applied perturbations;
 // the grid itself is a passive source/sink of frequency and
@@ -17,7 +19,7 @@ package core
 // the infinite-bus assumption is sufficient: Frequency and
 // Voltage are pure inputs held at their current values unless
 // the operator changes them.
-func (g *Grid) Step() Grid {
+func (g *Grid) Step(dt time.Duration) Grid {
 	ret := *g
 	return ret
 }

@@ -2,21 +2,22 @@ package core
 
 import (
 	u "github.com/bcicen/go-units"
+	"time"
 )
 
 // Step advances one RHRS train by one timestep. The Step function
 // implements the three-mode behaviour described in the spec:
 //
-//   1. Pump off: no flow, no heat rejection.
-//   2. Pump on, suction closed, warmup incomplete: pump runs on
-//      its minimum-flow recirculation line. HeatTransferRate is
-//      zero; the HX is not in service yet.
-//   3. Pump on, suction open, warmup complete: pump returns flow
-//      to the RCS cold legs. The fraction routed through the HX
-//      is set by BypassValve; the rest bypasses the HX. The spec
-//      describes the bypass-controller architecture as keeping
-//      total return flow constant while the operator adjusts the
-//      throttle valve to control cooldown rate.
+//  1. Pump off: no flow, no heat rejection.
+//  2. Pump on, suction closed, warmup incomplete: pump runs on
+//     its minimum-flow recirculation line. HeatTransferRate is
+//     zero; the HX is not in service yet.
+//  3. Pump on, suction open, warmup complete: pump returns flow
+//     to the RCS cold legs. The fraction routed through the HX
+//     is set by BypassValve; the rest bypasses the HX. The spec
+//     describes the bypass-controller architecture as keeping
+//     total return flow constant while the operator adjusts the
+//     throttle valve to control cooldown rate.
 //
 // Spec justification:
 //   - Minimum-flow recirc: "A minimum flow for the RHR pump is
@@ -41,13 +42,12 @@ import (
 //     fluid to the component cooling water circulating through
 //     the RHR heat exchanger shell side."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:19-22
-func (t *RHRSTrain) Step(
+func (t *RHRSTrain) Step(dt time.Duration,
 	rcsHotTemp Temperature,
 	ccwInletTemp Temperature,
 	suctionOpen bool,
 ) RHRSTrain {
 	ret := *t
-	dt := TimeStep
 
 	// DriveReady is wired from the per-train ESF bus by
 	// Plant.Step. RHR pumps need bus power to deliver flow;
@@ -75,7 +75,7 @@ func (t *RHRSTrain) Step(
 
 	hxFlow := RHRSTrainDesignFlow * (1.0 - ret.BypassValve.Open) * dt.Seconds()
 	bypassFlow := RHRSTrainDesignFlow * ret.BypassValve.Open * dt.Seconds()
-	ret.ReturnFlow = Volume{Val: hxFlow+bypassFlow+minFlow, Unit: u.Gallon}
+	ret.ReturnFlow = Volume{Val: hxFlow + bypassFlow + minFlow, Unit: u.Gallon}
 
 	rcsOut := rcsHotTemp.Float()
 	ccwIn := ccwInletTemp.Float()
@@ -114,7 +114,7 @@ func (t *RHRSTrain) Step(
 //     function has been taken over by the RHRS, and the steam dump
 //     system may be shutdown."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:35-37
-func (r *RHRS) Step(
+func (r *RHRS) Step(dt time.Duration,
 	rcsHotTemp Temperature,
 	rcsPressure float64,
 	ccwInletTemp Temperature,
@@ -136,8 +136,8 @@ func (r *RHRS) Step(
 	bSuction := ret.TrainB.SuctionValves[0].Open == 1 &&
 		ret.TrainB.SuctionValves[1].Open == 1
 
-	ret.TrainA = ret.TrainA.Step(rcsHotTemp, ccwInletTemp, aSuction)
-	ret.TrainB = ret.TrainB.Step(rcsHotTemp, ccwInletTemp, bSuction)
+	ret.TrainA = ret.TrainA.Step(dt, rcsHotTemp, ccwInletTemp, aSuction)
+	ret.TrainB = ret.TrainB.Step(dt, rcsHotTemp, ccwInletTemp, bSuction)
 
 	totalHeatRejection := float64(ret.TrainA.HeatExchanger.HeatTransferRate) +
 		float64(ret.TrainB.HeatExchanger.HeatTransferRate)
@@ -170,7 +170,7 @@ func (r *RHRS) Step(
 // losses."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:115-122,
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_228.txt:25-32
-func (r *RHRS) SolidPlantRelieve(pzr *Pressurizer) Volume {
+func (r *RHRS) SolidPlantRelieve(dt time.Duration, pzr *Pressurizer) Volume {
 	r.SolidPlantReliefFlow = Volume{Val: 0, Unit: u.Gallon}
 	if r.SolidPlantPressureValve.Open <= 0 || !r.Running {
 		return r.SolidPlantReliefFlow
@@ -181,7 +181,7 @@ func (r *RHRS) SolidPlantRelieve(pzr *Pressurizer) Volume {
 	}
 
 	gal := min(RHRSSolidPlantBleedGalPerSec*r.SolidPlantPressureValve.Open*
-		TimeStep.Seconds(), pzr.Water.Float())
+		dt.Seconds(), pzr.Water.Float())
 	psiDrop := min(gal*PressurizerBubbleStiffness, overshoot)
 	removed := psiDrop / PressurizerBubbleStiffness
 	if removed <= 0 {
@@ -194,6 +194,6 @@ func (r *RHRS) SolidPlantRelieve(pzr *Pressurizer) Volume {
 	pzr.Pressure -= Pressure(psiDrop)
 
 	r.SolidPlantReliefFlow = Volume{
-		Val: removed / TimeStep.Seconds(), Unit: u.Gallon}
+		Val: removed / dt.Seconds(), Unit: u.Gallon}
 	return Volume{Val: removed, Unit: u.Gallon}
 }

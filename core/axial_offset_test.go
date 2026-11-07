@@ -98,8 +98,9 @@ func TestAxialOffset_OperationalWindowStaysInTargetBand(t *testing.T) {
 // The resulting top-poor xenon deviation carries positive offset worth,
 // pulling the realized offset back up away from the pure rod-shift
 // line, the restoring direction of the oscillation narrative.
-//   "the power distribution is forced to the opposite end of the core"
-//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:85-93
+//
+//	"the power distribution is forced to the opposite end of the core"
+//	specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:85-93
 func TestAxialOffset_SkewRestoresAfterLoadDrop(t *testing.T) {
 	r := axialFixture(0.04362222, 0.47)
 	settleAxial(&r, 30*time.Minute)
@@ -124,15 +125,15 @@ func TestAxialOffset_ZeroDeviationReducesToLumpedReactivity(t *testing.T) {
 	r := axialFixture(0.04222222, 1.0)
 	r.BoronConcentration = loadFollowBoron
 	r.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
-	stepped := r.Step(RCPRatedSpeed, 0)
+	stepped := r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 
 	rodPct := float32(0.04222222) * CoreRodWorthABCD * 100
 	powerFrac := float64(r.TotalThermalPower()) / float64(CoreRatedThermalPower)
-	dopplerBasePct := float32(powerFrac * (float64(CoreReferenceOutletF) -
-		float64(CoreDopplerReferenceTempF)) *
+	dopplerBasePct := float32(powerFrac*(float64(CoreReferenceOutletF)-
+		float64(CoreDopplerReferenceTempF))*
 		CoreDopplerBasePcmPerDegF) / 1000
-	moderatorPct := float32((float64(CoreReferenceOutletF) -
-		float64(CoreDopplerReferenceTempF)) *
+	moderatorPct := float32((float64(CoreReferenceOutletF)-
+		float64(CoreDopplerReferenceTempF))*
 		netTempCoef(loadFollowBoron)) / 1000
 	boronPct := float32((loadFollowBoron - CVCSInitialBoron) / 100.0 *
 		float64(CoreBoronWorthPer100ppm))
@@ -152,7 +153,7 @@ func TestAxialOffset_SkewWeightsXenonWorthByFluxShare(t *testing.T) {
 	r.AxialOffset = 100 * aofrac
 	r.Xenon135AxialDeviation = dev
 
-	stepped := r.Step(RCPRatedSpeed, 0)
+	stepped := r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	wantXenon := float32(CoreXenonEquilibriumWorthPct *
 		(xenonNormalized(xenonEquilibriumPhysical(1.0)+aofrac*dev/2) - 1.0))
 	gotXenon := stepped.Reactivity - (float32(r.ControlRods.Insertion)*CoreRodWorthABCD*100 +
@@ -169,8 +170,8 @@ func TestAxialOffset_SkewWeightsXenonWorthByFluxShare(t *testing.T) {
 func TestAxialOffset_StepPathAdvancesObservable(t *testing.T) {
 	r := axialFixture(0.05, 1.0)
 	start := r.AxialOffset
-	for range int(20 * time.Second / TimeStep) {
-		r = r.Step(RCPRatedSpeed, 0)
+	for range int(20 * time.Second / DefaultTimeStep) {
+		r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	}
 	assert.Negative(t, r.AxialOffset-start,
 		"deepening insertion must drive the realized offset negative")

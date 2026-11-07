@@ -27,7 +27,7 @@ func TestManualSIStartsEFWSMotorPumps(t *testing.T) {
 	require.True(t, ok, "ManualSI control not registered")
 	require.NoError(t, c.Set("1"), "set ManualSI")
 
-	stepN(&p, 2000) // 2 s of plant time, well inside the one-minute window
+	stepN(&p, 2000, DefaultTimeStep) // 2 s of plant time, well inside the one-minute window
 
 	rps := p.ReactorBuilding.ReactorProtectionSystem
 	assert.True(t, rps.SafetyInjectionActuated,

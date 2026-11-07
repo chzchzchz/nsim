@@ -26,15 +26,14 @@ import (
 // specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:20-30
 // Duty figure:
 // specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:71-74
-func scenario35Plant(t *testing.T) Plant {
+func scenario35Plant(t *testing.T) (Plant, time.Duration) {
 	t.Helper()
 	p := MakePlant()
-	overrideTimeStep(t, 10*time.Millisecond)
-	return p
+	return p, 10 * time.Millisecond
 }
 
 func TestScenario35_MakeupAndBleedCampaignFillsHoldupThroughDivert(t *testing.T) {
-	p := scenario35Plant(t)
+	p, testDt := scenario35Plant(t)
 	setControl(t, &p,
 		"ReactorBuilding/ReactorMakeupControlValve/Open", "1")
 	setControl(t, &p,
@@ -45,7 +44,7 @@ func TestScenario35_MakeupAndBleedCampaignFillsHoldupThroughDivert(t *testing.T)
 	cvcs := &p.AuxiliaryBuilding.ChemicalVolumeControlSystem
 	require.False(t, cvcs.Diverting, "campaign must start undiverted")
 
-	stepFor(&p, 200*time.Second)
+	stepFor(&p, 200*time.Second, testDt)
 	cvcs = &p.AuxiliaryBuilding.ChemicalVolumeControlSystem
 	require.True(t, cvcs.Diverting,
 		"the VCT must cross its high level and latch the divert")
@@ -55,7 +54,7 @@ func TestScenario35_MakeupAndBleedCampaignFillsHoldupThroughDivert(t *testing.T)
 		"diverted letdown must land in the holdup tanks")
 
 	holdupBefore := cvcs.BRSHoldupLevel.Float()
-	stepFor(&p, 60*time.Second)
+	stepFor(&p, 60*time.Second, testDt)
 	cvcs = &p.AuxiliaryBuilding.ChemicalVolumeControlSystem
 	growth := cvcs.BRSHoldupLevel.Float() - holdupBefore
 	assert.InDelta(t, CVCSDesignLetdownFlow.Float()*60.0, growth, 3.0*60.0,
@@ -63,14 +62,14 @@ func TestScenario35_MakeupAndBleedCampaignFillsHoldupThroughDivert(t *testing.T)
 }
 
 func TestScenario35_ReclaimTrainSplitsFeedIntoProducts(t *testing.T) {
-	p := scenario35Plant(t)
+	p, testDt := scenario35Plant(t)
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BRSHoldupLevel =
 		Volume{Val: 2500, Unit: u.Gallon}
 	setControl(t, &p,
 		"AuxiliaryBuilding/BoronRecycleSystem/FeedPumpRunning", "1")
 
 	const run = 3 * time.Minute // 1800 gal at the duty rate
-	stepFor(&p, run)
+	stepFor(&p, run, testDt)
 
 	brs := p.AuxiliaryBuilding.BoronRecycleSystem
 	cvcs := p.AuxiliaryBuilding.ChemicalVolumeControlSystem
@@ -99,12 +98,12 @@ func TestScenario35_ReclaimTrainSplitsFeedIntoProducts(t *testing.T) {
 }
 
 func TestScenario35_CarryoverTripsAutoDivertAndReleaseResumesDelivery(t *testing.T) {
-	p := scenario35Plant(t)
+	p, testDt := scenario35Plant(t)
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BRSHoldupLevel =
 		Volume{Val: 1500, Unit: u.Gallon}
 	setControl(t, &p,
 		"AuxiliaryBuilding/BoronRecycleSystem/FeedPumpRunning", "1")
-	stepFor(&p, 2*time.Second)
+	stepFor(&p, 2*time.Second, testDt)
 
 	brs := &p.AuxiliaryBuilding.BoronRecycleSystem
 	require.False(t, brs.DistillateDiverted)
@@ -113,7 +112,7 @@ func TestScenario35_CarryoverTripsAutoDivertAndReleaseResumesDelivery(t *testing
 		"AuxiliaryBuilding/BoronRecycleSystem/Carryover", "1")
 	latchSec := 0
 	for ; latchSec < 180 && !brs.DistillateDiverted; latchSec++ {
-		stepFor(&p, time.Second)
+		stepFor(&p, time.Second, testDt)
 	}
 	require.True(t, brs.DistillateDiverted,
 		"the monitor must reach its high signal and latch the auto-divert")
@@ -121,7 +120,7 @@ func TestScenario35_CarryoverTripsAutoDivertAndReleaseResumesDelivery(t *testing
 		"the high signal must arrive within the evolution window")
 	divertedDelivered := brs.DistillateDelivered.Float()
 
-	stepFor(&p, 60*time.Second)
+	stepFor(&p, 60*time.Second, testDt)
 	brs = &p.AuxiliaryBuilding.BoronRecycleSystem
 	assert.InDelta(t, divertedDelivered, brs.DistillateDelivered.Float(), 1e-9,
 		"diverted distillate must not reach the storage tank")
@@ -133,7 +132,7 @@ func TestScenario35_CarryoverTripsAutoDivertAndReleaseResumesDelivery(t *testing
 
 	releaseSec := 0
 	for ; releaseSec < 180 && brs.DistillateDiverted; releaseSec++ {
-		stepFor(&p, time.Second)
+		stepFor(&p, time.Second, testDt)
 	}
 	require.False(t, brs.DistillateDiverted,
 		"a cleared carryover must decay the monitor and release the divert")
@@ -141,7 +140,7 @@ func TestScenario35_CarryoverTripsAutoDivertAndReleaseResumesDelivery(t *testing
 		"the release must land inside the recovery window")
 
 	resumed := brs.DistillateDelivered.Float()
-	stepFor(&p, 30*time.Second)
+	stepFor(&p, 30*time.Second, testDt)
 	brs = &p.AuxiliaryBuilding.BoronRecycleSystem
 	assert.Greater(t, brs.DistillateDelivered.Float(), resumed,
 		"delivery must resume after release")
@@ -156,9 +155,9 @@ func TestScenario35_StarvedTrainDrawsRecirculatedInventoryFirst(t *testing.T) {
 		FeedPumpRunning: true,
 		Recirculating:   Volume{Val: 50, Unit: u.Gallon},
 	}
-	out := brs.Step(0)
+	out := brs.Step(DefaultTimeStep, 0)
 
-	draw := BRSSEvaporatorDutyGPM * TimeStep.Seconds()
+	draw := BRSSEvaporatorDutyGPM * DefaultTimeStep.Seconds()
 	distillateFrac := 1 - CoreRatedCriticalBoronPpm/BRSSProductWeightPercentPpm
 	assert.InDelta(t, BRSSEvaporatorDutyGPM, out.FeedFlow, 1e-9,
 		"an empty holdup tank must not stop a train holding recycled distillate")
@@ -176,12 +175,12 @@ func TestScenario35_StarvingTrainReportsThrottledFeedFlow(t *testing.T) {
 		FeedPumpRunning: true,
 		Recirculating:   Volume{Val: 0.002, Unit: u.Gallon},
 	}
-	out := brs.Step(0)
+	out := brs.Step(DefaultTimeStep, 0)
 
-	fullDraw := BRSSEvaporatorDutyGPM * TimeStep.Seconds()
+	fullDraw := BRSSEvaporatorDutyGPM * DefaultTimeStep.Seconds()
 	require.Less(t, 0.002, fullDraw,
 		"fixture must starve the train below one step's draw")
-	assert.InDelta(t, 0.002/TimeStep.Seconds(), out.FeedFlow, 1e-9,
+	assert.InDelta(t, 0.002/DefaultTimeStep.Seconds(), out.FeedFlow, 1e-9,
 		"FeedFlow must report the rate actually processed")
 	assert.Less(t, out.FeedFlow, BRSSEvaporatorDutyGPM,
 		"a starving train must not read its duty figure")
@@ -194,7 +193,7 @@ func TestScenario35_StarvingTrainReportsThrottledFeedFlow(t *testing.T) {
 func TestScenario35_MonitorNeedsProductionToReachItsTrip(t *testing.T) {
 	idle := BoronRecycleSystem{Carryover: true}
 	for i := 0; i < 400; i++ {
-		idle = idle.Step(500)
+		idle = idle.Step(DefaultTimeStep, 500)
 	}
 	assert.Zero(t, idle.DistillateRadiation,
 		"carryover without production must not climb the monitor")
@@ -206,7 +205,7 @@ func TestScenario35_MonitorNeedsProductionToReachItsTrip(t *testing.T) {
 	}
 	latched := false
 	for i := 0; i < 200000 && !latched; i++ {
-		running = running.Step(500)
+		running = running.Step(DefaultTimeStep, 500)
 		latched = running.DistillateDiverted
 	}
 	assert.True(t, latched,
@@ -224,9 +223,9 @@ func TestScenario35_DivertedTrainConsumesOnlyConcentrate(t *testing.T) {
 		DistillateDiverted:  true,
 		Recirculating:       Volume{Val: 50, Unit: u.Gallon},
 	}
-	out := s.Step(100)
+	out := s.Step(DefaultTimeStep, 100)
 
-	concentrate := BRSSEvaporatorDutyGPM * TimeStep.Seconds() *
+	concentrate := BRSSEvaporatorDutyGPM * DefaultTimeStep.Seconds() *
 		CoreRatedCriticalBoronPpm / BRSSProductWeightPercentPpm
 	assert.Zero(t, out.HoldupDrawn.Float(),
 		"a pooled loop covers the whole draw before holdup is touched")

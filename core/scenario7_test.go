@@ -67,7 +67,7 @@ const scenario7Tick = 100 * time.Millisecond
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:69-71).
 func TestScenario7_WideRangeRollReachesSynchronous(t *testing.T) {
 	p := newScenario7Plant(t)
-	overrideTimeStep(t, scenario7Tick)
+	testDt := scenario7Tick
 
 	setControl(t, p, "TurbineBuilding/Turbine/LubeOilPump", "1")
 	setControl(t, p, "TurbineBuilding/Turbine/SpeedDemand", "0.33")
@@ -75,21 +75,21 @@ func TestScenario7_WideRangeRollReachesSynchronous(t *testing.T) {
 
 	// TurbineSpeedRampRate = 1/60 per second paces the rotor at
 	// 1800 rpm / 60 s = 30 rpm/s toward SpeedDemand x rated.
-	stepFor(p, 5*time.Second)
+	stepFor(p, 5*time.Second, testDt)
 	rpm := float64(p.TurbineBuilding.Turbine.Velocity)
 	assert.InDelta(t, 150.0, rpm, 25.0,
 		"want the roll pacing at the design 30 rpm/s, got %v rpm after 5 s", rpm)
 
 	require.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State,
 		"a rolling rotor must be in the running state")
-	stepFor(p, 15*time.Second)
+	stepFor(p, 15*time.Second, testDt)
 	assert.InDelta(t, 0.33*float64(TurbineRatedSpeed),
 		float64(p.TurbineBuilding.Turbine.Velocity), 20.0,
 		"wide-range control must settle on the selected speed fraction")
 
 	setControl(t, p, "TurbineBuilding/Turbine/SpeedDemand", "1")
 	for i := 0; i < int(45*time.Second/scenario7Tick); i++ {
-		stepN(p, 1)
+		stepN(p, 1, testDt)
 		if float64(p.TurbineBuilding.Turbine.Velocity) >=
 			float64(TurbineRatedSpeed)-20.0 {
 			break
@@ -109,7 +109,7 @@ func TestScenario7_WideRangeRollReachesSynchronous(t *testing.T) {
 func TestScenario7_BreakerHoldsInSyncAndPopsOutOfSync(t *testing.T) {
 	run := func(spin Velocity) bool {
 		p := newScenario7Plant(t)
-		overrideTimeStep(t, scenario7Tick)
+		testDt := scenario7Tick
 		// Seed the slow roll leg directly: the acceleration phase has
 		// its own coverage above, and the synchronism check only sees
 		// terminal versus grid frequency at the close instant.
@@ -120,10 +120,10 @@ func TestScenario7_BreakerHoldsInSyncAndPopsOutOfSync(t *testing.T) {
 		// Field forcing builds terminal voltage toward rated at five
 		// percent of the remaining gap per step; five seconds puts the
 		// terminal comfortably inside the ten percent voltage window.
-		stepFor(p, 5*time.Second)
+		stepFor(p, 5*time.Second, testDt)
 
 		setControl(t, p, "TurbineBuilding/Generator/BreakerClosed", "1")
-		stepFor(p, 2*time.Second)
+		stepFor(p, 2*time.Second, testDt)
 		return p.TurbineBuilding.Generator.BreakerClosed
 	}
 
@@ -137,14 +137,14 @@ func TestScenario7_BreakerHoldsInSyncAndPopsOutOfSync(t *testing.T) {
 // dispatch escalation walks the load at the controlled selectable rate.
 func TestScenario7_SynchronizedUnitEscalatesAtControlledRate(t *testing.T) {
 	p := newScenario7Plant(t)
-	overrideTimeStep(t, scenario7Tick)
+	testDt := scenario7Tick
 	p.TurbineBuilding.Turbine.Velocity = TurbineRatedSpeed
 	setControl(t, p, "TurbineBuilding/Turbine/LubeOilPump", "1")
 	setControl(t, p, "TurbineBuilding/Turbine/SpeedDemand", "1")
 	setControl(t, p, "TurbineBuilding/Turbine/StopValve", "1")
-	stepFor(p, 5*time.Second)
+	stepFor(p, 5*time.Second, testDt)
 	setControl(t, p, "TurbineBuilding/Generator/BreakerClosed", "1")
-	stepFor(p, 1*time.Second)
+	stepFor(p, 1*time.Second, testDt)
 	require.True(t, p.TurbineBuilding.Generator.BreakerClosed)
 
 	// Dispatcher demand drives the DEHM setpoint walk at
@@ -171,7 +171,7 @@ func TestScenario7_SynchronizedUnitEscalatesAtControlledRate(t *testing.T) {
 	turbineTripped := false
 	walkedOneMinute := 0.0
 	for i := 0; i < int(1320*time.Second/scenario7Tick); i++ {
-		stepN(p, 1)
+		stepN(p, 1, testDt)
 		if i == int(60*time.Second/scenario7Tick)-1 {
 			walkedOneMinute = turb.Setpoint
 		}

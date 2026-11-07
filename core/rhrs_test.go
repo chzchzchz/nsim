@@ -19,22 +19,22 @@ import (
 //     in operation."
 //     specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
 func TestRHRS_StartRequiresTempAndPressureThresholds(t *testing.T) {
-	rcsAbove := Temperature{Val: RHRSTempThreshold+1, Unit: u.Fahrenheit}
+	rcsAbove := Temperature{Val: RHRSTempThreshold + 1, Unit: u.Fahrenheit}
 	rcsAt := Temperature{Val: RHRSTempThreshold, Unit: u.Fahrenheit}
-	rcsBelow := Temperature{Val: RHRSTempThreshold-10, Unit: u.Fahrenheit}
+	rcsBelow := Temperature{Val: RHRSTempThreshold - 10, Unit: u.Fahrenheit}
 	ccw := Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit}
 
-	hot := (&RHRS{}).Step(rcsAbove, RHRSPressureThreshold-1, ccw)
+	hot := (&RHRS{}).Step(DefaultTimeStep, rcsAbove, RHRSPressureThreshold-1, ccw)
 	assert.False(t, hot.Running,
 		"want Running=false with RCS temp above threshold, got %v",
 		hot.Running)
 
-	highP := (&RHRS{}).Step(rcsBelow, RHRSPressureThreshold, ccw)
+	highP := (&RHRS{}).Step(DefaultTimeStep, rcsBelow, RHRSPressureThreshold, ccw)
 	assert.False(t, highP.Running,
 		"want Running=false when pressure == 400 psig (not strictly below), got %v",
 		highP.Running)
 
-	started := (&RHRS{}).Step(rcsAt, RHRSPressureThreshold-1, ccw)
+	started := (&RHRS{}).Step(DefaultTimeStep, rcsAt, RHRSPressureThreshold-1, ccw)
 	assert.True(t, started.Running,
 		"want Running=true at RCS temp == 350°F and pressure < 400 psig, got %v",
 		started.Running)
@@ -62,9 +62,9 @@ func TestRHRS_DoesNotStartAboveTempThreshold(t *testing.T) {
 			SuctionValves: [2]Valve{{Open: 1}, {Open: 1}},
 		},
 	}
-	rcsHot := Temperature{Val: RHRSTempThreshold+10, Unit: u.Fahrenheit}
+	rcsHot := Temperature{Val: RHRSTempThreshold + 10, Unit: u.Fahrenheit}
 	ccw := Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit}
-	r = r.Step(rcsHot, 100, ccw)
+	r = r.Step(DefaultTimeStep, rcsHot, 100, ccw)
 	assert.False(t, r.Running,
 		"want Running=false with RCS temp above threshold, got %v",
 		r.Running)
@@ -98,7 +98,7 @@ func TestRHRS_WarmupTimerKeepsSuctionClosed(t *testing.T) {
 	}
 	rcsHot := Temperature{Val: 350, Unit: u.Fahrenheit}
 	ccw := Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit}
-	tr = tr.Step(rcsHot, ccw, false)
+	tr = tr.Step(DefaultTimeStep, rcsHot, ccw, false)
 	assert.False(t, tr.WarmupComplete,
 		"want WarmupComplete=false before warmup elapses, got %v",
 		tr.WarmupComplete)
@@ -133,8 +133,8 @@ func TestRHRS_MinimumFlowRecircAlwaysPresent(t *testing.T) {
 	}
 	rcsHot := Temperature{Val: 350, Unit: u.Fahrenheit}
 	ccw := Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit}
-	tr = tr.Step(rcsHot, ccw, true)
-	dt := TimeStep.Seconds()
+	tr = tr.Step(DefaultTimeStep, rcsHot, ccw, true)
+	dt := DefaultTimeStep.Seconds()
 	want := (RHRSTrainDesignFlow + RHRSPumpMinFlowGalPerStep) * dt
 	got := tr.ReturnFlow.Float()
 	assert.InDelta(t, want, got, 1e-9,
@@ -165,12 +165,12 @@ func TestRHRS_BypassValveKeepsReturnFlowConstant(t *testing.T) {
 			WarmupComplete: true,
 		}
 	}
-	dt := TimeStep.Seconds()
+	dt := DefaultTimeStep.Seconds()
 	wantFlow := (RHRSTrainDesignFlow + RHRSPumpMinFlowGalPerStep) * dt
 
-	a := mk(0).Step(rcsHot, ccw, true)
-	b := mk(0.5).Step(rcsHot, ccw, true)
-	c := mk(1).Step(rcsHot, ccw, true)
+	a := mk(0).Step(DefaultTimeStep, rcsHot, ccw, true)
+	b := mk(0.5).Step(DefaultTimeStep, rcsHot, ccw, true)
+	c := mk(1).Step(DefaultTimeStep, rcsHot, ccw, true)
 
 	assert.InDelta(t, wantFlow, a.ReturnFlow.Float(), 1e-9,
 		"want ReturnFlow=%v at Bypass=0, got %v",
@@ -224,7 +224,7 @@ func TestRHRS_EndToEndCooldownTransfersHeatFromRCS(t *testing.T) {
 	}
 	r.TrainB = r.TrainA
 
-	r2 := r.Step(
+	r2 := r.Step(DefaultTimeStep,
 		p.ReactorBuilding.ReactorPressureVessel.Outlet,
 		float64(p.ReactorBuilding.Pressurizer.Pressure),
 		Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit},
@@ -242,8 +242,8 @@ func TestRHRS_EndToEndCooldownTransfersHeatFromRCS(t *testing.T) {
 			r.TrainB.HeatExchanger.HeatTransferRate)
 	assert.Less(t,
 		r.TrainA.ReturnFlow.Float()+r.TrainB.ReturnFlow.Float(),
-		float64(RHRSTrainDesignFlow)*TimeStep.Seconds()*2+
-			RHRSPumpMinFlowGalPerStep*TimeStep.Seconds()*2+1e-9,
+		float64(RHRSTrainDesignFlow)*DefaultTimeStep.Seconds()*2+
+			RHRSPumpMinFlowGalPerStep*DefaultTimeStep.Seconds()*2+1e-9,
 		"want ReturnFlow within design bound, got %v",
 		r.TrainA.ReturnFlow.Float()+r.TrainB.ReturnFlow.Float())
 }
@@ -270,7 +270,7 @@ func TestRHRS_EntryLatchesFromCooledPlantState(t *testing.T) {
 	pz.SteamBubble = Volume{}
 	pz.Pressure = PressurizerBasePressure
 
-	stepN(&p, int(time.Second / TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	assert.True(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.Running,
 		"a cooled plant under the 400 psig ceiling must latch RHRS entry")

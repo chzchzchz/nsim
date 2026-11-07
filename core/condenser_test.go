@@ -19,8 +19,8 @@ func TestCondenser_VacuumPumpsRestoreVacuum(t *testing.T) {
 		VacuumPumpRunning:  true,
 		CirculatingWaterIn: Temperature{Val: CondenserDesignCWIn, Unit: u.Fahrenheit},
 	}
-	for i := 0; i < int(5*time.Second/TimeStep); i++ {
-		c = c.Step(c.CirculatingWaterIn, true, true)
+	for i := 0; i < int(5*time.Second/DefaultTimeStep); i++ {
+		c = c.Step(DefaultTimeStep, c.CirculatingWaterIn, true, true)
 	}
 	assert.Less(t, c.Pressure, AtmosphericPressure,
 		"want condenser pressure below atmospheric, got %v", c.Pressure)
@@ -36,8 +36,8 @@ func TestCondenser_NoCWDegradesToAtmospheric(t *testing.T) {
 		VacuumPumpRunning:  true,
 		CirculatingWaterIn: Temperature{Val: CondenserDesignCWIn, Unit: u.Fahrenheit},
 	}
-	for i := 0; i < int(30*time.Second/TimeStep); i++ {
-		c = c.Step(c.CirculatingWaterIn, true, false)
+	for i := 0; i < int(30*time.Second/DefaultTimeStep); i++ {
+		c = c.Step(DefaultTimeStep, c.CirculatingWaterIn, true, false)
 	}
 	assert.Greater(t, c.Pressure, CondenserDesignVacuum*5,
 		"want pressure risen from vacuum, got %v", c.Pressure)
@@ -75,8 +75,8 @@ func TestCondenser_TripOpensDumpValveAndReclosesOnAdmission(t *testing.T) {
 			BearingOilPressure: BearingOilDesignPressure,
 		},
 	}
-	for i := 0; i < int(2*time.Second/TimeStep); i++ {
-		tb = tb.StepWithSteam(SteamGeneratorShellPressure, hotTavg, true, false, 1, 560)
+	for i := 0; i < int(2*time.Second/DefaultTimeStep); i++ {
+		tb = tb.StepWithSteam(DefaultTimeStep, SteamGeneratorShellPressure, hotTavg, true, false, 1, 560)
 	}
 	assert.Greater(t, tb.Turbine.DumpValve.Open, 0.9,
 		"want DumpValve opened by the trip, got %v", tb.Turbine.DumpValve.Open)
@@ -91,8 +91,8 @@ func TestCondenser_TripOpensDumpValveAndReclosesOnAdmission(t *testing.T) {
 		Val:  programmedRodTavg(0) + 1,
 		Unit: u.Fahrenheit,
 	}
-	for i := 0; i < int(2*time.Second/TimeStep); i++ {
-		tb = tb.StepWithSteam(SteamGeneratorShellPressure, onProgram, true, false, 1, 560)
+	for i := 0; i < int(2*time.Second/DefaultTimeStep); i++ {
+		tb = tb.StepWithSteam(DefaultTimeStep, SteamGeneratorShellPressure, onProgram, true, false, 1, 560)
 	}
 	assert.Zero(t, tb.Turbine.DumpValve.Open,
 		"want DumpValve closed once steam is admitted, got %v",
@@ -112,7 +112,7 @@ func TestCondenser_LevelAccumulatesCondensingRate(t *testing.T) {
 	const steps = 100
 	for i := 0; i < steps; i++ {
 		c.CondensingRate = Volume{Val: perStep, Unit: u.Gallon}
-		c = c.Step(c.CirculatingWaterIn, true, true)
+		c = c.Step(DefaultTimeStep, c.CirculatingWaterIn, true, true)
 	}
 	want := perStep * float64(steps)
 	got := c.Level.Float()
@@ -139,7 +139,7 @@ func TestCondenser_HotwellAccumulates(t *testing.T) {
 	const steps = 1000
 	for i := 0; i < steps; i++ {
 		c.CondensingRate = Volume{Val: perStep, Unit: u.Gallon}
-		c = c.Step(c.CirculatingWaterIn, true, true)
+		c = c.Step(DefaultTimeStep, c.CirculatingWaterIn, true, true)
 	}
 	assert.Positive(t, c.HotwellLevel.Float(),
 		"want HotwellLevel > 0 after %d steps, got %v", steps, c.HotwellLevel.Float())

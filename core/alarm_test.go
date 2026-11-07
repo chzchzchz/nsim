@@ -21,10 +21,10 @@ func TestPlant_Alarms_EmptyAtConstruction(t *testing.T) {
 // trip-severity reactor-trip alarm and the annunciator rings.
 func TestPlant_Alarms_ReactorTripAppears(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	p.ReactorBuilding.ReactorProtectionSystem.ManualTrip = true
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	found := false
 	for _, a := range p.Alarms() {
@@ -50,12 +50,12 @@ func TestPlant_Alarms_ReactorTripAppears(t *testing.T) {
 // TurbineOPCALarmFraction * rated.
 func TestPlant_Alarms_OPCAlarmAndTrip(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	p.TurbineBuilding.Turbine.State = TurbineRunning
 	p.TurbineBuilding.Turbine.Velocity = Velocity(
 		float64(TurbineRatedSpeed) * TurbineOPCALarmFraction * 1.01)
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	have := map[AlarmID]Severity{}
 	for _, a := range p.Alarms() {
@@ -67,7 +67,7 @@ func TestPlant_Alarms_OPCAlarmAndTrip(t *testing.T) {
 	// Trip case: push velocity above 110% to latch OPCTrip.
 	p.TurbineBuilding.Turbine.Velocity = Velocity(
 		float64(TurbineRatedSpeed) * TurbineOPCTripFraction * 1.01)
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	have = map[AlarmID]Severity{}
 	for _, a := range p.Alarms() {
@@ -84,11 +84,11 @@ func TestPlant_Alarms_OPCAlarmAndTrip(t *testing.T) {
 // DieselOff at zero speed and zero start signal).
 func TestPlant_Alarms_DieselTripped(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	p.AuxiliaryBuilding.DieselGenerator.State = DieselTripped
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	found := false
 	for _, a := range p.Alarms() {
@@ -106,11 +106,11 @@ func TestPlant_Alarms_DieselTripped(t *testing.T) {
 // generator; the alarm list surfaces this as AlarmIDSCCWNoFlow.
 func TestPlant_Alarms_SCCWAlarm(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	// MainFeedwaterPump drives SCCWPumpRunning per core/plant.go.
 	p.TurbineBuilding.MainFeedwaterPump.Running = true
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	p.TurbineBuilding.Generator.SCCWPumpRunning = true
 	p.TurbineBuilding.Generator.SCCWFlow = 0
@@ -135,10 +135,10 @@ func TestPlant_Alarms_SCCWAlarm(t *testing.T) {
 // the annunciator latched even after acknowledgement.
 func TestPlantControlRoom_ResetAlarm_ClearsAcknowledged(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	p.TurbineBuilding.Turbine.OPCTrip = true
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 
 	c := p.ReactorBuilding.PlantControlRoom
@@ -156,10 +156,10 @@ func TestPlantControlRoom_ResetAlarm_ClearsAcknowledged(t *testing.T) {
 // alarm is active and unacknowledged.
 func TestPlantControlRoom_AlarmSet_AnnunciatorLatch(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	p.TurbineBuilding.Turbine.OPCTrip = true
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 
 	c := p.ReactorBuilding.PlantControlRoom
@@ -168,7 +168,7 @@ func TestPlantControlRoom_AlarmSet_AnnunciatorLatch(t *testing.T) {
 		c.AnnunciatorAlarm)
 
 	p.ReactorBuilding.PlantControlRoom.ResetAlarm(AlarmIDOPCTrip)
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	c = p.ReactorBuilding.PlantControlRoom
 	assert.True(t, c.AnnunciatorAlarm,
@@ -176,7 +176,7 @@ func TestPlantControlRoom_AlarmSet_AnnunciatorLatch(t *testing.T) {
 			"condition persists, got %v", c.AnnunciatorAlarm)
 
 	p.TurbineBuilding.Turbine.OPCTrip = false
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	c = p.ReactorBuilding.PlantControlRoom
 	assert.False(t, c.AnnunciatorAlarm,
@@ -188,11 +188,11 @@ func TestPlantControlRoom_AlarmSet_AnnunciatorLatch(t *testing.T) {
 // pattern after a transient alarm burst.
 func TestPlantControlRoom_AcknowledgeAll(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	p.TurbineBuilding.Turbine.OPCAlarm = true
 	p.TurbineBuilding.Turbine.OPCTrip = true
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 
 	c := p.ReactorBuilding.PlantControlRoom
@@ -210,7 +210,7 @@ func TestPlantControlRoom_AcknowledgeAll(t *testing.T) {
 // is responsible for decoding it back into objects.
 func TestBridge_AlarmsActiveSensor_JSONShape(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	p.TurbineBuilding.Turbine.OPCAlarm = true
 	m := GetSensorMap(&p)
@@ -226,10 +226,10 @@ func TestBridge_AlarmsActiveSensor_JSONShape(t *testing.T) {
 // control room.
 func TestBridge_AlarmsResetControl(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	p.TurbineBuilding.Turbine.OPCTrip = true
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	m := GetControlMap(&p)
 	c, ok := m["Alarms/Reset"]
@@ -247,12 +247,12 @@ func TestBridge_AlarmsResetControl(t *testing.T) {
 // derived from the same constant as the trip latch.
 func TestPlant_Alarms_DieselCoolantWarning(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	p.AuxiliaryBuilding.DieselGenerator.CoolantTemp =
-		Temperature{Val: DieselCoolantTripTemp.Float()+1, Unit: u.Fahrenheit}
+		Temperature{Val: DieselCoolantTripTemp.Float() + 1, Unit: u.Fahrenheit}
 	p.AuxiliaryBuilding.DieselGenerator.State = DieselRunning
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	found := false
 	for _, a := range p.Alarms() {
@@ -271,26 +271,26 @@ func TestPlant_Alarms_DieselCoolantWarning(t *testing.T) {
 // operator sees when the condition came in.
 func TestPlantControlRoom_AlarmSet_TimestampsActivationTime(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	p.TurbineBuilding.Turbine.OPCTrip = true
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 
 	c := p.ReactorBuilding.PlantControlRoom
 	require.NotEmpty(t, c.AlarmSet)
 	a := c.AlarmSet[AlarmIDOPCTrip]
 	require.NotNil(t, a)
-	assert.Equal(t, int64(TimeStep), int64(a.Timestamp),
+	assert.Equal(t, int64(DefaultTimeStep), int64(a.Timestamp),
 		"want activation stamp at one tick after start, got %v ns",
 		a.Timestamp)
-	assert.Equal(t, 2*int64(TimeStep), c.SimTimeNs,
-		"clock should advance one TimeStep per Step call")
+	assert.Equal(t, 2*int64(DefaultTimeStep), c.SimTimeNs,
+		"clock should advance one ProductionStep per Step call")
 
 	// The condition persists; the stamp must not move.
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
-	assert.Equal(t, int64(TimeStep),
+	assert.Equal(t, int64(DefaultTimeStep),
 		int64(p.ReactorBuilding.PlantControlRoom.AlarmSet[AlarmIDOPCTrip].Timestamp),
 		"stamp should hold while the condition stays active")
 }
@@ -299,10 +299,10 @@ func TestPlantControlRoom_AlarmSet_TimestampsActivationTime(t *testing.T) {
 // its time_s field so the HMI can render when each alarm fired.
 func TestBridge_PlantAlarms_TimeSReflectsActivation(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	p.TurbineBuilding.Turbine.OPCTrip = true
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 
 	m := GetSensorMap(&p)
@@ -312,9 +312,9 @@ func TestBridge_PlantAlarms_TimeSReflectsActivation(t *testing.T) {
 	require.NoError(t, err)
 
 	type row struct {
-		ID     string  `json:"id"`
-		TimeS  float64 `json:"time_s"`
-		Acked  bool    `json:"acknowledged"`
+		ID    string  `json:"id"`
+		TimeS float64 `json:"time_s"`
+		Acked bool    `json:"acknowledged"`
 	}
 	var list []row
 	require.NoError(t, json.Unmarshal([]byte(out), &list))
@@ -325,7 +325,7 @@ func TestBridge_PlantAlarms_TimeSReflectsActivation(t *testing.T) {
 		}
 	}
 	require.NotNil(t, trip, "want opc_trip in %v", out)
-	wantS := TimeStep.Seconds()
+	wantS := DefaultTimeStep.Seconds()
 	assert.InDelta(t, wantS, trip.TimeS, 1e-9,
 		"want time_s %v, got %v", wantS, trip.TimeS)
 	assert.False(t, trip.Acked, "fresh alarm starts unacknowledged")

@@ -35,7 +35,7 @@ func TestESFGating_SWSNoFlowWithBusesOff(t *testing.T) {
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false
 	p.Outside.ServiceWaterSystem.PumpRunning = true
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.False(t, p.Outside.ServiceWaterSystem.DriveReady,
 		"want SWS DriveReady=false with buses off, got true")
 	assert.Zero(t, p.Outside.ServiceWaterSystem.Flow,
@@ -50,7 +50,7 @@ func TestESFGating_SWSFlowsWithOneBusOn(t *testing.T) {
 	p := MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Outside.ServiceWaterSystem.PumpRunning = true
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.True(t, p.Outside.ServiceWaterSystem.DriveReady,
 		"want SWS DriveReady=true with ESFBusB on, got false")
 	assert.InDelta(t, ServiceWaterDesignFlow,
@@ -69,7 +69,7 @@ func TestESFGating_CCWSNoRecoveryWithBusesOff(t *testing.T) {
 	p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning = true
 	p.AuxiliaryBuilding.ComponentCoolingWaterSystem.InletTemp =
 		Temperature{Val: 120, Unit: u.Fahrenheit}
-	stepN(&p, int(10*time.Second/TimeStep))
+	stepN(&p, int(10*time.Second/DefaultTimeStep), DefaultTimeStep)
 	assert.False(t, p.AuxiliaryBuilding.ComponentCoolingWaterSystem.DriveReady,
 		"want CCWS DriveReady=false with buses off, got true")
 	assert.InDelta(t, 120.0,
@@ -93,7 +93,7 @@ func TestESFGating_HHSINoFlowWithBusesOff(t *testing.T) {
 	rwstInitial := p.ReactorBuilding.SafetyInjectionSystem.RWSTLevel.Float()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	require.True(t, p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning,
 		"precondition: HHSIPumpRunning should latch on SI signal")
 	assert.False(t, p.ReactorBuilding.SafetyInjectionSystem.HHSIDriveReady,
@@ -125,7 +125,7 @@ func TestESFGating_RHRTrainGatedByOwnBus(t *testing.T) {
 	}
 	r.TrainB = r.TrainA
 
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.False(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.DriveReady,
 		"want TrainA DriveReady=false with BusA off, got true")
 	assert.True(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.DriveReady,
@@ -152,7 +152,7 @@ func TestESFGating_CWNoFlowWithBusesOff(t *testing.T) {
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false
 	p.Outside.CirculatingWaterPump.Running = true
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.False(t, p.Outside.CirculatingWaterPump.DriveReady,
 		"want CW pump DriveReady=false with buses off, got true")
 	assert.Zero(t, p.Outside.CirculatingWaterSystem.FlowGPM,
@@ -175,7 +175,7 @@ func TestESFGating_CWFlowsWithOneBusOn(t *testing.T) {
 	p := MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Outside.CirculatingWaterPump.Running = true
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.True(t, p.Outside.CirculatingWaterPump.DriveReady,
 		"want CW pump DriveReady=true with ESFBusB on, got false")
 	assert.InDelta(t, CirculatingWaterDesignFlowGPM,
@@ -196,7 +196,7 @@ func TestESFGating_SFPCSNoFlowWithBusesOff(t *testing.T) {
 	sf := &p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
 	sf.LoopAPumpRunning = true
 	sf.LoopBPumpRunning = true
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.False(t, p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.DriveReady,
 		"want SFPC DriveReady=false with buses off, got true")
 	assert.Zero(t, p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PurificationFlow,
@@ -217,12 +217,12 @@ func TestESFGating_CWRecoversWhenPowerReturns(t *testing.T) {
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false
 	p.Outside.CirculatingWaterPump.Running = true
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.Zero(t, p.Outside.CirculatingWaterSystem.FlowGPM,
 		"precondition: no CW flow during blackout")
 	// Restore bus power and step again.
 	p.Electrical.ESFBusA.BreakerClosed = true
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.True(t, p.Outside.CirculatingWaterPump.DriveReady,
 		"want CW pump DriveReady=true after power restored, got false")
 	assert.InDelta(t, CirculatingWaterDesignFlowGPM,

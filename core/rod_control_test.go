@@ -14,10 +14,11 @@ import (
 // inputs outside [0,1] clamp.
 //
 // Spec:
-//   "The rod control system automatically controls RCS average
-//   coolant temperature (Tavg) as a programmed function of turbine
-//   load."
-//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:24-27
+//
+//	"The rod control system automatically controls RCS average
+//	coolant temperature (Tavg) as a programmed function of turbine
+//	load."
+//	specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:24-27
 func TestRodProgramAnchors(t *testing.T) {
 	assert.InDelta(t, RCSNoLoadTavgF, programmedRodTavg(0), 1e-9)
 	assert.InDelta(t, RCSFullLoadTavgF, programmedRodTavg(1), 1e-9)
@@ -32,9 +33,10 @@ func TestRodProgramAnchors(t *testing.T) {
 // bounded by the slew cap.
 //
 // Spec:
-//   "The rod control system also has an expandable temperature error
-//   control deadband for use at reduced power levels [...]"
-//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:77-81
+//
+//	"The rod control system also has an expandable temperature error
+//	control deadband for use at reduced power levels [...]"
+//	specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:77-81
 func TestRodAutoControlDeadbandAndSlew(t *testing.T) {
 	fullTarget := programPowerFraction(programmedRodTavg(1))
 
@@ -44,7 +46,7 @@ func TestRodAutoControlDeadbandAndSlew(t *testing.T) {
 		programPrimed:         true,
 		programTargetFraction: 0,
 	}
-	hot.applyAutoControl(
+	hot.applyAutoControl(DefaultTimeStep,
 		Temperature{Val: RCSNoLoadTavgF + 20, Unit: u.Fahrenheit},
 		0, 0.5, 0)
 	assert.Greater(t, hot.DemandInsertion, 0.0,
@@ -57,7 +59,7 @@ func TestRodAutoControlDeadbandAndSlew(t *testing.T) {
 		programPrimed:         true,
 		programTargetFraction: fullTarget,
 	}
-	cold.applyAutoControl(
+	cold.applyAutoControl(DefaultTimeStep,
 		Temperature{Val: programmedRodTavg(1), Unit: u.Fahrenheit},
 		1, fullTarget/2, 0)
 	assert.Less(t, cold.DemandInsertion, 0.05,
@@ -69,7 +71,7 @@ func TestRodAutoControlDeadbandAndSlew(t *testing.T) {
 		programPrimed:         true,
 		programTargetFraction: fullTarget,
 	}
-	frozen.applyAutoControl(
+	frozen.applyAutoControl(DefaultTimeStep,
 		Temperature{Val: programmedRodTavg(1), Unit: u.Fahrenheit},
 		1, fullTarget+RodCtrlDeadbandFrac/2, 0)
 	assert.InDelta(t, 0.05, frozen.DemandInsertion, 1e-12,
@@ -83,7 +85,7 @@ func TestRodManualDemandUntouched(t *testing.T) {
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0.25
 
-	stepN(&p, int(5*time.Second/TimeStep))
+	stepN(&p, int(5*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	assert.InDelta(t, 0.25,
 		p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion,
@@ -100,12 +102,12 @@ func TestRodAutoControlFrozenWhileTripped(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.AutoControl = true
 	p.ReactorBuilding.ReactorProtectionSystem.ManualTrip = true
 
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	require.True(t, p.ReactorBuilding.ReactorPressureVessel.Trip,
 		"fixture: manual trip must latch")
 	demand := p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion
 
-	stepN(&p, int(time.Second/TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 	assert.InDelta(t, demand,
 		p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion,
 		1e-12, "tripped controller must not integrate")
@@ -150,13 +152,13 @@ func TestRodAutoControlFrozenWhileTripped(t *testing.T) {
 // wide.
 //
 // Spec:
-//   "The rod control system automatically adjusts the power level of
-//   the reactor to match the power demanded by the turbine [...]"
-//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:68-71
+//
+//	"The rod control system automatically adjusts the power level of
+//	the reactor to match the power demanded by the turbine [...]"
+//	specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:68-71
 func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
-	// Must not run in parallel: overrideTimeStep mutates global
 	// simulation state.
-	overrideTimeStep(t, 25*time.Millisecond)
+	testDt := 25 * time.Millisecond
 	p := MakePlant()
 	// At-power maneuvering requires forced flow: "Natural
 	// circulation flow is sufficient only for decay heat removal of
@@ -170,12 +172,12 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.AutoControl = true
 
 	// Chemistry trim rebalance before maneuvering.
-	stepN(&p, int(30*time.Second/TimeStep))
+	stepN(&p, int(30*time.Second/testDt), testDt)
 	startPower := float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower)
 
 	const load = 0.7
 	p.TurbineBuilding.Turbine.Setpoint = load
-	stepN(&p, int(150*time.Second/TimeStep))
+	stepN(&p, int(150*time.Second/testDt), testDt)
 	descending := float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower) /
 		float64(CoreRatedThermalPower)
 	startFrac := startPower / float64(CoreRatedThermalPower)
@@ -189,7 +191,7 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 	// coefficient returns reactivity as Tavg falls, which the rods
 	// must spend insertion overcoming. Give the glide room to reach
 	// the plateau band before asserting it.
-	stepN(&p, int(450*time.Second/TimeStep))
+	stepN(&p, int(450*time.Second/testDt), testDt)
 	rpv := p.ReactorBuilding.ReactorPressureVessel
 	plateauFrac := float64(rpv.FissionPower) / float64(CoreRatedThermalPower)
 	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
@@ -213,7 +215,7 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 	// sit here as a recorded deviation.
 
 	// The plateau must hold, not glide into collapse.
-	stepN(&p, int(90*time.Second/TimeStep))
+	stepN(&p, int(90*time.Second/testDt), testDt)
 	held := float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower) /
 		float64(CoreRatedThermalPower)
 	assert.Greater(t, held, 0.35, "plateau still held after holding window")
@@ -227,7 +229,7 @@ func TestRodAutoControlPartialPowerPlateau(t *testing.T) {
 //	"to overcome "power defect" during power ascension"
 //	specs/the_westinghouse_pressurized_water_react/chapter_16/page_232.txt:54-55
 func TestRodAutoControlPartialPowerPlateauAscent(t *testing.T) {
-	overrideTimeStep(t, 25 * time.Millisecond)
+	testDt := 25 * time.Millisecond
 	p := MakePlant()
 	// Forced flow for an at-power arc (see the plateau test above).
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
@@ -235,9 +237,9 @@ func TestRodAutoControlPartialPowerPlateauAscent(t *testing.T) {
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 500
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.AutoControl = true
-	stepN(&p, int(30 * time.Second / TimeStep))
+	stepN(&p, int(30*time.Second/testDt), testDt)
 	p.TurbineBuilding.Turbine.Setpoint = 0.7
-	stepN(&p, int(600 * time.Second / TimeStep))
+	stepN(&p, int(600*time.Second/testDt), testDt)
 	held := float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower) /
 		float64(CoreRatedThermalPower)
 
@@ -245,14 +247,13 @@ func TestRodAutoControlPartialPowerPlateauAscent(t *testing.T) {
 	p.ReactorBuilding.Grid.LoadDemand = 1000
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 450
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = 450
-	stepN(&p, int(450 * time.Second / TimeStep))
+	stepN(&p, int(450*time.Second/testDt), testDt)
 	recovered := float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower) /
 		float64(CoreRatedThermalPower)
 	assert.Greater(t, recovered, held+0.1,
 		"restoring demand raises power back toward rated")
 	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped)
 }
-
 
 // The scenario 8 reference cycle in miniature under the integrated
 // control lineup: automatic rod control walks power down the Tavg
@@ -262,16 +263,16 @@ func TestRodAutoControlPartialPowerPlateauAscent(t *testing.T) {
 // (full reserve capability) with the axial offset inside its target
 // band at every checkpoint.
 //
-//   "12 hours at full power, decreasing load to 50-percent power over
-//    a 3 hour period, remaining at 50-percent power for 6 hours and
-//    returning to full power over a 3 hour period"
-//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_230.txt:79-87
-//   "In plants with the Integrated Control System the boron
-//    adjustments are done automatically."
-//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:114-116
-//   "the control system makes boron concentration adjustments whenever
-//    the control rods approach the limits of their AFD target band"
-//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:120-123
+//	"12 hours at full power, decreasing load to 50-percent power over
+//	 a 3 hour period, remaining at 50-percent power for 6 hours and
+//	 returning to full power over a 3 hour period"
+//	specs/the_westinghouse_pressurized_water_react/chapter_16/page_230.txt:79-87
+//	"In plants with the Integrated Control System the boron
+//	 adjustments are done automatically."
+//	specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:114-116
+//	"the control system makes boron concentration adjustments whenever
+//	 the control rods approach the limits of their AFD target band"
+//	specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:120-123
 //
 // Windows are shortened to the controller's own timescales (the
 // internal program walks at the spec loading rate, so a half-load
@@ -284,9 +285,7 @@ func TestRodAutoControlDailyLoadFollowArc(t *testing.T) {
 	// by TestReactorFissionPower_WidthInvariance; the automatic boron
 	// trim selects a fixed-rate BTRS mode on rod position alone
 	// (applyAutoBoronControl) whose ppm integration is linear in dt;
-	// and xenon advances by dt directly. Must not run in parallel:
-	// overrideTimeStep mutates global simulation state.
-	overrideTimeStep(t, 25*time.Millisecond)
+	testDt := 25 * time.Millisecond
 	p := MakePlant()
 	// Forced flow for an at-power arc (see the plateau test above).
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
@@ -321,14 +320,14 @@ func TestRodAutoControlDailyLoadFollowArc(t *testing.T) {
 			"%s: axial offset above band (small transient margin)", when)
 	}
 
-	stepN(&p, int(60*time.Second/TimeStep))
+	stepN(&p, int(60*time.Second/testDt), testDt)
 	require.Greater(t, fissionFrac(), 0.9,
 		"settled start must sit near rated before maneuvering")
 	assertAOInBand("start")
 
 	// Descent leg: the walked program takes ten minutes down.
 	p.TurbineBuilding.Turbine.Setpoint = 0.5
-	stepN(&p, int(660*time.Second/TimeStep))
+	stepN(&p, int(660*time.Second/testDt), testDt)
 	descended := fissionFrac()
 	assert.Greater(t, descended, 0.38, "descent undershoots the plateau")
 	assert.Less(t, descended, 0.62, "descent overshoots the program")
@@ -337,7 +336,7 @@ func TestRodAutoControlDailyLoadFollowArc(t *testing.T) {
 
 	// Plateau: the boron trim keeps the rod bank inside its window
 	// against the post-drop xenon rise - reserve stays intact.
-	stepN(&p, int(240*time.Second/TimeStep))
+	stepN(&p, int(240*time.Second/testDt), testDt)
 	assert.Greater(t, fissionFrac(), 0.38, "plateau collapsed")
 	assert.Less(t, fissionFrac(), 0.62, "plateau climbed away")
 	assert.LessOrEqual(t, rpv.ControlRods.Insertion,
@@ -347,7 +346,7 @@ func TestRodAutoControlDailyLoadFollowArc(t *testing.T) {
 
 	// Ascent leg back toward rated on restored demand.
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
-	stepN(&p, int(480*time.Second/TimeStep))
+	stepN(&p, int(480*time.Second/testDt), testDt)
 	assert.Greater(t, fissionFrac(), descended+0.15,
 		"restored demand climbs back toward rated")
 	assertAOInBand("ascent")

@@ -32,9 +32,8 @@ func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
 	// in dt; the header rides the SG design clamp through the
 	// transient. So the widened tick reproduces the sequence.
 	// Checkpoints below sample by simulated time, not step index,
-	// so they keep their meaning at any width. Must not run in
-	// parallel: overrideTimeStep mutates global simulation state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	// so they keep their meaning at any width.
+	testDt := 10 * time.Millisecond
 	// The at-power fixture is the ride-through's premise: a rejection
 	// is only defined against a synchronized machine carrying load.
 	// The construction default now idles at hot standby, so the
@@ -50,10 +49,10 @@ func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
 	maxPressure := 0.0
 	// Sample checkpoints one step before each sim-time mark, matching
 	// what the original fixed-index samples read at the default tick.
-	fiveS := int(5*time.Second/TimeStep) - 1
-	sixtyS := int(60*time.Second/TimeStep) - 1
-	for i := 0; i < int(73*time.Second/TimeStep); i++ {
-		p.Step()
+	fiveS := int(5*time.Second/testDt) - 1
+	sixtyS := int(60*time.Second/testDt) - 1
+	for i := 0; i < int(73*time.Second/testDt); i++ {
+		p.Step(testDt)
 		p.Update()
 		switch i {
 		case fiveS:
@@ -89,8 +88,8 @@ func TestLoadRejectionSteamDumpRideThrough(t *testing.T) {
 	require.NoError(t,
 		cm["TurbineBuilding/Turbine/Setpoint"].Set("1"))
 	reclosed := false
-	for i := 0; i < int(30*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(30*time.Second/testDt); i++ {
+		p.Step(testDt)
 		p.Update()
 		if p.TurbineBuilding.Turbine.DumpValve.Open < 0.05 {
 			reclosed = true
@@ -115,7 +114,7 @@ func TestTurbineTripAtPowerInitiatesReactorTrip(t *testing.T) {
 
 	trippedAt := -1
 	for i := 0; i < 300; i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, DefaultTimeStep)
 		if trippedAt < 0 &&
 			p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped {
 			trippedAt = i
@@ -147,7 +146,7 @@ func TestPlant_HighNeutronFluxScramsDirectly(t *testing.T) {
 
 	trippedAt := -1
 	for i := 0; i < 50; i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, DefaultTimeStep)
 		if trippedAt < 0 &&
 			p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped {
 			trippedAt = i
@@ -180,7 +179,7 @@ func TestPlant_HighPressurizerPressureScramsBeforeRelief(t *testing.T) {
 
 	trippedAt := -1
 	for i := 0; i < 50; i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, DefaultTimeStep)
 		if trippedAt < 0 &&
 			p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped {
 			trippedAt = i
@@ -214,7 +213,7 @@ func TestSteamlineIsolationClosesMSIVAndKillsOfftake(t *testing.T) {
 	p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open = 0.5
 
 	p.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationActuated = true
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	require.LessOrEqualf(t,
 		p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open, 1e-6,
 		"isolation must force the MSIV shut within one step")
@@ -223,8 +222,8 @@ func TestSteamlineIsolationClosesMSIVAndKillsOfftake(t *testing.T) {
 		"an isolated shell has no downstream offtake")
 
 	discharging := false
-	for i := 0; i < int(30*time.Second/TimeStep); i++ {
-		stepN(&p, 1)
+	for i := 0; i < int(30*time.Second/DefaultTimeStep); i++ {
+		stepN(&p, 1, DefaultTimeStep)
 		if p.TurbineBuilding.Turbine.State == TurbineTripped {
 			discharging = true
 			break
@@ -237,9 +236,9 @@ func TestSteamlineIsolationClosesMSIVAndKillsOfftake(t *testing.T) {
 		"the upstream atmospheric dump stays open through isolation")
 
 	p.ReactorBuilding.ReactorProtectionSystem.Reset()
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open = 1
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	require.Equalf(t, 1.0,
 		float64(p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open),
 		"after the reset the operator commands the MSIV again")
@@ -260,7 +259,7 @@ func TestTurbineTripOutputTripsMachineOnHighSGLevel(t *testing.T) {
 	trippedAt := -1
 	scrammedAt := -1
 	for i := 0; i < 50; i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, DefaultTimeStep)
 		if trippedAt < 0 &&
 			p.TurbineBuilding.Turbine.State == TurbineTripped {
 			trippedAt = i
@@ -314,7 +313,7 @@ func TestLowTcoldBlocksAutomaticDumpDemand(t *testing.T) {
 	p.ReactorBuilding.SteamGenerator.Pressure = Pressure(
 		SteamDumpPressureModeMargin*float64(SteamGeneratorShellPressure) + 25)
 
-	stepN(&p, 20)
+	stepN(&p, 20, DefaultTimeStep)
 	require.LessOrEqualf(t,
 		float64(p.TurbineBuilding.Turbine.DumpValve.Open), 1e-9,
 		"the low-Tcold block must hold the automatic dump shut")
@@ -328,8 +327,8 @@ func TestLowTcoldBlocksAutomaticDumpDemand(t *testing.T) {
 	// dump pulls the header back under the arm.
 	p.ReactorBuilding.ReactorPressureVessel.Inlet.Val = float64(RPSLowTcoldTrip) + 5
 	maxOpen := 0.0
-	for i := 0; i < int(time.Second/TimeStep); i++ {
-		stepN(&p, 1)
+	for i := 0; i < int(time.Second/DefaultTimeStep); i++ {
+		stepN(&p, 1, DefaultTimeStep)
 		maxOpen = max(maxOpen,
 			float64(p.TurbineBuilding.Turbine.DumpValve.Open))
 	}
@@ -364,7 +363,7 @@ func TestFeedwaterIsolationShutsMainFeed(t *testing.T) {
 
 	fwiAt := -1
 	for i := 0; i < 300; i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, DefaultTimeStep)
 		if p.ReactorBuilding.ReactorProtectionSystem.FeedwaterIsolationActuated {
 			fwiAt = i
 			break
@@ -385,7 +384,7 @@ func TestFeedwaterIsolationShutsMainFeed(t *testing.T) {
 	hotwell0 := float64(p.TurbineBuilding.Condenser.HotwellLevel.Val)
 	valveShutAt := -1
 	for i := 0; i < 3000; i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, DefaultTimeStep)
 		open := float64(p.TurbineBuilding.MainFeedwaterControlValve.Open)
 		if valveShutAt < 0 && open < 1e-6 {
 			valveShutAt = i

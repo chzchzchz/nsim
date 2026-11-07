@@ -30,7 +30,7 @@ func TestEFWSPumpControlDeliversWater(t *testing.T) {
 	require.NoErrorf(t, c.Set("1"), "Set MotorPumpRunning")
 
 	for i := 0; i < 2000; i++ {
-		p.Step()
+		p.Step(DefaultTimeStep)
 		p.Update()
 	}
 	after := p.ReactorBuilding.SteamGenerator.Water.Float()
@@ -61,7 +61,7 @@ func TestMainFeedwaterPumpControlRunsRegulator(t *testing.T) {
 
 	mfwBefore := p.ReactorBuilding.SteamGenerator.Water.Float()
 	for i := 0; i < 100; i++ {
-		p.Step()
+		p.Step(DefaultTimeStep)
 		p.Update()
 	}
 	assert.True(t, p.TurbineBuilding.MainFeedwaterPump.Running)

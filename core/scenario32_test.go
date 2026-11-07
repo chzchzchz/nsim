@@ -43,15 +43,15 @@ func scenario32Temps() (Temperature, Temperature) {
 // elapsed AND the suction path is open; either gate alone holds duty at
 // zero while the pump keeps circulating.
 func TestScenario32_MiniflowWarmupGatesHxDuty(t *testing.T) {
-	overrideTimeStep(t, time.Second)
+	testDt := time.Second
 	hot, ccw := scenario32Temps()
 	train := scenario32Train()
 
-	warmupSteps := int(RHRSTrainWarmupTime / TimeStep)
+	warmupSteps := int(RHRSTrainWarmupTime / testDt)
 
 	// First third with suctions shut: miniflow only, zero duty.
 	for i := 0; i < warmupSteps/3; i++ {
-		train = train.Step(hot, ccw, false)
+		train = train.Step(testDt, hot, ccw, false)
 	}
 	require.False(t, train.WarmupComplete, "warmup must still be running")
 	assert.Positive(t, train.ReturnFlow.Float(), "mini-flow circulates")
@@ -59,7 +59,7 @@ func TestScenario32_MiniflowWarmupGatesHxDuty(t *testing.T) {
 		"a shut suction path rejects no heat")
 
 	// Open the suctions before warmup completes: still zero duty.
-	train = train.Step(hot, ccw, true)
+	train = train.Step(testDt, hot, ccw, true)
 	require.False(t, train.WarmupComplete)
 	assert.Zero(t, float64(train.HeatExchanger.HeatTransferRate),
 		"warmup completion gates the heat exchanger, not the suction")
@@ -67,9 +67,9 @@ func TestScenario32_MiniflowWarmupGatesHxDuty(t *testing.T) {
 	// Ride out the rest of the window with suctions open: the next
 	// step after WarmupComplete carries full HX flow and real duty.
 	for !train.WarmupComplete {
-		train = train.Step(hot, ccw, true)
+		train = train.Step(testDt, hot, ccw, true)
 	}
-	train = train.Step(hot, ccw, true)
+	train = train.Step(testDt, hot, ccw, true)
 	assert.Positive(t, float64(train.HeatExchanger.HeatTransferRate),
 		"post-warmup with suctions open the HX must reject heat")
 	assert.Positive(t, train.ReturnFlow.Float())
@@ -78,7 +78,7 @@ func TestScenario32_MiniflowWarmupGatesHxDuty(t *testing.T) {
 // The plant-level latch places the RHRS in operation at the entry line
 // and marks takeover on the first step that actually rejects heat.
 func TestScenario32_TakeoverLatchesOnFirstHeatRejection(t *testing.T) {
-	overrideTimeStep(t, time.Second)
+	testDt := time.Second
 	hot, ccw := scenario32Temps()
 	ready := func() RHRSTrain {
 		return RHRSTrain{
@@ -91,13 +91,13 @@ func TestScenario32_TakeoverLatchesOnFirstHeatRejection(t *testing.T) {
 
 	// Suctions open but the mini-flow warmup has not run: running
 	// without any heat rejection yet.
-	r = r.Step(hot, RHRSPressureThreshold-1, ccw)
+	r = r.Step(testDt, hot, RHRSPressureThreshold-1, ccw)
 	require.True(t, r.Running)
 	assert.False(t, r.HasTakenOver,
 		"no takeover before any heat reaches component cooling water")
 
 	for range int(RHRSTrainWarmupTime/time.Second) + 1 {
-		r = r.Step(hot, RHRSPressureThreshold-1, ccw)
+		r = r.Step(testDt, hot, RHRSPressureThreshold-1, ccw)
 		if r.HasTakenOver {
 			break
 		}
@@ -113,17 +113,17 @@ func TestScenario32_TakeoverLatchesOnFirstHeatRejection(t *testing.T) {
 // the later bubble-formation and isolation steps.
 // specs/the_westinghouse_pressurized_water_react/chapter_4/page_087.txt:46-48
 func TestScenario32_StoppedButAlignedKeepsPathOpen(t *testing.T) {
-	overrideTimeStep(t, time.Second)
+	testDt := time.Second
 	hot, ccw := scenario32Temps()
 	train := scenario32Train()
 	train.WarmupComplete = true
 
-	train = train.Step(hot, ccw, true)
+	train = train.Step(testDt, hot, ccw, true)
 	require.Positive(t, float64(train.HeatExchanger.HeatTransferRate),
 		"precondition: aligned train is rejecting heat")
 
 	train.Pump.Running = false
-	train = train.Step(hot, ccw, true)
+	train = train.Step(testDt, hot, ccw, true)
 	assert.Zero(t, train.ReturnFlow.Float(),
 		"secured pump stops the return flow")
 	assert.Zero(t, float64(train.HeatExchanger.HeatTransferRate),

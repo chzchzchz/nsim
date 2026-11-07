@@ -16,7 +16,7 @@ import (
 // design flow rate and PumpsInService is the full count.
 func TestCirculatingWaterPumpRunning(t *testing.T) {
 	c := CirculatingWaterSystem{}
-	c = c.Step(true, true, CirculatingWaterPumpCount,
+	c = c.Step(DefaultTimeStep, true, true, CirculatingWaterPumpCount,
 		Temperature{Val: 70.0, Unit: u.Fahrenheit}, nil)
 	assert.Equal(t, CirculatingWaterPumpCount, c.PumpsInService,
 		"want PumpsInService=%d, got %d",
@@ -30,7 +30,7 @@ func TestCirculatingWaterPumpRunning(t *testing.T) {
 // PumpsInService is zero.
 func TestCirculatingWaterPumpStopped(t *testing.T) {
 	c := CirculatingWaterSystem{}
-	c = c.Step(false, true, 0,
+	c = c.Step(DefaultTimeStep, false, true, 0,
 		Temperature{Val: 70.0, Unit: u.Fahrenheit}, nil)
 	assert.Zero(t, c.PumpsInService,
 		"want PumpsInService=0 with pump off, got %v",
@@ -45,7 +45,7 @@ func TestCirculatingWaterPumpStopped(t *testing.T) {
 func TestCirculatingWaterInletTempRiver(t *testing.T) {
 	c := CirculatingWaterSystem{SourceIsCoolingTower: false}
 	source := Temperature{Val: 65.0, Unit: u.Fahrenheit}
-	c = c.Step(true, true, CirculatingWaterPumpCount, source, nil)
+	c = c.Step(DefaultTimeStep, true, true, CirculatingWaterPumpCount, source, nil)
 	assert.InDelta(t, 65.0, c.InletTemp.Float(), 1e-9,
 		"want InletTemp=65 with river source, got %v",
 		c.InletTemp.Float())
@@ -67,7 +67,7 @@ func TestCirculatingWaterInletTempCoolingTower(t *testing.T) {
 	}
 	ct.ColdBasinTemp = Temperature{Val: 80.0, Unit: u.Fahrenheit}
 	source := Temperature{Val: 70.0, Unit: u.Fahrenheit}
-	c = c.Step(true, true, CirculatingWaterPumpCount, source, ct)
+	c = c.Step(DefaultTimeStep, true, true, CirculatingWaterPumpCount, source, ct)
 	assert.InDelta(t, 80.0, c.InletTemp.Float(), 1e-9,
 		"want InletTemp=80 (live cold-basin temp), got %v",
 		c.InletTemp.Float())
@@ -85,7 +85,7 @@ func TestCirculatingWaterLosesSuctionWhenBasinEmpty(t *testing.T) {
 		}},
 	}
 	source := Temperature{Val: 70.0, Unit: u.Fahrenheit}
-	c = c.Step(true, true, CirculatingWaterPumpCount, source, ct)
+	c = c.Step(DefaultTimeStep, true, true, CirculatingWaterPumpCount, source, ct)
 	assert.Zero(t, c.FlowGPM,
 		"want FlowGPM=0 with drained basin, got %v", c.FlowGPM)
 	assert.Zero(t, c.PumpsInService,
@@ -100,11 +100,11 @@ func TestCoolingTowerFanRunning(t *testing.T) {
 	wetBulb := Temperature{Val: 75.0, Unit: u.Fahrenheit}
 	hot := Temperature{Val: 93.0, Unit: u.Fahrenheit}
 	ct := CoolingTower{}
-	ct = ct.Step(true, true, 0, hot, wetBulb)
+	ct = ct.Step(DefaultTimeStep, true, true, 0, hot, wetBulb)
 	assert.True(t, ct.FanRunning,
 		"want FanRunning=true after Step(true,true), got %v",
 		ct.FanRunning)
-	ct = ct.Step(true, false, 0, hot, wetBulb)
+	ct = ct.Step(DefaultTimeStep, true, false, 0, hot, wetBulb)
 	assert.False(t, ct.FanRunning,
 		"want FanRunning=false without drive power, got %v",
 		ct.FanRunning)
@@ -115,7 +115,7 @@ func TestCoolingTowerFanRunning(t *testing.T) {
 // InletTemp tracks RiverTemp.
 func TestPlant_CirculatingWaterSystem_InitialState(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	cws := p.Outside.CirculatingWaterSystem
 	assert.True(t, p.Outside.CirculatingWaterPump.Running,
@@ -138,7 +138,7 @@ func TestPlant_CirculatingWaterSystem_InitialState(t *testing.T) {
 func TestPlant_CirculatingWaterSystem_PumpStop(t *testing.T) {
 	p := MakePlant()
 	p.Outside.CirculatingWaterPump.Running = false
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	cws := p.Outside.CirculatingWaterSystem
 	assert.Zero(t, cws.FlowGPM,
@@ -174,9 +174,9 @@ func TestCoolingTowerSteadyStateApproach(t *testing.T) {
 	ct.ColdBasinTemp = Temperature{Val: 90.0, Unit: u.Fahrenheit}
 	wetBulb := Temperature{Val: 75.0, Unit: u.Fahrenheit}
 	hot := Temperature{Val: 93.0, Unit: u.Fahrenheit}
-	steps := int(5 * time.Minute / TimeStep)
+	steps := int(5 * time.Minute / DefaultTimeStep)
 	for range steps {
-		ct = ct.Step(true, true, CirculatingWaterDesignFlowGPM, hot, wetBulb)
+		ct = ct.Step(DefaultTimeStep, true, true, CirculatingWaterDesignFlowGPM, hot, wetBulb)
 	}
 	target := wetBulb.Float() + CoolingTowerApproachF
 	assert.InDelta(t, target, ct.ColdBasinTemp.Float(), 1.0,
@@ -194,16 +194,16 @@ func TestCoolingTowerSteadyStateApproach(t *testing.T) {
 func TestCoolingTowerDegradedApproachRunsHotter(t *testing.T) {
 	wetBulb := Temperature{Val: 75.0, Unit: u.Fahrenheit}
 	hot := Temperature{Val: 93.0, Unit: u.Fahrenheit}
-	steps := int(5 * time.Minute / TimeStep)
+	steps := int(5 * time.Minute / DefaultTimeStep)
 
 	design := towerFixture(93.0)
 	degraded := towerFixture(93.0)
 	degraded.ApproachF = CoolingTowerApproachF + 10.0
 
 	for range steps {
-		design = design.Step(true, true,
+		design = design.Step(DefaultTimeStep, true, true,
 			CirculatingWaterDesignFlowGPM, hot, wetBulb)
-		degraded = degraded.Step(true, true,
+		degraded = degraded.Step(DefaultTimeStep, true, true,
 			CirculatingWaterDesignFlowGPM, hot, wetBulb)
 	}
 	assert.Greater(t, degraded.ColdBasinTemp.Float(),
@@ -221,9 +221,9 @@ func TestCoolingTowerFanLossHotSoak(t *testing.T) {
 	hot := Temperature{Val: 95.0, Unit: u.Fahrenheit}
 	ct := towerFixture(95.0)
 	prev := ct.ColdBasinTemp.Float()
-	steps := int(CoolingTowerTimeConstant.Seconds() / TimeStep.Seconds())
+	steps := int(CoolingTowerTimeConstant.Seconds() / DefaultTimeStep.Seconds())
 	for range steps {
-		ct = ct.Step(false, false, CirculatingWaterDesignFlowGPM, hot, wetBulb)
+		ct = ct.Step(DefaultTimeStep, false, false, CirculatingWaterDesignFlowGPM, hot, wetBulb)
 		if ct.ColdBasinTemp.Float() < prev {
 			t.Fatalf("cold basin cooled during hot soak: %v -> %v",
 				prev, ct.ColdBasinTemp.Float())
@@ -250,20 +250,20 @@ func TestCoolingTowerEvaporationDepletesBasin(t *testing.T) {
 
 	// Converge thermally first (makeup open clamps at capacity;
 	// here we just let temps settle before closing makeup).
-	for range 10 * int(time.Second/TimeStep) {
-		ct = ct.Step(true, true, CirculatingWaterDesignFlowGPM, hot, wetBulb)
+	for range 10 * int(time.Second/DefaultTimeStep) {
+		ct = ct.Step(DefaultTimeStep, true, true, CirculatingWaterDesignFlowGPM, hot, wetBulb)
 	}
 	startLevel := ct.Basin.Level.Float()
-	measureSteps := 10 * int(time.Second/TimeStep)
+	measureSteps := 10 * int(time.Second/DefaultTimeStep)
 	for range measureSteps {
-		ct = ct.Step(true, true, CirculatingWaterDesignFlowGPM, hot, wetBulb)
+		ct = ct.Step(DefaultTimeStep, true, true, CirculatingWaterDesignFlowGPM, hot, wetBulb)
 	}
 	drop := startLevel - ct.Basin.Level.Float()
 
 	rangeF := hot.Float() - ct.ColdBasinTemp.Float()
 	lossGPS := CirculatingWaterDesignFlowGPM / 60.0 *
 		(CoolingTowerEvapFractionPerDegF*rangeF + CoolingTowerBlowdownFraction)
-	wantDrop := lossGPS * float64(measureSteps) * TimeStep.Seconds()
+	wantDrop := lossGPS * float64(measureSteps) * DefaultTimeStep.Seconds()
 	assert.Greater(t, drop, 0.0, "basin must deplete without makeup")
 	assert.InDelta(t, wantDrop, drop, 0.05*wantDrop,
 		"want level drop ≈ %.0f gal over 10 s, got %.0f",
@@ -286,12 +286,12 @@ func TestCoolingTowerMakeupRefillsBasin(t *testing.T) {
 	ct := towerFixture(93.0)
 	ct.MakeupValve.Open = 1.0
 	ct.Basin.Level = vol(ct.Basin.Level, 100_000)
-	steps := 60 * int(time.Second/TimeStep)
+	steps := 60 * int(time.Second/DefaultTimeStep)
 	for range steps {
-		ct = ct.Step(true, true, 0, hot, wetBulb)
+		ct = ct.Step(DefaultTimeStep, true, true, 0, hot, wetBulb)
 	}
 	want := 100_000 + CoolingTowerMakeupFlowGPM/60.0*
-		float64(steps)*TimeStep.Seconds()
+		float64(steps)*DefaultTimeStep.Seconds()
 	assert.InDelta(t, want, ct.Basin.Level.Float(), 1.0,
 		"want basin level ≈ %.0f gal after 60 s makeup-only refill, got %v",
 		want, ct.Basin.Level.Float())
@@ -307,7 +307,7 @@ func TestPlant_CoolingTower_UHSLossEndToEnd(t *testing.T) {
 
 	p.Outside.CoolingTower.Basin.Level = vol(
 		p.Outside.CoolingTower.Basin.Level, CoolingTowerMinSuctionGal/2)
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	assert.Zero(t, p.Outside.CirculatingWaterSystem.FlowGPM,
 		"want FlowGPM=0 with basin below suction minimum, got %v",
@@ -317,7 +317,7 @@ func TestPlant_CoolingTower_UHSLossEndToEnd(t *testing.T) {
 
 	p.Outside.CoolingTower.Basin.Level = vol(
 		p.Outside.CoolingTower.Basin.Level, CoolingTowerBasinCapacityGal)
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	assert.Equal(t, CirculatingWaterDesignFlowGPM,
 		p.Outside.CirculatingWaterSystem.FlowGPM,

@@ -33,17 +33,17 @@ func TestSteamGenerator_BreakDischargeScalesWithHeader(t *testing.T) {
 
 	require.Zero(t, sg.MainSteamLineBreak.Open,
 		"precondition: intact header")
-	closed := sg.Step(0)
+	closed := sg.Step(DefaultTimeStep, 0)
 	assert.Zero(t, closed.BreakFlow.Float(),
 		"an intact header must not discharge")
 
 	sg.MainSteamLineBreak.Open = 1
-	full := sg.Step(0)
+	full := sg.Step(DefaultTimeStep, 0)
 	require.Greater(t, full.BreakFlow.Float(), 0.0,
 		"an open break must discharge")
 	wantFull := SteamLineBreakCapacityFraction *
 		SteamGeneratorFullLoadSteamFlow.Float() / SecondsPerHour *
-		TimeStep.Seconds()
+		DefaultTimeStep.Seconds()
 	// Wiring check: the expectation is recomputed from the same
 	// constants production uses; it pins the plumbing, not physics.
 	assert.InDelta(t, wantFull, full.BreakFlow.Float(), wantFull*1e-9,
@@ -53,7 +53,7 @@ func TestSteamGenerator_BreakDischargeScalesWithHeader(t *testing.T) {
 
 	half := sg
 	half.Pressure = SteamGeneratorShellPressure / 2
-	dropped := half.Step(0)
+	dropped := half.Step(DefaultTimeStep, 0)
 	assert.InDelta(t, dropped.BreakFlow.Float(), full.BreakFlow.Float(),
 		full.BreakFlow.Float()*1e-9,
 		"choked blowdown must hold the rated fraction while any header pressure remains")
@@ -65,7 +65,7 @@ func TestSteamLineBreak_ProtectionResponse(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	synchronizeAndCloseBreaker(&p)
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 	require.False(t, p.ReactorBuilding.ReactorProtectionSystem.SafetyInjectionActuated,
 		"precondition: SI clear before the break")
 
@@ -83,9 +83,9 @@ func TestSteamLineBreak_ProtectionResponse(t *testing.T) {
 	waterPre := p.ReactorBuilding.SteamGenerator.Water.Float()
 
 	var siLagSteps, tripAfterSI = -1, -1
-	steps := int(30 * time.Second / TimeStep)
+	steps := int(30 * time.Second / DefaultTimeStep)
 	for i := 0; i < steps; i++ {
-		p.Step()
+		p.Step(DefaultTimeStep)
 		p.Update()
 		rps := p.ReactorBuilding.ReactorProtectionSystem
 		if siLagSteps < 0 && rps.SafetyInjectionActuated {
@@ -110,7 +110,7 @@ func TestSteamLineBreak_ProtectionResponse(t *testing.T) {
 
 	// The protective cascades read last tick's latches; give them
 	// a few steps to land before asserting the end state.
-	stepN(&p, int(3*time.Second/TimeStep))
+	stepN(&p, int(3*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	assert.True(t, p.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationActuated,
 		"steamline isolation shares the low-steamline trigger")
@@ -138,7 +138,7 @@ func TestSteamLineBreak_ProtectionResponse(t *testing.T) {
 // unchanged (plans/p34_1.txt).
 func TestSecondaryExcessDraw_SplitsFaultFromPacedPath(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	rb := &p.ReactorBuilding
 	op := PlantOperation{Mode: HotStandby}
@@ -152,20 +152,20 @@ func TestSecondaryExcessDraw_SplitsFaultFromPacedPath(t *testing.T) {
 	}
 
 	reset()
-	paced, fault := rb.secondaryExcessDrawW(0, false, op, TimeStep)
+	paced, fault := rb.secondaryExcessDrawW(0, false, op, DefaultTimeStep)
 	assert.Zero(t, paced, "an intact header draws nothing")
 	assert.Zero(t, fault)
 
 	reset()
 	sg.AtmosphericDumpValve.Open = 0.5
-	paced, fault = rb.secondaryExcessDrawW(0, false, op, TimeStep)
+	paced, fault = rb.secondaryExcessDrawW(0, false, op, DefaultTimeStep)
 	assert.Greater(t, float64(paced), 0.0,
 		"the atmospheric dump is operator-paced draw")
 	assert.Zero(t, fault, "a commanded dump is not a fault")
 
 	reset()
 	sg.MainSteamLineBreak.Open = 1
-	paced, fault = rb.secondaryExcessDrawW(0, false, op, TimeStep)
+	paced, fault = rb.secondaryExcessDrawW(0, false, op, DefaultTimeStep)
 	assert.Zero(t, paced)
 	assert.Greater(t, float64(fault), 0.0,
 		"the break discharge carries the whole excess as fault draw")
@@ -173,7 +173,7 @@ func TestSecondaryExcessDraw_SplitsFaultFromPacedPath(t *testing.T) {
 	reset()
 	sg.AtmosphericDumpValve.Open = 0.5
 	sg.MainSteamLineBreak.Open = 1
-	paced, fault = rb.secondaryExcessDrawW(0, false, op, TimeStep)
+	paced, fault = rb.secondaryExcessDrawW(0, false, op, DefaultTimeStep)
 	assert.Greater(t, float64(paced), 0.0)
 	assert.Greater(t, float64(fault), 0.0,
 		"both regimes draw at once when both paths are open")
@@ -191,7 +191,7 @@ func TestPlant_SteamLineBreakOvercoolsPastProgramEnvelope(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	synchronizeAndCloseBreaker(&p)
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	ctrl, ok := p.GetControlMap()["ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open"]
 	require.True(t, ok, "break control must be registered")
@@ -204,9 +204,9 @@ func TestPlant_SteamLineBreakOvercoolsPastProgramEnvelope(t *testing.T) {
 	// seconds of the break and both thresholds are pace-relative, so
 	// halving the window tightens rather than loosens them.
 	const window = 30 * time.Second
-	for i := 0; i < int(window/TimeStep); i++ {
+	for i := 0; i < int(window/DefaultTimeStep); i++ {
 		pre := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
-		p.Step()
+		p.Step(DefaultTimeStep)
 		p.Update()
 		post := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 		if trippedAt < 0 {
@@ -215,7 +215,7 @@ func TestPlant_SteamLineBreakOvercoolsPastProgramEnvelope(t *testing.T) {
 			}
 			continue
 		}
-		maxCoolFps = max(maxCoolFps, (pre-post)/TimeStep.Seconds())
+		maxCoolFps = max(maxCoolFps, (pre-post)/DefaultTimeStep.Seconds())
 	}
 	require.GreaterOrEqual(t, trippedAt, 0, "the break must trip the reactor")
 	endF := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()

@@ -22,12 +22,12 @@ func TestSIS_AccumulatorIdleAbovePrechargePressure(t *testing.T) {
 	s := (&SIS{
 		Accumulator: Accumulator{
 			Pressure: SISAccumulatorPrechargePressure,
-			Level: Volume{Val: SISAccumulatorPerTankCapacity.Float()*
-					float64(SISAccumulatorCount), Unit: u.Gallon},
-			Capacity: Volume{Val: SISAccumulatorPerTankCapacity.Float()*
-					float64(SISAccumulatorCount), Unit: u.Gallon},
+			Level: Volume{Val: SISAccumulatorPerTankCapacity.Float() *
+				float64(SISAccumulatorCount), Unit: u.Gallon},
+			Capacity: Volume{Val: SISAccumulatorPerTankCapacity.Float() *
+				float64(SISAccumulatorCount), Unit: u.Gallon},
 		},
-	}).Step(float64(SISAccumulatorPrechargePressure) + 1)
+	}).Step(DefaultTimeStep, float64(SISAccumulatorPrechargePressure)+1)
 	assert.False(t, s.Accumulator.Discharging,
 		"want Discharging=false above precharge, got %v",
 		s.Accumulator.Discharging)
@@ -65,7 +65,7 @@ func TestSIS_AccumulatorDischargesBelowPrecharge(t *testing.T) {
 			Level:    Volume{Val: initial, Unit: u.Gallon},
 			Capacity: Volume{Val: initial, Unit: u.Gallon},
 		},
-	}).Step(float64(SISAccumulatorPrechargePressure) - 1)
+	}).Step(DefaultTimeStep, float64(SISAccumulatorPrechargePressure)-1)
 	assert.True(t, s.Accumulator.Discharging,
 		"want Discharging=true below precharge, got %v",
 		s.Accumulator.Discharging)
@@ -79,8 +79,8 @@ func TestSIS_AccumulatorDischargesBelowPrecharge(t *testing.T) {
 	// Step until empty; injection flow should be non-zero while
 	// Level > 0 and zero after.
 	prev := s.Accumulator.Level.Float()
-	for i := 0; i < int(time.Hour/TimeStep); i++ {
-		s = s.Step(float64(SISAccumulatorPrechargePressure) - 1)
+	for i := 0; i < int(time.Hour/DefaultTimeStep); i++ {
+		s = s.Step(DefaultTimeStep, float64(SISAccumulatorPrechargePressure)-1)
 		if s.Accumulator.Level.Float() >= prev {
 			t.Fatalf("Level did not decrease at step %d: prev=%v now=%v",
 				i, prev, s.Accumulator.Level.Float())
@@ -92,7 +92,7 @@ func TestSIS_AccumulatorDischargesBelowPrecharge(t *testing.T) {
 	}
 	// One more step after Level reaches zero: Discharging
 	// should be cleared and AccumulatorInjectionFlow zero.
-	s = s.Step(float64(SISAccumulatorPrechargePressure) - 1)
+	s = s.Step(DefaultTimeStep, float64(SISAccumulatorPrechargePressure)-1)
 	assert.Zero(t, s.Accumulator.Level.Float(),
 		"want Level=0 after long discharge, got %v",
 		s.Accumulator.Level.Float())
@@ -125,8 +125,8 @@ func TestSIS_HHSIPumpDepletesRWST(t *testing.T) {
 		HHSIDriveReady:  true,
 		HHSISuction:     SISSuctionRWST,
 		RWSTLevel:       Volume{Val: SISRWSTCapacity, Unit: u.Gallon},
-	}).Step(100)
-	dt := TimeStep.Seconds()
+	}).Step(DefaultTimeStep, 100)
+	dt := DefaultTimeStep.Seconds()
 	wantLoss := SISHHSIDesignFlow.Float() *
 		(1.0 - SISHHSIMiniFlowFraction) * dt
 	assert.InDelta(t, SISRWSTCapacity-wantLoss, s.RWSTLevel.Float(), 1e-9,
@@ -148,7 +148,7 @@ func TestSIS_DryRWSTStarvesInjection(t *testing.T) {
 		HHSIDriveReady:  true,
 		HHSISuction:     SISSuctionRWST,
 		RWSTLevel:       Volume{Val: 0, Unit: u.Gallon},
-	}).Step(float64(SISHHSIShutoffHeadPsia - 100))
+	}).Step(DefaultTimeStep, float64(SISHHSIShutoffHeadPsia-100))
 	assert.Zero(t, s.HHSIInjectionFlow.Float(),
 		"a dry RWST must starve injection delivery")
 }
@@ -175,12 +175,12 @@ func TestSIS_RecirculationSwitchoverAlignsToSump(t *testing.T) {
 		HHSIPumpRunning: true,
 		HHSIDriveReady:  true,
 		HHSISuction:     SISSuctionRWST,
-		RWSTLevel:       Volume{Val: SISRWSTLowLevel-1, Unit: u.Gallon},
+		RWSTLevel:       Volume{Val: SISRWSTLowLevel - 1, Unit: u.Gallon},
 	}
-	delay := int(SISRecirculationSwitchoverDelay /
-		TimeStep.Seconds()) + 1
+	delay := int(SISRecirculationSwitchoverDelay/
+		DefaultTimeStep.Seconds()) + 1
 	for i := 0; i < delay; i++ {
-		s = s.Step(100)
+		s = s.Step(DefaultTimeStep, 100)
 	}
 	assert.Equal(t, SISSuctionSump, s.HHSISuction,
 		"want HHSISuction=SISSuctionSump after switchover, got %v",
@@ -189,7 +189,7 @@ func TestSIS_RecirculationSwitchoverAlignsToSump(t *testing.T) {
 		"want SwitchoverComplete=true after delay, got %v",
 		s.SwitchoverComplete)
 	prev := s.RWSTLevel.Float()
-	s = s.Step(100)
+	s = s.Step(DefaultTimeStep, 100)
 	assert.InDelta(t, prev, s.RWSTLevel.Float(), 1e-9,
 		"want RWSTLevel unchanged after switchover to sump, got %v (prev=%v)",
 		s.RWSTLevel.Float(), prev)
@@ -213,7 +213,7 @@ func TestSIS_SafetyInjectionSignalStartsHHSIPumps(t *testing.T) {
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.True(t, p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning,
 		"want HHSIPumpRunning=true on DieselStartSafetyInjection, got %v",
 		p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning)
@@ -226,11 +226,11 @@ func TestSIS_SafetyInjectionSignalStartsHHSIPumps(t *testing.T) {
 	// low-level setpoint and complete the switchover. We
 	// start the RWST close to the low-level setpoint so the
 	// test runs in a tractable number of steps.
-	p.ReactorBuilding.SafetyInjectionSystem.RWSTLevel = Volume{Val: SISRWSTLowLevel-1, Unit: u.Gallon}
+	p.ReactorBuilding.SafetyInjectionSystem.RWSTLevel = Volume{Val: SISRWSTLowLevel - 1, Unit: u.Gallon}
 	rwstDepletionSec := 1.0 / SISHHSIDesignFlow.Float()
 	totalSec := rwstDepletionSec + SISRecirculationSwitchoverDelay
-	steps := int(totalSec/TimeStep.Seconds()) + 100
-	stepN(&p, steps)
+	steps := int(totalSec/DefaultTimeStep.Seconds()) + 100
+	stepN(&p, steps, DefaultTimeStep)
 	assert.Equal(t, SISSuctionSump,
 		p.ReactorBuilding.SafetyInjectionSystem.HHSISuction,
 		"want HHSISuction=SISSuctionSump after long run, got %v",

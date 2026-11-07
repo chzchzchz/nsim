@@ -45,21 +45,17 @@ func scenario14FullPowerPlant() Plant {
 	return p
 }
 
-// Fidelity note: this glide used to require the default TimeStep.
+// Fidelity note: this glide used to require the default ProductionStep.
 // The reactor's per-step reactivity compounding folded power more
 // slowly under a coarser tick against an unchanged setpoint chase, and
 // the growing offtake surplus lifted SG header pressure until the
 // condenser dump left its <=0.20 pressure-modulation band (measured at
 // a uniform 10 ms tick). The compounding is now anchored to
 // DefaultTimeStep (see TestReactorFissionPower_WidthInvariance), so
-// the whole transient runs wide. Must not run in parallel:
-// overrideTimeStep mutates global simulation state.
 func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 	// The descent is one coupled maneuver (rod loop, chemistry, dump
 	// modulation) with no passive windows, sampled against measured
-	// trajectories at a uniform 10 ms tick. Must not run in parallel:
-	// overrideTimeStep mutates global simulation state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := scenario14FullPowerPlant()
 
 	// Reactor-lead power control owns the descent: the operator steps
@@ -89,8 +85,8 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 
 	// Bumpless handoff: shadow the integrator onto achieved power,
 	// then engage automatics and enter the descent rate.
-	for range int(5 * time.Second / TimeStep) {
-		p.Step()
+	for range int(5 * time.Second / testDt) {
+		p.Step(testDt)
 		p.Update()
 	}
 	rpv := &p.ReactorBuilding.ReactorPressureVessel
@@ -117,8 +113,8 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 		setControl(t, &p, "PlantOperation/PowerSetpointTarget", tgt.text)
 		settledAt := -1
 		var settledPF, settledDump float64
-		for i := range int(300 * time.Second / TimeStep) {
-			p.Step()
+		for i := range int(300 * time.Second / testDt) {
+			p.Step(testDt)
 			p.Update()
 			if i%checkEvery != 0 {
 				continue
@@ -188,15 +184,15 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 	// ~1.4 MW takes ~14 s. The Tavg pacing (outlet temperature
 	// moves at most 50 F/hr) holds the doppler term fixed through
 	// the window, so no faster collapse arrives from cooling.
-	stepN(&p, int(15*time.Second/TimeStep))
+	stepN(&p, int(15*time.Second/testDt), testDt)
 
 	// Honest end state: house-load steam draw exceeds what decay
 	// heat can raise, so the header must depart the shell pressure
 	// (or the turbine must trip on steam loss) instead of pinning
 	// at an infinite-energy 920 psia.
 	tailPressureOK := false
-	for i := 0; i < int(120*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(120*time.Second/testDt); i++ {
+		p.Step(testDt)
 		p.Update()
 		if float64(p.ReactorBuilding.SteamGenerator.Pressure) < 900 ||
 			p.TurbineBuilding.Turbine.State == TurbineTripped {
@@ -210,7 +206,7 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 	// The subcritical fold rides the small negative reactivity and
 	// needs tens of seconds to drain the fission chain to the
 	// neutron-source floor.
-	stepN(&p, int(60*time.Second/TimeStep))
+	stepN(&p, int(60*time.Second/testDt), testDt)
 
 	assert.LessOrEqual(t, float64(rpv.FissionPower), 100.0,
 		"fission chain collapsed to the neutron-source floor")
@@ -251,14 +247,14 @@ func TestScenario14_HZPCriticalityExpressible(t *testing.T) {
 	const hzpBoron = 975.7 // solves rho = 0 at 558 F, rods out, xe at rated eq
 
 	r := ReactorPressureVessel{
-		ControlRods:        ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: hzpBoron},
-		Inlet:              Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
-		Outlet:             Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
+		ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: hzpBoron},
+		Inlet:       Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
+		Outlet:      Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
 	}
 	r.SeedSteadyStatePower(0)
 	r.Iodine135 = 1.0
 	r.Xenon135 = xenonEquilibriumPhysical(1.0)
-	r.Step(RCPRatedSpeed, 0)
+	r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 
 	assert.InDelta(t, 0.0, float64(r.Reactivity), 1e-3,
 		"critical hot-zero-power must be expressible near the reference shim, rho=%v",

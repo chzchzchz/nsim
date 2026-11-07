@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // Step advances the Containment Isolation System by one timestep.
 // The step implements two phased latches with reset semantics:
 //
@@ -25,7 +27,7 @@ package core
 //     through the containment walls as required to prevent the
 //     release of radioactivity to the outside environment."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_113.txt:92-96
-func (s *ContainmentIsolationSystem) Step(
+func (s *ContainmentIsolationSystem) Step(dt time.Duration,
 	safetyInjection bool,
 	containmentPressure Pressure,
 ) ContainmentIsolationSystem {

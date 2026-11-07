@@ -25,12 +25,11 @@ import (
 func TestScenario13_ReactorLeadReturnToFullPower(t *testing.T) {
 	// Same width argument as the descent test in core/rodcontrol_test.go:
 	// the integrator is linear in dt, so a 10 ms tick lands on identical
-	// targets while cutting step count 10x. Must not run in parallel.
 	// Runtime exceeds 5 s because the return leg itself is the subject
 	// and is duration-bound: ten points at the modeled envelope pace of
 	// 0.02 %/s takes 500 s of simulated coolant time that seeding
 	// cannot shortcut.
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 
 	// Start from the post-descent plateau instead of re-walking the
 	// descent (its coverage lives in the RPC tests): inventories seeded
@@ -58,8 +57,8 @@ func TestScenario13_ReactorLeadReturnToFullPower(t *testing.T) {
 		ascentSeconds = 500.0 // 0.10 / 0.0002 covers the ten-point return
 		returnSeconds = 90.0
 	)
-	for i := 0; i < int(settleSeconds/TimeStep.Seconds()); i++ {
-		p.Step()
+	for i := 0; i < int(settleSeconds/testDt.Seconds()); i++ {
+		p.Step(testDt)
 		p.Update()
 	}
 	require.False(t, rpv.Trip, "the plateau hold must not trip the reactor")
@@ -70,8 +69,8 @@ func TestScenario13_ReactorLeadReturnToFullPower(t *testing.T) {
 	// loop stabilize.
 	setControl(t, &p, "PlantOperation/PowerSetpointTarget", "100")
 	tripped := false
-	for i := 0; i < int((ascentSeconds+returnSeconds)/TimeStep.Seconds()); i++ {
-		p.Step()
+	for i := 0; i < int((ascentSeconds+returnSeconds)/testDt.Seconds()); i++ {
+		p.Step(testDt)
 		p.Update()
 		if rpv.Trip {
 			tripped = true

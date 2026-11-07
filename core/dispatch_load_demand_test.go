@@ -19,7 +19,7 @@ func TestDispatchDemandLatchesUnderPermissive(t *testing.T) {
 	p.PlantOperation.LoadFollowActive = true
 	p.ReactorBuilding.Grid.LoadDemand = 600
 
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 
 	assert.InDelta(t, 0.6,
 		p.TurbineBuilding.Turbine.LoadDemandRef, 1e-9,
@@ -33,7 +33,7 @@ func TestDispatchDemandBlockedWithoutPermissive(t *testing.T) {
 	p.TurbineBuilding.Turbine.LoadDemandRef = 0.25
 	p.ReactorBuilding.Grid.LoadDemand = 900
 
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 
 	assert.InDelta(t, 0.25,
 		p.TurbineBuilding.Turbine.LoadDemandRef, 1e-9,
@@ -48,7 +48,7 @@ func TestDispatchPermissiveClearsOutsidePowerOperation(t *testing.T) {
 	p.PlantOperation.Mode = HotStandby
 	p.PlantOperation.LoadFollowActive = true
 
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 
 	assert.False(t, p.PlantOperation.LoadFollowActive,
 		"permissive must not survive outside power operation")

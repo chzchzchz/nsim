@@ -43,7 +43,7 @@ import "time"
 //     "The 118-volt ac instrument power supply is divided into
 //     four buses."
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_167.txt:22-23
-func (e *PlantElectricalSystems) Step(
+func (e *PlantElectricalSystems) Step(dt time.Duration,
 	busA, busB ESFBus,
 	dieselA, dieselB *DieselGenerator,
 ) PlantElectricalSystems {
@@ -59,12 +59,12 @@ func (e *PlantElectricalSystems) Step(
 	// is dark; a live bus (offsite or the unit through the UAT)
 	// resets them.
 	if busDark(busA) {
-		ret.Diesel1StartTime += TimeStep.Seconds()
+		ret.Diesel1StartTime += dt.Seconds()
 	} else {
 		ret.Diesel1StartTime = 0
 	}
 	if busDark(busB) {
-		ret.Diesel2StartTime += TimeStep.Seconds()
+		ret.Diesel2StartTime += dt.Seconds()
 	} else {
 		ret.Diesel2StartTime = 0
 	}
@@ -102,20 +102,20 @@ func (e *PlantElectricalSystems) Step(
 
 // StepBySeconds advances the Plant Electrical Systems state
 // machine by the given elapsed wall-clock duration (seconds).
-// It loops Step() once per TimeStep and is used by tests
+// It loops Step() once per ProductionStep and is used by tests
 // that need to walk through diesel-start or auto-transfer
-// delays without spending the (TimeStep)^{-1} steps per
+// delays without spending the (ProductionStep)^{-1} steps per
 // second.
-func (e *PlantElectricalSystems) StepBySeconds(
+func (e *PlantElectricalSystems) StepBySeconds(dt time.Duration,
 	seconds float64,
 	busA, busB ESFBus,
 	dieselA, dieselB *DieselGenerator,
 ) PlantElectricalSystems {
 	ret := *e
-	steps := int(seconds / TimeStep.Seconds())
+	steps := int(seconds / dt.Seconds())
 	steps = max(steps, 1)
 	for i := 0; i < steps; i++ {
-		ret = ret.Step(busA, busB, dieselA, dieselB)
+		ret = ret.Step(dt, busA, busB, dieselA, dieselB)
 	}
 	return ret
 }

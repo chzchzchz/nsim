@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // Step advances the three-element feedwater regulator by one
 // timestep. The regulator implements a proportional-integral (PI)
 // control law on steam-generator level error, with steam flow as a
@@ -44,7 +46,7 @@ package core
 //     spec's function-generator curves and uses a linear
 //     flow-vs-position characteristic instead.
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:83-85
-func (r *FeedwaterRegulator) Step() FeedwaterRegulator {
+func (r *FeedwaterRegulator) Step(dt time.Duration) FeedwaterRegulator {
 	ret := *r
 
 	kp := FeedwaterRegulatorGain
@@ -99,7 +101,7 @@ func (r *FeedwaterRegulator) Step() FeedwaterRegulator {
 	saturatedHigh := demand > 1 && eLevel > 0
 	saturatedLow := demand < 0 && eLevel < 0
 	if !saturatedHigh && !saturatedLow {
-		ret.IntegralError += eLevel * TimeStep.Seconds()
+		ret.IntegralError += eLevel * dt.Seconds()
 	}
 
 	demand = kp*eLevel + ki*ret.IntegralError + ffInput + mismatch

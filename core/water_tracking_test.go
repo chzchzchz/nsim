@@ -60,7 +60,7 @@ func TestPRT_AccumulatesPORVDischarge(t *testing.T) {
 	pzzBefore := p.ReactorBuilding.Pressurizer.Water.Float()
 	prtBefore := p.ReactorBuilding.PressurizedReliefTank.Level.Float()
 	outletBefore := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
-	stepN(&p, int(time.Second/TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	// The contraction surge contributes +k * (total hot-leg dT) to
 	// liquid inventory across the window (a drain while cooling);
@@ -86,8 +86,8 @@ func TestPRT_AccumulatesPORVDischarge(t *testing.T) {
 	assert.InDelta(t, wantWater, pzzGain, wantGain*0.05,
 		"want pressurizer liquid gain = discharge + cooldown"+
 			" recondensation + contraction surge (%v + %v + %v), got %v",
-			wantGain, float64(PressurizerAmbientDecay)/
-				PressurizerBubbleStiffness, surgeGain, pzzGain)
+		wantGain, float64(PressurizerAmbientDecay)/
+			PressurizerBubbleStiffness, surgeGain, pzzGain)
 }
 
 // Once the PRT is full the rupture disc vents it: further discharge
@@ -104,7 +104,7 @@ func TestPRT_RuptureDiscLatchesOnFull(t *testing.T) {
 	p.ReactorBuilding.PressurizedReliefTank.Level =
 		Volume{Val: PressurizedReliefTankCapacityGal, Unit: u.Gallon}
 
-	stepN(&p, int(10*time.Millisecond/TimeStep))
+	stepN(&p, int(10*time.Millisecond/DefaultTimeStep), DefaultTimeStep)
 	assert.True(t, p.ReactorBuilding.PRTRuptureDiscBurst,
 		"want rupture disc latched with PRT at capacity")
 	assert.InDelta(t, PressurizedReliefTankCapacityGal,
@@ -140,8 +140,8 @@ func TestSG_AtmosphericDumpDebitsInventory(t *testing.T) {
 			HeatInput: SteamGeneratorFullLoadHeatInput,
 		}
 		sg.AtmosphericDumpValve.Open = atmOpen
-		for i := 0; i < int(time.Second/TimeStep); i++ {
-			sg = sg.Step(1.0)
+		for i := 0; i < int(time.Second/DefaultTimeStep); i++ {
+			sg = sg.Step(DefaultTimeStep, 1.0)
 		}
 		return seededWater - sg.Water.Float()
 	}
@@ -175,7 +175,7 @@ func TestCVCS_LetdownDivertsToHoldupWhenVCTFull(t *testing.T) {
 	// low-pressure letdown scaling.
 	p.ReactorBuilding.Pressurizer.HeatersOn = true
 
-	stepN(&p, int(time.Second/TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 	cv := p.AuxiliaryBuilding.ChemicalVolumeControlSystem
 	assert.True(t, cv.Diverting, "want divert latched with VCT above high level")
 	assert.InDelta(t, CVCSDesignLetdownFlow.Float()*1.0,
@@ -185,8 +185,8 @@ func TestCVCS_LetdownDivertsToHoldupWhenVCTFull(t *testing.T) {
 
 	// Charging drains the tank back into its design band (~7 s at
 	// 30 gal/s numeric rate); poll until the divert clears.
-	for i := 0; i < int(20*time.Second/TimeStep); i++ {
-		stepN(&p, 1)
+	for i := 0; i < int(20*time.Second/DefaultTimeStep); i++ {
+		stepN(&p, 1, DefaultTimeStep)
 		if !p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Diverting {
 			break
 		}
@@ -215,11 +215,11 @@ func TestCVCS_ChargeLetdownMovesPressurizerWater(t *testing.T) {
 	steadyPressurizer(&letdownOnly)
 	letdownOnly.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = true
 
-	steps := int(time.Second / TimeStep)
+	steps := int(time.Second / DefaultTimeStep)
 	chargeBefore := chargeOnly.ReactorBuilding.Pressurizer.Water.Float()
 	letdownBefore := letdownOnly.ReactorBuilding.Pressurizer.Water.Float()
-	stepN(&chargeOnly, steps)
-	stepN(&letdownOnly, steps)
+	stepN(&chargeOnly, steps, DefaultTimeStep)
+	stepN(&letdownOnly, steps, DefaultTimeStep)
 
 	// The surge-line graph edges contribute small residual flows,
 	// so assert the coupled design-flow movement with margin.
@@ -248,7 +248,7 @@ func TestCVCS_MakeupDepletesRWST(t *testing.T) {
 
 	rwstBefore := p.ReactorBuilding.SafetyInjectionSystem.RWSTLevel.Float()
 	vctBefore := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
-	stepN(&p, int(time.Second/TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	rwstLoss := rwstBefore - p.ReactorBuilding.SafetyInjectionSystem.RWSTLevel.Float()
 	vctGain := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel.Float() - vctBefore
@@ -262,7 +262,7 @@ func TestCVCS_MakeupDepletesRWST(t *testing.T) {
 	// negative.
 	p.ReactorBuilding.SafetyInjectionSystem.RWSTLevel =
 		Volume{Val: 0.05, Unit: u.Gallon}
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 	assert.GreaterOrEqual(t,
 		p.ReactorBuilding.SafetyInjectionSystem.RWSTLevel.Float(), 0.0,
 		"want RWST to clamp at zero")
@@ -282,7 +282,7 @@ func TestCVCS_BedSaturationHaltsBoration(t *testing.T) {
 		BoronConcentration:           CVCSInitialBoron,
 		BTRSRecirculationPumpRunning: true,
 		BTRSBedSaturation:            1.0,
-	}).Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
+	}).Step(DefaultTimeStep, Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
 	assert.Zero(t, spent.BorationRate,
 		"want BorationRate=0 on a saturated bed")
 	assert.InDelta(t, CVCSInitialBoron, spent.BoronConcentration, 1e-9,
@@ -293,7 +293,7 @@ func TestCVCS_BedSaturationHaltsBoration(t *testing.T) {
 		BoronConcentration:           CVCSInitialBoron,
 		BTRSRecirculationPumpRunning: true,
 	}
-	after := fresh.Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
+	after := fresh.Step(DefaultTimeStep, Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
 	assert.Positive(t, after.BTRSBedSaturation,
 		"want bed saturation to advance while borating")
 	assert.Greater(t, after.BoronConcentration, CVCSInitialBoron,
@@ -315,7 +315,7 @@ func TestTurbineBuilding_LPHeaterDrainsCascadeToHotwell(t *testing.T) {
 		Volume{Val: 123, Unit: u.Gallon}
 
 	hotwellBefore := p.TurbineBuilding.Condenser.HotwellLevel.Float()
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 
 	drainAfter := p.TurbineBuilding.LowPressureHeater.DrainLevel.Float()
 	hotwellRise := p.TurbineBuilding.Condenser.HotwellLevel.Float() - hotwellBefore
@@ -356,7 +356,7 @@ func TestTurbineBuilding_HDTDumpValveCapsLevel(t *testing.T) {
 		Volume{Val: HeaterDrainTankCapacityGal, Unit: u.Gallon}
 
 	hotwellBefore := p.TurbineBuilding.Condenser.HotwellLevel.Float()
-	stepN(&p, int(time.Second/TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	hdt := p.TurbineBuilding.HeaterDrainTank.Level.Float()
 	hotwellRise := p.TurbineBuilding.Condenser.HotwellLevel.Float() - hotwellBefore
@@ -384,7 +384,7 @@ func TestTurbineBuilding_FeedPumpDrawsDownHDT(t *testing.T) {
 	// sees no differential and only the modelled suction moves level.
 	p.ReactorBuilding.SteamGenerator.Pressure = Pressure(pumpHead)
 
-	stepN(&p, int(time.Second/TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 	got := p.TurbineBuilding.HeaterDrainTank.Level.Float()
 	wantDraw := FeedPumpSuctionFlow * 1.0
 	assert.GreaterOrEqual(t, 5000-got, wantDraw,

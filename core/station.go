@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // Step advances the station transformer and house-load model.
 //
 // The UAT is energised when the generator breaker is closed and
@@ -22,7 +24,7 @@ package core
 //   - "house loads automatically transferred to the offsite
 //     sources of power."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:64-66
-func (s *StationTransformer) Step(
+func (s *StationTransformer) Step(dt time.Duration,
 	generatorVoltage float64,
 	gridVoltage float64,
 	breakerClosed bool,
@@ -59,7 +61,7 @@ func (s *StationTransformer) Step(
 // Spec justification:
 //   - "supply power for its own auxiliaries."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:57-58
-func (h *HouseLoad) Step(
+func (h *HouseLoad) Step(dt time.Duration,
 	generatorOnline bool,
 	generatorOutputFraction float64,
 ) HouseLoad {

@@ -25,8 +25,8 @@ func TestWitness_RodBankWorthPerInsertion(t *testing.T) {
 		rpv.ControlRods.Insertion = insertion
 		rpv.ControlRods.DemandInsertion = insertion
 	}
-	stepN(&low, 1)
-	stepN(&high, 1)
+	stepN(&low, 1, DefaultTimeStep)
+	stepN(&high, 1, DefaultTimeStep)
 
 	rhoLow := float64(low.ReactorBuilding.ReactorPressureVessel.Reactivity)
 	rhoHigh := float64(high.ReactorBuilding.ReactorPressureVessel.Reactivity)

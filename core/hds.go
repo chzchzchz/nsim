@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // Step advances the Hydrogen Detection and Suppression System by
 // one timestep. The simplified model integrates the containment
 // atmosphere hydrogen volume percent with three external flows:
@@ -37,23 +39,23 @@ package core
 //   - Explosive mixture concern: "controlling hydrogen to avoid
 //     an explosive mixture."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_107.txt:54-55
-func (h *HydrogenDetectionSuppression) Step() HydrogenDetectionSuppression {
+func (h *HydrogenDetectionSuppression) Step(dt time.Duration) HydrogenDetectionSuppression {
 	ret := *h
 
-	dt := TimeStep.Seconds()
+	dtSec := dt.Seconds()
 
 	// Volume balance. Rates are in % per hour; convert to per
 	// step by multiplying by dt/3600.
 	var dH2 float64
 	if ret.GenerationActive {
-		dH2 += HydrogenGenerationRate * dt / 3600.0
+		dH2 += HydrogenGenerationRate * dtSec / 3600.0
 	}
 	if ret.RecombinerActive {
 		dH2 -= HydrogenRecombinerRemovalRate *
-			float64(HydrogenNumRecombiners) * dt / 3600.0
+			float64(HydrogenNumRecombiners) * dtSec / 3600.0
 	}
 	if ret.VentilationActive {
-		dH2 -= HydrogenVentilationRemovalRate * dt / 3600.0
+		dH2 -= HydrogenVentilationRemovalRate * dtSec / 3600.0
 	}
 
 	ret.HydrogenVolumePercent += dH2

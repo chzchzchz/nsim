@@ -62,7 +62,7 @@ func TestRefueling_CavityFloodsToMaxDepth(t *testing.T) {
 		CavityFlooding: true,
 	}
 	// 24 ft at 1 ft/min = 24 minutes = 1440 s.
-	r = r.StepBy(1500.0)
+	r = r.StepBy(DefaultTimeStep, 1500.0)
 	assert.InDelta(t, RefuelingCavityMaxDepth, r.CavityFloodDepth, 1e-6,
 		"want CavityFloodDepth=RefuelingCavityMaxDepth after flooding, "+
 			"got %v", r.CavityFloodDepth)
@@ -85,7 +85,7 @@ func TestRefueling_CavityDrainsOnReassembly(t *testing.T) {
 		InternalsRemoved: true,
 	}
 	// 24 ft at 1 ft/min = 24 minutes = 1440 s.
-	r = r.StepBy(1500.0)
+	r = r.StepBy(DefaultTimeStep, 1500.0)
 	assert.Zero(t, r.CavityFloodDepth,
 		"want CavityFloodDepth=0 after draining, got %v",
 		r.CavityFloodDepth)
@@ -114,7 +114,7 @@ func TestRefueling_PhaseAdvancesOnTimer(t *testing.T) {
 	for i := 0; i < 6; i++ {
 		totalSec += RefuelingPhaseDurations[i]
 	}
-	r = r.StepBy(totalSec + 100*TimeStep.Seconds())
+	r = r.StepBy(DefaultTimeStep, totalSec+100*DefaultTimeStep.Seconds())
 	assert.Equal(t, RefuelingPhaseComplete, r.Phase,
 		"want Phase=RefuelingPhaseComplete after full cycle, got %v",
 		r.Phase)
@@ -126,12 +126,12 @@ func TestRefueling_PhaseAdvancesOnTimer(t *testing.T) {
 func TestRefueling_FuelTransfersAtMidPhaseHandling(t *testing.T) {
 	t.Parallel()
 	r := RefuelingOperations{
-		Phase:               RefuelingPhaseFuelHandling,
+		Phase:                RefuelingPhaseFuelHandling,
 		FuelAssembliesInCore: FuelAssembliesPerReactor,
 		FuelAssembliesInPit:  0,
 	}
 	midSec := RefuelingPhaseDurations[RefuelingPhaseFuelHandling] / 2.0
-	r = r.StepBy(midSec + 100*TimeStep.Seconds())
+	r = r.StepBy(DefaultTimeStep, midSec+100*DefaultTimeStep.Seconds())
 	assert.True(t, r.FuelTransferred,
 		"want FuelTransferred=true after mid-phase, got %v",
 		r.FuelTransferred)
@@ -148,7 +148,7 @@ func TestRefueling_FuelTransfersAtMidPhaseHandling(t *testing.T) {
 // disassembly phase.
 func TestRefueling_HeadAndInternalsRemovedAtDisassembly(t *testing.T) {
 	r := RefuelingOperations{Phase: RefuelingPhaseDisassembly}
-	r = r.Step()
+	r = r.Step(DefaultTimeStep)
 	assert.True(t, r.HeadRemoved,
 		"want HeadRemoved=true in disassembly, got %v", r.HeadRemoved)
 	assert.True(t, r.InternalsRemoved,
@@ -161,7 +161,7 @@ func TestRefueling_HeadAndInternalsRemovedAtDisassembly(t *testing.T) {
 // flooding happens without operator action.
 func TestPlant_Refueling_InitialStatePreserved(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	r := p.ReactorBuilding.RefuelingOperations
 	assert.Equal(t, RefuelingPhaseComplete, r.Phase,

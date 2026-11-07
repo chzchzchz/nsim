@@ -25,7 +25,7 @@ import (
 func TestCCWS_AutoLatchesOnESFBusPower(t *testing.T) {
 	p := MakePlant()
 	require.True(t, p.Electrical.ESFBusA.BreakerClosed)
-	stepN(&p, 2)
+	stepN(&p, 2, DefaultTimeStep)
 	assert.True(t, p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning,
 		"want CCWS pump latched once the ESF bus is energised")
 	assert.InDelta(t, CCWSInletSteadyStateTemp,
@@ -111,7 +111,7 @@ func TestPrecriticalLineup_DutyCycleBalancesChargingLetdown(t *testing.T) {
 				set("AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen", "0")
 			}
 		}
-		stepN(&p, 1)
+		stepN(&p, 1, DefaultTimeStep)
 		vct := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
 		minVCT = min(minVCT, vct)
 		maxVCT = max(maxVCT, vct)
@@ -159,9 +159,8 @@ func TestMakeup_AutoInitiatesOnVCTLowLevel(t *testing.T) {
 	// Level drift, flow delivery, and the initiation latch are
 	// linear in dt; crossing detection shifts by at most one tick
 	// against 30 s windows and band assertions built for slack. Must
-	// not run in parallel: overrideTimeStep mutates global simulation
 	// state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	run := func(auto string) (initiated, cleared bool, minVCT, maxVCT, endVCT float64) {
 		p := MakePlant()
 		cm := GetControlMap(&p)
@@ -173,8 +172,8 @@ func TestMakeup_AutoInitiatesOnVCTLowLevel(t *testing.T) {
 			cm["ReactorBuilding/ReactorMakeupControlValve/Auto"].Set(auto))
 		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel =
 			Volume{Val: VCTLowLevel + 10, Unit: u.Gallon}
-		for range int(30 * time.Second / TimeStep) {
-			stepN(&p, 1)
+		for range int(30 * time.Second / testDt) {
+			stepN(&p, 1, testDt)
 			mv := p.ReactorBuilding.ReactorMakeupControlValve
 			if mv.Initiated {
 				initiated = true
@@ -224,7 +223,7 @@ func TestRPS_ChannelTestSuppressesTestedChannel(t *testing.T) {
 	lowSteamline := RPSLowSteamlinePressureTrip - 10
 
 	tested := ReactorProtectionSystem{ChannelTest: RPSSteamlineChannelInTest}
-	tested = tested.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 0,
+	tested = tested.Step(DefaultTimeStep, lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 0,
 		false)
 	assert.Equal(t, 0, tested.TripSignalCount,
 		"the isolated channel contributes no trip vote")
@@ -234,7 +233,7 @@ func TestRPS_ChannelTestSuppressesTestedChannel(t *testing.T) {
 		"steamline isolation stays clear during its own channel test")
 
 	inService := ReactorProtectionSystem{}
-	inService = inService.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 0,
+	inService = inService.Step(DefaultTimeStep, lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 0,
 		false)
 	assert.True(t, inService.SafetyInjectionActuated,
 		"with channels in service the same state actuates SI")
@@ -242,7 +241,7 @@ func TestRPS_ChannelTestSuppressesTestedChannel(t *testing.T) {
 	highContainment := RPSHighContainmentPressureTrip + 10
 	sprayTested := ReactorProtectionSystem{
 		ChannelTest: RPSContainmentChannelInTest}
-	sprayTested = sprayTested.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
+	sprayTested = sprayTested.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
 		CoreReferenceInletF, highContainment, 0, 1, 0,
 		false)
 	assert.False(t, sprayTested.ContainmentSprayActuated,

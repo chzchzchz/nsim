@@ -24,10 +24,9 @@ func TestScenario16_ReactorTripStabilizationAndRecovery(t *testing.T) {
 	// The fold trajectory is width-sensitive, so trip-side bands here
 	// are coarse and directional; the dump controller's headroom limiter
 	// and the rod clamp are latch/algebraic logic that tolerate the
-	// coarse tick. Must not run in parallel.
-	overrideTimeStep(t, scenario16Tick)
+	testDt := scenario16Tick
 	p := scenario10FullPowerPlant()
-	stepFor(&p, 5*time.Second)
+	stepFor(&p, 5*time.Second, testDt)
 	require.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State)
 
 	startOutlet := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
@@ -38,7 +37,7 @@ func TestScenario16_ReactorTripStabilizationAndRecovery(t *testing.T) {
 	// of reactor trip by operator action in the control room.",
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:8-9).
 	setControl(t, &p, "ReactorBuilding/ReactorPressureVessel/Trip", "true")
-	stepFor(&p, 3*time.Second)
+	stepFor(&p, 3*time.Second, testDt)
 
 	rpv := &p.ReactorBuilding.ReactorPressureVessel
 	require.True(t, rpv.Trip, "the manual trip must latch the reactor")
@@ -50,7 +49,7 @@ func TestScenario16_ReactorTripStabilizationAndRecovery(t *testing.T) {
 	// the no-load program, and nothing spuriously actuates.
 	maxSgP := 0.0
 	for i := 0; i < int(120*time.Second/scenario16Tick); i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, testDt)
 		maxSgP = max(maxSgP, float64(p.ReactorBuilding.SteamGenerator.Pressure))
 	}
 	frac := fissionFraction(rpv.FissionPower)
@@ -86,7 +85,7 @@ func TestScenario16_ReactorTripStabilizationAndRecovery(t *testing.T) {
 	// demonstrate the return to power here (the ramp itself is
 	// covered by TestScenario5_BoronSetpointRampsThroughFlowPath).
 	for i := 0; i < int(600*time.Second/scenario16Tick); i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, testDt)
 		if i%int(10*time.Second/scenario16Tick) == 0 &&
 			rpv.ControlRods.Insertion < 0.01 {
 			// Chase a small supercritical bias on the measured folded

@@ -107,8 +107,8 @@ func TestCVCSAutoBoronManualOverride(t *testing.T) {
 	auto := MakePlant()
 	auto.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoBoronControl = true
 
-	stepN(&manual, 1)
-	stepN(&auto, 1)
+	stepN(&manual, 1, DefaultTimeStep)
+	stepN(&auto, 1, DefaultTimeStep)
 
 	assert.Equal(t, CVCSVolumeControl,
 		manual.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode,
@@ -134,9 +134,8 @@ func TestCVCSAutoBoronUnlocksDeepPlateau(t *testing.T) {
 	// dilution selected by applyAutoBoronControl on rod position and
 	// integrated linearly in dt; the assertions are wide bands around
 	// the walked plateau, so the widened tick reproduces the
-	// trajectory at one tenth the step count. Must not run in
-	// parallel: overrideTimeStep mutates global simulation state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	// trajectory at one tenth the step count..
+	testDt := 10 * time.Millisecond
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.AutoControl = true
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoBoronControl = true
@@ -147,7 +146,7 @@ func TestCVCSAutoBoronUnlocksDeepPlateau(t *testing.T) {
 			float64(CoreRatedThermalPower)
 	}
 
-	stepN(&p, int(240*time.Second/TimeStep))
+	stepN(&p, int(240*time.Second/testDt), testDt)
 	descending := powerFrac()
 	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped)
 	assert.Greater(t, descending, 0.6,
@@ -157,7 +156,7 @@ func TestCVCSAutoBoronUnlocksDeepPlateau(t *testing.T) {
 		BoronConcentration, CVCSInitialBoron,
 		"boron trim has diluted below the fresh-fuel value")
 
-	stepN(&p, int(240*time.Second/TimeStep))
+	stepN(&p, int(240*time.Second/testDt), testDt)
 	final := powerFrac()
 	assert.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
 		"deep maneuver must not trip")
@@ -251,7 +250,7 @@ func TestCVCSAutoBoronDrivePacesWithError(t *testing.T) {
 // its zero value - operator chemistry never inherits the automatic
 // pacing scalar.
 func TestCVCSDilutionRateFullWithoutAutoTrim(t *testing.T) {
-	overrideTimeStep(t, time.Second)
+	testDt := time.Second
 	c := MakePlant().AuxiliaryBuilding.ChemicalVolumeControlSystem
 	require.False(t, c.AutoBoronControl)
 	require.Zero(t, c.AutoBoronDrive)
@@ -259,7 +258,7 @@ func TestCVCSDilutionRateFullWithoutAutoTrim(t *testing.T) {
 	c.BTRSRecirculationPumpRunning = true
 
 	start := c.BoronConcentration
-	c = c.Step(Volume{},
+	c = c.Step(testDt, Volume{},
 		Temperature{Val: 580, Unit: u.Fahrenheit}, 0.5, PressurizerHeaterTarget)
 
 	dropped := start - c.BoronConcentration

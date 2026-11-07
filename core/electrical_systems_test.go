@@ -38,7 +38,10 @@ func carryingDiesel() *DieselGenerator {
 // is no station blackout.
 func TestElecSys_InitialStateHasOffsiteAndEnergizedBuses(t *testing.T) {
 	e := PlantElectricalSystems{}
-	e = e.Step(pesStepIn(true, true, nil, nil))
+	{
+		busA, busB, da, db := pesStepIn(true, true, nil, nil)
+		e = e.Step(DefaultTimeStep, busA, busB, da, db)
+	}
 	assert.False(t, e.Diesel1Running,
 		"want Diesel1Running=false at startup, got %v",
 		e.Diesel1Running)
@@ -63,8 +66,11 @@ func TestElecSys_InitialStateHasOffsiteAndEnergizedBuses(t *testing.T) {
 // timers do not accumulate and the diesels stay stopped.
 func TestElecSys_DieselsStayStoppedWhileBusesHealthy(t *testing.T) {
 	e := PlantElectricalSystems{}
-	for i := 0; i < int(60.0/TimeStep.Seconds()); i++ {
-		e = e.Step(pesStepIn(true, true, nil, nil))
+	for i := 0; i < int(60.0/DefaultTimeStep.Seconds()); i++ {
+		{
+			busA, busB, da, db := pesStepIn(true, true, nil, nil)
+			e = e.Step(DefaultTimeStep, busA, busB, da, db)
+		}
 	}
 	assert.False(t, e.Diesel1Running,
 		"want Diesel1Running=false with buses healthy, got %v",
@@ -87,7 +93,7 @@ func TestElecSys_DieselsStartOnLossOfOffsite(t *testing.T) {
 	e := PlantElectricalSystems{}
 	d := carryingDiesel()
 	busA, busB, da, db := pesStepIn(false, false, d, d)
-	e = e.StepBySeconds(1.0, busA, busB, da, db)
+	e = e.StepBySeconds(DefaultTimeStep, 1.0, busA, busB, da, db)
 	assert.True(t, e.Diesel1Running,
 		"want Diesel1Running=true after 30 s, got %v",
 		e.Diesel1Running)
@@ -106,7 +112,7 @@ func TestElecSys_StationBlackoutBeforeDieselReady(t *testing.T) {
 	e := PlantElectricalSystems{}
 	cranking := &DieselGenerator{State: DieselCranking}
 	busA, busB, da, db := pesStepIn(false, false, cranking, cranking)
-	e = e.StepBySeconds(1.0, busA, busB, da, db)
+	e = e.StepBySeconds(DefaultTimeStep, 1.0, busA, busB, da, db)
 	assert.False(t, e.ESFBus1Available,
 		"want ESFBus1Available=false before diesel ready, got %v",
 		e.ESFBus1Available)
@@ -129,7 +135,7 @@ func TestElecSys_ESFBusEnergizedAfterDieselAndAutoTransfer(t *testing.T) {
 	busA, busB, _, _ := pesStepIn(true, true, d, d)
 	busA.OnDiesel = true
 	busB.OnDiesel = true
-	e = e.Step(busA, busB, d, d)
+	e = e.Step(DefaultTimeStep, busA, busB, d, d)
 	assert.True(t, e.ESFBus1Available,
 		"want ESFBus1Available=true after diesel+transfer, got %v",
 		e.ESFBus1Available)
@@ -150,10 +156,13 @@ func TestElecSys_OffsiteReturnResetsDieselTimers(t *testing.T) {
 	e := PlantElectricalSystems{}
 	da, db := carryingDiesel(), carryingDiesel()
 	busA, busB, _, _ := pesStepIn(false, false, da, db)
-	e = e.StepBySeconds(DieselRatedLoadTime+5.0, busA, busB, da, db)
+	e = e.StepBySeconds(DefaultTimeStep, DieselRatedLoadTime+5.0, busA, busB, da, db)
 	assert.Positive(t, e.Diesel1StartTime,
 		"want Diesel1StartTime>0 while the bus is dark")
-	e = e.Step(pesStepIn(true, true, nil, nil))
+	{
+		busA, busB, da, db := pesStepIn(true, true, nil, nil)
+		e = e.Step(DefaultTimeStep, busA, busB, da, db)
+	}
 	assert.Zero(t, e.Diesel1StartTime,
 		"want Diesel1StartTime=0 after the bus re-energizes, got %v",
 		e.Diesel1StartTime)
@@ -166,7 +175,7 @@ func TestElecSys_InverterPoweredFromEitherESFBus(t *testing.T) {
 	d := carryingDiesel()
 	busA, busB, _, _ := pesStepIn(true, false, d, d)
 	busA.OnDiesel = true
-	e = e.Step(busA, busB, d, d)
+	e = e.Step(DefaultTimeStep, busA, busB, d, d)
 	assert.True(t, e.ESFBus1Available,
 		"want ESFBus1Available=true from diesel, got %v",
 		e.ESFBus1Available)
@@ -180,7 +189,7 @@ func TestElecSys_InverterPoweredFromEitherESFBus(t *testing.T) {
 // and the buses remain energized.
 func TestPlant_PlantElectricalSystems_InitialStatePreserved(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	e := p.ReactorBuilding.PlantElectricalSystems
 	assert.True(t, e.OffsitePowerAvailable,

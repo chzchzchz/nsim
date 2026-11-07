@@ -26,7 +26,7 @@ import (
 func TestRiverFeedsServiceWaterInlet(t *testing.T) {
 	p := MakePlant()
 	p.Outside.RiverTemp = Temperature{Val: 88, Unit: u.Fahrenheit}
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.InDelta(t, 88.0,
 		p.Outside.ServiceWaterSystem.InletTemp.Float(), 1e-9,
 		"want SWS InletTemp=88 after one step, got %v",
@@ -38,7 +38,7 @@ func TestRiverFeedsServiceWaterInlet(t *testing.T) {
 func TestRiverFeedsRCFCCoilInlet(t *testing.T) {
 	p := MakePlant()
 	p.Outside.RiverTemp = Temperature{Val: 88, Unit: u.Fahrenheit}
-	stepN(&p, 2)
+	stepN(&p, 2, DefaultTimeStep)
 	for i := 0; i < RCFCUnitCount; i++ {
 		assert.InDelta(t, 88.0,
 			p.AuxiliaryBuilding.RCFCUnits[i].CoilInletTemp.Float(), 1e-9,
@@ -52,7 +52,7 @@ func TestRiverFeedsRCFCCoilInlet(t *testing.T) {
 func TestLossOfServiceWaterKillsRCFCCooling(t *testing.T) {
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = false
-	stepN(&p, 3)
+	stepN(&p, 3, DefaultTimeStep)
 	assert.Zero(t, p.Outside.ServiceWaterSystem.Flow,
 		"want SWS Flow=0 with pumps stopped, got %v",
 		p.Outside.ServiceWaterSystem.Flow)
@@ -74,7 +74,7 @@ func TestLossOfServiceWaterKillsRCFCCooling(t *testing.T) {
 func TestHotRiverLiftsCCWInletTarget(t *testing.T) {
 	hot := MakePlant()
 	hot.Outside.RiverTemp = Temperature{Val: 100, Unit: u.Fahrenheit}
-	stepN(&hot, 2)
+	stepN(&hot, 2, DefaultTimeStep)
 	ccws := hot.AuxiliaryBuilding.ComponentCoolingWaterSystem
 	require.True(t, ccws.PumpRunning,
 		"precondition: CCWS auto-starts once an ESF bus is energised")
@@ -83,7 +83,7 @@ func TestHotRiverLiftsCCWInletTarget(t *testing.T) {
 		ccws.InletTemp.Float())
 
 	nominal := MakePlant()
-	stepN(&nominal, 2)
+	stepN(&nominal, 2, DefaultTimeStep)
 	nominalCCWS := nominal.AuxiliaryBuilding.ComponentCoolingWaterSystem
 	assert.InDelta(t, CCWSInletSteadyStateTemp,
 		nominalCCWS.InletTemp.Float(), 1e-9,
@@ -96,7 +96,7 @@ func TestHotRiverLiftsCCWInletTarget(t *testing.T) {
 func TestLossOfServiceWaterSoaksCCWLoop(t *testing.T) {
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = false
-	stepN(&p, 2)
+	stepN(&p, 2, DefaultTimeStep)
 	ccws := p.AuxiliaryBuilding.ComponentCoolingWaterSystem
 	require.True(t, ccws.PumpRunning,
 		"precondition: CCWS auto-starts once an ESF bus is energised")
@@ -115,7 +115,7 @@ func TestLossOfServiceWaterSoaksCCWLoop(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:81
 func TestSWSTotalHeatLoadIncludesCCWDuty(t *testing.T) {
 	p := MakePlant()
-	stepN(&p, 2)
+	stepN(&p, 2, DefaultTimeStep)
 	rcfcSum := 0.0
 	for i := 0; i < RCFCUnitCount; i++ {
 		rcfcSum += p.AuxiliaryBuilding.RCFCUnits[i].HeatTransferRate
@@ -144,10 +144,10 @@ func TestSWSTotalHeatLoadIncludesCCWDuty(t *testing.T) {
 //     as drops of a borated sodium hydroxide solution."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:4-7
 func TestContainment_SprayCondensationCoolsAtmosphere(t *testing.T) {
-	steps := 5 * int(time.Second/TimeStep)
+	steps := 5 * int(time.Second/DefaultTimeStep)
 
 	base := MakePlant()
-	stepN(&base, steps)
+	stepN(&base, steps, DefaultTimeStep)
 	baseT := base.ReactorBuilding.ContainmentBuilding.Temperature.Float()
 
 	sprayed := MakePlant()
@@ -155,7 +155,7 @@ func TestContainment_SprayCondensationCoolsAtmosphere(t *testing.T) {
 	css.Running = true
 	css.DriveReady = true
 	css.SprayHeaderOpen = true
-	stepN(&sprayed, steps)
+	stepN(&sprayed, steps, DefaultTimeStep)
 	sprayT := sprayed.ReactorBuilding.ContainmentBuilding.Temperature.Float()
 
 	assert.Less(t, sprayT, baseT,
@@ -175,14 +175,13 @@ func TestSWS_HeatLoadIncludesDieselJacketDuty(t *testing.T) {
 	// the current duty list every step (sws.go), and the 15 s
 	// windows exist only to pass the timer-based ready deadline,
 	// which accumulates dt exactly, so the widened tick reproduces
-	// both legs. Must not run in parallel: overrideTimeStep mutates
 	// global simulation state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal =
 		DieselStartSafetyInjection
-	stepN(&p, int(15*time.Second/TimeStep))
+	stepN(&p, int(15*time.Second/testDt), testDt)
 
 	dg := p.AuxiliaryBuilding.DieselGenerator
 	require.True(t, dg.ReadyToLoad,
@@ -215,7 +214,7 @@ func TestSWS_HeatLoadIncludesDieselJacketDuty(t *testing.T) {
 	dry.AuxiliaryBuilding.DieselGenerator.StartSignal =
 		DieselStartManual
 	dry.Outside.ServiceWaterSystem.PumpRunning = false
-	stepN(&dry, int(15*time.Second/TimeStep))
+	stepN(&dry, int(15*time.Second/testDt), testDt)
 	assert.Zero(t,
 		dry.AuxiliaryBuilding.DieselGenerator.JacketHeatDuty,
 		"want jacket duty=0 with dry cooler, got %v",

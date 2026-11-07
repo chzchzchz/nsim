@@ -38,7 +38,7 @@ func TestRCFC_InitialStateAllUnitsRunning(t *testing.T) {
 	swT := Temperature{Val: 70, Unit: u.Fahrenheit}
 	for i := 0; i < RCFCUnitCount; i++ {
 		p.AuxiliaryBuilding.RCFCUnits[i] =
-			p.AuxiliaryBuilding.RCFCUnits[i].Step(false, cbTemp, swT, true)
+			p.AuxiliaryBuilding.RCFCUnits[i].Step(DefaultTimeStep, false, cbTemp, swT, true)
 	}
 	sum := 0.0
 	for i := 0; i < RCFCUnitCount; i++ {
@@ -58,7 +58,7 @@ func TestRCFC_StoppedUnitRejectsNoHeat(t *testing.T) {
 		Running:             false,
 		BackdraftDamperOpen: true,
 	}
-	r2 := r.Step(false, Temperature{Val: 120, Unit: u.Fahrenheit},
+	r2 := r.Step(DefaultTimeStep, false, Temperature{Val: 120, Unit: u.Fahrenheit},
 		Temperature{Val: 75, Unit: u.Fahrenheit}, true)
 	assert.Zero(t, r2.HeatTransferRate,
 		"want HeatTransferRate=0 for stopped unit, got %v",
@@ -82,7 +82,7 @@ func TestRCFC_LOCASensedSwitchesToLowSpeed(t *testing.T) {
 		LowSpeed:            false,
 		BackdraftDamperOpen: true,
 	}
-	r2 := r.Step(true, Temperature{Val: 120, Unit: u.Fahrenheit},
+	r2 := r.Step(DefaultTimeStep, true, Temperature{Val: 120, Unit: u.Fahrenheit},
 		Temperature{Val: 75, Unit: u.Fahrenheit}, true)
 	assert.True(t, r2.LowSpeed,
 		"want LowSpeed=true after LOCA signal, got %v", r2.LowSpeed)
@@ -98,18 +98,18 @@ func TestRCFC_HeatTransferScalesWithDeltaT(t *testing.T) {
 	}
 	swT := Temperature{Val: 60, Unit: u.Fahrenheit}
 	// Half-design ΔT (25°F above coil inlet) → half heat rating.
-	half := r.Step(false, Temperature{Val: 60 + 25, Unit: u.Fahrenheit}, swT, true)
+	half := r.Step(DefaultTimeStep, false, Temperature{Val: 60 + 25, Unit: u.Fahrenheit}, swT, true)
 	assert.InDelta(t, RCFCDesignHeatRejection*0.5,
 		half.HeatTransferRate, 1e-9,
 		"want half design heat at half ΔT, got %v",
 		half.HeatTransferRate)
 	// ΔT at or below the coil approach temp → no heat transfer.
-	zero := r.Step(false, Temperature{Val: 60 + 5, Unit: u.Fahrenheit}, swT, true)
+	zero := r.Step(DefaultTimeStep, false, Temperature{Val: 60 + 5, Unit: u.Fahrenheit}, swT, true)
 	assert.Zero(t, zero.HeatTransferRate,
 		"want zero heat transfer below approach temp, got %v",
 		zero.HeatTransferRate)
 	// ΔT well above design → clamped to design rating.
-	clamped := r.Step(false, Temperature{Val: 60 + 200, Unit: u.Fahrenheit}, swT, true)
+	clamped := r.Step(DefaultTimeStep, false, Temperature{Val: 60 + 200, Unit: u.Fahrenheit}, swT, true)
 	assert.InDelta(t, RCFCDesignHeatRejection,
 		clamped.HeatTransferRate, 1e-9,
 		"want clamped heat at super-design ΔT, got %v",
@@ -129,7 +129,7 @@ func TestRCFC_NoServiceWaterFlowStopsHeatRejection(t *testing.T) {
 		Running:             true,
 		BackdraftDamperOpen: true,
 	}
-	dry := r.Step(false, Temperature{Val: 200, Unit: u.Fahrenheit},
+	dry := r.Step(DefaultTimeStep, false, Temperature{Val: 200, Unit: u.Fahrenheit},
 		Temperature{Val: 88, Unit: u.Fahrenheit}, false)
 	assert.Zero(t, dry.HeatTransferRate,
 		"want HeatTransferRate=0 with no service water flow, got %v",
@@ -165,17 +165,17 @@ func TestContainmentBuilding_TemperatureAndPressureTrackHeatBalance(t *testing.T
 		FreeVolume:     ContainmentFreeVolume,
 	}
 	// No heat in, no heat out → temperature unchanged.
-	c2 := c.Step(Watts(0), Watts(0))
+	c2 := c.Step(DefaultTimeStep, Watts(0), Watts(0))
 	assert.InDelta(t, c.Temperature.Float(), c2.Temperature.Float(), 1e-9,
 		"want Temperature unchanged with no heat, got %v → %v",
 		c.Temperature.Float(), c2.Temperature.Float())
 	// Heat in, no RCFC → temperature rises.
-	hot := c.Step(Watts(1e7), Watts(0))
+	hot := c.Step(DefaultTimeStep, Watts(1e7), Watts(0))
 	assert.Greater(t, hot.Temperature.Float(), c.Temperature.Float(),
 		"want Temperature > 120 after 1e7 W in, got %v",
 		hot.Temperature.Float())
 	// RCFC sink matches heat input → temperature unchanged.
-	balanced := c.Step(Watts(1e7), Watts(1e7))
+	balanced := c.Step(DefaultTimeStep, Watts(1e7), Watts(1e7))
 	assert.InDelta(t, c.Temperature.Float(),
 		balanced.Temperature.Float(), 1e-6,
 		"want Temperature unchanged with balanced heat, got %v → %v",
@@ -192,7 +192,7 @@ func TestRCFC_EndToEndLOCAStartsLowSpeed(t *testing.T) {
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 	// Step long enough for the diesel to reach ReadyToLoad.
-	stepN(&p, int(15*time.Second/TimeStep))
+	stepN(&p, int(15*time.Second/DefaultTimeStep), DefaultTimeStep)
 	lowCount := 0
 	for i := 0; i < RCFCUnitCount; i++ {
 		if p.AuxiliaryBuilding.RCFCUnits[i].LowSpeed {

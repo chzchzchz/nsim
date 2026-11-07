@@ -18,14 +18,14 @@ import (
 // the resulting reactivity change.
 
 // At a single 1 ms timestep the rod can move by no more than
-// RodInsertionSpeed * TimeStep = 5e-5 fraction. A demand jump
+// RodInsertionSpeed * ProductionStep = 5e-5 fraction. A demand jump
 // from 0.0 to 1.0 (withdrawn to fully inserted) is therefore
 // rate-limited to that exact amount per call, not the full
 // 1.0. Step moves Insertion toward DemandInsertion.
 func TestControlRods_StepRateLimits(t *testing.T) {
 	c := ControlRods{Insertion: 0, DemandInsertion: 1}
-	out := c.Step()
-	want := RodInsertionSpeed * TimeStep.Seconds()
+	out := c.Step(DefaultTimeStep)
+	want := RodInsertionSpeed * DefaultTimeStep.Seconds()
 	assert.InDelta(t, want, out.Insertion, 1e-12,
 		"want Insertion = %v after one Step from full-withdrawal, got %v",
 		want, out.Insertion)
@@ -34,8 +34,8 @@ func TestControlRods_StepRateLimits(t *testing.T) {
 	// is 5% of travel per second, so 20 s covers the full
 	// travel with margin.
 	c2 := ControlRods{Insertion: 0, DemandInsertion: 1}
-	for i := 0; i < int(20*time.Second/TimeStep); i++ {
-		c2 = c2.Step()
+	for i := 0; i < int(20*time.Second/DefaultTimeStep); i++ {
+		c2 = c2.Step(DefaultTimeStep)
 	}
 	assert.InDelta(t, 1, c2.Insertion, 1e-9,
 		"want Insertion=1 after 20 s of stepping, got %v", c2.Insertion)
@@ -46,15 +46,15 @@ func TestControlRods_StepRateLimits(t *testing.T) {
 // physical rod travel.
 func TestControlRods_StepClamps(t *testing.T) {
 	high := ControlRods{Insertion: 0.5, DemandInsertion: 2.0}
-	for i := 0; i < int(60*time.Second/TimeStep); i++ {
-		high = high.Step()
+	for i := 0; i < int(60*time.Second/DefaultTimeStep); i++ {
+		high = high.Step(DefaultTimeStep)
 	}
 	assert.LessOrEqual(t, high.Insertion, 1.0,
 		"want Insertion <= 1, got %v", high.Insertion)
 
 	low := ControlRods{Insertion: 0.5, DemandInsertion: -1.0}
-	for i := 0; i < int(60*time.Second/TimeStep); i++ {
-		low = low.Step()
+	for i := 0; i < int(60*time.Second/DefaultTimeStep); i++ {
+		low = low.Step(DefaultTimeStep)
 	}
 	assert.GreaterOrEqual(t, low.Insertion, 0.0,
 		"want Insertion >= 0, got %v", low.Insertion)
@@ -88,8 +88,8 @@ func TestBridge_RodInsertionControlClamps(t *testing.T) {
 
 	// Test rate-limit toward intermediate withdrawal.
 	require.NoError(t, c.Set("0.1"))
-	for i := 0; i < int(20*time.Second/TimeStep); i++ {
-		*rods = rods.Step()
+	for i := 0; i < int(20*time.Second/DefaultTimeStep); i++ {
+		*rods = rods.Step(DefaultTimeStep)
 	}
 	assert.InDelta(t, 0.1, rods.Insertion, 0.01,
 		"want Insertion≈0.1 after Set(0.1) and 20 s of ControlRods.Step, got %v",
@@ -97,8 +97,8 @@ func TestBridge_RodInsertionControlClamps(t *testing.T) {
 
 	// Test rate-limit toward intermediate insertion.
 	require.NoError(t, c.Set("0.9"))
-	for i := 0; i < int(20*time.Second/TimeStep); i++ {
-		*rods = rods.Step()
+	for i := 0; i < int(20*time.Second/DefaultTimeStep); i++ {
+		*rods = rods.Step(DefaultTimeStep)
 	}
 	assert.InDelta(t, 0.9, rods.Insertion, 0.01,
 		"want Insertion≈0.9 after Set(0.9) and 20 s of ControlRods.Step, got %v",
@@ -119,7 +119,7 @@ func TestBridge_BoronSetpointWritable(t *testing.T) {
 	cvcs := &p.AuxiliaryBuilding.ChemicalVolumeControlSystem
 	require.True(t, cvcs.BoronSetpointTracking,
 		"the write must latch setpoint tracking")
-	stepN(&p, int(15*time.Second/TimeStep))
+	stepN(&p, int(15*time.Second/DefaultTimeStep), DefaultTimeStep)
 	assert.InDelta(t, target, cvcs.BoronConcentration, 1.0,
 		"want BoronConcentration ramped to the 990 ppm setpoint, got %v",
 		cvcs.BoronConcentration)
@@ -137,7 +137,7 @@ func TestBridge_BoronSetpointWritable(t *testing.T) {
 func TestBridge_SensorsReflectState(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
-	stepN(&p, int(15*time.Second/TimeStep))
+	stepN(&p, int(15*time.Second/DefaultTimeStep), DefaultTimeStep)
 	sensors := GetSensorMap(&p)
 	for _, id := range []string{
 		"ReactorBuilding/ReactorPressureVessel/Outlet",
@@ -183,7 +183,7 @@ func TestBridge_SensorsReflectState(t *testing.T) {
 // or neutron capability is near zero at the top and bottom
 // ends of the core" (specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:124-132).
 func TestThermal_RodWithdrawalRaisesReactivity(t *testing.T) {
-	steps := int(5 * time.Second / TimeStep)
+	steps := int(5 * time.Second / DefaultTimeStep)
 	const seedPower = CoreRatedThermalPower / 2
 
 	// Insertion 0.7 = rods 30% withdrawn (mostly inserted).
@@ -192,7 +192,7 @@ func TestThermal_RodWithdrawalRaisesReactivity(t *testing.T) {
 	low.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0.7
 	low.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = CVCSInitialBoron
 	low.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(seedPower)
-	stepN(&low, steps)
+	stepN(&low, steps, DefaultTimeStep)
 
 	// Insertion 0.2 = rods 80% withdrawn (mostly out).
 	high := MakePlant()
@@ -200,7 +200,7 @@ func TestThermal_RodWithdrawalRaisesReactivity(t *testing.T) {
 	high.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0.2
 	high.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = CVCSInitialBoron
 	high.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(seedPower)
-	stepN(&high, steps)
+	stepN(&high, steps, DefaultTimeStep)
 
 	lowReact := low.ReactorBuilding.ReactorPressureVessel.Reactivity
 	highReact := high.ReactorBuilding.ReactorPressureVessel.Reactivity
@@ -224,6 +224,7 @@ func TestThermal_RodWithdrawalRaisesReactivity(t *testing.T) {
 //   - "the coefficient is substantially more negative due to
 //     depletion and removal of shim boron"
 //     (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:119-121).
+//
 // The dilution path therefore cools the plant rather than
 // heating it; operators use boron to swing reactivity, not
 // temperature.
@@ -253,13 +254,12 @@ func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 	// tail channel scales identically under them; boron integrates
 	// linearly in dt and every assertion compares the legs against
 	// each other rather than against absolute horizons. Must not
-	// run in parallel: overrideTimeStep mutates global simulation
 	// state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	// Both legs share the same scrammed seed, so decay-heat
 	// trajectories diverge (if at all) from the first step; a
 	// short window is as probative as a long one.
-	steps := int(15 * time.Second / TimeStep)
+	steps := int(15 * time.Second / testDt)
 
 	base := MakePlant()
 	// Scram both units explicitly. The old MakePlant self-scram
@@ -268,7 +268,7 @@ func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 	// signal; the graph no longer transfers water between the
 	// separated primary and secondary cycles.
 	base.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
-	stepN(&base, steps)
+	stepN(&base, steps, testDt)
 
 	diluted := MakePlant()
 	diluted.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
@@ -277,7 +277,7 @@ func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 	// Drop the boron concentration so the net temperature
 	// coefficient becomes more negative.
 	diluted.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = CVCSInitialBoron - 500
-	stepN(&diluted, steps)
+	stepN(&diluted, steps, testDt)
 
 	baseRP := base.ReactorBuilding.ReactorPressureVessel
 	dilRP := diluted.ReactorBuilding.ReactorPressureVessel
@@ -312,11 +312,11 @@ func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 //
 // The live control sequence (bridge path) is:
 //
-//   bridge.Set("AuxiliaryBuilding/ChemicalVolumeControlSystem/Mode", "Boration")
-//   bridge.Set("AuxiliaryBuilding/ChemicalVolumeControlSystem/
-//             BTRSRecirculationPumpRunning", "true")
-//   bridge.Set("AuxiliaryBuilding/ChemicalVolumeControlSystem/
-//             BoronSetpoint", "<higher ppm>")
+//	bridge.Set("AuxiliaryBuilding/ChemicalVolumeControlSystem/Mode", "Boration")
+//	bridge.Set("AuxiliaryBuilding/ChemicalVolumeControlSystem/
+//	          BTRSRecirculationPumpRunning", "true")
+//	bridge.Set("AuxiliaryBuilding/ChemicalVolumeControlSystem/
+//	          BoronSetpoint", "<higher ppm>")
 //
 // Because BoronSetpoint writes both the CVCS field and
 // RPV.ControlRods.BoronConcentration (bridge.go:815-829),
@@ -324,9 +324,8 @@ func TestThermal_BoronDilutionMovesReactivityNotDecayHeat(t *testing.T) {
 func TestThermal_Fission4_BorationLowersOutlet(t *testing.T) {
 	// Boron marches linearly in dt and the outlet relaxes on a
 	// seconds-scale lag, so the widened step preserves both legs'
-	// trajectories while cutting step count 100x. Must not run in
-	// parallel: overrideTimeStep mutates global simulation state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	// trajectories while cutting step count 100x.
+	testDt := 10 * time.Millisecond
 	run := func(borate bool) float64 {
 		p := MakePlant()
 		p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
@@ -342,8 +341,8 @@ func TestThermal_Fission4_BorationLowersOutlet(t *testing.T) {
 		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = true
 		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = true
 
-		warmup := int(15 * time.Second / TimeStep)
-		stepN(&p, warmup)
+		warmup := int(15 * time.Second / testDt)
+		stepN(&p, warmup, testDt)
 
 		if borate {
 			// Switch to boration: CVCS drives boron upward
@@ -354,8 +353,8 @@ func TestThermal_Fission4_BorationLowersOutlet(t *testing.T) {
 			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
 		}
 
-		steps := int(90 * time.Second / TimeStep)
-		stepN(&p, steps)
+		steps := int(90 * time.Second / testDt)
+		stepN(&p, steps, testDt)
 		return p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 	}
 	baseline := run(false)

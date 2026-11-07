@@ -47,7 +47,7 @@ func TestScenarioOverridesStepCleanly(t *testing.T) {
 		t.Run(s.ID, func(t *testing.T) {
 			p := MakePlant()
 			require.NotPanics(t, func() { s.Apply(&p) })
-			stepN(&p, 200)
+			stepN(&p, 200, DefaultTimeStep)
 		})
 	}
 }
@@ -84,7 +84,7 @@ func TestColdScenarioLineupStaysSubcriticalAndSolid(t *testing.T) {
 func TestPostTripScenarioLineupHoldsTripState(t *testing.T) {
 	p := MakePlant()
 	Scenarios()[15].Apply(&p)
-	stepN(&p, 100)
+	stepN(&p, 100, DefaultTimeStep)
 
 	rps := p.ReactorBuilding.ReactorProtectionSystem
 	assert.True(t, rps.ReactorTripped)
@@ -220,7 +220,7 @@ func TestScenarioChecksFlipDoneAtTheirEndStates(t *testing.T) {
 			css.Running = true
 		}},
 		{"ccw-train-lineup", func(p *Plant) {
-			stepN(p, 1)
+			stepN(p, 1, DefaultTimeStep)
 		}},
 		{"cvcs-charging-letdown", func(p *Plant) {
 			pzr := &p.ReactorBuilding.Pressurizer
@@ -268,19 +268,19 @@ func TestScriptedScenariosResolveWithoutOperatorAction(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.id, func(t *testing.T) {
-			overrideTimeStep(t, tc.tick)
+			testDt := tc.tick
 			s, ok := ScenarioByID(tc.id)
 			require.True(t, ok)
 			p := MakePlant()
 			s.Apply(&p)
 			script := append([]ScriptCommand{}, s.Script...)
 			cm := GetControlMap(&p)
-			steps := int(tc.budget / TimeStep)
+			steps := int(tc.budget / testDt)
 			done := false
 			for i := 0; i < steps && !done; i++ {
-				nowNs := int64(i) * int64(TimeStep)
+				nowNs := int64(i) * int64(testDt)
 				ApplyScript(&script, nowNs, cm)
-				p.Step()
+				p.Step(testDt)
 				p.Update()
 				if nowNs >= scenarioTriggerDelayMs*int64(time.Millisecond) &&
 					s.Check(&p).Done {
@@ -383,18 +383,18 @@ func TestOperatorActionScenariosResolve(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.id, func(t *testing.T) {
-			overrideTimeStep(t, 200*time.Millisecond)
+			testDt := 200 * time.Millisecond
 			s, ok := ScenarioByID(tc.id)
 			require.True(t, ok)
 			p := MakePlant()
 			s.Apply(&p)
 			cm := GetControlMap(&p)
-			steps := int(tc.budget / TimeStep)
+			steps := int(tc.budget / testDt)
 			done := false
 			for i := 0; i < steps && !done; i++ {
 				tc.act(t, &p, cm, i)
-				ApplyScript(&s.Script, int64(i)*int64(TimeStep), cm)
-				p.Step()
+				ApplyScript(&s.Script, int64(i)*int64(testDt), cm)
+				p.Step(testDt)
 				p.Update()
 				done = s.Check(&p).Done
 			}

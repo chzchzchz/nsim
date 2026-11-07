@@ -21,7 +21,7 @@ func TestScenario22_CavityFloodControlRaisesDepth(t *testing.T) {
 
 	setControl(t, &p,
 		"ReactorBuilding/RefuelingOperations/CavityFlooding", "1")
-	stepFor(&p, 5*time.Second)
+	stepFor(&p, 5*time.Second, DefaultTimeStep)
 
 	got := p.ReactorBuilding.RefuelingOperations.CavityFloodDepth
 	want := RefuelingCavityFloodRate * 5.0 / 60.0
@@ -69,7 +69,7 @@ func TestScenario22_BatchTransferAtFuelHandlingMidpoint(t *testing.T) {
 		FuelAssembliesInCore: FuelAssembliesPerReactor,
 	}
 	for range 1200 {
-		r = r.Step()
+		r = r.Step(DefaultTimeStep)
 	}
 	require.True(t, r.FuelTransferred,
 		"batch transfer must latch at the phase midpoint")
@@ -92,7 +92,7 @@ func TestScenario22_BatchTransferAtFuelHandlingMidpoint(t *testing.T) {
 func TestScenario22_PhaseWalkLatchesAndCompletion(t *testing.T) {
 	// Disassembly entry latches head and internals out underwater.
 	r := RefuelingOperations{Phase: RefuelingPhaseDisassembly}
-	r = r.Step()
+	r = r.Step(DefaultTimeStep)
 	assert.True(t, r.HeadRemoved, "head must be out during disassembly")
 	assert.True(t, r.InternalsRemoved,
 		"upper internals must be out during disassembly")
@@ -109,7 +109,7 @@ func TestScenario22_PhaseWalkLatchesAndCompletion(t *testing.T) {
 	}
 	drainSeconds := RefuelingCavityMaxDepth / RefuelingCavityDrainRate *
 		60.0
-	r = r.StepBy(drainSeconds + TimeStep.Seconds())
+	r = r.StepBy(DefaultTimeStep, drainSeconds+DefaultTimeStep.Seconds())
 	assert.False(t, r.HeadRemoved,
 		"head must be reseated on reassembly entry")
 	assert.False(t, r.InternalsRemoved,
@@ -126,7 +126,7 @@ func TestScenario22_PhaseWalkLatchesAndCompletion(t *testing.T) {
 		PhaseTimer: RefuelingPhaseDurations[RefuelingPhaseStartup] - 0.5,
 	}
 	for range 600 {
-		r = r.Step()
+		r = r.Step(DefaultTimeStep)
 	}
 	assert.Equal(t, RefuelingPhaseComplete, r.Phase,
 		"cycle must reach Complete after the startup leg")

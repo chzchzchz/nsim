@@ -35,7 +35,7 @@ func newScenario24Plant(t *testing.T) *Plant {
 	for _, pu := range p.ReactorBuilding.ReactorCoolantPumps.All() {
 		pu.Velocity = RCPRatedSpeed
 	}
-	stepFor(&p, 2*time.Second)
+	stepFor(&p, 2*time.Second, DefaultTimeStep)
 	return &p
 }
 
@@ -49,13 +49,13 @@ func TestRPS_LowFlowTripVotesDirectTripAtPower(t *testing.T) {
 	// Establish healthy forced flow first - the bistable must be set
 	// before a degradation can actuate (a rising startup ramp passing
 	// through the band never trips).
-	established := r.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
+	established := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
 		CoreReferenceInletF, 0, 1.0, 1.0, 0,
 		false)
 	assert.False(t, established.ReactorTripped,
 		"full forced flow is not a trip condition")
 
-	tripped := established.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
+	tripped := established.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
 		CoreReferenceInletF, 0, 1.0, 0.5, 0,
 		false)
 	assert.True(t, tripped.ReactorTripped,
@@ -65,23 +65,23 @@ func TestRPS_LowFlowTripVotesDirectTripAtPower(t *testing.T) {
 	assert.False(t, tripped.SteamlineIsolationActuated)
 	assert.False(t, tripped.ContainmentSprayActuated)
 
-	belowPermissive := r.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
+	belowPermissive := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
 		CoreReferenceInletF, 0, RPSAtPowerPermissiveFraction/2, 0.5, 0,
 		false)
 	assert.False(t, belowPermissive.ReactorTripped,
 		"reduced-flow lineups below the permissive are normal")
 
 	inTest := ReactorProtectionSystem{ChannelTest: RPSFlowChannelInTest}
-	establishedInTest := inTest.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
+	establishedInTest := inTest.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
 		CoreReferenceInletF, 0, 1.0, 1.0, 0,
 		false)
-	blocked := establishedInTest.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
+	blocked := establishedInTest.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
 		CoreReferenceInletF, 0, 1.0, 0.5, 0,
 		false)
 	assert.False(t, blocked.ReactorTripped,
 		"the flow channel under test must not actuate the trip")
 
-	secured := r.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
+	secured := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
 		CoreReferenceInletF, 0, 1.0, 0, 0,
 		false)
 	assert.False(t, secured.ReactorTripped,
@@ -92,17 +92,17 @@ func TestRPS_LowFlowTripVotesDirectTripAtPower(t *testing.T) {
 // coastdown decays flow exponentially through the trip setpoint, and
 // the scram lands with rods fully inserted.
 func TestPlant_SinglePumpTripStepsBackThenScramsOnLowFlow(t *testing.T) {
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := newScenario24Plant(t)
 	preTrip := float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower)
 
 	p.ReactorBuilding.ReactorCoolantPumps.All()[0].Running = false
 
 	var steppedBack, scrammed time.Duration
-	for i := 0; i < int(30*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(30*time.Second/testDt); i++ {
+		p.Step(testDt)
 		p.Update()
-		el := time.Duration(i+1) * TimeStep
+		el := time.Duration(i+1) * testDt
 		if steppedBack == 0 && p.PlantOperation.StepbackActive {
 			steppedBack = el
 		}
@@ -142,7 +142,7 @@ func TestPlant_SinglePumpTripStepsBackThenScramsOnLowFlow(t *testing.T) {
 // both the runback and the scram arrive sooner than the single-pump
 // case, and the settled aggregate flow sits near N/4 staging.
 func TestPlant_TwoPumpLossScramsSoonerWithLowerSettledFlow(t *testing.T) {
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 
 	scramTime := func(tripCount int) (time.Duration, Velocity) {
 		p := newScenario24Plant(t)
@@ -151,12 +151,12 @@ func TestPlant_TwoPumpLossScramsSoonerWithLowerSettledFlow(t *testing.T) {
 			pumps[i].Running = false
 		}
 		var scrammed time.Duration
-		for i := 0; i < int(60*time.Second/TimeStep); i++ {
-			p.Step()
+		for i := 0; i < int(60*time.Second/testDt); i++ {
+			p.Step(testDt)
 			p.Update()
 			if scrammed == 0 &&
 				p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped {
-				scrammed = time.Duration(i+1) * TimeStep
+				scrammed = time.Duration(i+1) * testDt
 			}
 		}
 		return scrammed, p.ReactorBuilding.ReactorCoolantPump.Velocity
@@ -181,7 +181,7 @@ func TestPlant_TwoPumpLossScramsSoonerWithLowerSettledFlow(t *testing.T) {
 // anyway ("the reactor shutdown system (SDS) is always poised to act",
 // specs/pwr_sim/chapter_4/page_051.txt:8-9).
 func TestPlant_StepbackFailureStillScramsViaSDS(t *testing.T) {
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := newScenario24Plant(t)
 	setControl(t, p, "PlantOperation/StepbackFailed", "1")
 
@@ -190,12 +190,12 @@ func TestPlant_StepbackFailureStillScramsViaSDS(t *testing.T) {
 	pumps[1].Running = false
 
 	var scrammed time.Duration
-	for i := 0; i < int(30*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(30*time.Second/testDt); i++ {
+		p.Step(testDt)
 		p.Update()
 		if scrammed == 0 &&
 			p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped {
-			scrammed = time.Duration(i+1) * TimeStep
+			scrammed = time.Duration(i+1) * testDt
 		}
 	}
 	assert.False(t, p.PlantOperation.StepbackActive,
@@ -210,7 +210,7 @@ func TestPlant_StepbackFailureStillScramsViaSDS(t *testing.T) {
 // and the per-pass temperature rise drives the outlet upward inside the
 // model's rate envelope.
 func TestPlant_UnprotectedLossOfFlowChallengesMargin(t *testing.T) {
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := newScenario24Plant(t)
 	setControl(t, p, "PlantOperation/StepbackFailed", "1")
 	setControl(t, p,
@@ -221,8 +221,8 @@ func TestPlant_UnprotectedLossOfFlowChallengesMargin(t *testing.T) {
 	pumps[0].Running = false
 	pumps[1].Running = false
 
-	for i := 0; i < int(120*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(120*time.Second/testDt); i++ {
+		p.Step(testDt)
 		p.Update()
 	}
 	assert.False(t, p.PlantOperation.StepbackActive,
@@ -241,18 +241,18 @@ func TestPlant_UnprotectedLossOfFlowChallengesMargin(t *testing.T) {
 // Restarting the tripped machine restores forced flow above the
 // initiation band and releases the stepback latch before any scram.
 func TestPlant_StepbackReleasesWhenFlowRestores(t *testing.T) {
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := newScenario24Plant(t)
 
 	p.ReactorBuilding.ReactorCoolantPumps.All()[0].Running = false
 	released := false
 	scrammed := false
-	for i := 0; i < int(40*time.Second/TimeStep); i++ {
-		el := time.Duration(i) * TimeStep
+	for i := 0; i < int(40*time.Second/testDt); i++ {
+		el := time.Duration(i) * testDt
 		if el >= 3*time.Second {
 			p.ReactorBuilding.ReactorCoolantPumps.All()[0].Running = true
 		}
-		p.Step()
+		p.Step(testDt)
 		p.Update()
 		if !p.PlantOperation.StepbackActive && el > 3*time.Second {
 			released = true
@@ -272,13 +272,13 @@ func TestPlant_StepbackReleasesWhenFlowRestores(t *testing.T) {
 // (natural circulation) follows exactly the full-flow trajectory, since
 // the gated divisor leaves both anchored.
 func TestRPV_FlowDegradedTargetRaisesOutletOnlyWhenForced(t *testing.T) {
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 
 	outletAfter := func(speed Velocity) float64 {
 		r := ReactorPressureVessel{}
 		r.SeedSteadyStatePower(CoreRatedThermalPower)
-		for i := 0; i < int(120*time.Second/TimeStep); i++ {
-			r = r.Step(speed, 0)
+		for i := 0; i < int(120*time.Second/testDt); i++ {
+			r = r.Step(testDt, speed, 0)
 		}
 		return r.Outlet.Float()
 	}

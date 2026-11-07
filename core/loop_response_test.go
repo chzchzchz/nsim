@@ -24,7 +24,7 @@ import (
 //   - ready to accept load within 10 s, rated load within 30 s:
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:48-51
 func TestPlant_LoopDeclarationTransfersESFBusesToDiesel(t *testing.T) {
-	overrideTimeStep(t, 100 * time.Millisecond)
+	testDt := 100 * time.Millisecond
 
 	p := MakePlant()
 	controls := p.GetControlMap()
@@ -34,7 +34,7 @@ func TestPlant_LoopDeclarationTransfersESFBusesToDiesel(t *testing.T) {
 		"want OffsitePowerAvailable registered on the bridge")
 	require.NoError(t, loop.Set("0"))
 
-	p.Step()
+	p.Step(testDt)
 	p.Update()
 
 	assert.False(t, p.Electrical.ESFBusA.Energized,
@@ -48,7 +48,7 @@ func TestPlant_LoopDeclarationTransfersESFBusesToDiesel(t *testing.T) {
 		"station blackout must be declared before a diesel is running")
 
 	for i := 0; i < 320; i++ {
-		p.Step()
+		p.Step(testDt)
 		p.Update()
 	}
 
@@ -71,7 +71,7 @@ func TestPlant_LoopDeclarationTransfersESFBusesToDiesel(t *testing.T) {
 	assert.False(t, pes.StationBlackout)
 
 	require.NoError(t, loop.Set("1"))
-	p.Step()
+	p.Step(testDt)
 	p.Update()
 
 	assert.True(t, p.Electrical.ESFBusA.Energized,
@@ -89,7 +89,7 @@ func TestPlant_LoopDeclarationTransfersESFBusesToDiesel(t *testing.T) {
 // while low-steamline pressure is an SI trigger
 // (specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt).
 func TestPlant_TrippedDumpRestoresTavgWithoutCollapsingHeader(t *testing.T) {
-	overrideTimeStep(t, 50 * time.Millisecond)
+	testDt := 50 * time.Millisecond
 
 	p := MakePlant()
 	controls := p.GetControlMap()
@@ -101,7 +101,7 @@ func TestPlant_TrippedDumpRestoresTavgWithoutCollapsingHeader(t *testing.T) {
 	minHeader := float64(SteamGeneratorShellPressure)
 
 	for i := 0; i < 1200; i++ {
-		p.Step()
+		p.Step(testDt)
 		p.Update()
 		if h := float64(p.ReactorBuilding.SteamGenerator.Pressure); h < minHeader {
 			minHeader = h
@@ -130,14 +130,14 @@ func TestPlant_TrippedDumpRestoresTavgWithoutCollapsingHeader(t *testing.T) {
 //     power decay transient."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:80-84
 func TestPlant_LoopTripsReactorCoolantPumpsUntilOperatorRestart(t *testing.T) {
-	overrideTimeStep(t, 100 * time.Millisecond)
+	testDt := 100 * time.Millisecond
 
 	p := MakePlant()
 	controls := p.GetControlMap()
 	require.NoError(t,
 		controls["ReactorBuilding/ReactorCoolantPump/Running"].Set("1"),
 		"seed the at-power pump lineup through the operator control")
-	p.Step()
+	p.Step(testDt)
 	p.Update()
 	require.True(t, p.ReactorBuilding.ReactorCoolantPumps.AnyRunning(),
 		"precondition: pumps run at power")
@@ -146,7 +146,7 @@ func TestPlant_LoopTripsReactorCoolantPumpsUntilOperatorRestart(t *testing.T) {
 	require.NotNil(t, loop)
 	require.NoError(t, loop.Set("0"))
 
-	p.Step()
+	p.Step(testDt)
 	p.Update()
 
 	assert.False(t, p.ReactorBuilding.ReactorCoolantPumps.AnyRunning(),
@@ -155,7 +155,7 @@ func TestPlant_LoopTripsReactorCoolantPumpsUntilOperatorRestart(t *testing.T) {
 		"the flywheel must coast down, not stop instantly")
 
 	for i := 0; i < 400; i++ {
-		p.Step()
+		p.Step(testDt)
 		p.Update()
 	}
 	require.True(t, p.Electrical.ESFBusA.Energized,
@@ -165,7 +165,7 @@ func TestPlant_LoopTripsReactorCoolantPumpsUntilOperatorRestart(t *testing.T) {
 
 	require.NoError(t,
 		controls["ReactorBuilding/ReactorCoolantPump/Running"].Set("1"))
-	p.Step()
+	p.Step(testDt)
 	p.Update()
 	assert.True(t, p.ReactorBuilding.ReactorCoolantPumps.AnyRunning(),
 		"a supply exists, so the operator restart must latch")
@@ -176,7 +176,7 @@ func TestPlant_LoopTripsReactorCoolantPumpsUntilOperatorRestart(t *testing.T) {
 // after the declaration they read zero
 // (specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:103-105).
 func TestPlant_OffsiteAvailabilityGatesSourceVoltage(t *testing.T) {
-	overrideTimeStep(t, 100 * time.Millisecond)
+	testDt := 100 * time.Millisecond
 
 	p := MakePlant()
 	assert.InDelta(t, float64(DieselRatedVoltage),
@@ -187,7 +187,7 @@ func TestPlant_OffsiteAvailabilityGatesSourceVoltage(t *testing.T) {
 	require.NotNil(t, loop)
 	require.NoError(t, loop.Set("0"))
 
-	p.Step()
+	p.Step(testDt)
 	p.Update()
 
 	assert.Zero(t, p.Electrical.OffsiteSourceA.Voltage)
@@ -195,7 +195,7 @@ func TestPlant_OffsiteAvailabilityGatesSourceVoltage(t *testing.T) {
 	assert.Zero(t, p.Electrical.ESFBusA.Voltage)
 
 	require.NoError(t, loop.Set("1"))
-	p.Step()
+	p.Step(testDt)
 	p.Update()
 
 	assert.InDelta(t, float64(DieselRatedVoltage),

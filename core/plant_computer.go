@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // Step advances the Plant Computer state machine by one
 // timestep. The simplified model implements four per-step
 // dynamics from chapter 9 of the spec:
@@ -30,7 +32,7 @@ package core
 //     specs/the_westinghouse_pressurized_water_react/chapter_9/page_156.txt:5-7
 //   - Bypassed / Inoperable Status Indication:
 //     specs/the_westinghouse_pressurized_water_react/chapter_9/page_156.txt:9-12
-func (c *PlantComputer) Step(
+func (c *PlantComputer) Step(dt time.Duration,
 	powerAvailable bool,
 	reactorTripped, reactorTripOccurred bool,
 	alarmCondition bool,

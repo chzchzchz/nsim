@@ -30,7 +30,7 @@ func TestScenario26_StuckPORVVentsUntilBlockValveIsolates(t *testing.T) {
 	cm := GetControlMap(&p)
 	require.NoError(t, cm["ReactorBuilding/Pressurizer/PORVStuckOpen"].Set("1"))
 
-	stepN(&p, int(1*time.Second/TimeStep))
+	stepN(&p, int(1*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	// The stuck latch defeats the auto-reclose that would otherwise
 	// shut a manually opened PORV the moment pressure falls below
@@ -56,7 +56,7 @@ func TestScenario26_StuckPORVVentsUntilBlockValveIsolates(t *testing.T) {
 	// auto-reclose returns and shuts the valve below its setpoint.
 	require.NoError(t, cm["ReactorBuilding/BlockValve/Open"].Set("0"))
 	require.NoError(t, cm["ReactorBuilding/Pressurizer/PORVStuckOpen"].Set("0"))
-	stepN(&p, int(1*time.Second/TimeStep))
+	stepN(&p, int(1*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	assert.Equal(t, float64(0), p.ReactorBuilding.PORV.Open,
 		"isolated valve recloses below its setpoint")

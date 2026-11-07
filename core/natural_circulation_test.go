@@ -23,8 +23,8 @@ func TestReactor_NaturalCirculationEmergesFromLoopHead(t *testing.T) {
 		Inlet:  Temperature{Val: RCSNoLoadTavgF - 30, Unit: u.Fahrenheit},
 		Outlet: Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
 	}
-	for i := 0; i < int((3*NatCircTimeConstant*time.Second)/TimeStep); i++ {
-		hot = hot.Step(0, 0)
+	for i := 0; i < int((3*NatCircTimeConstant*time.Second)/DefaultTimeStep); i++ {
+		hot = hot.Step(DefaultTimeStep, 0, 0)
 	}
 	assert.Greater(t, hot.NaturalCircFlowFrac, 0.04,
 		"hot loop must develop thermosiphon flow, got %v",
@@ -38,8 +38,8 @@ func TestReactor_NaturalCirculationEmergesFromLoopHead(t *testing.T) {
 	}
 	isothermal.Trip = true
 	isothermal.SeedSteadyStatePower(CoreRatedThermalPower)
-	for i := 0; i < int((3*NatCircTimeConstant*time.Second)/TimeStep); i++ {
-		isothermal = isothermal.Step(0, 0)
+	for i := 0; i < int((3*NatCircTimeConstant*time.Second)/DefaultTimeStep); i++ {
+		isothermal = isothermal.Step(DefaultTimeStep, 0, 0)
 	}
 	// A tripped core never sits exactly isothermal (decay heat
 	// keeps a sub-degree anchor drift alive), so the null case is
@@ -62,8 +62,8 @@ func TestReactor_NaturalCirculationSaturatesAtCapability(t *testing.T) {
 		Inlet:  Temperature{Val: RCSNoLoadTavgF, Unit: u.Fahrenheit},
 		Outlet: Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
 	}
-	for i := 0; i < int((10*NatCircTimeConstant*time.Second)/TimeStep); i++ {
-		r = r.Step(0, 0)
+	for i := 0; i < int((10*NatCircTimeConstant*time.Second)/DefaultTimeStep); i++ {
+		r = r.Step(DefaultTimeStep, 0, 0)
 	}
 	assert.LessOrEqual(t, r.NaturalCircFlowFrac, NatCircMaxFlowFrac+1e-9,
 		"thermosiphon must not exceed its capability cap, got %v",
@@ -78,8 +78,7 @@ func TestReactor_NaturalCirculationSaturatesAtCapability(t *testing.T) {
 // trajectory consequence is witnessed end-to-end in
 // TestPlant_NaturalCirculationLegsSeparateAndRestartRecovers.
 func TestPlant_NaturalCirculationLegsSeparateAndRestartRecovers(t *testing.T) {
-	overrideTimeStep(t, 100*time.Millisecond)
-	defer overrideTimeStep(t, TimeStep)
+	testDt := 100 * time.Millisecond
 
 	newTrippedPlant := func() *Plant {
 		p := MakePlant()
@@ -103,7 +102,7 @@ func TestPlant_NaturalCirculationLegsSeparateAndRestartRecovers(t *testing.T) {
 	startNatural := outlet(natural)
 
 	run := func(p *Plant, seconds int) {
-		stepN(p, int(time.Duration(seconds)*time.Second/TimeStep))
+		stepN(p, int(time.Duration(seconds)*time.Second/testDt), testDt)
 	}
 	run(forced, 600)
 	run(natural, 600)

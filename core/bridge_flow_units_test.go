@@ -37,7 +37,7 @@ func TestBridge_FlowSensorsPresentGPM(t *testing.T) {
 	p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.Turbidity = 12
 	p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent = 2.5
 
-	// BreakFlow stores a PER-STEP volume (gal over one TimeStep), so
+	// BreakFlow stores a PER-STEP volume (gal over one ProductionStep), so
 	// the gpm presentation divides out the tick: 0.12 gal/step at the
 	// 1 ms tick is the 120 gal/s full-open break rate = 7200 gpm.
 	p.ReactorBuilding.ReactorPressureVessel.BreakFlow =

@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 type Outside struct {
 	// 450K gallons,
 	// 239K gallons to be operable
@@ -66,7 +68,7 @@ type Outside struct {
 	RiverTemp Temperature
 }
 
-func (o *Outside) Step(electricalDriveReady bool,
+func (o *Outside) Step(dt time.Duration, electricalDriveReady bool,
 	condenserOutlet Temperature) Outside {
 	ret := *o
 	// Circulating Water System step. The CW pump count is
@@ -82,14 +84,14 @@ func (o *Outside) Step(electricalDriveReady bool,
 	// The tower steps first so the CWS reads this tick's
 	// basin level and cold-basin temperature; it uses last
 	// tick's circulating flow (a 1 ms lag).
-	ret.CoolingTower = o.CoolingTower.Step(
+	ret.CoolingTower = o.CoolingTower.Step(dt,
 		cwRunning,
 		electricalDriveReady,
 		o.CirculatingWaterSystem.FlowGPM,
 		condenserOutlet,
 		o.AmbientWetBulbTemp,
 	)
-	ret.CirculatingWaterSystem = o.CirculatingWaterSystem.Step(
+	ret.CirculatingWaterSystem = o.CirculatingWaterSystem.Step(dt,
 		cwRunning,
 		electricalDriveReady,
 		cwPumps,

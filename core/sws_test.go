@@ -35,10 +35,10 @@ func TestSWS_InitialStateHasAllPumpsRunning(t *testing.T) {
 func TestSWS_StoppedPumpsHaveZeroFlow(t *testing.T) {
 	s := ServiceWaterSystem{
 		PumpRunning: true,
-		Flow:       ServiceWaterDesignFlow,
+		Flow:        ServiceWaterDesignFlow,
 	}
 	s.PumpRunning = false
-	s2 := s.Step(Temperature{Val: 70, Unit: u.Fahrenheit}, Watts(1e6))
+	s2 := s.Step(DefaultTimeStep, Temperature{Val: 70, Unit: u.Fahrenheit}, Watts(1e6))
 	assert.Zero(t, s2.Flow,
 		"want Flow=0 with pumps stopped, got %v", s2.Flow)
 	assert.InDelta(t, s2.InletTemp.Float(), s2.OutletTemp.Float(), 1e-9,
@@ -53,15 +53,15 @@ func TestSWS_OutletTempRisesWithHeatLoad(t *testing.T) {
 	s := ServiceWaterSystem{
 		PumpRunning: true,
 		DriveReady:  true,
-		Flow:       ServiceWaterDesignFlow,
+		Flow:        ServiceWaterDesignFlow,
 	}
 	riverT := Temperature{Val: 70, Unit: u.Fahrenheit}
-	s2 := s.Step(riverT, Watts(0))
+	s2 := s.Step(DefaultTimeStep, riverT, Watts(0))
 	assert.InDelta(t, s2.InletTemp.Float(), s2.OutletTemp.Float(), 1e-9,
 		"want OutletTemp=InletTemp with no heat load, got %v",
 		s2.OutletTemp.Float())
 	// Apply 1e7 W; expect a measurable rise above inlet.
-	hot := s.Step(riverT, Watts(1e7))
+	hot := s.Step(DefaultTimeStep, riverT, Watts(1e7))
 	assert.Greater(t, hot.OutletTemp.Float(), hot.InletTemp.Float(),
 		"want OutletTemp > InletTemp with heat load, got %v vs %v",
 		hot.OutletTemp.Float(), hot.InletTemp.Float())
@@ -102,7 +102,7 @@ func TestSFPCS_StandbyStartsBelow50psig(t *testing.T) {
 		DriveReady:       true,
 		HeaderPressure:   SFPCStandbyStartPressure - 1.0,
 	}
-	s2 := s.Step(true)
+	s2 := s.Step(DefaultTimeStep, true)
 	assert.True(t, s2.StandbyRunning,
 		"want StandbyRunning=true below 50 psig, got %v",
 		s2.StandbyRunning)
@@ -116,7 +116,7 @@ func TestSFPCS_StandbyOffAbove50psig(t *testing.T) {
 		DriveReady:       true,
 		HeaderPressure:   SFPCStandbyStartPressure + 1.0,
 	}
-	s2 := s.Step(true)
+	s2 := s.Step(DefaultTimeStep, true)
 	assert.False(t, s2.StandbyRunning,
 		"want StandbyRunning=false above 50 psig, got %v",
 		s2.StandbyRunning)
@@ -127,7 +127,7 @@ func TestSFPCS_StoppedPumpsZeroPurificationFlow(t *testing.T) {
 	s := SpentFuelPoolCoolingSystem{
 		PurificationFlow: SFPCPurificationFlow,
 	}
-	s2 := s.Step(true)
+	s2 := s.Step(DefaultTimeStep, true)
 	assert.Zero(t, s2.PurificationFlow,
 		"want PurificationFlow=0 with pumps stopped, got %v",
 		s2.PurificationFlow)
@@ -140,7 +140,7 @@ func TestSFPCS_StoppedPumpsZeroPurificationFlow(t *testing.T) {
 // the SWS outlet picks up the RCFC heat sink.
 func TestSWS_EndToEndSteadyState(t *testing.T) {
 	p := MakePlant()
-	stepN(&p, int(15*time.Second/TimeStep))
+	stepN(&p, int(15*time.Second/DefaultTimeStep), DefaultTimeStep)
 	sws := p.Outside.ServiceWaterSystem
 	sf := p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem
 	assert.True(t, sws.PumpRunning,
@@ -179,7 +179,7 @@ func TestSWS_PumpAutoStartsOnSafetySignal(t *testing.T) {
 		// Operator stops the SWS pump, then SI signal arrives.
 		p.Outside.ServiceWaterSystem.PumpRunning = false
 		p.AuxiliaryBuilding.DieselGenerator.StartSignal = cause
-		stepN(&p, 1)
+		stepN(&p, 1, DefaultTimeStep)
 		assert.True(t, p.Outside.ServiceWaterSystem.PumpRunning,
 			"want SWS PumpRunning auto-latched on %v, got false",
 			cause)
@@ -189,7 +189,7 @@ func TestSWS_PumpAutoStartsOnSafetySignal(t *testing.T) {
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = false
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.False(t, p.Outside.ServiceWaterSystem.PumpRunning,
 		"want SWS PumpRunning remain false on DieselStartManual, got true")
 }

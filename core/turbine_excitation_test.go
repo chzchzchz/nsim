@@ -12,7 +12,7 @@ import (
 // are zero.
 func TestGeneratorExcitationShaftStopped(t *testing.T) {
 	e := GeneratorExcitationSystem{}
-	e = e.Step(0)
+	e = e.Step(DefaultTimeStep, 0)
 	assert.False(t, e.ExciterActive,
 		"want ExciterActive=false with shaft stopped, got %v",
 		e.ExciterActive)
@@ -29,7 +29,7 @@ func TestGeneratorExcitationShaftStopped(t *testing.T) {
 // The pilot-exciter frequency scales with shaft speed.
 func TestGeneratorExcitationShaftRunning(t *testing.T) {
 	e := GeneratorExcitationSystem{}
-	e = e.Step(float64(TurbineRatedSpeed))
+	e = e.Step(DefaultTimeStep, float64(TurbineRatedSpeed))
 	assert.True(t, e.ExciterActive,
 		"want ExciterActive=true with shaft turning, got %v",
 		e.ExciterActive)
@@ -45,7 +45,7 @@ func TestGeneratorExcitationShaftRunning(t *testing.T) {
 // GeneratorSCCWDesignFlow.
 func TestGeneratorSCCWFlowRunning(t *testing.T) {
 	c := GeneratorCoolingSystem{SCCWPumpRunning: true}
-	c = c.Step(1.0)
+	c = c.Step(DefaultTimeStep, 1.0)
 	assert.InDelta(t, GeneratorSCCWDesignFlow, c.SCCWFlow, 1e-9,
 		"want SCCWFlow=GeneratorSCCWDesignFlow with pump on, got %v",
 		c.SCCWFlow)
@@ -55,7 +55,7 @@ func TestGeneratorSCCWFlowRunning(t *testing.T) {
 // zero.
 func TestGeneratorSCCWFlowStopped(t *testing.T) {
 	c := GeneratorCoolingSystem{SCCWPumpRunning: false}
-	c = c.Step(1.0)
+	c = c.Step(DefaultTimeStep, 1.0)
 	assert.Zero(t, c.SCCWFlow,
 		"want SCCWFlow=0 with pump off, got %v", c.SCCWFlow)
 }
@@ -64,7 +64,7 @@ func TestGeneratorSCCWFlowStopped(t *testing.T) {
 // the shaft-driven blower is at rated speed.
 func TestGeneratorCoolingFourCoolersInService(t *testing.T) {
 	c := GeneratorCoolingSystem{}
-	c = c.Step(1.0)
+	c = c.Step(DefaultTimeStep, 1.0)
 	for i := 0; i < GeneratorNumHydrogenCoolers; i++ {
 		assert.InDelta(t, 1.0, c.HydrogenCoolerEffectiveness[i], 1e-9,
 			"want cooler[%d]=1.0 at full blower, got %v",
@@ -76,7 +76,7 @@ func TestGeneratorCoolingFourCoolersInService(t *testing.T) {
 // linearly with the fraction.
 func TestGeneratorCoolingEffectivenessScalesWithBlower(t *testing.T) {
 	c := GeneratorCoolingSystem{}
-	c = c.Step(0.5)
+	c = c.Step(DefaultTimeStep, 0.5)
 	for i := 0; i < GeneratorNumHydrogenCoolers; i++ {
 		assert.InDelta(t, 0.5, c.HydrogenCoolerEffectiveness[i], 1e-9,
 			"want cooler[%d]=0.5 at half blower, got %v",
@@ -136,7 +136,7 @@ func TestGeneratorSCCWTripOpensBreaker(t *testing.T) {
 	// Sanity check: starting the condensate pump mirrors
 	// into SCCWPumpRunning after a step.
 	p.TurbineBuilding.CondensatePump.Running = true
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	assert.True(t, p.TurbineBuilding.Generator.SCCWPumpRunning,
 		"want SCCWPumpRunning=true with condensate pump on, got %v",
@@ -148,7 +148,7 @@ func TestGeneratorSCCWTripOpensBreaker(t *testing.T) {
 func TestGeneratorSCCWNoAlarmAtDesignFlow(t *testing.T) {
 	p := MakePlant()
 	p.TurbineBuilding.CondensatePump.Running = true
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	assert.InDelta(t, GeneratorSCCWDesignFlow,
 		p.TurbineBuilding.Generator.SCCWFlow, 1e-9,

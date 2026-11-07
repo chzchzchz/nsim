@@ -3,10 +3,10 @@ package core
 import (
 	u "github.com/bcicen/go-units"
 	"math"
+	"time"
 )
 
-
-// Step advances the pressurizer by TimeStep. Pressure follows a
+// Step advances the pressurizer by ProductionStep. Pressure follows a
 // heater/spray/idle energy balance while liquid inventory moves through
 // boiloff, spray condensation, and the CVCS, PORV, and relief-discharge
 // paths, so the pressure loop (heaters and spray) stays independent of
@@ -25,11 +25,10 @@ import (
 // charging flow, available with the pumps secured.
 //
 // Spec justification for each block is inline below.
-func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
+func (p *Pressurizer) Step(dt time.Duration, rcsTemp Temperature, porv, safety, block *Valve,
 	sprayDrive, auxSpray float64,
 ) (Pressurizer, Volume) {
 	ret := *p
-	dt := TimeStep
 	satFloor := float64(PressurizerSatPressure(rcsTemp.Float()))
 
 	// Automatic pressure regulation. The thermostat latches the
@@ -235,6 +234,7 @@ func (p *Pressurizer) Step(rcsTemp Temperature, porv, safety, block *Valve,
 
 	return ret, relief
 }
+
 // Pressurizer models the surge-line volume at the top of the primary
 // loop that holds the steam bubble used for pressure control.
 //
@@ -353,28 +353,28 @@ const (
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:48-58
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:3-6
 	PressurizerBasePressure Pressure = 375
-	PressurizerHeaterTarget    Pressure = 2250
-	PressurizerHeaterRate      Pressure = 200 // psi/s while HeatersOn
+	PressurizerHeaterTarget Pressure = 2250
+	PressurizerHeaterRate   Pressure = 200 // psi/s while HeatersOn
 	// PressurizerAutoHeaterBand is the sag below the heater target at
 	// which the armed automatic pressure regulation latches the
 	// heaters on; it releases them back at the target. Derived; the
 	// spec describes the automatic energization without a band.
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:97-98
 	PressurizerAutoHeaterBand Pressure = 50
-	PressurizerSprayRate       Pressure = 300 // psi/s at SprayOpen == 1
+	PressurizerSprayRate      Pressure = 300 // psi/s at SprayOpen == 1
 	// PressurizerAuxSprayRate is the depressurization rate at full
 	// auxiliary spray drive. Sized an order below normal spray:
 	// charging flow is a small fraction of an RCP's spray injection,
 	// so auxiliary control is deliberately slow per the manual P-T
 	// limit discipline it serves; the spec states no rate figure.
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:100-106
-	PressurizerAuxSprayRate    Pressure = 30 // psi/s at aux drive == 1
-	PressurizerAmbientDecay    Pressure = 5   // psi/s cooldown when idle
+	PressurizerAuxSprayRate Pressure = 30 // psi/s at aux drive == 1
+	PressurizerAmbientDecay Pressure = 5  // psi/s cooldown when idle
 	// PressurizerBubbleStiffness converts heater and spray pressure
 	// changes into displaced liquid volume during boiloff and
 	// condensation.
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:66-67
-	PressurizerBubbleStiffness float64 = 2.5 // psi per gallon of bubble
+	PressurizerBubbleStiffness float64  = 2.5 // psi per gallon of bubble
 	PressurizerPORVTrip        Pressure = 2500
 
 	// PressurizerSafetySetpoint is where the self-actuating ASME
@@ -449,7 +449,7 @@ func PressurizerSatPressure(tempF float64) Pressure {
 // specs/wiki/Vapor_pressure_of_water.txt:793-795
 func PressurizerSatTemperatureF(psia float64) float64 {
 	pMmHg := max(psia, PressurizerMinSatFloor) * mmHgPerPsi
-	return (antoineB2/(antoineA2-math.Log10(pMmHg)) - antoineC2) * 1.8 + 32
+	return (antoineB2/(antoineA2-math.Log10(pMmHg))-antoineC2)*1.8 + 32
 }
 
 const (

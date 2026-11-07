@@ -29,7 +29,7 @@ func setPressurizerPsi(p *Plant, psia float64) {
 func holdPressure(p *Plant, psia float64, steps int) {
 	for range steps {
 		setPressurizerPsi(p, psia)
-		p.Step()
+		p.Step(DefaultTimeStep)
 		p.Update()
 	}
 }
@@ -42,7 +42,7 @@ func holdPressure(p *Plant, psia float64, steps int) {
 func TestPressurizer_SafetyValveAutoActuates(t *testing.T) {
 	p := MakePlant()
 	setPressurizerPsi(&p, float64(PressurizerSafetySetpoint)+50)
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	assert.NotZero(t, p.ReactorBuilding.SafetyValve.Open,
 		"safety valve must auto-actuate above its setpoint")
@@ -65,8 +65,8 @@ func TestPressurizer_ReliefLowersPressure(t *testing.T) {
 	porv := Valve{Open: 1}
 	block := Valve{Open: 1}
 	var safety Valve
-	for range int(5 * time.Second / TimeStep) {
-		prz, _ = prz.Step(hotLeg, &porv, &safety, &block, 1, 0)
+	for range int(5 * time.Second / DefaultTimeStep) {
+		prz, _ = prz.Step(DefaultTimeStep, hotLeg, &porv, &safety, &block, 1, 0)
 	}
 	assert.Less(t, float64(prz.Pressure), start,
 		"relief must depressurize the pressurizer")
@@ -81,7 +81,7 @@ func TestRelief_RoutesToPRTNotContainment(t *testing.T) {
 	p := MakePlant()
 	startLevel := p.ReactorBuilding.PressurizedReliefTank.Level.Float()
 	holdPressure(&p, float64(PressurizerPORVTrip)+50,
-		int(time.Second/TimeStep))
+		int(time.Second/DefaultTimeStep))
 	assert.Greater(t, p.ReactorBuilding.PressurizedReliefTank.Level.Float(),
 		startLevel, "PRT level must rise under sustained relief")
 	assert.False(t, p.ReactorBuilding.PRTRuptureDiscBurst,
@@ -106,7 +106,7 @@ func TestRelief_RuptureDiscBurstVentsAndCSSCatches(t *testing.T) {
 	tank := &p.ReactorBuilding.PressurizedReliefTank
 	tank.Level = vol(tank.Level, PressurizedReliefTankCapacityGal-5)
 	holdPressure(&p, float64(PressurizerPORVTrip)+50,
-		int(10*time.Second/TimeStep))
+		int(10*time.Second/DefaultTimeStep))
 	require.True(t, p.ReactorBuilding.PRTRuptureDiscBurst,
 		"disc must burst once the tank reaches capacity")
 
@@ -115,10 +115,10 @@ func TestRelief_RuptureDiscBurstVentsAndCSSCatches(t *testing.T) {
 		"containment must pressurize after the disc bursts")
 
 	// Keep relieving; once the CSS starts it must turn the rise around.
-	for range int(60 * time.Second / TimeStep) {
+	for range int(60 * time.Second / DefaultTimeStep) {
 		setPressurizerPsi(&p, float64(PressurizerPORVTrip)+50)
 		before := float64(p.ReactorBuilding.ContainmentPressure)
-		p.Step()
+		p.Step(DefaultTimeStep)
 		p.Update()
 		if p.AuxiliaryBuilding.ContainmentSpraySystem.Running &&
 			float64(p.ReactorBuilding.ContainmentPressure) < before {
@@ -141,7 +141,7 @@ func TestBlockValve_GatesReliefDischarge(t *testing.T) {
 	p.ReactorBuilding.BlockValve = Valve{}
 	startLevel := p.ReactorBuilding.PressurizedReliefTank.Level.Float()
 	holdPressure(&p, float64(PressurizerPORVTrip)+50,
-		int(time.Second/TimeStep))
+		int(time.Second/DefaultTimeStep))
 	assert.Equal(t, startLevel,
 		p.ReactorBuilding.PressurizedReliefTank.Level.Float(),
 		"shut block valve must isolate the PRT from discharge")
@@ -156,13 +156,13 @@ func TestPRTSpray_AddsInventoryWhileOpen(t *testing.T) {
 	p.ReactorBuilding.PRTSprayValve = Valve{Open: 1}
 	startLevel := p.ReactorBuilding.PressurizedReliefTank.Level.Float()
 	holdPressure(&p, float64(PressurizerSatPressure(CoreReferenceOutletF)),
-		int(time.Second/TimeStep))
+		int(time.Second/DefaultTimeStep))
 	assert.Greater(t, p.ReactorBuilding.PressurizedReliefTank.Level.Float(),
 		startLevel, "open spray must add PRT inventory")
 
 	p2 := MakePlant()
 	holdPressure(&p2, float64(PressurizerSatPressure(CoreReferenceOutletF)),
-		int(time.Second/TimeStep))
+		int(time.Second/DefaultTimeStep))
 	assert.Equal(t, startLevel,
 		p2.ReactorBuilding.PressurizedReliefTank.Level.Float(),
 		"closed spray must leave PRT level untouched")

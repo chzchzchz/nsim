@@ -38,7 +38,7 @@ import "time"
 //   - Auxiliary safety stations: "arranged in stations each
 //     dedicated to a single train of safeguard systems."
 //     specs/the_westinghouse_pressurized_water_react/chapter_8/page_147.txt:65-67
-func (c *PlantControlRoom) Step(
+func (c *PlantControlRoom) Step(dt time.Duration,
 	alarmCondition bool,
 	alarms []Alarm,
 	esfBus1Available, esfBus2Available bool,
@@ -164,8 +164,8 @@ func (c *PlantControlRoom) Step(
 			(esfBus1Available || esfBus2Available)
 
 	// One Step call per plant tick advances the annunciator
-	// clock by exactly one TimeStep (see SimTimeNs).
-	ret.SimTimeNs += int64(TimeStep)
+	// clock by exactly one ProductionStep (see SimTimeNs).
+	ret.SimTimeNs += int64(dt)
 
 	return ret
 }

@@ -29,14 +29,14 @@ import (
 // fresh plant whose service water cools the running engine. The widened
 // tick keeps the deadline accumulators exact while making thousands of
 // simulated seconds cheap; tests using it must not run in parallel.
-func startScenario36Diesel(t *testing.T, signal string) *Plant {
+func startScenario36Diesel(t *testing.T, signal string) (*Plant, time.Duration) {
 	t.Helper()
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := MakePlant()
 	p.Outside.ServiceWaterSystem.PumpRunning = true
 	cm := GetControlMap(&p)
 	require.NoError(t, cm["AuxiliaryBuilding/DieselGenerator/StartSignal"].Set(signal))
-	return &p
+	return &p, testDt
 }
 
 // A test start against the normal lineup cranks to rated speed, latches
@@ -44,16 +44,16 @@ func startScenario36Diesel(t *testing.T, signal string) *Plant {
 // automatic synchronizer close the breaker - leaving the ESF bus served
 // by its normal offsite source, paralleled beside the diesel.
 func TestScenario36_TestStartParallelsWithLiveBus(t *testing.T) {
-	p := startScenario36Diesel(t, "4")
+	p, testDt := startScenario36Diesel(t, "4")
 
-	stepN(p, 900) // 9 s at the 10 ms tick: before the deadline
+	stepN(p, 900, testDt) // 9 s at the 10 ms tick: before the deadline
 	d := &p.AuxiliaryBuilding.DieselGenerator
 	assert.Equal(t, DieselRunning, d.State, "rated speed reached before the deadline")
 	assert.False(t, d.ReadyToLoad, "ready-to-load must wait for the 10 s deadline")
 	assert.False(t, d.Generator.BreakerClosed,
 		"the synchronizer must not close onto a live bus before ready")
 
-	stepN(p, 150) // 10.5 s total
+	stepN(p, 150, testDt) // 10.5 s total
 	assert.True(t, d.ReadyToLoad, "ready inside the 10 s deadline")
 	assert.True(t, d.Generator.BreakerClosed,
 		"automatic synchronizing closes the breaker once synchronized")
@@ -72,14 +72,14 @@ func TestScenario36_TestStartParallelsWithLiveBus(t *testing.T) {
 // source gone the bus is dead, so the breaker closes dead-bus the moment
 // the engine is ready to load and the bus transfers onto the diesel.
 func TestScenario36_DeadBusClosesAtReadyWithoutSync(t *testing.T) {
-	p := startScenario36Diesel(t, "4")
+	p, testDt := startScenario36Diesel(t, "4")
 	p.ReactorBuilding.PlantElectricalSystems.OffsitePowerAvailable = false
 
-	stepN(p, 900) // 9 s at the 10 ms tick: before the deadline
+	stepN(p, 900, testDt) // 9 s at the 10 ms tick: before the deadline
 	require.False(t, p.AuxiliaryBuilding.DieselGenerator.Generator.BreakerClosed,
 		"no close before ready even on a dead bus")
 
-	stepN(p, 150) // 10.5 s total
+	stepN(p, 150, testDt) // 10.5 s total
 	assert.True(t, p.AuxiliaryBuilding.DieselGenerator.Generator.BreakerClosed,
 		"dead-bus close fires as soon as the engine is ready to load")
 	assert.Equal(t, DieselStartTest,
@@ -93,13 +93,13 @@ func TestScenario36_DeadBusClosesAtReadyWithoutSync(t *testing.T) {
 // A closed breaker dragged out of its synchronization band pops,
 // mirroring the main-generator out-of-step protection.
 func TestScenario36_OutOfSyncBreakerPops(t *testing.T) {
-	p := startScenario36Diesel(t, "4")
-	stepN(p, 1100) // 11 s at the 10 ms tick: paralleled
+	p, testDt := startScenario36Diesel(t, "4")
+	stepN(p, 1100, testDt) // 11 s at the 10 ms tick: paralleled
 	require.True(t, p.AuxiliaryBuilding.DieselGenerator.Generator.BreakerClosed,
 		"precondition: paralleled")
 
 	p.AuxiliaryBuilding.DieselGenerator.Generator.Voltage = 0
-	stepN(p, 1)
+	stepN(p, 1, testDt)
 	assert.False(t, p.AuxiliaryBuilding.DieselGenerator.Generator.BreakerClosed,
 		"out-of-sync closed breaker must pop while the bus is live")
 }
@@ -111,20 +111,20 @@ func TestScenario36_OutOfSyncBreakerPops(t *testing.T) {
 // it. Voltage is sagged just before the deadline to simulate a
 // regulator that has not settled.
 func TestScenario36_BreakerWaitsForSyncBand(t *testing.T) {
-	p := startScenario36Diesel(t, "4")
+	p, testDt := startScenario36Diesel(t, "4")
 	d := &p.AuxiliaryBuilding.DieselGenerator
 
-	stepN(p, 999) // one tick before the 10 s deadline
+	stepN(p, 999, testDt) // one tick before the 10 s deadline
 	d.Generator.Voltage = DieselRatedVoltage * 0.5
 
-	stepN(p, 1) // deadline crossed while the sag dominates the ramp
+	stepN(p, 1, testDt) // deadline crossed while the sag dominates the ramp
 	assert.True(t, d.ReadyToLoad, "ready latches on schedule")
 	assert.False(t, d.Generator.BreakerClosed,
 		"an unsynchronized generator must not close onto a live bus")
 
 	closed := false
 	for i := 0; i < 300; i++ { // voltage ramp re-enters the band well inside 3 s
-		stepN(p, 1)
+		stepN(p, 1, testDt)
 		if d.Generator.BreakerClosed {
 			closed = true
 			break
@@ -141,13 +141,13 @@ func TestScenario36_BreakerWaitsForSyncBand(t *testing.T) {
 // ESF buses: the engine stops, the breaker opens, the offsite feed
 // continues uninterrupted.
 func TestScenario36_ClearingSignalEndsTestCleanly(t *testing.T) {
-	p := startScenario36Diesel(t, "4")
-	stepN(p, 1100) // 11 s at the 10 ms tick: paralleled
+	p, testDt := startScenario36Diesel(t, "4")
+	stepN(p, 1100, testDt) // 11 s at the 10 ms tick: paralleled
 	require.True(t, p.Electrical.ESFBusA.Energized, "precondition: bus energized")
 
 	cm := GetControlMap(p)
 	require.NoError(t, cm["AuxiliaryBuilding/DieselGenerator/StartSignal"].Set("0"))
-	stepN(p, 5)
+	stepN(p, 5, testDt)
 
 	d := &p.AuxiliaryBuilding.DieselGenerator
 	assert.NotEqual(t, DieselRunning, d.State, "engine stops when the signal clears")

@@ -40,12 +40,12 @@ func TestHDS_GenerationIncreasesHydrogen(t *testing.T) {
 	h := HydrogenDetectionSuppression{
 		GenerationActive: true,
 	}
-	h2 := h.Step()
+	h2 := h.Step(DefaultTimeStep)
 	assert.Greater(t, h2.HydrogenVolumePercent, h.HydrogenVolumePercent,
 		"want H2%% to rise with generation on, got %v vs %v",
 		h2.HydrogenVolumePercent, h.HydrogenVolumePercent)
 	// Expected delta: 1.0 %/h × 1 ms = 1e-3/3600 % = 2.78e-7 %.
-	expected := HydrogenGenerationRate * TimeStep.Seconds() / 3600.0
+	expected := HydrogenGenerationRate * DefaultTimeStep.Seconds() / 3600.0
 	assert.InDelta(t, expected, h2.HydrogenVolumePercent, 1e-12,
 		"want H2%% delta = rate × dt, got %v vs expected %v",
 		h2.HydrogenVolumePercent, expected)
@@ -61,11 +61,11 @@ func TestHDS_AlarmLatchesAtSetpoint(t *testing.T) {
 	h := HydrogenDetectionSuppression{
 		HydrogenVolumePercent: HydrogenAlarmSetpoint - 0.1,
 	}
-	h2 := h.Step()
+	h2 := h.Step(DefaultTimeStep)
 	assert.False(t, h2.HydrogenAlarm,
 		"want alarm false below setpoint, got %v", h2.HydrogenAlarm)
 	h.HydrogenVolumePercent = HydrogenAlarmSetpoint + 0.1
-	h3 := h.Step()
+	h3 := h.Step(DefaultTimeStep)
 	assert.True(t, h3.HydrogenAlarm,
 		"want alarm true at/above setpoint, got %v", h3.HydrogenAlarm)
 }
@@ -77,7 +77,7 @@ func TestHDS_RecombinersActivateAtSetpointPlusHysteresis(t *testing.T) {
 		HydrogenVolumePercent: HydrogenAlarmSetpoint +
 			HydrogenRecombinerHysteresis + 0.1,
 	}
-	h2 := h.Step()
+	h2 := h.Step(DefaultTimeStep)
 	assert.True(t, h2.RecombinerActive,
 		"want RecombinerActive=true at setpoint+hysteresis, got %v",
 		h2.RecombinerActive)
@@ -91,7 +91,7 @@ func TestHDS_RecombinersRemoveHydrogen(t *testing.T) {
 		HydrogenVolumePercent: 3.0,
 		RecombinerActive:      true,
 	}
-	h2 := h.Step()
+	h2 := h.Step(DefaultTimeStep)
 	assert.Less(t, h2.HydrogenVolumePercent, h.HydrogenVolumePercent,
 		"want H2%% to fall with recombiners active, got %v vs %v",
 		h2.HydrogenVolumePercent, h.HydrogenVolumePercent)
@@ -104,7 +104,7 @@ func TestHDS_VolumePercentClampedAtZero(t *testing.T) {
 		RecombinerActive:      true,
 		VentilationActive:     true,
 	}
-	h2 := h.Step()
+	h2 := h.Step(DefaultTimeStep)
 	assert.Zero(t, h2.HydrogenVolumePercent,
 		"want H2%% clamped at 0, got %v", h2.HydrogenVolumePercent)
 }
@@ -115,7 +115,7 @@ func TestHDS_VolumePercentClampedAtZero(t *testing.T) {
 func TestPlant_HDS_GenerationActivatesOnLOCA(t *testing.T) {
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
-	stepN(&p, int(time.Second/TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 	hds := p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
 	assert.True(t, hds.GenerationActive,
 		"want GenerationActive=true after LOCA signal, got %v",

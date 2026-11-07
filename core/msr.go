@@ -2,9 +2,10 @@ package core
 
 import (
 	u "github.com/bcicen/go-units"
+	"time"
 )
 
-// Step advances the moisture separator-reheater by TimeStep. The
+// Step advances the moisture separator-reheater by ProductionStep. The
 // caller supplies the inlet steam conditions (pressure, quality,
 // temperature) and the reheat-steam supply (flow + pressure). The
 // MSR drains the liquid fraction of the wet inlet steam to the
@@ -25,7 +26,7 @@ import (
 //     through chevron-type moisture-separators where the water is
 //     removed and drained to the feedwater system."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:60-62
-func (m *MoistureSeparatorReheater) Step(
+func (m *MoistureSeparatorReheater) Step(dt time.Duration,
 	inletPressure Pressure,
 	inletQuality float64,
 	inletTemp Temperature,
@@ -33,7 +34,6 @@ func (m *MoistureSeparatorReheater) Step(
 	reheatSteamPressure Pressure,
 ) MoistureSeparatorReheater {
 	ret := *m
-	dt := TimeStep
 
 	// Outlet pressure drops slightly across the separator and
 	// reheater bundles.
@@ -57,7 +57,7 @@ func (m *MoistureSeparatorReheater) Step(
 	reheatFraction := reheatSteamFlow.Float() /
 		(FeedwaterDesignFlow.Float() * MSRDesignExtractionFraction)
 	reheatFraction = min(reheatFraction, 1.0)
-	ret.OutletTemperature = Temperature{Val: inletTemp.Float()+MSRReheatTarget*reheatFraction, Unit: u.Fahrenheit}
+	ret.OutletTemperature = Temperature{Val: inletTemp.Float() + MSRReheatTarget*reheatFraction, Unit: u.Fahrenheit}
 
 	// Reheat steam pressure is passed through for state tracking.
 	ret.ReheatSteamPressure = reheatSteamPressure

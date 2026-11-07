@@ -67,8 +67,8 @@ type Electrical struct {
 //     some operator-controlled disconnect. Default true: closed.
 type ESFBus struct {
 	Part
-	Voltage      float64
-	Energized    bool
+	Voltage       float64
+	Energized     bool
 	BreakerClosed bool
 
 	// OnDiesel is true while this bus's own diesel generator is
@@ -121,10 +121,10 @@ const esfLoadSequenceStageDelay = 5 * time.Second
 // Step computes the per-train ESF bus state from its available sources.
 // Follows the existing copy-into-nextPlant style: pure on input, writes
 // only to ret.
-func (e *Electrical) Step() Electrical {
+func (e *Electrical) Step(dt time.Duration) Electrical {
 	ret := *e
-	ret.ESFBusA = stepESFBus(ret.ESFBusA, ret.OffsiteA, ret.MainGenA, ret.DieselGenA)
-	ret.ESFBusB = stepESFBus(ret.ESFBusB, ret.OffsiteB, ret.MainGenB, ret.DieselGenB)
+	ret.ESFBusA = stepESFBus(dt, ret.ESFBusA, ret.OffsiteA, ret.MainGenA, ret.DieselGenA)
+	ret.ESFBusB = stepESFBus(dt, ret.ESFBusB, ret.OffsiteB, ret.MainGenB, ret.DieselGenB)
 	return ret
 }
 
@@ -143,7 +143,7 @@ func (e *Electrical) Step() Electrical {
 //     from physically and electrically independent diesel
 //     generators located on the site."
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:27-31
-func stepESFBus(b ESFBus, offsite, main *PowerGenerator, diesel *DieselGenerator) ESFBus {
+func stepESFBus(dt time.Duration, b ESFBus, offsite, main *PowerGenerator, diesel *DieselGenerator) ESFBus {
 	if !b.BreakerClosed {
 		b.Voltage = 0
 		b.Energized = false
@@ -161,7 +161,7 @@ func stepESFBus(b ESFBus, offsite, main *PowerGenerator, diesel *DieselGenerator
 				b.OnDiesel = true
 				b.DieselFeedElapsed = 0
 			}
-			b.DieselFeedElapsed += TimeStep
+			b.DieselFeedElapsed += dt
 		} else {
 			b.OnDiesel = false
 			b.DieselFeedElapsed = 0

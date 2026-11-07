@@ -2,6 +2,7 @@ package core
 
 import (
 	u "github.com/bcicen/go-units"
+	"time"
 )
 
 // Step advances the Circulating Water System state machine by
@@ -45,7 +46,7 @@ import (
 //     of circulating water may be a river, lake, ocean, or
 //     cooling tower."
 //     specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:28-30
-func (c *CirculatingWaterSystem) Step(
+func (c *CirculatingWaterSystem) Step(dt time.Duration,
 	pumpRunning bool,
 	driveReady bool,
 	numPumps int,
@@ -112,10 +113,9 @@ func (c *CirculatingWaterSystem) Step(
 //
 // cwFlowGPM is the previous tick's circulating flow (a 1 ms lag
 // consistent with the copy-into-nextPlant ordering).
-func (ct *CoolingTower) Step(fansRunning, driveReady bool,
+func (ct *CoolingTower) Step(dt time.Duration, fansRunning, driveReady bool,
 	cwFlowGPM float64, hotInlet, wetBulb Temperature) CoolingTower {
 	ret := *ct
-	dt := TimeStep
 
 	ret.FanRunning = fansRunning && driveReady
 	ret.HotInletTemp = hotInlet

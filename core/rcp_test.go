@@ -23,13 +23,12 @@ import (
 func TestRCP_Startup(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
-	stepN(&p, int(5*time.Second/TimeStep))
+	stepN(&p, int(5*time.Second/DefaultTimeStep), DefaultTimeStep)
 	assert.GreaterOrEqual(t, float64(p.ReactorBuilding.ReactorCoolantPump.Velocity),
 		0.9*float64(RCPRatedSpeed),
 		"want loop-average RCP velocity >= 0.9 * RCPRatedSpeed after 5 s startup, got %v",
 		p.ReactorBuilding.ReactorCoolantPump.Velocity)
 }
-
 
 // TestRCP_SequentialStartStagesFlow verifies that starting the loop
 // pumps one at a time stages the loop-average flow: N of four rotors
@@ -44,9 +43,8 @@ func TestRCP_Startup(t *testing.T) {
 //     may be secured."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:104-108
 func TestRCP_SequentialStartStagesFlow(t *testing.T) {
-	// Must not run in parallel: overrideTimeStep mutates global
 	// simulation state (same discipline as TestRCP_Coastdown).
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := MakePlant()
 	for stage := 1; stage <= 4; stage++ {
 		p.ReactorBuilding.ReactorCoolantPumps.All()[stage-1].Running = true
@@ -54,8 +52,8 @@ func TestRCP_SequentialStartStagesFlow(t *testing.T) {
 		// Poll to the staged plateau: the exponential ramp passes
 		// 95 percent of its asymptote after ~3 tau (6 s sim).
 		reached := false
-		for i := 0; i < int(12*time.Second/TimeStep) && !reached; i++ {
-			p.Step()
+		for i := 0; i < int(12*time.Second/testDt) && !reached; i++ {
+			p.Step(testDt)
 			p.Update()
 			reached = float64(p.ReactorBuilding.ReactorCoolantPump.Velocity) >=
 				0.95*want
@@ -77,13 +75,13 @@ func TestRCP_SequentialStartStagesFlow(t *testing.T) {
 //
 // Spec justification:
 //   - "All of the engineered safety system loads are fed from two
-//      6600-volt engineered safety features buses."
+//     6600-volt engineered safety features buses."
 //   - specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:72-74
 func TestPlant_RCPDriveReadyFollowsESFBreaker(t *testing.T) {
 	p := MakePlant()
 	p.Electrical.ESFBusA.BreakerClosed = false
 	p.Electrical.ESFBusB.BreakerClosed = false
-	stepN(&p, 10)
+	stepN(&p, 10, DefaultTimeStep)
 	require.False(t, p.ReactorBuilding.ReactorCoolantPump.DriveReady,
 		"precondition: ESF breakers open, want DriveReady=false")
 	require.False(t, p.ReactorBuilding.ReactorCoolantPumps.LoopA.DriveReady,
@@ -91,7 +89,7 @@ func TestPlant_RCPDriveReadyFollowsESFBreaker(t *testing.T) {
 
 	p.Electrical.ESFBusA.BreakerClosed = true
 	p.Electrical.ESFBusB.BreakerClosed = true
-	stepN(&p, 10)
+	stepN(&p, 10, DefaultTimeStep)
 	assert.True(t, p.ReactorBuilding.ReactorCoolantPump.DriveReady,
 		"want DriveReady=true with the ESF buses energized")
 }
@@ -113,16 +111,15 @@ func TestRCP_Coastdown(t *testing.T) {
 	// At this tick width dt/tau is 1e-3 per step, shifting the
 	// discrete decay's effective tau by about 0.05 percent, orders
 	// of magnitude inside the 1-percent-of-rated crossing the test
-	// reads. Must not run in parallel: overrideTimeStep mutates
 	// global simulation state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := MakePlant()
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	// Poll to rated speed with a cap; the ramp is monotone so the
 	// exit comes as soon as the precondition holds.
 	reached := false
-	for i := 0; i < int(20*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(20*time.Second/testDt); i++ {
+		p.Step(testDt)
 		p.Update()
 		if float64(p.ReactorBuilding.ReactorCoolantPump.Velocity) >=
 			0.99*float64(RCPRatedSpeed) {
@@ -139,8 +136,8 @@ func TestRCP_Coastdown(t *testing.T) {
 	// sub-1% crossing instead of stepping a fixed window past it.
 	const maxCoast = 50 * time.Second
 	crossed := false
-	for i := 0; i < int(maxCoast/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(maxCoast/testDt); i++ {
+		p.Step(testDt)
 		p.Update()
 		if float64(p.ReactorBuilding.ReactorCoolantPump.Velocity) <
 			0.01*float64(RCPRatedSpeed) {
@@ -166,7 +163,7 @@ func TestRCP_HeatInputScalesWithSpeed(t *testing.T) {
 	p.ReactorBuilding.ReactorCoolantPumps.LoopA.Running = true
 	p.ReactorBuilding.ReactorCoolantPumps.LoopA.Velocity = RCPRatedSpeed / 2
 	p.ReactorBuilding.ReactorPressureVessel.PumpHeatInput = 0
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	got := float64(p.ReactorBuilding.ReactorPressureVessel.PumpHeatInput)
 	want := float64(RCPRatedHeatInput) * 0.25
 	assert.InDelta(t, want, got, want*0.05,
@@ -183,7 +180,7 @@ func TestRCP_HeatInputOff(t *testing.T) {
 		pu.Velocity = 0
 	}
 	p.ReactorBuilding.ReactorPressureVessel.PumpHeatInput = 0
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.Equal(t, 0.0,
 		float64(p.ReactorBuilding.ReactorPressureVessel.PumpHeatInput),
 		"want PumpHeatInput=0 with velocity=0, got %v",
@@ -227,7 +224,7 @@ func TestRCP_HeadScalesWithVelocity(t *testing.T) {
 				From: "from", To: "to", Pump: pump,
 			}},
 		}
-		simulateFluidFlow(g, TimeStep)
+		simulateFluidFlow(g, DefaultTimeStep)
 		return to.Level.Float()
 	}
 	fullFlow := runFlow(RCPRatedSpeed)

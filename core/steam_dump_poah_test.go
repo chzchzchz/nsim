@@ -27,7 +27,7 @@ func TestSteamDumpPressureModeArmsAtPOAH(t *testing.T) {
 
 	maxDump, minP, maxP := 0.0, 9999.0, 0.0
 	for i := 0; i < 15000; i++ {
-		p.Step()
+		p.Step(DefaultTimeStep)
 		p.Update()
 		d := p.TurbineBuilding.Turbine.DumpValve.Open
 		pp := float64(p.ReactorBuilding.SteamGenerator.Pressure)
@@ -62,25 +62,24 @@ func TestSteamDumpPressureModeArmsAtPOAH(t *testing.T) {
 // holds for 2. The asserted bound sits far from both.
 //
 // The widened tick only stretches valve travel and thermal lag, both of
-// which move slower than the sampled checkpoints. Must not run in
-// parallel: overrideTimeStep mutates global simulation state.
+// which move slower than the sampled checkpoints..
 func TestSteamDumpPressureModeModulatesUnderSmallSurplus(t *testing.T) {
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := fullPowerLineup()
 	cm := p.GetControlMap()
 
 	for _, sp := range []string{"0.91", "0.82", "0.73", "0.64", "0.55"} {
 		require.NoError(t, cm["TurbineBuilding/Turbine/Setpoint"].Set(sp))
-		for i := 0; i < int(20*time.Second/TimeStep); i++ {
-			p.Step()
+		for i := 0; i < int(20*time.Second/DefaultTimeStep); i++ {
+			p.Step(testDt)
 			p.Update()
 		}
 	}
 
 	travel, maxP := 0.0, 0.0
 	prev := -1.0
-	for i := 0; i < int(60*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(60*time.Second/DefaultTimeStep); i++ {
+		p.Step(testDt)
 		p.Update()
 		d := float64(p.TurbineBuilding.Turbine.DumpValve.Open)
 		if prev >= 0 {

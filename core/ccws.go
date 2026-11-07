@@ -2,6 +2,7 @@ package core
 
 import (
 	"math"
+	"time"
 
 	u "github.com/bcicen/go-units"
 )
@@ -12,22 +13,22 @@ import (
 // to the service water across the component cooling heat
 // exchangers.
 //
-//   1. Inlet-temperature target. The component cooling heat
-//      exchanger can only cool the loop toward the service water
-//      supply temperature plus the HX approach, so the inlet
-//      relaxes toward max(CCWSInletSteadyStateTemp, supply +
-//      CCHXApproachTemp). At nominal river temperature this is
-//      the spec's 105°F design value; a hotter river lifts it.
-//      Without service water flow there is no heat sink and the
-//      loop soaks toward CCWSInletMaxCooldownTemp with the same
-//      first-order lag (CCWSRecoveryTimeConstant).
-//   2. Outlet temperature. When pumps are running, the outlet
-//      temperature equals the inlet plus CCHXApproachTemp
-//      (10°F). This lumped value is what the RHRS Step reads
-//      as its ccwInletTemp argument.
-//   3. Surge-tank level. Initialised full at MakePlant and not
-//      drawn down in the simplified fidelity band (leakage is
-//      omitted; passive-failure isolation is deferred).
+//  1. Inlet-temperature target. The component cooling heat
+//     exchanger can only cool the loop toward the service water
+//     supply temperature plus the HX approach, so the inlet
+//     relaxes toward max(CCWSInletSteadyStateTemp, supply +
+//     CCHXApproachTemp). At nominal river temperature this is
+//     the spec's 105°F design value; a hotter river lifts it.
+//     Without service water flow there is no heat sink and the
+//     loop soaks toward CCWSInletMaxCooldownTemp with the same
+//     first-order lag (CCWSRecoveryTimeConstant).
+//  2. Outlet temperature. When pumps are running, the outlet
+//     temperature equals the inlet plus CCHXApproachTemp
+//     (10°F). This lumped value is what the RHRS Step reads
+//     as its ccwInletTemp argument.
+//  3. Surge-tank level. Initialised full at MakePlant and not
+//     drawn down in the simplified fidelity band (leakage is
+//     omitted; passive-failure isolation is deferred).
 //
 // Spec justification:
 //   - "The component cooling water inlet temperature to various
@@ -57,7 +58,7 @@ import (
 //     transients, and collects water that may leak into the
 //     system from components being cooled."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_104.txt:60-64
-func (c *CCWS) Step(
+func (c *CCWS) Step(dt time.Duration,
 	swSupplyTemp Temperature,
 	swFlowAvail bool,
 ) CCWS {
@@ -74,7 +75,7 @@ func (c *CCWS) Step(
 		return ret
 	}
 
-	dt := TimeStep.Seconds()
+	dtSec := dt.Seconds()
 	tau := CCWSRecoveryTimeConstant.Seconds()
 	if tau <= 0 {
 		tau = 1
@@ -93,8 +94,8 @@ func (c *CCWS) Step(
 	}
 	ss := target
 	gap := ss - ret.InletTemp.Float()
-	ret.InletTemp = Temperature{Val: ret.InletTemp.Float()+gap*(1.0-math.Exp(-dt/tau)), Unit: u.Fahrenheit}
-	ret.OutletTemp = Temperature{Val: ret.InletTemp.Float()+CCHXApproachTemp.Float(), Unit: u.Fahrenheit}
+	ret.InletTemp = Temperature{Val: ret.InletTemp.Float() + gap*(1.0-math.Exp(-dtSec/tau)), Unit: u.Fahrenheit}
+	ret.OutletTemp = Temperature{Val: ret.InletTemp.Float() + CCHXApproachTemp.Float(), Unit: u.Fahrenheit}
 
 	// Lumped duty across the HX from the CCW-side temperature
 	// drop: mass flow × cp × approach. This is the heat handed
@@ -110,4 +111,3 @@ func (c *CCWS) Step(
 
 	return ret
 }
-

@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func stepFor(p *Plant, d time.Duration) {
-	for i := 0; i < int(d/TimeStep); i++ {
-		p.Step()
+func stepFor(p *Plant, d time.Duration, dt time.Duration) {
+	for i := 0; i < int(d/dt); i++ {
+		p.Step(dt)
 		p.Update()
 	}
 }
@@ -54,7 +54,7 @@ func TestScenario4_VacuumPumpControlEstablishesVacuum(t *testing.T) {
 	p.TurbineBuilding.Turbine.StopValve.Open = 0
 
 	setControl(t, &p, "TurbineBuilding/Condenser/VacuumPump", "1")
-	stepFor(&p, 5*time.Second)
+	stepFor(&p, 5*time.Second, DefaultTimeStep)
 
 	assert.True(t, p.TurbineBuilding.Condenser.VacuumPumpRunning)
 	// Physics-forced: established vacuum sits below atmospheric and
@@ -81,11 +81,11 @@ func TestScenario4_RollingWithVacuumHoldsBackpressure(t *testing.T) {
 	p.TurbineBuilding.Turbine.StopValve.Open = 0
 
 	setControl(t, &p, "TurbineBuilding/Condenser/VacuumPump", "1")
-	stepFor(&p, 5*time.Second)
+	stepFor(&p, 5*time.Second, DefaultTimeStep)
 
 	setControl(t, &p, "TurbineBuilding/Turbine/SpeedDemand", "0.05")
 	setControl(t, &p, "TurbineBuilding/Turbine/StopValve", "1")
-	stepFor(&p, 10*time.Second)
+	stepFor(&p, 10*time.Second, DefaultTimeStep)
 
 	// Fixed-horizon read is valid: TripByVacuum latches while stepping
 	// and clears only on an operator reset, so an end-state false
@@ -108,7 +108,7 @@ func TestScenario4_AdmittingSteamWithoutVacuumTrips(t *testing.T) {
 
 	setControl(t, &p, "TurbineBuilding/Turbine/SpeedDemand", "0.05")
 	setControl(t, &p, "TurbineBuilding/Turbine/StopValve", "1")
-	stepFor(&p, 10*time.Second)
+	stepFor(&p, 10*time.Second, DefaultTimeStep)
 
 	assert.True(t, p.TurbineBuilding.Turbine.TripByVacuum)
 	assert.Equal(t, TurbineTripped, p.TurbineBuilding.Turbine.State)
@@ -128,7 +128,7 @@ func TestScenario4_SteamlineVentDrawsSteamToHotwell(t *testing.T) {
 	hotwellBefore := p.TurbineBuilding.Condenser.HotwellLevel.Float()
 
 	setControl(t, &p, "ReactorBuilding/SteamGenerator/SteamlineVent/Open", "1")
-	stepFor(&p, 20*time.Second)
+	stepFor(&p, 20*time.Second, DefaultTimeStep)
 
 	ventGalPerSec := SteamlineVentCapacityFraction *
 		SteamGeneratorFullLoadSteamFlow.Float() / SecondsPerHour
@@ -153,13 +153,13 @@ func TestScenario4_DrainValvePullsLevelToNormalBand(t *testing.T) {
 	t.Parallel()
 	baseline := MakePlant()
 	setControl(t, &baseline, "TurbineBuilding/MainFeedwaterPump/Running", "0")
-	stepFor(&baseline, 30*time.Second)
+	stepFor(&baseline, 30*time.Second, DefaultTimeStep)
 
 	drained := MakePlant()
 	setControl(t, &drained, "TurbineBuilding/MainFeedwaterPump/Running", "0")
 	setControl(t, &drained, "ReactorBuilding/SteamGenerator/DrainValve/Open", "1")
 	hotwellBefore := drained.TurbineBuilding.Condenser.HotwellLevel.Float()
-	stepFor(&drained, 30*time.Second)
+	stepFor(&drained, 30*time.Second, DefaultTimeStep)
 
 	drainDelta := baseline.ReactorBuilding.SteamGenerator.Water.Float() -
 		drained.ReactorBuilding.SteamGenerator.Water.Float()
@@ -205,7 +205,7 @@ func TestScenario4_CondensatePumpMovesHotwellToDeaerator(t *testing.T) {
 	hdtBefore := p.TurbineBuilding.HeaterDrainTank.Level.Float()
 
 	setControl(t, &p, "TurbineBuilding/CondensatePump/Running", "1")
-	stepFor(&p, 3*time.Second)
+	stepFor(&p, 3*time.Second, DefaultTimeStep)
 
 	draw := pumpHead * 3
 	recirc := FeedwaterMinFlow.Float() * 3
@@ -224,8 +224,10 @@ func TestScenario4_CondensatePumpMovesHotwellToDeaerator(t *testing.T) {
 // charging injection against letdown draw.
 //
 // "pressurizer level represents a balance of injection water flow
-//  into the RCS and water letdown flow into the Chemical and Volume
-//  Control System."
+//
+//	into the RCS and water letdown flow into the Chemical and Volume
+//	Control System."
+//
 // specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65
 // Direction is physics-forced (letdown net draw must lower level);
 // magnitude recomputed from the CVCS design constants is a wiring
@@ -240,14 +242,14 @@ func TestScenario4_LetdownMeasurablyDrainsPressurizer(t *testing.T) {
 	closed := MakePlant()
 	setControl(t, &closed,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen", "0")
-	stepFor(&closed, 15*time.Second)
+	stepFor(&closed, 15*time.Second, DefaultTimeStep)
 	closedWater := closed.ReactorBuilding.Pressurizer.Water.Float()
 
 	open := MakePlant()
 	setControl(t, &open,
 		"AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen", "1")
 	require.True(t, open.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen)
-	stepFor(&open, 15*time.Second)
+	stepFor(&open, 15*time.Second, DefaultTimeStep)
 
 	drain := closedWater - open.ReactorBuilding.Pressurizer.Water.Float()
 	netGalPerSec := CVCSDesignLetdownFlow.Float() -

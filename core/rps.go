@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // Step advances the Reactor Protection System by one timestep.
 // The RPS evaluates trip conditions from the supplied process
 // variables, applies 2/4 voting logic to decide whether to
@@ -10,15 +12,16 @@ package core
 // redundant channels. A trip is declared when the trip count
 // reaches RPSTripVotingThreshold (2).
 //
-//   "The protection system normally uses 2/4 logic but reverts to
-//    a safe 2/3 logic when part of the system is being tested
-//    or is involved in maintenance. A 2/4 logic means that a
-//    trip occurs when at least 2 signals out of 4 indicate a
-//    trip condition."
-//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:116-121
+//	"The protection system normally uses 2/4 logic but reverts to
+//	 a safe 2/3 logic when part of the system is being tested
+//	 or is involved in maintenance. A 2/4 logic means that a
+//	 trip occurs when at least 2 signals out of 4 indicate a
+//	 trip condition."
+//	specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:116-121
 //
 // ESFAS outputs are commanded per Table 7-1:
-//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:6-81
+//
+//	specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:6-81
 //
 // Spec justification:
 //   - RPS functions: "Monitors the plant for abnormal
@@ -34,7 +37,7 @@ package core
 //   - Turbine trip interlock: "The RPS initiates a turbine trip
 //     signal whenever reactor trip occurs."
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:10-11
-func (r *ReactorProtectionSystem) Step(
+func (r *ReactorProtectionSystem) Step(dt time.Duration,
 	steamlinePressure Pressure,
 	pzrPressure Pressure,
 	sgLevelPct float64,
@@ -376,13 +379,16 @@ func (r *ReactorProtectionSystem) Step(
 // once the operator has addressed the initiating conditions. The
 // next Step re-declares a trip on its own if enough trip channels
 // are still demanding one, so reset cannot bypass an active trip:
-//   "The trip breakers are arranged to provide a 2/4 configuration."
-//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:132-133
+//
+//	"The trip breakers are arranged to provide a 2/4 configuration."
+//	specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:132-133
+//
 // Return to operation after a shutdown proceeds from hot standby,
 // withdrawing the rods back to criticality:
-//   "Startup from Hot Standby: The shutdown banks of the reactor
-//    control rods are withdrawn."
-//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:24-26
+//
+//	"Startup from Hot Standby: The shutdown banks of the reactor
+//	 control rods are withdrawn."
+//	specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:24-26
 func (r *ReactorProtectionSystem) Reset() {
 	r.ReactorTripped = false
 	r.ManualTrip = false

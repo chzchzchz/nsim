@@ -48,8 +48,8 @@ func TestPressurizer_DepressurizeTracksSaturationToRHRSGate(t *testing.T) {
 	pz.SprayOpen = 1.0
 	for tempF := CoreReferenceInletF - 1; tempF >= 349; tempF-- {
 		hotLeg := Temperature{Val: float64(tempF), Unit: u.Fahrenheit}
-		for range int(200 * time.Millisecond / TimeStep) {
-			pz, _ = pz.Step(hotLeg, nil, nil, nil, 1, 0)
+		for range int(200 * time.Millisecond / DefaultTimeStep) {
+			pz, _ = pz.Step(DefaultTimeStep, hotLeg, nil, nil, nil, 1, 0)
 		}
 	}
 	floor := PressurizerSatPressure(349)
@@ -74,7 +74,7 @@ func TestRPV_SecondaryExcessCoolsOutlet(t *testing.T) {
 	// Sized so the unclamped m*cp drop stays inside the operational
 	// program envelope (50 F/hr x 60 s = 0.83 F).
 	excess := Watts(40e6)
-	window := int(60 * time.Second / TimeStep)
+	window := int(60 * time.Second / DefaultTimeStep)
 
 	// Subcritical core: production is source-floor, so the dump draw
 	// carries the full m*cp cooling share (the planned-cooldown
@@ -84,15 +84,15 @@ func TestRPV_SecondaryExcessCoolsOutlet(t *testing.T) {
 	base.FissionPower = CoreNeutronSourcePower
 	dump.FissionPower = CoreNeutronSourcePower
 	for range window {
-		base = base.Step(RCPRatedSpeed, 0)
-		dump = dump.Step(RCPRatedSpeed, excess)
+		base = base.Step(DefaultTimeStep, RCPRatedSpeed, 0)
+		dump = dump.Step(DefaultTimeStep, RCPRatedSpeed, excess)
 	}
 
 	// Differential readout: the shared relaxation term cancels
 	// between the twins, leaving the pure energy-balance offset.
 	massKg := RCSMassKg
 	wantDropF := float64(excess) / (massKg * SpecificHeatWater) *
-		float64(window) * TimeStep.Seconds() * 9.0 / 5.0
+		float64(window) * DefaultTimeStep.Seconds() * 9.0 / 5.0
 	gotDropF := base.Outlet.Float() - dump.Outlet.Float()
 	require.Greater(t, gotDropF, 0.0,
 		"the dumped twin must sit below its neutralized twin")
@@ -110,8 +110,8 @@ func TestRPV_SecondaryExcessSuppressedAtPower(t *testing.T) {
 		Outlet: Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
 	}
 	atPower.SeedSteadyStatePower(CoreRatedThermalPower)
-	for range int(60 * time.Second / TimeStep) {
-		atPower = atPower.Step(RCPRatedSpeed, excess)
+	for range int(60 * time.Second / DefaultTimeStep) {
+		atPower = atPower.Step(DefaultTimeStep, RCPRatedSpeed, excess)
 	}
 	assert.InDelta(t, CoreReferenceOutletF, atPower.Outlet.Float(), 1.0,
 		"at power the draw must not walk the anchor: got %v",
@@ -130,7 +130,7 @@ func TestRPS_SafetyInjectionBlockGatesActuation(t *testing.T) {
 	lowSteamline := RPSLowSteamlinePressureTrip - 10
 
 	blocked := ReactorProtectionSystem{SafetyInjectionBlocked: true}
-	blocked = blocked.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 0,
+	blocked = blocked.Step(DefaultTimeStep, lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 0,
 		false)
 	assert.False(t, blocked.SafetyInjectionActuated,
 		"a blocked SI signal must not actuate below the setpoint")
@@ -138,7 +138,7 @@ func TestRPS_SafetyInjectionBlockGatesActuation(t *testing.T) {
 		"one channel below voting threshold must not trip the reactor")
 
 	open := ReactorProtectionSystem{}
-	open = open.Step(lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 0,
+	open = open.Step(DefaultTimeStep, lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 0,
 		false)
 	assert.True(t, open.SafetyInjectionActuated,
 		"without the block the same state must actuate SI")
@@ -158,7 +158,7 @@ func TestSIS_AccumulatorIsolationShutBlocksDischarge(t *testing.T) {
 		Capacity:      SISAccumulatorPerTankCapacity,
 		IsolationShut: true,
 	}}
-	shut = shut.Step(belowPrecharge)
+	shut = shut.Step(DefaultTimeStep, belowPrecharge)
 	assert.False(t, shut.Accumulator.Discharging,
 		"isolated tanks must not discharge below precharge")
 	assert.Equal(t, SISAccumulatorPerTankCapacity.Float(),
@@ -169,7 +169,7 @@ func TestSIS_AccumulatorIsolationShutBlocksDischarge(t *testing.T) {
 		Level:    SISAccumulatorPerTankCapacity,
 		Capacity: SISAccumulatorPerTankCapacity,
 	}}
-	open = open.Step(belowPrecharge)
+	open = open.Step(DefaultTimeStep, belowPrecharge)
 	assert.True(t, open.Accumulator.Discharging,
 		"open isolation must discharge below precharge")
 	assert.Less(t, open.Accumulator.Level.Float(),
@@ -189,8 +189,8 @@ func TestSteamGenerator_WetLayupFillTopsToVents(t *testing.T) {
 	}
 	live.Pressure = Pressure(SGWetLayupMaxHeaderPsia + 100)
 	live.WetLayupFillValve = Valve{Open: 1}
-	for range int(60 * time.Second / TimeStep) {
-		live = live.Step(0)
+	for range int(60 * time.Second / DefaultTimeStep) {
+		live = live.Step(DefaultTimeStep, 0)
 	}
 	assert.Equal(t, 30000.0, live.Water.Float(),
 		"a live header must not accept layup fill")
@@ -201,15 +201,15 @@ func TestSteamGenerator_WetLayupFillTopsToVents(t *testing.T) {
 	}
 	vented.Pressure = Pressure(5)
 	vented.WetLayupFillValve = Valve{Open: 1}
-	for range int(60 * time.Second / TimeStep) {
-		vented = vented.Step(0)
+	for range int(60 * time.Second / DefaultTimeStep) {
+		vented = vented.Step(DefaultTimeStep, 0)
 	}
 	wantGain := SGWetLayupFillGalPerSec * 60.0
 	assert.InDelta(t, 30000+wantGain, vented.Water.Float(), wantGain*0.01,
 		"fill should add the design rate while below the vents")
 
-	for range int(3500 * time.Second / TimeStep) {
-		vented = vented.Step(0)
+	for range int(3500 * time.Second / DefaultTimeStep) {
+		vented = vented.Step(DefaultTimeStep, 0)
 	}
 	assert.Equal(t, 100000.0, vented.Water.Float(),
 		"fill clamps at the vents (shell full)")
@@ -224,17 +224,17 @@ func TestSteamGenerator_WetLayupFillTopsToVents(t *testing.T) {
 func TestCVCS_ChargingFlowDemandThrottlesManualFlow(t *testing.T) {
 	hotTavg := Temperature{Val: 571, Unit: u.Fahrenheit}
 	c := CVCS{ChargingPumpRunning: true}
-	c = c.Step(Volume{}, hotTavg, 0.6, PressurizerHeaterTarget)
+	c = c.Step(DefaultTimeStep, Volume{}, hotTavg, 0.6, PressurizerHeaterTarget)
 	require.Equal(t, CVCSDesignChargingFlow.Float(), c.ChargingFlow.Float(),
 		"default demand keeps full design flow")
 
 	half := CVCS{ChargingPumpRunning: true, ChargingFlowDemand: 0.5}
-	half = half.Step(Volume{}, hotTavg, 0.6, PressurizerHeaterTarget)
+	half = half.Step(DefaultTimeStep, Volume{}, hotTavg, 0.6, PressurizerHeaterTarget)
 	assert.InDelta(t, CVCSDesignChargingFlow.Float()*0.5,
 		half.ChargingFlow.Float(), 1e-9)
 
 	full := CVCS{ChargingPumpRunning: true, ChargingFlowDemand: 2}
-	full = full.Step(Volume{}, hotTavg, 0.6, PressurizerHeaterTarget)
+	full = full.Step(DefaultTimeStep, Volume{}, hotTavg, 0.6, PressurizerHeaterTarget)
 	assert.InDelta(t, CVCSDesignChargingFlow.Float(),
 		full.ChargingFlow.Float(), 1e-9,
 		"demand clamps at design flow")
@@ -250,12 +250,12 @@ func TestCVCS_ChargingFlowDemandThrottlesManualFlow(t *testing.T) {
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:100-104
 func TestCVCS_AuxSprayDriveRequiresChargingPump(t *testing.T) {
 	secured := CVCS{AuxSprayValveOpen: 1}
-	secured = secured.Step(Volume{}, Temperature{}, 0.5, PressurizerHeaterTarget)
+	secured = secured.Step(DefaultTimeStep, Volume{}, Temperature{}, 0.5, PressurizerHeaterTarget)
 	assert.Zero(t, secured.AuxSprayDrive,
 		"no charging pump means no auxiliary spray flow")
 
 	supplying := CVCS{AuxSprayValveOpen: 1, ChargingPumpRunning: true}
-	supplying = supplying.Step(Volume{}, Temperature{}, 0.5,
+	supplying = supplying.Step(DefaultTimeStep, Volume{}, Temperature{}, 0.5,
 		PressurizerHeaterTarget)
 	assert.InDelta(t, 1.0, supplying.AuxSprayDrive, 1e-9,
 		"open valve on a running pump delivers full drive")
@@ -270,14 +270,14 @@ func TestCVCS_AuxSprayDriveRequiresChargingPump(t *testing.T) {
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:96-98
 func TestPressurizer_NormalSprayNeedsRCPFlow(t *testing.T) {
 	hotLeg := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
-	steps := int(time.Second / TimeStep)
+	steps := int(time.Second / DefaultTimeStep)
 
 	secured := Pressurizer{
 		Volume: Volume{Val: 1500, Unit: u.Gallon}, SprayOpen: 1,
 		Pressure: PressurizerHeaterTarget,
 	}
 	for range steps {
-		secured, _ = secured.Step(hotLeg, nil, nil, nil, 0, 0)
+		secured, _ = secured.Step(DefaultTimeStep, hotLeg, nil, nil, nil, 0, 0)
 	}
 	assert.Equal(t, float64(PressurizerHeaterTarget),
 		float64(secured.Pressure),
@@ -285,7 +285,7 @@ func TestPressurizer_NormalSprayNeedsRCPFlow(t *testing.T) {
 
 	running := secured
 	for range steps {
-		running, _ = running.Step(hotLeg, nil, nil, nil, 1, 0)
+		running, _ = running.Step(DefaultTimeStep, hotLeg, nil, nil, nil, 1, 0)
 	}
 	assert.Less(t, float64(running.Pressure),
 		float64(PressurizerHeaterTarget),
@@ -307,13 +307,13 @@ func TestPressurizer_AuxSprayControlsPressureWithRCPsSecured(t *testing.T) {
 		Water:    Volume{Val: 900, Unit: u.Gallon},
 		Pressure: PressurizerHeaterTarget,
 	}
-	window := int(10 * time.Second / TimeStep)
+	window := int(10 * time.Second / DefaultTimeStep)
 	for range window {
-		pz, _ = pz.Step(hotLeg, nil, nil, nil, 0, 1)
+		pz, _ = pz.Step(DefaultTimeStep, hotLeg, nil, nil, nil, 0, 1)
 	}
 	floor := float64(PressurizerSatPressure(CoreReferenceOutletF))
 	want := float64(PressurizerHeaterTarget) -
-		float64(PressurizerAuxSprayRate)*float64(window)*TimeStep.Seconds()
+		float64(PressurizerAuxSprayRate)*float64(window)*DefaultTimeStep.Seconds()
 	got := float64(pz.Pressure)
 	assert.InDelta(t, max(want, floor), got, max(want, floor)*0.02,
 		"auxiliary spray should track its own rate toward the saturation "+
@@ -331,7 +331,7 @@ func TestPressurizer_AuxSprayControlsPressureWithRCPsSecured(t *testing.T) {
 func TestCVCS_LetdownFallsWithLowRcsPressure(t *testing.T) {
 	open := func(pzrPressure Pressure) CVCS {
 		c := CVCS{LetdownValveOpen: true}
-		return c.Step(Volume{}, Temperature{}, 0.5, pzrPressure)
+		return c.Step(DefaultTimeStep, Volume{}, Temperature{}, 0.5, pzrPressure)
 	}
 	design := open(Pressure(CVCSLetdownDesignPsia))
 	assert.InDelta(t, CVCSDesignLetdownFlow.Float(),
@@ -368,8 +368,8 @@ func TestRHRS_SolidPlantPressureValveHoldsSelectedPressure(t *testing.T) {
 	}
 
 	bledGal := 0.0
-	for range int(60 * time.Second / TimeStep) {
-		bledGal += rhrs.SolidPlantRelieve(&solid).Float()
+	for range int(60 * time.Second / DefaultTimeStep) {
+		bledGal += rhrs.SolidPlantRelieve(DefaultTimeStep, &solid).Float()
 		if rhrs.SolidPlantReliefFlow.Float() == 0 {
 			break
 		}
@@ -383,7 +383,7 @@ func TestRHRS_SolidPlantPressureValveHoldsSelectedPressure(t *testing.T) {
 		PressurizerBubbleStiffness, bledGal, 1.0,
 		"settling 2250 -> 400 psia takes the stiffness-equivalent volume")
 
-	idle := rhrs.SolidPlantRelieve(&solid)
+	idle := rhrs.SolidPlantRelieve(DefaultTimeStep, &solid)
 	assert.Zero(t, idle.Float(),
 		"at the setpoint the valve stands down")
 }
@@ -398,7 +398,7 @@ func TestRHRS_SolidPlantValveNeedsRHRRunning(t *testing.T) {
 		Water:    Volume{Val: 1500, Unit: u.Gallon},
 		Pressure: PressurizerHeaterTarget,
 	}
-	bled := rhrs.SolidPlantRelieve(&solid)
+	bled := rhrs.SolidPlantRelieve(DefaultTimeStep, &solid)
 	assert.Zero(t, bled.Float(),
 		"without forced RHR flow the CVC interface carries nothing")
 	assert.Equal(t, float64(PressurizerHeaterTarget),
@@ -440,7 +440,7 @@ func TestPlant_AuxSprayMovesPressureWithRCPsSecured(t *testing.T) {
 		// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:81-84
 		p.ReactorBuilding.Pressurizer.HeatersOn = false
 		before := p.ReactorBuilding.Pressurizer.Pressure
-		stepN(&p, int(5*time.Second/TimeStep))
+		stepN(&p, int(5*time.Second/DefaultTimeStep), DefaultTimeStep)
 		return float64(before) - float64(p.ReactorBuilding.Pressurizer.Pressure)
 	}
 	idleOnly := run("0")

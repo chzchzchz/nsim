@@ -26,7 +26,7 @@ var (
 	// matching the
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:36-37
 	// 7-day (full tank) hint.
-	dieselFuelRate = Volume{Val: 500.0/(4*24), Unit: u.Gallon} // gal/hr at 1.0 frac
+	dieselFuelRate = Volume{Val: 500.0 / (4 * 24), Unit: u.Gallon} // gal/hr at 1.0 frac
 	// Jacket heat rejected through the jacket-water cooler as a
 	// fraction of rated output. The spec gives no number; large
 	// medium-speed diesel gensets reject roughly 5-10% of fuel
@@ -35,14 +35,13 @@ var (
 	dieselJacketFraction = 0.07
 )
 
-// Step advances the diesel generator by TimeStep. The state machine,
+// Step advances the diesel generator by ProductionStep. The state machine,
 // speed ramp, generator output ramp, fuel integration, and cooling
 // integration all run on the 1 ms plant step defined in core/units.go:16.
 //
 // Spec justification for each block is inline below.
-func (d *DieselGenerator) Step(swFlowGPM float64) DieselGenerator {
+func (d *DieselGenerator) Step(dt time.Duration, swFlowGPM float64) DieselGenerator {
 	ret := *d
-	dt := TimeStep
 
 	// 1) State-machine transitions.
 	//
@@ -137,12 +136,12 @@ func (d *DieselGenerator) Step(swFlowGPM float64) DieselGenerator {
 	ambient := ret.Fuel.Part.Temperature.Float() // proxy for ambient
 	gap := ret.CoolantTemp.Float() - ambient
 	if swFlowing {
-		ret.CoolantTemp = Temperature{Val: ret.CoolantTemp.Float()-gap*(dt.Seconds()/dieselCoolingTau.Seconds()), Unit: u.Fahrenheit}
+		ret.CoolantTemp = Temperature{Val: ret.CoolantTemp.Float() - gap*(dt.Seconds()/dieselCoolingTau.Seconds()), Unit: u.Fahrenheit}
 	} else {
 		if ret.State == DieselRunning {
-			ret.CoolantTemp = Temperature{Val: ret.CoolantTemp.Float()+dieselAmbientRate*dt.Seconds()*100, Unit: u.Fahrenheit}
+			ret.CoolantTemp = Temperature{Val: ret.CoolantTemp.Float() + dieselAmbientRate*dt.Seconds()*100, Unit: u.Fahrenheit}
 		} else {
-			ret.CoolantTemp = Temperature{Val: ret.CoolantTemp.Float()-gap*(dt.Seconds()/dieselCoolingTau.Seconds()), Unit: u.Fahrenheit}
+			ret.CoolantTemp = Temperature{Val: ret.CoolantTemp.Float() - gap*(dt.Seconds()/dieselCoolingTau.Seconds()), Unit: u.Fahrenheit}
 		}
 	}
 	// Jacket-cooler duty handed to the service water: only while the

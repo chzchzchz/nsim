@@ -106,7 +106,7 @@ func TestScenario1_PrecriticalLineupReplay(t *testing.T) {
 				set("AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen", "0")
 			}
 		}
-		stepN(&p, 1)
+		stepN(&p, 1, DefaultTimeStep)
 
 		if !p.Electrical.ESFBusA.Energized || !p.Electrical.ESFBusB.Energized {
 			busesHeld = false

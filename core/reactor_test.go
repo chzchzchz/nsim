@@ -20,8 +20,8 @@ func TestReactor_RunningProducesRatedPower(t *testing.T) {
 		Outlet:      Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
 	}
 	r.SeedSteadyStatePower(CoreRatedThermalPower)
-	for i := 0; i < int(time.Second/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed, 0)
+	for i := 0; i < int(time.Second/DefaultTimeStep); i++ {
+		r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	}
 	assert.Positive(t, r.TotalThermalPower(), "want ThermalPower > 0 at running")
 	assert.LessOrEqual(t, r.TotalThermalPower(), CoreRatedThermalPower,
@@ -52,7 +52,7 @@ func TestReactor_RunningProducesRatedPower(t *testing.T) {
 //     absorbers reducing the boron need
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_039.txt:51-56
 //   - "reactor power is maintained equal to load by virtue of
-//      feedback effects inherent in the physics of a PWR"
+//     feedback effects inherent in the physics of a PWR"
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:69-71
 func TestReactor_DopplerShiftsReactivityWithBoron(t *testing.T) {
 	assert.Greater(t, netTempCoef(CVCSInitialBoron), netTempCoef(10),
@@ -72,9 +72,9 @@ func TestReactor_DopplerShiftsReactivityWithBoron(t *testing.T) {
 			Outlet:      Temperature{Val: float64(CoreDopplerReferenceTempF), Unit: u.Fahrenheit},
 		}
 		hot.SeedSteadyStatePower(CoreRatedThermalPower)
-		hot = hot.Step(RCPRatedSpeed, 0)
+		hot = hot.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 		ref.SeedSteadyStatePower(CoreRatedThermalPower)
-		ref = ref.Step(RCPRatedSpeed, 0)
+		ref = ref.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 		return hot.Reactivity - ref.Reactivity
 	}
 
@@ -98,8 +98,8 @@ func TestReactor_TripWithRodsOutKeepsDecayHeatFloor(t *testing.T) {
 		Outlet:      Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
 	}
 	r.SeedSteadyStatePower(CoreRatedThermalPower)
-	for i := 0; i < int(5*time.Minute/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed, 0)
+	for i := 0; i < int(5*time.Minute/DefaultTimeStep); i++ {
+		r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	}
 	assert.Positive(t, r.TotalThermalPower(),
 		"want non-zero ThermalPower during decay, got %v", r.TotalThermalPower())
@@ -125,7 +125,7 @@ func TestReactor_OutletAtReferenceGivesZeroDoppler(t *testing.T) {
 		// equilibrium is now the physical concentration.
 		Xenon135: xenonEquilibriumPhysical(1),
 	}
-	r = r.Step(RCPRatedSpeed, 0)
+	r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	assert.GreaterOrEqual(t, r.Reactivity, float32(-1),
 		"want near-zero Reactivity, got %v", r.Reactivity)
 	assert.LessOrEqual(t, r.Reactivity, float32(1),
@@ -144,8 +144,8 @@ func TestReactor_OutletTracksThermalPower(t *testing.T) {
 	// Pre-warm the outlet at the design reference so the simplified
 	// model is on the right side of the operating curve. With Outlet
 	// at the reference, Doppler ≈ 0 and the cascade doesn't halve.
-	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed, 0)
+	for i := 0; i < int(10*time.Second/DefaultTimeStep); i++ {
+		r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	}
 	// After 10 s of full power the outlet should still be near the
 	// design reference (within the model noise).
@@ -163,14 +163,14 @@ func TestReactor_OutletDropsAfterTrip(t *testing.T) {
 	}
 	r.SeedSteadyStatePower(CoreRatedThermalPower)
 	// Settle at full power briefly so Outlet converges to ~621°F.
-	for i := 0; i < int(time.Second/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed, 0)
+	for i := 0; i < int(time.Second/DefaultTimeStep); i++ {
+		r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	}
 	start := r.Outlet.Float()
 	r.Trip = true
 	r.ControlRods.Insertion = 1
-	for i := 0; i < int(time.Minute/TimeStep); i++ {
-		r = r.Step(RCPRatedSpeed, 0)
+	for i := 0; i < int(time.Minute/DefaultTimeStep); i++ {
+		r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	}
 	assert.Less(t, r.Outlet.Float(), start,
 		"want Outlet < %v after 1 min of decay, got %v", start, r.Outlet.Float())
@@ -191,14 +191,14 @@ func TestReactor_OutletDropsAfterTrip(t *testing.T) {
 //     specs/westinghouse_tech_manual/chapter_3/page_0328.txt:31-32
 func TestReactor_InletFollowsProgramUnderNaturalCirculation(t *testing.T) {
 	r := ReactorPressureVessel{
-		ControlRods:  ControlRods{Insertion: 1, DemandInsertion: 1, BoronConcentration: CVCSInitialBoron},
-		Inlet:        Temperature{Val: 420, Unit: u.Fahrenheit},
-		Outlet:       Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
+		ControlRods: ControlRods{Insertion: 1, DemandInsertion: 1, BoronConcentration: CVCSInitialBoron},
+		Inlet:       Temperature{Val: 420, Unit: u.Fahrenheit},
+		Outlet:      Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
 	}
 	r.Trip = true
 	r.SeedSteadyStatePower(CoreRatedThermalPower)
-	for i := 0; i < int(10*time.Minute/TimeStep); i++ {
-		r = r.Step(0, 0) // pumps off, buoyancy carries the loop
+	for i := 0; i < int(10*time.Minute/DefaultTimeStep); i++ {
+		r = r.Step(DefaultTimeStep, 0, 0) // pumps off, buoyancy carries the loop
 	}
 	assert.Greater(t, r.NaturalCircFlowFrac, 0.03,
 		"want thermosiphon flow developed, got %v", r.NaturalCircFlowFrac)
@@ -236,9 +236,9 @@ func TestReactor_TrippedPowerIgnoresReactivity(t *testing.T) {
 	weak := mk(950)
 	strong := mk(990)
 
-	for i := 0; i < int(time.Second/TimeStep); i++ {
-		weak = weak.Step(RCPRatedSpeed, 0)
-		strong = strong.Step(RCPRatedSpeed, 0)
+	for i := 0; i < int(time.Second/DefaultTimeStep); i++ {
+		weak = weak.Step(DefaultTimeStep, RCPRatedSpeed, 0)
+		strong = strong.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 		if i > 0 {
 			break
 		}
@@ -272,7 +272,7 @@ func TestReactor_TrippedPowerIgnoresReactivity(t *testing.T) {
 //
 // Spec justification:
 //   - "Reactor startup neutron sources must be used because of fuel
-//      configuration and the initially low core activity."
+//     configuration and the initially low core activity."
 //   - specs/the_westinghouse_pressurized_water_react/chapter_2/page_041.txt:18-20
 func TestReactor_FissionRegrowsFromSourceAfterScram(t *testing.T) {
 	r := ReactorPressureVessel{
@@ -290,8 +290,8 @@ func TestReactor_FissionRegrowsFromSourceAfterScram(t *testing.T) {
 
 	// Scram: full rod insertion drives the chain to the source floor.
 	r.Trip = true
-	for i := 0; i < int(70*time.Second/TimeStep); i++ {
-		r = r.Step(0, 0)
+	for i := 0; i < int(70*time.Second/DefaultTimeStep); i++ {
+		r = r.Step(DefaultTimeStep, 0, 0)
 	}
 	require.Less(t, float64(r.FissionPower), 1e4,
 		"precondition: scram must collapse fission power, got %v W",
@@ -305,9 +305,9 @@ func TestReactor_FissionRegrowsFromSourceAfterScram(t *testing.T) {
 	r.Trip = false
 	r.DemandInsertion = 0
 	regrown := false
-	for i := 0; i < int(600*time.Second/TimeStep); i++ {
-		r.ControlRods = r.ControlRods.Step()
-		r = r.Step(RCPRatedSpeed, 0)
+	for i := 0; i < int(600*time.Second/DefaultTimeStep); i++ {
+		r.ControlRods = r.ControlRods.Step(DefaultTimeStep)
+		r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 		if r.FissionPower > CoreRatedThermalPower/10 {
 			regrown = true
 			break
@@ -333,8 +333,8 @@ func TestReactor_ZeroPowerHoldsTemperature(t *testing.T) {
 	}
 	r.FissionPower = CoreNeutronSourcePower
 
-	for range int(60 * time.Second / TimeStep) {
-		r = r.Step(RCPRatedSpeed, 0)
+	for range int(60 * time.Second / DefaultTimeStep) {
+		r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	}
 
 	assert.InDelta(t, 135.0, r.Outlet.Float(), 0.5,
@@ -360,8 +360,8 @@ func TestReactor_OutletProgramRateLimited(t *testing.T) {
 
 	const window = 10 * time.Second
 	start := hot.Outlet.Float()
-	for i := 0; i < int(window/TimeStep); i++ {
-		hot = hot.Step(0, 0)
+	for i := 0; i < int(window/DefaultTimeStep); i++ {
+		hot = hot.Step(DefaultTimeStep, 0, 0)
 	}
 	drop := start - hot.Outlet.Float()
 	want := OpHeatupRateLimit * window.Seconds()
@@ -379,8 +379,8 @@ func TestReactor_OutletProgramRateLimited(t *testing.T) {
 	cold.Outlet = Temperature{Val: 200, Unit: u.Fahrenheit}
 	cold.SeedSteadyStatePower(CoreRatedThermalPower)
 	start = cold.Outlet.Float()
-	for i := 0; i < int(window/TimeStep); i++ {
-		cold = cold.Step(RCPRatedSpeed, 0)
+	for i := 0; i < int(window/DefaultTimeStep); i++ {
+		cold = cold.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	}
 	rise := cold.Outlet.Float() - start
 	assert.InDelta(t, want, rise, want*1e-6,
@@ -395,9 +395,11 @@ func TestReactor_OutletProgramRateLimited(t *testing.T) {
 // because a break outruns it.
 //
 // "The pipe break also results in increase in steam flow from the
-//  steam generators, leading to increase in heat removal from the
-//  reactor coolant system. Therefore, coolant temperature and pressure
-//  will drop."
+//
+//	steam generators, leading to increase in heat removal from the
+//	reactor coolant system. Therefore, coolant temperature and pressure
+//	will drop."
+//
 // specs/pwr_sim/chapter_4/page_053.txt:9-11
 func TestReactor_FaultOvercoolBypassesProgramEnvelope(t *testing.T) {
 	hot := ReactorPressureVessel{}
@@ -410,9 +412,9 @@ func TestReactor_FaultOvercoolBypassesProgramEnvelope(t *testing.T) {
 
 	const window = 10 * time.Second
 	start := hot.Outlet.Float()
-	for i := 0; i < int(window/TimeStep); i++ {
-		hot = hot.Step(0, 0)
-		hot.applyFaultOvercool(Watts(SteamGeneratorFullLoadHeatInput),
+	for i := 0; i < int(window/DefaultTimeStep); i++ {
+		hot = hot.Step(DefaultTimeStep, 0, 0)
+		hot.applyFaultOvercool(DefaultTimeStep, Watts(SteamGeneratorFullLoadHeatInput),
 			SteamGeneratorShellPressure)
 	}
 	drop := start - hot.Outlet.Float()
@@ -426,7 +428,7 @@ func TestReactor_FaultOvercoolBypassesProgramEnvelope(t *testing.T) {
 
 	// One-writer discipline: no fault draw, no fault cooling.
 	before := hot.Outlet.Float()
-	hot.applyFaultOvercool(0, SteamGeneratorShellPressure)
+	hot.applyFaultOvercool(DefaultTimeStep, 0, SteamGeneratorShellPressure)
 	assert.Equal(t, before, hot.Outlet.Float(),
 		"an absent fault path must leave the outlet untouched")
 }
@@ -450,8 +452,8 @@ func TestRPV_ColdPressureHoldsAtZeroPower(t *testing.T) {
 	// a withdrawn-rod critical core).
 	rpv.ControlRods.Insertion = 1.0
 	rpv.ControlRods.DemandInsertion = 1.0
-	for range int(300 * time.Second / TimeStep) {
-		rpv = rpv.Step(RCPRatedSpeed, 0)
+	for range int(300 * time.Second / DefaultTimeStep) {
+		rpv = rpv.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	}
 	assert.Less(t, float64(rpv.Pressure), 420.0,
 		"cold primary must not drift toward the design point: got %v",
@@ -464,8 +466,8 @@ func TestRPV_ColdPressureHoldsAtZeroPower(t *testing.T) {
 func TestRPV_PressureStillRelaxesTowardDesignAtPower(t *testing.T) {
 	atPower := ReactorPressureVessel{Pressure: 2000}
 	atPower.SeedSteadyStatePower(CoreRatedThermalPower)
-	for range int(300 * time.Second / TimeStep) {
-		atPower = atPower.Step(RCPRatedSpeed, 0)
+	for range int(300 * time.Second / DefaultTimeStep) {
+		atPower = atPower.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	}
 	want := 2000 + (float64(RPVDesignPressure)-2000)*(1-math.Exp(-1))
 	assert.InDelta(t, want, float64(atPower.Pressure), 5.0,

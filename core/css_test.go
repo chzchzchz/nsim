@@ -56,9 +56,9 @@ func TestCSS_CSSTDepletesWhileRunning(t *testing.T) {
 		CSSTLevel:              CSSTCapacity,
 		SATLevel:               SATCapacity,
 	}
-	dt := TimeStep.Seconds()
+	dt := DefaultTimeStep.Seconds()
 	wantLoss := (CSSDesignFlow / 60.0) * dt
-	c2 := c.Step()
+	c2 := c.Step(DefaultTimeStep)
 	assert.InDelta(t, CSSTCapacity.Float()-wantLoss,
 		c2.CSSTLevel.Float(), 1e-9,
 		"want CSSTLevel=%v after one step, got %v",
@@ -83,7 +83,7 @@ func TestCSS_SATDepletesProportionallyWithCSST(t *testing.T) {
 		CSSTLevel:              CSSTCapacity,
 		SATLevel:               SATCapacity,
 	}
-	c2 := c.Step()
+	c2 := c.Step(DefaultTimeStep)
 	csstLoss := CSSTCapacity.Float() - c2.CSSTLevel.Float()
 	satLoss := SATCapacity.Float() - c2.SATLevel.Float()
 	wantRatio := SATCapacity.Float() / CSSTCapacity.Float()
@@ -111,11 +111,11 @@ func TestCSS_MiniflowReducesCSSTDrainWhenHeaderClosed(t *testing.T) {
 	}
 	closedHeader := openHeader
 	closedHeader.SprayHeaderOpen = false
-	dt := TimeStep.Seconds()
+	dt := DefaultTimeStep.Seconds()
 	wantLossOpen := (CSSDesignFlow / 60.0) * dt
 	wantLossClosed := wantLossOpen * (1.0 - CSSMiniflowFraction)
-	openStep := openHeader.Step()
-	closedStep := closedHeader.Step()
+	openStep := openHeader.Step(DefaultTimeStep)
+	closedStep := closedHeader.Step(DefaultTimeStep)
 	openLoss := CSSTCapacity.Float() - openStep.CSSTLevel.Float()
 	closedLoss := CSSTCapacity.Float() - closedStep.CSSTLevel.Float()
 	assert.Less(t, closedLoss, openLoss,
@@ -142,10 +142,10 @@ func TestCSS_SumpPHAdjustedLatchesBelowLoLo(t *testing.T) {
 		DriveReady:             true,
 		SprayHeaderOpen:        true,
 		SATIsolationValveBOpen: true,
-		CSSTLevel:              Volume{Val: CSSLowLevelSetpoint-10, Unit: u.Gallon},
-		SATLevel:               Volume{Val: SATCapacity.Float()/CSSTCapacity.Float()*(CSSLowLevelSetpoint-10), Unit: u.Gallon},
+		CSSTLevel:              Volume{Val: CSSLowLevelSetpoint - 10, Unit: u.Gallon},
+		SATLevel:               Volume{Val: SATCapacity.Float() / CSSTCapacity.Float() * (CSSLowLevelSetpoint - 10), Unit: u.Gallon},
 	}
-	c2 := c.Step()
+	c2 := c.Step(DefaultTimeStep)
 	assert.True(t, c2.SumpPHAdjusted,
 		"want SumpPHAdjusted=true after CSST drains below Lo-Lo, got %v",
 		c2.SumpPHAdjusted)
@@ -169,11 +169,11 @@ func TestCSS_SwitchoverToSumpStopsCSSTDrain(t *testing.T) {
 		DriveReady:             true,
 		SprayHeaderOpen:        true,
 		SATIsolationValveBOpen: true,
-		CSSTLevel:              Volume{Val: CSSLowLevelSetpoint-10, Unit: u.Gallon},
+		CSSTLevel:              Volume{Val: CSSLowLevelSetpoint - 10, Unit: u.Gallon},
 		SATLevel:               Volume{Val: 100, Unit: u.Gallon},
 	}
 	// Below Lo-Lo but before the operator acts: still injecting.
-	c2 := c.Step()
+	c2 := c.Step(DefaultTimeStep)
 	assert.False(t, c2.SuctionSump,
 		"the model must not perform the operator's switchover")
 	assert.True(t, c2.SumpPHAdjusted,
@@ -182,7 +182,7 @@ func TestCSS_SwitchoverToSumpStopsCSSTDrain(t *testing.T) {
 
 	// Operator performs the switchover through the control.
 	c2.SuctionSump = true
-	c3 := c2.Step()
+	c3 := c2.Step(DefaultTimeStep)
 	assert.True(t, c3.SuctionSump)
 	assert.InDelta(t, levelBefore, c3.CSSTLevel.Float(), 1e-9,
 		"want CSSTLevel frozen after the manual switchover, got %v → %v",
@@ -200,11 +200,11 @@ func TestCSS_SprayFlowTracksHeaderState(t *testing.T) {
 		CSSTLevel:              CSSTCapacity,
 		SATLevel:               SATCapacity,
 	}
-	c2 := c.Step()
+	c2 := c.Step(DefaultTimeStep)
 	assert.InDelta(t, CSSDesignFlow/60.0, c2.SprayFlow, 1e-9,
 		"want SprayFlow=CSSDesignFlow/60, got %v", c2.SprayFlow)
 	c.SprayHeaderOpen = false
-	c3 := c.Step()
+	c3 := c.Step(DefaultTimeStep)
 	assert.Zero(t, c3.SprayFlow,
 		"want SprayFlow=0 with header closed, got %v", c3.SprayFlow)
 }
@@ -236,13 +236,13 @@ func TestCSS_ClosedSATIsolationValvesFreezeAdditiveAndPHCredit(t *testing.T) {
 	closed := open
 	closed.SATIsolationValveBOpen = false
 
-	openStep := open.Step()
+	openStep := open.Step(DefaultTimeStep)
 	assert.Less(t, openStep.SATLevel.Float(), SATCapacity.Float(),
 		"with B open the SAT drains proportionally with the CSST")
 	assert.True(t, openStep.SumpPHAdjusted,
 		"with B open the additive is delivered and the pH consequence latches")
 
-	closedStep := closed.Step()
+	closedStep := closed.Step(DefaultTimeStep)
 	assert.InDelta(t, SATCapacity.Float(), closedStep.SATLevel.Float(), 1e-9,
 		"with B closed the SAT stays full, got %v", closedStep.SATLevel.Float())
 	assert.False(t, closedStep.SumpPHAdjusted,
@@ -270,7 +270,7 @@ func TestCSS_EndToEndHighContainmentPressureStartsCSS(t *testing.T) {
 	p.ReactorBuilding.PORV.Open = 1
 	p.ReactorBuilding.ContainmentPressure = CSSContainmentPressureSetpoint + 10
 	// Step long enough for the diesel to reach ReadyToLoad.
-	stepN(&p, int(15*time.Second/TimeStep))
+	stepN(&p, int(15*time.Second/DefaultTimeStep), DefaultTimeStep)
 	css := p.AuxiliaryBuilding.ContainmentSpraySystem
 	assert.True(t, css.Running,
 		"want Running=true after containment high pressure + diesel ready, got %v",

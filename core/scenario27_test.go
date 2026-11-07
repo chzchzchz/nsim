@@ -42,22 +42,22 @@ func TestScenario27_RPCWithdrawsAtCappedRateAfterDrop(t *testing.T) {
 		DroppedBank:     true,
 		AutoControl:     true,
 	}
-	steps := int(1 * time.Second / TimeStep)
+	steps := int(1 * time.Second / DefaultTimeStep)
 	for i := 0; i < steps; i++ {
-		c.applyAutoControl(
+		c.applyAutoControl(DefaultTimeStep,
 			Temperature{Val: programmedRodTavg(1.0) - 10, Unit: u.Fahrenheit},
 			1.0, 0.30, -3.9)
-		c = c.Step()
+		c = c.Step(DefaultTimeStep)
 	}
 
 	withdrawn := 0.85 - c.DemandInsertion
 	assert.Greater(t, withdrawn, 0.0,
 		"the controller must answer the drop with withdrawal")
 	assert.LessOrEqual(t, withdrawn,
-		RodCtrlMaxDemandSlewPerSec*float64(steps)*TimeStep.Seconds()*1.01,
+		RodCtrlMaxDemandSlewPerSec*float64(steps)*DefaultTimeStep.Seconds()*1.01,
 		"withdrawal runs at the demand slew cap")
 	assert.GreaterOrEqual(t, withdrawn,
-		RodCtrlMaxDemandSlewPerSec*float64(steps)*TimeStep.Seconds()*0.99,
+		RodCtrlMaxDemandSlewPerSec*float64(steps)*DefaultTimeStep.Seconds()*0.99,
 		"sustained large error keeps the cap pinned")
 
 	// The dropped bank pins the actual insertion at the failure depth:
@@ -73,7 +73,7 @@ func TestScenario27_RPCWithdrawsAtCappedRateAfterDrop(t *testing.T) {
 	held.AutoControl = true
 	held.DemandInsertion = 0.30
 	for i := 0; i < steps; i++ {
-		held.applyAutoControl(
+		held.applyAutoControl(DefaultTimeStep,
 			Temperature{Val: programmedRodTavg(0.30), Unit: u.Fahrenheit},
 			0.30, 0.30, 0)
 	}
@@ -90,7 +90,7 @@ func TestScenario27_DroppedBankRaisesLoadRunback(t *testing.T) {
 	cm := GetControlMap(&p)
 	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/ControlRods/DroppedBank"].Set("1"))
 
-	stepN(&p, 100)
+	stepN(&p, 100, DefaultTimeStep)
 
 	assert.True(t, p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion >=
 		RodDroppedBankInsertion,
@@ -120,7 +120,7 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 	// the reactor trip on the next.
 	r := ReactorProtectionSystem{}
 	low := RPSLowPressurizerPressureTrip - 1
-	s1 := r.Step(SteamGeneratorShellPressure, low, 50,
+	s1 := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, low, 50,
 		CoreReferenceInletF, AtmosphericPressure, 1.0, 1, 0,
 		false)
 	assert.Equal(t, 1, s1.TripSignalCount,
@@ -129,7 +129,7 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 		"low pressurizer pressure is an SI trigger")
 	assert.True(t, s1.SteamlineIsolationActuated,
 		"low pressurizer pressure is a steamline-isolation trigger")
-	s2 := s1.Step(SteamGeneratorShellPressure, low, 50,
+	s2 := s1.Step(DefaultTimeStep, SteamGeneratorShellPressure, low, 50,
 		CoreReferenceInletF, AtmosphericPressure, 1.0, 1, 0,
 		false)
 	assert.True(t, s2.ReactorTripped,
@@ -138,7 +138,7 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 	// Below the at-power permissive the channel stays silent so
 	// planned cooldowns pass through the setpoint without ESFAS.
 	cold := ReactorProtectionSystem{}
-	s3 := cold.Step(SteamGeneratorShellPressure, low, 50,
+	s3 := cold.Step(DefaultTimeStep, SteamGeneratorShellPressure, low, 50,
 		CoreReferenceInletF, AtmosphericPressure,
 		RPSAtPowerPermissiveFraction/2, 1, 0,
 		false)
@@ -148,7 +148,7 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 	// Channel-under-test isolation forces the monitored pressure
 	// away from the setpoint, so calibration cannot actuate SI.
 	tested := ReactorProtectionSystem{ChannelTest: RPSPressurizerChannelInTest}
-	s4 := tested.Step(SteamGeneratorShellPressure, low, 50,
+	s4 := tested.Step(DefaultTimeStep, SteamGeneratorShellPressure, low, 50,
 		CoreReferenceInletF, AtmosphericPressure, 1.0, 1, 0,
 		false)
 	assert.False(t, s4.SafetyInjectionActuated,
@@ -156,7 +156,7 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 
 	// Healthy pressure at power contributes nothing.
 	ok := ReactorProtectionSystem{}
-	s5 := ok.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
+	s5 := ok.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
 		CoreReferenceInletF, AtmosphericPressure, 1.0, 1, 0,
 		false)
 	assert.Equal(t, 0, s5.TripSignalCount)

@@ -2,28 +2,29 @@ package core
 
 import (
 	u "github.com/bcicen/go-units"
+	"time"
 )
 
 // Step advances the Safety Injection System by one timestep.
 // The step function implements three independent state machines
 // that run in parallel:
 //
-//   1. Accumulator discharge — passive: a tank begins
-//      discharging into the RCS cold legs as soon as RCS pressure
-//      drops below the nitrogen precharge. The tank empties at
-//      SISAccumulatorDischargeRate × SISAccumulatorCount until
-//      Level reaches zero, at which point Discharging latches
-//      false.
-//   2. RWST depletion — active while the HHSI pumps are running
-//      and aligned to RWST suction. During the injection phase
-//      the pumps draw from the RWST at SISHHSIDesignFlow per
-//      pump. SISHHSIMiniFlowFraction recirculates back to the
-//      RWST via the continuous minimum-flow path so an
-//      inadvertent start cannot deadhead the pump.
-//   3. Recirculation switchover — once RWSTLevel falls below
-//      SISRWSTLowLevel the protection logic aligns suction to
-//      containment sump. The switchover is latched so it does
-//      not toggle on subsequent steps.
+//  1. Accumulator discharge — passive: a tank begins
+//     discharging into the RCS cold legs as soon as RCS pressure
+//     drops below the nitrogen precharge. The tank empties at
+//     SISAccumulatorDischargeRate × SISAccumulatorCount until
+//     Level reaches zero, at which point Discharging latches
+//     false.
+//  2. RWST depletion — active while the HHSI pumps are running
+//     and aligned to RWST suction. During the injection phase
+//     the pumps draw from the RWST at SISHHSIDesignFlow per
+//     pump. SISHHSIMiniFlowFraction recirculates back to the
+//     RWST via the continuous minimum-flow path so an
+//     inadvertent start cannot deadhead the pump.
+//  3. Recirculation switchover — once RWSTLevel falls below
+//     SISRWSTLowLevel the protection logic aligns suction to
+//     containment sump. The switchover is latched so it does
+//     not toggle on subsequent steps.
 //
 // Spec justification:
 //   - Passive accumulator discharge: "The accumulator tanks are
@@ -64,9 +65,8 @@ import (
 //     the containment sump, the HHSI pump miniflow isolation
 //     valves are automatically closed at this time."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:61-63
-func (s *SIS) Step(rcsPressure float64) SIS {
+func (s *SIS) Step(dt time.Duration, rcsPressure float64) SIS {
 	ret := *s
-	dt := TimeStep
 
 	ret.AccumulatorInjectionFlow = Volume{Val: 0, Unit: u.Gallon}
 	ret.HHSIInjectionFlow = Volume{Val: 0, Unit: u.Gallon}
@@ -93,8 +93,8 @@ func (s *SIS) Step(rcsPressure float64) SIS {
 			ret.Accumulator.Discharging = false
 		}
 		ret.Accumulator.Level = Volume{Val: newLevel, Unit: u.Gallon}
-		ret.AccumulatorInjectionFlow = Volume{Val: SISAccumulatorDischargeRate.Float()*
-				float64(SISAccumulatorCount), Unit: u.Gallon}
+		ret.AccumulatorInjectionFlow = Volume{Val: SISAccumulatorDischargeRate.Float() *
+			float64(SISAccumulatorCount), Unit: u.Gallon}
 	}
 
 	// 2) RWST depletion under HHSI injection.

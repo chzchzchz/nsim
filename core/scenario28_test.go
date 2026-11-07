@@ -32,8 +32,8 @@ func TestScenario28_HotLegBreakBlowsDownTripsAndActuatesSI(t *testing.T) {
 	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
 
 	sawTripPressure := 0.0
-	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(10*time.Second/DefaultTimeStep); i++ {
+		p.Step(DefaultTimeStep)
 		p.Update()
 		pzrP := float64(p.ReactorBuilding.Pressurizer.Pressure)
 		if !p.ReactorBuilding.ReactorPressureVessel.Trip &&
@@ -85,7 +85,7 @@ func TestScenario28_RHRPumpsAutoStartInsideEntryEnvelope(t *testing.T) {
 		Pressure(RHRSPressureThreshold + AtmosphericPressure - 100)
 	cm := GetControlMap(&p)
 	require.NoError(t, cm["ReactorBuilding/ReactorProtectionSystem/ManualSI"].Set("1"))
-	stepN(&p, 5)
+	stepN(&p, 5, DefaultTimeStep)
 
 	rhr := p.AuxiliaryBuilding.ResidualHeatRemovalSystem
 	assert.True(t, rhr.TrainA.Running && rhr.TrainB.Running,
@@ -106,7 +106,7 @@ func TestScenario28_BreakDebitsInventoryVoidsAndPressurizesContainment(t *testin
 	t.Parallel()
 
 	baseline := MakePlant()
-	stepN(&baseline, 10)
+	stepN(&baseline, 10, DefaultTimeStep)
 	closedWater := baseline.ReactorBuilding.Pressurizer.Water.Float()
 	closedContainment := baseline.ReactorBuilding.ContainmentBuilding.Pressure
 	require.Zero(t, baseline.ReactorBuilding.ReactorPressureVessel.BreakFlow.Float(),
@@ -115,8 +115,8 @@ func TestScenario28_BreakDebitsInventoryVoidsAndPressurizesContainment(t *testin
 	p := baseline
 	cm := GetControlMap(&p)
 	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
-	for i := 0; i < int(45*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(45*time.Second/DefaultTimeStep); i++ {
+		p.Step(DefaultTimeStep)
 		p.Update()
 		if float64(p.ReactorBuilding.Pressurizer.Pressure) <=
 			float64(SISAccumulatorPrechargePressure) {
@@ -143,7 +143,7 @@ func TestScenario28_BreakDebitsInventoryVoidsAndPressurizesContainment(t *testin
 	assert.Equal(t, SISAccumulatorDischargeRate.Float()*
 		float64(SISAccumulatorCount), sis.AccumulatorInjectionFlow.Float())
 	levelBefore := sis.Accumulator.Level.Float()
-	*sis = sis.Step(float64(AtmosphericPressure))
+	*sis = sis.Step(DefaultTimeStep, float64(AtmosphericPressure))
 	assert.Less(t, sis.Accumulator.Level.Float(), levelBefore,
 		"discharge draws the accumulator bank down")
 }
@@ -161,8 +161,8 @@ func TestScenario28_RefloodCreditedAfterBreakIsolation(t *testing.T) {
 	p := MakePlant()
 	cm := GetControlMap(&p)
 	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
-	for i := 0; i < int(45*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(45*time.Second/DefaultTimeStep); i++ {
+		p.Step(DefaultTimeStep)
 		p.Update()
 	}
 	rpv := &p.ReactorBuilding.ReactorPressureVessel
@@ -176,7 +176,7 @@ func TestScenario28_RefloodCreditedAfterBreakIsolation(t *testing.T) {
 	require.NoError(t, cm["ReactorBuilding/Pressurizer/HeatersOn"].Set("0"))
 	water0 := p.ReactorBuilding.Pressurizer.Water.Float()
 	drawn0 := rpv.BreakDischarged.Float()
-	stepN(&p, int(20*time.Second/TimeStep))
+	stepN(&p, int(20*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	waterGain := p.ReactorBuilding.Pressurizer.Water.Float() - water0
 	netRetired := drawn0 - rpv.BreakDischarged.Float()
@@ -199,12 +199,12 @@ func TestScenario28_BreakStopsAtDrainableInventory(t *testing.T) {
 	r := &ReactorPressureVessel{}
 	r.HotLegBreak.Open = 1
 	pzr := &Pressurizer{
-		Volume: Volume{Val: 1500, Unit: u.Gallon},
-		Water:  Volume{Val: 900, Unit: u.Gallon},
+		Volume:   Volume{Val: 1500, Unit: u.Gallon},
+		Water:    Volume{Val: 900, Unit: u.Gallon},
 		Pressure: RPSLowPressurizerPressureTrip,
 	}
 	r.BreakDischarged = vol(r.BreakDischarged, RCSDrainableInventoryGal)
-	r.applyHotLegBreak(pzr, AtmosphericPressure)
+	r.applyHotLegBreak(DefaultTimeStep, pzr, AtmosphericPressure)
 
 	assert.Zero(t, r.BreakFlow.Float(),
 		"an exhausted primary delivers no further break flow")
@@ -229,7 +229,7 @@ func TestScenario28_BreakStopsAtDrainableInventory(t *testing.T) {
 func TestScenario28_SwitchoverAtRWSTLowThenHotLegRealignment(t *testing.T) {
 	t.Parallel()
 
-	stepsPerSecond := int(time.Second / TimeStep)
+	stepsPerSecond := int(time.Second / DefaultTimeStep)
 	// Post-blowdown pressure sits below the HHSI shutoff head, so
 	// injection develops and the switchover logic runs.
 	s := SIS{
@@ -240,13 +240,13 @@ func TestScenario28_SwitchoverAtRWSTLowThenHotLegRealignment(t *testing.T) {
 		Sump:            Volume{Val: 5000, Unit: u.Gallon},
 	}
 	for range stepsPerSecond {
-		s = s.Step(float64(SISHHSIShutoffHeadPsia - 100))
+		s = s.Step(DefaultTimeStep, float64(SISHHSIShutoffHeadPsia-100))
 	}
 	assert.False(t, s.SwitchoverComplete,
 		"switchover waits for the RWST low-level signal")
 
 	for range 5 * stepsPerSecond {
-		s = s.Step(float64(SISHHSIShutoffHeadPsia - 100))
+		s = s.Step(DefaultTimeStep, float64(SISHHSIShutoffHeadPsia-100))
 	}
 	assert.True(t, s.SwitchoverComplete,
 		"RWST low level latches the switchover")
@@ -259,7 +259,7 @@ func TestScenario28_SwitchoverAtRWSTLowThenHotLegRealignment(t *testing.T) {
 		"no hot-leg share before the manual realignment")
 
 	s.HotLegInjection = true
-	s = s.Step(float64(SISHHSIShutoffHeadPsia - 100))
+	s = s.Step(DefaultTimeStep, float64(SISHHSIShutoffHeadPsia-100))
 	// Wiring checks: shares recomputed from the same production
 	// constants (design flow minus miniflow, half-split fraction).
 	assert.InDelta(t, net*SISHotLegInjectionFraction, s.HHSIHotLegFlow.Float(),
@@ -286,15 +286,15 @@ func TestRPV_BlowdownCoolingTracksSaturationWhileDischarging(t *testing.T) {
 	r.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 
 	before := r.Outlet.Float()
-	r.applyBlowdownCooling(Pressure(300))
+	r.applyBlowdownCooling(DefaultTimeStep, Pressure(300))
 	assert.Equal(t, before, r.Outlet.Float(),
 		"no discharge this tick, no flash cooling")
 
 	r.BreakFlow = vol(r.BreakFlow, 100)
 	target := PressurizerSatTemperatureF(300)
 	const window = 30 * time.Second
-	for i := 0; i < int(window/TimeStep); i++ {
-		r.applyBlowdownCooling(Pressure(300))
+	for i := 0; i < int(window/DefaultTimeStep); i++ {
+		r.applyBlowdownCooling(DefaultTimeStep, Pressure(300))
 	}
 	drop := before - r.Outlet.Float()
 	envelope := OpHeatupRateLimit * window.Seconds()
@@ -306,7 +306,7 @@ func TestRPV_BlowdownCoolingTracksSaturationWhileDischarging(t *testing.T) {
 
 	r.BreakFlow = vol(r.BreakFlow, 50)
 	parked := r.Outlet.Float()
-	r.applyBlowdownCooling(RPVDesignPressure)
+	r.applyBlowdownCooling(DefaultTimeStep, RPVDesignPressure)
 	assert.Equal(t, parked, r.Outlet.Float(),
 		"a saturation target above the outlet must never heat")
 }
@@ -323,8 +323,8 @@ func TestScenario28_BlowdownCoolsCoolantPastProgramEnvelope(t *testing.T) {
 	startF := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 
 	const window = 45 * time.Second
-	for i := 0; i < int(window/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(window/DefaultTimeStep); i++ {
+		p.Step(DefaultTimeStep)
 		p.Update()
 	}
 	rpv := p.ReactorBuilding.ReactorPressureVessel
@@ -376,7 +376,7 @@ func TestReactor_ECCSInjectionMixesStorageTemperature(t *testing.T) {
 	assert.InDelta(t, want, r.Outlet.Float(), 0.5,
 		"the mix must be the exact mass-weighted convex combination")
 
-	for i := 0; i < int(600*time.Second/TimeStep); i++ {
+	for i := 0; i < int(600*time.Second/DefaultTimeStep); i++ {
 		r.creditSafetyInjection(pzr, tenth/1000)
 	}
 	assert.Greater(t, r.Outlet.Float(), ECCSInjectionTempF-1e-9,
@@ -403,11 +403,10 @@ func TestReactor_ECCSInjectionMixesStorageTemperature(t *testing.T) {
 // by at most one tick; and the assertion is differential between twin
 // legs that share any residual discretization bias.
 func TestScenario28_ECCSCreditCoolsRefilledPrimary(t *testing.T) {
-	// Must not run in parallel: overrideTimeStep mutates the global
 	// tick other stepping tests read, and a concurrent leg changes
 	// where the blowdown lands (observed: RPV pressure parked exactly
 	// at the accumulator precharge in a sibling test).
-	overrideTimeStep(t, 5*time.Millisecond)
+	testDt := 5 * time.Millisecond
 
 	runLeg := func(seedAccumulators bool) float64 {
 		p := MakePlant()
@@ -417,13 +416,13 @@ func TestScenario28_ECCSCreditCoolsRefilledPrimary(t *testing.T) {
 		}
 		cm := GetControlMap(&p)
 		require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
-		for i := 0; i < int(15*time.Second/TimeStep); i++ {
-			p.Step()
+		for i := 0; i < int(15*time.Second/testDt); i++ {
+			p.Step(testDt)
 			p.Update()
 		}
 		require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0"))
-		for i := 0; i < int(120*time.Second/TimeStep); i++ {
-			p.Step()
+		for i := 0; i < int(120*time.Second/testDt); i++ {
+			p.Step(testDt)
 			p.Update()
 		}
 		return p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
@@ -455,7 +454,7 @@ func TestScenario28_SumpSpillsDrawsAndStarves(t *testing.T) {
 		HHSIDriveReady:  true,
 		HHSISuction:     SISSuctionSump,
 	}
-	dry = dry.Step(float64(SISHHSIShutoffHeadPsia - 100))
+	dry = dry.Step(DefaultTimeStep, float64(SISHHSIShutoffHeadPsia-100))
 	assert.Zero(t, dry.HHSIInjectionFlow.Float(),
 		"a dry sump must starve recirculation delivery")
 
@@ -467,9 +466,9 @@ func TestScenario28_SumpSpillsDrawsAndStarves(t *testing.T) {
 		Sump:            Volume{Val: 1000, Unit: u.Gallon},
 	}
 	net := SISHHSIDesignFlow.Float() * (1.0 - SISHHSIMiniFlowFraction)
-	wet = wet.Step(float64(SISHHSIShutoffHeadPsia - 100))
+	wet = wet.Step(DefaultTimeStep, float64(SISHHSIShutoffHeadPsia-100))
 	assert.InDelta(t, net, wet.HHSIInjectionFlow.Float(), net*1e-9)
-	assert.InDelta(t, 1000-net*TimeStep.Seconds(), wet.Sump.Float(),
+	assert.InDelta(t, 1000-net*DefaultTimeStep.Seconds(), wet.Sump.Float(),
 		1e-6, "recirculation draws its delivered volume from the sump")
 
 	// Full plant: spill credits equal the break discharge tick for
@@ -478,13 +477,13 @@ func TestScenario28_SumpSpillsDrawsAndStarves(t *testing.T) {
 	cm := GetControlMap(&p)
 	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
 	spilled, drawn := 0.0, 0.0
-	for i := 0; i < int(45*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(45*time.Second/DefaultTimeStep); i++ {
+		p.Step(DefaultTimeStep)
 		rpv := &p.ReactorBuilding.ReactorPressureVessel
 		spilled += rpv.BreakFlow.Float()
 		sis := &p.ReactorBuilding.SafetyInjectionSystem
 		if sis.HHSISuction == SISSuctionSump {
-			drawn += sis.HHSIInjectionFlow.Float() * TimeStep.Seconds()
+			drawn += sis.HHSIInjectionFlow.Float() * DefaultTimeStep.Seconds()
 		}
 		p.Update()
 	}
@@ -495,8 +494,8 @@ func TestScenario28_SumpSpillsDrawsAndStarves(t *testing.T) {
 		"sump level must close against spill minus recirculation draw")
 
 	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0"))
-	for i := 0; i < int(10*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(10*time.Second/DefaultTimeStep); i++ {
+		p.Step(DefaultTimeStep)
 		p.Update()
 	}
 	assert.LessOrEqual(t,

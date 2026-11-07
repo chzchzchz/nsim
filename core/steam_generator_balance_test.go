@@ -40,13 +40,13 @@ func TestSteamGenerator_FullPowerDrainMatchesSpecFlow(t *testing.T) {
 	sg.HeatInput = SteamGeneratorFullLoadHeatInput
 
 	before := sg.Water.Float()
-	after := sg.Step(1.0) // full turbine admission
+	after := sg.Step(DefaultTimeStep, 1.0) // full turbine admission
 	drainedPerStep := before - after.Water.Float()
 
 	ratedKgPerSec := float64(CoreRatedThermalPower) /
 		float64(SteamGeneratorLoopCount) /
 		float64(LatentHeatOfSteamization)
-	wantDrain := ratedKgPerSec / KilogramsPerGallon * TimeStep.Seconds()
+	wantDrain := ratedKgPerSec / KilogramsPerGallon * DefaultTimeStep.Seconds()
 
 	assert.InDelta(t, wantDrain, drainedPerStep, 0.01*wantDrain,
 		"rated no-feed drain must equal the liquid-equivalent "+
@@ -67,12 +67,12 @@ func TestSteamGenerator_OfftakeDoesNotDebitLiquidStock(t *testing.T) {
 	}
 
 	before := sg.Water.Float()
-	after := sg.Step(1.0) // full demand, zero heat input
+	after := sg.Step(DefaultTimeStep, 1.0) // full demand, zero heat input
 	assert.InDelta(t, before, after.Water.Float(), 1e-9,
 		"condenser-directed offtake is internal recirculation and "+
 			"must not spend shell inventory")
 
-	after = sg.Step(0.0) // nothing boiling, nothing drawing
+	after = sg.Step(DefaultTimeStep, 0.0) // nothing boiling, nothing drawing
 	assert.InDelta(t, before, after.Water.Float(), 1e-9,
 		"an idle shell holds its liquid stock")
 }
@@ -99,11 +99,11 @@ func lossOfFeedPlant() Plant {
 // spuriously collapses the fresh-plant header); overrideTimeStep
 // mutates global state, so this test must not run in parallel.
 func TestPlant_FeedwaterRegulatesLevelAtFullPower(t *testing.T) {
-	overrideTimeStep(t, 100*time.Millisecond)
+	testDt := 100 * time.Millisecond
 	p := scenario10FullPowerPlant()
 	p.TurbineBuilding.MainFeedwaterPump.Running = true
 
-	stepN(&p, int(480*time.Second/TimeStep)) // eight simulated minutes
+	stepN(&p, int(480*time.Second/testDt), testDt) // eight simulated minutes
 	water := p.ReactorBuilding.SteamGenerator.Water.Float()
 	assert.GreaterOrEqual(t, water, 45000.0,
 		"level fell below the regulation band, water=%v", water)
@@ -111,7 +111,7 @@ func TestPlant_FeedwaterRegulatesLevelAtFullPower(t *testing.T) {
 		"level rose above the regulation band, water=%v", water)
 
 	held := water
-	stepN(&p, int(240*time.Second/TimeStep)) // four more minutes on automatics
+	stepN(&p, int(240*time.Second/testDt), testDt) // four more minutes on automatics
 	water = p.ReactorBuilding.SteamGenerator.Water.Float()
 	assert.GreaterOrEqual(t, water, 45000.0,
 		"regulator lost the band on the long hold, water=%v", water)
@@ -129,13 +129,13 @@ func TestPlant_FeedwaterRegulatesLevelAtFullPower(t *testing.T) {
 // Same widened-tick rationale as the regulation test above; must not
 // run in parallel.
 func TestPlant_LossOfFeedReachesEFWSLowLowTrigger(t *testing.T) {
-	overrideTimeStep(t, 100*time.Millisecond)
+	testDt := 100 * time.Millisecond
 	p := lossOfFeedPlant()
 
-	steps := int(100 * time.Millisecond / TimeStep)
+	steps := int(100 * time.Millisecond / testDt)
 	crossed := false
 	for i := 0; i < 2000 && !crossed; i++ {
-		stepN(&p, steps)
+		stepN(&p, steps, testDt)
 		if p.ReactorBuilding.SteamGenerator.Water.Float() <
 			EFWSLevelLowLow {
 			crossed = true
@@ -151,7 +151,7 @@ func TestPlant_LossOfFeedReachesEFWSLowLowTrigger(t *testing.T) {
 	assert.True(t, efws.SubsystemA.MotorPump.Running)
 	assert.True(t, efws.SubsystemB.MotorPump.Running)
 
-	stepN(&p, int(EFWSDeliveryTime/0.1))
+	stepN(&p, int(EFWSDeliveryTime/0.1), testDt)
 	assert.GreaterOrEqual(t, p.ReactorBuilding.EFWSFeedwaterFlow.Float(),
 		2*EFWSMotorPumpFlow.Float(),
 		"both motor pumps delivering within one minute of the trigger")
@@ -167,7 +167,7 @@ func TestPlant_LossOfFeedReachesEFWSLowLowTrigger(t *testing.T) {
 //
 // Same widened-tick rationale as above; must not run in parallel.
 func TestPlant_EFWHoldsDecayHeatBoil(t *testing.T) {
-	overrideTimeStep(t, 100*time.Millisecond)
+	testDt := 100 * time.Millisecond
 	p := scenario10FullPowerPlant()
 	cm := GetControlMap(&p)
 	c, ok := cm["ReactorBuilding/ReactorProtectionSystem/ManualSI"]
@@ -175,7 +175,7 @@ func TestPlant_EFWHoldsDecayHeatBoil(t *testing.T) {
 	require.NoError(t, c.Set("1"), "set ManualSI")
 
 	waterBefore := p.ReactorBuilding.SteamGenerator.Water.Float()
-	stepN(&p, int(300*time.Second/TimeStep)) // five minutes of hot standby
+	stepN(&p, int(300*time.Second/testDt), testDt) // five minutes of hot standby
 
 	waterAfter := p.ReactorBuilding.SteamGenerator.Water.Float()
 	assert.GreaterOrEqual(t, waterAfter-waterBefore, 0.0,

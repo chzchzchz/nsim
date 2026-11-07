@@ -69,7 +69,7 @@ func TestRHRSTakeover_SecuredPumpsHeatAtDecayRate(t *testing.T) {
 
 	window := 10 * time.Second
 	before := outletF(p)
-	stepN(p, int(window/time.Millisecond))
+	stepN(p, int(window/time.Millisecond), DefaultTimeStep)
 	after := outletF(p)
 
 	wantRate := float64(
@@ -91,7 +91,7 @@ func TestRHRSTakeover_RunningTrainCoolsPlant(t *testing.T) {
 
 	window := 10 * time.Second
 	before := outletF(p)
-	stepN(p, int(window/time.Millisecond))
+	stepN(p, int(window/time.Millisecond), DefaultTimeStep)
 	after := outletF(p)
 
 	require.True(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.HasTakenOver,
@@ -105,7 +105,7 @@ func TestRHRSTakeover_RunningTrainCoolsPlant(t *testing.T) {
 // minutes of sim time leave it within a few degrees of its start.
 func TestRHRSTakeover_NoRelaxationToNoLoadWhenSecured(t *testing.T) {
 	p := coldShutdownPlant()
-	stepN(p, int(20*time.Second/time.Millisecond))
+	stepN(p, int(20*time.Second/time.Millisecond), DefaultTimeStep)
 	assert.Less(t, outletF(p), 210.0,
 		"want cold plant held near 200 F, got %v", outletF(p))
 }

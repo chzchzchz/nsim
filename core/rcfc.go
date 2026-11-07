@@ -2,29 +2,30 @@ package core
 
 import (
 	u "github.com/bcicen/go-units"
+	"time"
 )
 
 // Step advances one RCFC unit by one timestep. The Step
 // function implements the three state machines described in the
 // spec:
 //
-//   1. Running state. The fan motor either runs (in either
-//      high or low speed) or is stopped. When stopped, the unit
-//      rejects no heat; the backdraft damper may close to
-//      protect against reverse flow.
-//   2. Speed switchover. When the LOCA signal arrives the fan
-//      motor drops from normal speed to low speed; the air-flow
-//      path is also switched (normal dampers → emergency-flow
-//      dampers, HEPA filters, moisture separators). The
-//      simplified model collapses this to a single LowSpeed
-//      boolean.
-//   3. Heat transfer. While running, the unit rejects heat from
-//      the containment atmosphere to the service water at a
-//      rate proportional to the live ΔT (containment air
-//      temperature minus coil inlet temperature) scaled against
-//      the design ΔT. The coil inlet is the live essential
-//      service water supply temperature; with no service water
-//      flow the coils run dry and reject no heat.
+//  1. Running state. The fan motor either runs (in either
+//     high or low speed) or is stopped. When stopped, the unit
+//     rejects no heat; the backdraft damper may close to
+//     protect against reverse flow.
+//  2. Speed switchover. When the LOCA signal arrives the fan
+//     motor drops from normal speed to low speed; the air-flow
+//     path is also switched (normal dampers → emergency-flow
+//     dampers, HEPA filters, moisture separators). The
+//     simplified model collapses this to a single LowSpeed
+//     boolean.
+//  3. Heat transfer. While running, the unit rejects heat from
+//     the containment atmosphere to the service water at a
+//     rate proportional to the live ΔT (containment air
+//     temperature minus coil inlet temperature) scaled against
+//     the design ΔT. The coil inlet is the live essential
+//     service water supply temperature; with no service water
+//     flow the coils run dry and reject no heat.
 //
 // Spec justification:
 //   - RCFC purpose: "The Reactor Containment Fan Cooler System
@@ -47,7 +48,7 @@ import (
 //     protect each unit from damage due to reverse flow during
 //     a LOCA pressure transient."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_116.txt:71-77
-func (r *RCFCUnit) Step(
+func (r *RCFCUnit) Step(dt time.Duration,
 	locaSensed bool,
 	containmentTemp Temperature,
 	swSupplyTemp Temperature,
@@ -131,11 +132,11 @@ func RCFCUnitsRunning(units *[RCFCUnitCount]RCFCUnit) int {
 // containment-atmosphere conditions; the spec states no value
 // (derived sizing assumption).
 const (
-	ft3ToM3              = 0.0283168
-	paPerPsi             = 6894.76
-	airSpecificGasConst   = 287.0 // J/kg·K
-	containmentAirDensity = 1.2   // kg/m³
-	airCp                = 1005.0 // J/kg·K
+	ft3ToM3               = 0.0283168
+	paPerPsi              = 6894.76
+	airSpecificGasConst   = 287.0  // J/kg·K
+	containmentAirDensity = 1.2    // kg/m³
+	airCp                 = 1005.0 // J/kg·K
 
 	// ContainmentStructuresTempF is the lumped temperature of the
 	// passive heat sink the containment structures and sump form.
@@ -185,12 +186,12 @@ const (
 //   - Free volume: "The internal net free volume approximates
 //     2,000,000 cubic feet (56,600 m³)."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_109.txt:11-12
-func (c *ContainmentBuilding) Step(
+func (c *ContainmentBuilding) Step(dt time.Duration,
 	heatIn Watts,
 	heatOutRCFC Watts,
 ) ContainmentBuilding {
 	ret := *c
-	dt := TimeStep.Seconds()
+	dtSec := dt.Seconds()
 
 	netW := float64(heatIn) - float64(heatOutRCFC)
 	volumeM3 := ret.FreeVolume * ft3ToM3
@@ -204,7 +205,7 @@ func (c *ContainmentBuilding) Step(
 	structureSinkW := float64(ret.Temperature.Float()-ContainmentStructuresTempF) /
 		ContainmentStructureTau * (massKg * airCp)
 	netW -= structureSinkW
-	deltaK := netW / (massKg * airCp) * dt
+	deltaK := netW / (massKg * airCp) * dtSec
 	newTempF := ret.Temperature.Float() + deltaK*9.0/5.0
 	newTempF = max(newTempF, -459.67)
 	ret.Temperature = Temperature{Val: newTempF, Unit: u.Fahrenheit}

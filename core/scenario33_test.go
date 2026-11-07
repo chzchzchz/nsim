@@ -26,15 +26,15 @@ import (
 // cooldown maximum and never past it: the cap is a hard ceiling of the
 // relaxation, not a clamp bolted onto the output.
 func TestScenario33_NoServiceWaterSoaksToCooldownCap(t *testing.T) {
-	overrideTimeStep(t, 10*time.Second)
+	testDt := 10 * time.Second
 	c := CCWS{
-		InletTemp:    Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit},
-		PumpRunning:  true,
-		DriveReady:   true,
+		InletTemp:   Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit},
+		PumpRunning: true,
+		DriveReady:  true,
 	}
 
 	for i := 0; i < 3000; i++ { // 30,000 s: far past any transient
-		c = c.Step(Temperature{Val: 75, Unit: u.Fahrenheit}, false)
+		c = c.Step(testDt, Temperature{Val: 75, Unit: u.Fahrenheit}, false)
 		assert.LessOrEqual(t, c.InletTemp.Float(), CCWSInletMaxCooldownTemp,
 			"the soak must never exceed the permitted cooldown maximum")
 	}
@@ -46,16 +46,16 @@ func TestScenario33_NoServiceWaterSoaksToCooldownCap(t *testing.T) {
 // Restoring service water returns the inlet to the design value inside the
 // spec's four-hour allowance, approaching from above without undershoot.
 func TestScenario33_ServiceWaterRestorationRecoversByFourHours(t *testing.T) {
-	overrideTimeStep(t, time.Minute)
+	testDt := time.Minute
 	c := CCWS{
-		InletTemp:    Temperature{Val: CCWSInletMaxCooldownTemp, Unit: u.Fahrenheit},
-		PumpRunning:  true,
-		DriveReady:   true,
+		InletTemp:   Temperature{Val: CCWSInletMaxCooldownTemp, Unit: u.Fahrenheit},
+		PumpRunning: true,
+		DriveReady:  true,
 	}
 
 	prev := c.InletTemp.Float()
 	for i := 0; i <= int(4*time.Hour/time.Minute); i++ {
-		c = c.Step(Temperature{Val: 75, Unit: u.Fahrenheit}, true)
+		c = c.Step(testDt, Temperature{Val: 75, Unit: u.Fahrenheit}, true)
 		assert.LessOrEqual(t, c.InletTemp.Float(), prev,
 			"recovery must be monotone toward the design inlet")
 		assert.GreaterOrEqual(t, c.InletTemp.Float(), CCWSInletSteadyStateTemp,
@@ -75,7 +75,7 @@ func TestScenario33_PumpLatchAutoReplacesWhileBusUp(t *testing.T) {
 	p := MakePlant()
 	p.AuxiliaryBuilding.ComponentCoolingWaterSystem.PumpRunning = false
 
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 
 	require.True(t, p.nextPlant.Electrical.ESFBusA.Energized ||
 		p.nextPlant.Electrical.ESFBusB.Energized,

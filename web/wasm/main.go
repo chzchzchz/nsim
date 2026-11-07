@@ -104,7 +104,7 @@ func (h *plantHandle) cached(
 }
 
 // step advances the plant by ticks `Step()`/`Update()` cycles.
-// Each cycle is one `core.TimeStep` (1 ms) of simulated time.
+// Each cycle is one `core.DefaultTimeStep` (1 ms) of simulated time.
 // Queued console commands and the active scenario's opening script
 // fire at their exact simulated millisecond, independent of ticks
 // per call; scripted actions journal like operator input so exported
@@ -114,10 +114,10 @@ func (h *plantHandle) step(ticks int) {
 		return
 	}
 	for range ticks {
-		next := h.simTimeNs + int64(core.TimeStep)
+		next := h.simTimeNs + int64(core.DefaultTimeStep)
 		h.fireDueScript(next)
 		h.queue.FireDue(next, h.controls)
-		h.p.Step()
+		h.p.Step(core.DefaultTimeStep)
 		h.p.Update()
 		h.simTimeNs = next
 		if h.progress != nil {

@@ -73,7 +73,7 @@ func TestLoadFollow_ProgrammedOperatingPointsAreCritical(t *testing.T) {
 	full := loadFollowFixture(loadFollowRodsFull, loadFollowBoron,
 		CoreReferenceInletF+(CoreReferenceOutletF-CoreReferenceInletF), // 621 F
 		CoreRatedThermalPower)
-	full = full.Step(RCPRatedSpeed, 0)
+	full = full.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	require.InDelta(t, 0.0, float64(full.Reactivity), 1e-4,
 		"full-power point (I=%.8f, B=%.0f, T=621) should be critical, rho=%v",
 		loadFollowRodsFull, loadFollowBoron, full.Reactivity)
@@ -81,14 +81,14 @@ func TestLoadFollow_ProgrammedOperatingPointsAreCritical(t *testing.T) {
 	halfT := CoreReferenceInletF + 0.5*(CoreReferenceOutletF-CoreReferenceInletF)
 	half := loadFollowFixture(loadFollowRodsHalf, loadFollowBoron, halfT,
 		Watts(0.5*float64(CoreRatedThermalPower)))
-	half = half.Step(RCPRatedSpeed, 0)
+	half = half.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	require.InDelta(t, 0.0, float64(half.Reactivity), 1e-4,
 		"50-percent point (I=%.8f, B=%.0f, T=%.1f) should be critical, rho=%v",
 		loadFollowRodsHalf, loadFollowBoron, halfT, half.Reactivity)
 
 	plateau := loadFollowFixture(loadFollowRodsFull, loadFollowBoronPlateau, halfT,
 		Watts(0.5*float64(CoreRatedThermalPower)))
-	plateau = plateau.Step(RCPRatedSpeed, 0)
+	plateau = plateau.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	require.InDelta(t, 0.0, float64(plateau.Reactivity), 1e-4,
 		"plateau reserve point (rods restored, B=%.2f) should be critical, rho=%v",
 		loadFollowBoronPlateau, plateau.Reactivity)
@@ -104,14 +104,14 @@ func TestLoadFollow_NaiveBorationLeavesCoreSupercritical(t *testing.T) {
 	halfT := CoreReferenceInletF + 0.5*(CoreReferenceOutletF-CoreReferenceInletF)
 	naive := loadFollowFixture(loadFollowRodsFull, 612.6, halfT,
 		Watts(0.5*float64(CoreRatedThermalPower)))
-	naive = naive.Step(RCPRatedSpeed, 0)
+	naive = naive.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	assert.Greater(t, float64(naive.Reactivity), 5e-4,
 		"naive 12.6 ppm boration should leave positive reactivity, rho=%v",
 		naive.Reactivity)
 
 	exact := loadFollowFixture(loadFollowRodsFull, loadFollowBoronPlateau, halfT,
 		Watts(0.5*float64(CoreRatedThermalPower)))
-	exact = exact.Step(RCPRatedSpeed, 0)
+	exact = exact.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	assert.Less(t, float64(exact.Reactivity), 1e-4,
 		"exact boration solve should be critical, rho=%v", exact.Reactivity)
 }
@@ -120,9 +120,10 @@ func TestLoadFollow_NaiveBorationLeavesCoreSupercritical(t *testing.T) {
 // active. Half power burns xenon below its rated equilibrium, and the
 // missing poison worth must be replaced with soluble boron before the
 // rods can return to the full-power position while staying critical:
-//   "This capability is maintained by automatic adjustment of the
-//    boron concentration to compensate for xenon reactivity changes"
-//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:115-117
+//
+//	"This capability is maintained by automatic adjustment of the
+//	 boron concentration to compensate for xenon reactivity changes"
+//	specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:115-117
 //
 // The pre-xenon plateau value (614.17) leaves the core strongly
 // supercritical; the production-block solve lands at 1027.38 ppm,
@@ -145,13 +146,13 @@ func TestLoadFollow_XenonActiveReservePointBoration(t *testing.T) {
 		return r
 	}
 	exact := mk(loadFollowBoronPlateauXenon)
-	exact = exact.Step(RCPRatedSpeed, 0)
+	exact = exact.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	assert.InDelta(t, 0.0, float64(exact.Reactivity), 1e-4,
 		"xenon-active reserve solve should be critical, rho=%v",
 		exact.Reactivity)
 
 	naive := mk(loadFollowBoronPlateau)
-	naive = naive.Step(RCPRatedSpeed, 0)
+	naive = naive.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	assert.Greater(t, float64(naive.Reactivity), 0.05,
 		"pre-xenon plateau boron must leave the core supercritical under "+
 			"active iodine/xenon, rho=%v", naive.Reactivity)
@@ -189,9 +190,11 @@ func loadFollowFixedPoint(boron, outletF float64, seedPower Watts) ReactorPressu
 // positive near fresh-fuel boron concentrations — the sign that decides
 // whether a power rise is opposed or reinforced once the thermal lag
 // plays out.
-//   "the coefficient is substantially more negative due to depletion
-//    and removal of shim boron"
-//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122
+//
+//	"the coefficient is substantially more negative due to depletion
+//	 and removal of shim boron"
+//	specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122
+//
 // Asserted on the coefficient function directly: a dynamic version of
 // this check cannot isolate the sign, because the xenon worth (amplified
 // through the iodine-to-xenon inventory ratio) responds to any power
@@ -231,8 +234,8 @@ func TestLoadFollow_PlateauHoldsOnTotalThermalPower(t *testing.T) {
 		"fission alone should undershoot the 50-percent load level by the decay share")
 	startOutlet := r.Outlet.Float()
 
-	for range int(45 * time.Second / TimeStep) {
-		r = r.Step(RCPRatedSpeed, 0)
+	for range int(45 * time.Second / DefaultTimeStep) {
+		r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	}
 	assert.Less(t, r.Outlet.Float(), startOutlet,
 		"outlet relaxes downward toward the total-power program")

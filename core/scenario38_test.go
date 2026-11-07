@@ -26,7 +26,6 @@ import (
 //     selected pressure ..."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_228.txt:25-32
 
-// Must not run in parallel: overrideTimeStep mutates global simulation
 // state shared across the package tests.
 
 func outageScenarioPlant() Plant {
@@ -42,7 +41,7 @@ func outageScenarioPlant() Plant {
 // is an invented convention (A-2, plans/x/scenario/38.txt) asserted as a
 // hold-band, not an exact value.
 func TestScenario38_ReducedRHRHoldsShutdownTemperature(t *testing.T) {
-	overrideTimeStep(t, time.Second)
+	testDt := time.Second
 	p := outageScenarioPlant()
 	cm := p.GetControlMap()
 
@@ -50,7 +49,7 @@ func TestScenario38_ReducedRHRHoldsShutdownTemperature(t *testing.T) {
 	require.NoError(t, cm["AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/BypassValve/Open"].Set("0.73"))
 
 	for range 600 {
-		stepN(&p, 1)
+		stepN(&p, 1, testDt)
 	}
 
 	assert.False(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.Pump.Running,
@@ -69,7 +68,7 @@ func TestScenario38_ReducedRHRHoldsShutdownTemperature(t *testing.T) {
 // only through completion within the window, while the header cap is
 // physics-forced (a laid-up shell must not pressurise from filling).
 func TestScenario38_WetLayupFillsShellToTheVents(t *testing.T) {
-	overrideTimeStep(t, time.Second)
+	testDt := time.Second
 	p := outageScenarioPlant()
 	sg := &p.ReactorBuilding.SteamGenerator
 	startWater := sg.Water.Float()
@@ -81,7 +80,7 @@ func TestScenario38_WetLayupFillsShellToTheVents(t *testing.T) {
 
 	filled := false
 	for range 1200 {
-		stepN(&p, 1)
+		stepN(&p, 1, testDt)
 		assert.LessOrEqual(t, float64(sg.Pressure), SGWetLayupMaxHeaderPsia,
 			"filling must not pressurise the laid-up header")
 		if !filled && sg.Water.Float() >= sg.Volume.Float()*scenarioLayupFilledFrac {
@@ -102,12 +101,12 @@ func TestScenario38_WetLayupFillsShellToTheVents(t *testing.T) {
 // PressurizerHeaterRate is a wiring check against production constants,
 // marked as such.
 func TestScenario38_SolidPlantReliefTrimsHeaterTestOverpressure(t *testing.T) {
-	overrideTimeStep(t, time.Second)
+	testDt := time.Second
 	p := outageScenarioPlant()
 	cm := p.GetControlMap()
 
 	require.NoError(t, cm["ReactorBuilding/Pressurizer/HeatersOn"].Set("1"))
-	stepN(&p, 2)
+	stepN(&p, 2, testDt)
 	pulsePeak := p.ReactorBuilding.Pressurizer.Pressure
 	assert.InDelta(t, float64(scenarioColdPsia)+200*2, float64(pulsePeak), 5,
 		"two seconds of heaters must show the rapid solid-plant rise")
@@ -125,7 +124,7 @@ func TestScenario38_SolidPlantReliefTrimsHeaterTestOverpressure(t *testing.T) {
 	settled := false
 	bled := false
 	for range 60 {
-		stepN(&p, 1)
+		stepN(&p, 1, testDt)
 		if p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantReliefFlow.Float() > 0 {
 			bled = true
 		}
@@ -155,7 +154,7 @@ func TestScenario38_SolidPlantReliefTrimsHeaterTestOverpressure(t *testing.T) {
 // chapter_7/page_140.txt:37,73-76), asserted hard on both sides.
 func TestScenario38_SGLevelChannelsRespectAtPowerPermissive(t *testing.T) {
 	r := ReactorProtectionSystem{}
-	idle := r.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 95,
+	idle := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 95,
 		CoreReferenceInletF, 0, 0, 1, 0,
 		false)
 	assert.Zero(t, idle.TripSignalCount,
@@ -165,7 +164,7 @@ func TestScenario38_SGLevelChannelsRespectAtPowerPermissive(t *testing.T) {
 	assert.False(t, idle.TurbineTripActuated,
 		"layup fill must not trip a secured turbine")
 
-	atPower := r.Step(SteamGeneratorShellPressure, PressurizerHeaterTarget, 95,
+	atPower := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 95,
 		CoreReferenceInletF, 0, 0.5, 1, 0,
 		false)
 	assert.Equal(t, 1, atPower.TripSignalCount,
@@ -176,7 +175,7 @@ func TestScenario38_SGLevelChannelsRespectAtPowerPermissive(t *testing.T) {
 		"Table 7-1 turbine trip on high level")
 
 	fresh := ReactorProtectionSystem{}
-	lowLevelStart := fresh.Step(
+	lowLevelStart := fresh.Step(DefaultTimeStep,
 		SteamGeneratorShellPressure, PressurizerHeaterTarget, 5,
 		CoreReferenceInletF, 0, 0, 1, 0,
 		false)

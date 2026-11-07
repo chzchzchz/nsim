@@ -31,14 +31,14 @@ func TestPlant_TripControlLatchesRPSAndDropsRods(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 	require.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
 		"precondition: plant must be untripped before the pushbutton")
 
 	cm := GetControlMap(&p)
 	require.NoError(t,
 		cm["ReactorBuilding/ReactorPressureVessel/Trip"].Set("true"))
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	rps := p.ReactorBuilding.ReactorProtectionSystem
 	assert.True(t, rps.ReactorTripped,
@@ -98,8 +98,8 @@ func TestTurbineBuilding_TripDumpModulatesOnTavgError(t *testing.T) {
 	}
 
 	hot := newTripped()
-	for i := 0; i < int(1*time.Second/TimeStep); i++ {
-		hot = hot.StepWithSteam(SteamGeneratorShellPressure,
+	for i := 0; i < int(1*time.Second/DefaultTimeStep); i++ {
+		hot = hot.StepWithSteam(DefaultTimeStep, SteamGeneratorShellPressure,
 			tavgAt(SteamDumpTripDeadbandF+SteamDumpTripSpanF),
 			true, true, 1, 560)
 	}
@@ -114,8 +114,8 @@ func TestTurbineBuilding_TripDumpModulatesOnTavgError(t *testing.T) {
 		(SteamDumpPressureModeMargin*float64(SteamGeneratorShellPressure)-floorF))
 	midExcess := SteamDumpTripSpanF * 0.1
 	mid := newTripped()
-	for i := 0; i < int(2*time.Second/TimeStep); i++ {
-		mid = mid.StepWithSteam(lowHeader,
+	for i := 0; i < int(2*time.Second/DefaultTimeStep); i++ {
+		mid = mid.StepWithSteam(DefaultTimeStep, lowHeader,
 			tavgAt(midExcess),
 			true, true, 1, 560)
 	}
@@ -125,8 +125,8 @@ func TestTurbineBuilding_TripDumpModulatesOnTavgError(t *testing.T) {
 		"the dump modulates down with the shrinking excess")
 
 	restored := mid
-	for i := 0; i < int(2*time.Second/TimeStep); i++ {
-		restored = restored.StepWithSteam(lowHeader,
+	for i := 0; i < int(2*time.Second/DefaultTimeStep); i++ {
+		restored = restored.StepWithSteam(DefaultTimeStep, lowHeader,
 			tavgAt(0),
 			true, true, 1, 560)
 	}
@@ -147,7 +147,7 @@ func TestBridge_ManualSIActuatesSIAndVotesTrip(t *testing.T) {
 	cm := GetControlMap(&p)
 	require.NoError(t,
 		cm["ReactorBuilding/ReactorProtectionSystem/ManualSI"].Set("true"))
-	stepN(&p, int(100*time.Millisecond/TimeStep))
+	stepN(&p, int(100*time.Millisecond/DefaultTimeStep), DefaultTimeStep)
 
 	rps := p.ReactorBuilding.ReactorProtectionSystem
 	assert.True(t, rps.ManualSI)

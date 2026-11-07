@@ -22,7 +22,7 @@ func TestCVCS_VolumeControlKeepsBoronSteady(t *testing.T) {
 		BoronConcentration:  CVCSInitialBoron,
 		ChargingPumpRunning: true,
 		LetdownValveOpen:    true,
-	}).Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
+	}).Step(DefaultTimeStep, Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
 	assert.Equal(t, CVCSInitialBoron, c.BoronConcentration,
 		"want BoronConcentration unchanged in VolumeControl, got %v",
 		c.BoronConcentration)
@@ -49,7 +49,7 @@ func TestCVCS_BorationIncreasesBoronConcentration(t *testing.T) {
 		BTRSRecirculationPumpRunning: true,
 		ChargingPumpRunning:          true,
 		LetdownValveOpen:             true,
-	}).Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
+	}).Step(DefaultTimeStep, Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
 	assert.InDelta(t, CVCSBorationRate, c.BorationRate, 1e-9,
 		"want BorationRate=CVCSBorationRate, got %v", c.BorationRate)
 	assert.Greater(t, c.BoronConcentration, CVCSInitialBoron,
@@ -74,7 +74,7 @@ func TestCVCS_DilutionDecreasesBoronConcentration(t *testing.T) {
 		BTRSRecirculationPumpRunning: true,
 		ChargingPumpRunning:          true,
 		LetdownValveOpen:             true,
-	}).Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
+	}).Step(DefaultTimeStep, Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
 	assert.InDelta(t, CVCSDilutionRate, c.DilutionRate, 1e-9,
 		"want DilutionRate=CVCSDilutionRate, got %v", c.DilutionRate)
 	assert.Less(t, c.BoronConcentration, CVCSInitialBoron,
@@ -102,14 +102,14 @@ func TestCVCS_HighVCTLevelSwitchesToLetdownMode(t *testing.T) {
 		BoronConcentration:  CVCSInitialBoron,
 		ChargingPumpRunning: true,
 		LetdownValveOpen:    true,
-	}).Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
+	}).Step(DefaultTimeStep, Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
 	assert.True(t, c.Diverting,
 		"want Diverting with VCTLevel>VCTHighLevel, got %v", c.Diverting)
 	assert.InDelta(t, CVCSDesignChargingFlow.Float(), c.ChargingFlow.Float(), 1e-9,
 		"want charging unchanged by divert, got %v", c.ChargingFlow)
 	assert.InDelta(t, CVCSDesignLetdownFlow.Float(), c.LetdownFlow.Float(), 1e-9,
 		"want letdown at design rate during divert, got %v", c.LetdownFlow)
-	assert.InDelta(t, CVCSDesignLetdownFlow.Float()*TimeStep.Seconds(),
+	assert.InDelta(t, CVCSDesignLetdownFlow.Float()*DefaultTimeStep.Seconds(),
 		c.BRSHoldupLevel.Float(), 1e-9,
 		"want BRSHoldupLevel to gain one step of letdown, got %v",
 		c.BRSHoldupLevel)
@@ -126,7 +126,7 @@ func TestCVCS_HighVCTLevelSwitchesToLetdownMode(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65
 func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 	initial := VCTDesignLevel
-	steps := int(1 * time.Second / TimeStep)
+	steps := int(1 * time.Second / DefaultTimeStep)
 	// Charging pump only.
 	c := CVCS{
 		Mode:                CVCSVolumeControl,
@@ -136,7 +136,7 @@ func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 		LetdownValveOpen:    true,
 	}
 	for i := 0; i < steps; i++ {
-		c = c.Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
+		c = c.Step(DefaultTimeStep, Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
 	}
 	wantGain := (CVCSDesignLetdownFlow.Float() - CVCSDesignChargingFlow.Float()) * 1.0
 	assert.InDelta(t, initial+wantGain, c.VCTLevel.Float(), 1e-3,
@@ -153,7 +153,7 @@ func TestCVCS_VCTLevelAccumulates(t *testing.T) {
 		LetdownValveOpen:             true,
 	}
 	for i := 0; i < steps; i++ {
-		c = c.Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
+		c = c.Step(DefaultTimeStep, Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
 	}
 	wantGainBoth := (CVCSDesignLetdownFlow.Float() - CVCSDesignChargingFlow.Float() -
 		VCTBTRSCirculation) * 1.0
@@ -183,12 +183,12 @@ func TestCVCS_BorationIncreasesBoronAtExpectedRate(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
-	stepN(&p, int(1*time.Second/TimeStep))
+	stepN(&p, int(1*time.Second/DefaultTimeStep), DefaultTimeStep)
 	boronBefore := p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration
 
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSBoration
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
-	stepN(&p, int(10*time.Second/TimeStep))
+	stepN(&p, int(10*time.Second/DefaultTimeStep), DefaultTimeStep)
 	boronAfter := p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration
 
 	wantRise := CVCSBorationRate * 10.0
@@ -212,12 +212,12 @@ func TestCVCS_DilutionDecreasesBoronAtExpectedRate(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
-	stepN(&p, int(1*time.Second/TimeStep))
+	stepN(&p, int(1*time.Second/DefaultTimeStep), DefaultTimeStep)
 	boronBefore := p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration
 
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode = CVCSDilution
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BTRSRecirculationPumpRunning = true
-	stepN(&p, int(10*time.Second/TimeStep))
+	stepN(&p, int(10*time.Second/DefaultTimeStep), DefaultTimeStep)
 	boronAfter := p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration
 
 	wantFall := CVCSDilutionRate * 10.0
@@ -248,12 +248,12 @@ func TestCVCS_MakeupValveRaisesVCTLevel(t *testing.T) {
 	// opening the makeup valve should be the only inflow.
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = false
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.LetdownValveOpen = false
-	stepN(&p, int(1*time.Second/TimeStep))
+	stepN(&p, int(1*time.Second/DefaultTimeStep), DefaultTimeStep)
 	vctBefore := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
 
 	// Open the makeup valve to half-flow.
 	p.ReactorBuilding.ReactorMakeupControlValve.Open = 0.5
-	stepN(&p, int(5*time.Second/TimeStep))
+	stepN(&p, int(5*time.Second/DefaultTimeStep), DefaultTimeStep)
 	vctAfter := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
 
 	wantRise := ReactorMakeupDesignFlow.Float() * 0.5 * 5.0
@@ -281,7 +281,7 @@ func TestCVCS_ChargingPumpIndependentOfRCP(t *testing.T) {
 		BoronConcentration:  CVCSInitialBoron,
 		ChargingPumpRunning: true,
 		LetdownValveOpen:    true,
-	}).Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
+	}).Step(DefaultTimeStep, Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
 	assert.InDelta(t, CVCSDesignChargingFlow.Float(),
 		c.ChargingFlow.Float(), 1e-9,
 		"want ChargingFlow>0 with ChargingPumpRunning=true regardless of RCP")
@@ -293,7 +293,7 @@ func TestCVCS_ChargingPumpIndependentOfRCP(t *testing.T) {
 		BoronConcentration:  CVCSInitialBoron,
 		ChargingPumpRunning: false,
 		LetdownValveOpen:    true,
-	}).Step(Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
+	}).Step(DefaultTimeStep, Volume{Val: 0, Unit: u.Gallon}, Temperature{}, 0, 0)
 	assert.Zero(t, c.ChargingFlow.Float(),
 		"want ChargingFlow=0 with ChargingPumpRunning=false regardless of RCP")
 }

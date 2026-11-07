@@ -68,7 +68,7 @@ func TestScenario3_SecuredRHRSHeatupUnderLimit(t *testing.T) {
 
 	window := 5 * time.Second
 	before := outletF(p)
-	stepFor(p, window)
+	stepFor(p, window, DefaultTimeStep)
 	require.LessOrEqual(t, outletF(p), before,
 		"a running RHR train must keep the cold plant from heating")
 
@@ -91,7 +91,7 @@ func TestScenario3_SecuredRHRSHeatupUnderLimit(t *testing.T) {
 		p.ReactorBuilding.ReactorPressureVessel.TotalThermalPower(),
 	) / (RCSMassKg * SpecificHeatWater) * 9.0 / 5.0
 	ride := 20 * time.Second
-	stepFor(p, ride)
+	stepFor(p, ride, DefaultTimeStep)
 	gotRate := (outletF(p) - rideStart) / ride.Seconds()
 
 	assert.Greater(t, gotRate, 0.0,
@@ -142,7 +142,7 @@ func TestScenario3_FinalPressurizationReachesNoLoadBands(t *testing.T) {
 	setControl(t, &p, "ReactorBuilding/Pressurizer/HeatersOn", "1")
 	maxPORV, maxOutletF := 0.0, 0.0
 	for i := 0; i < int(6*time.Second/time.Millisecond); i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, DefaultTimeStep)
 		maxPORV = max(maxPORV, p.ReactorBuilding.PORV.Open)
 		maxOutletF = max(maxOutletF, outletF(&p))
 	}

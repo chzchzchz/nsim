@@ -31,7 +31,7 @@ func TestScenario23_ManualSIStartsEFWSMotorPumps(t *testing.T) {
 
 	// One second of plant time already shows delivery, far inside
 	// the one-minute window, and keeps the test fast.
-	stepN(&p, int(1*time.Second/TimeStep))
+	stepN(&p, int(1*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	rps := p.ReactorBuilding.ReactorProtectionSystem
 	assert.True(t, rps.SafetyInjectionActuated,

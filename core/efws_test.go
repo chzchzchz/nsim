@@ -54,7 +54,7 @@ func TestEFWS_MotorPumpsStartOnSafetyInjection(t *testing.T) {
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	efws := p.AuxiliaryBuilding.EmergencyFeedwaterSystem
 	assert.True(t, efws.Active,
 		"want EFWSActive=true after SI signal, got %v",
@@ -86,9 +86,9 @@ func TestEFWS_MotorPumpsStartOnSafetyInjection(t *testing.T) {
 func TestEFWS_TurbinePumpsStartOnLowLowSGLevel(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.SteamGenerator.Water =
-		Volume{Val: EFWSLevelLowLow-100, Unit: u.Gallon}
+		Volume{Val: EFWSLevelLowLow - 100, Unit: u.Gallon}
 
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	efws := p.AuxiliaryBuilding.EmergencyFeedwaterSystem
 	assert.True(t, efws.Active,
 		"want EFWSActive=true after SG low-low, got %v",
@@ -122,9 +122,9 @@ func TestEFWS_PrimaryTankDepletesWhilePumpsRunning(t *testing.T) {
 		Active: true,
 		SubsystemA: EFWSSubsystem{
 			Tank: EFWSTank{
-				Level:      EFWSPrimaryTankCapacity,
-				Capacity:   EFWSPrimaryTankCapacity,
-				IsPrimary:  true,
+				Level:       EFWSPrimaryTankCapacity,
+				Capacity:    EFWSPrimaryTankCapacity,
+				IsPrimary:   true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
 			MotorPump: EFWSPump{
@@ -134,9 +134,9 @@ func TestEFWS_PrimaryTankDepletesWhilePumpsRunning(t *testing.T) {
 		},
 		SubsystemB: EFWSSubsystem{
 			Tank: EFWSTank{
-				Level:      EFWSPrimaryTankCapacity,
-				Capacity:   EFWSPrimaryTankCapacity,
-				IsPrimary:  true,
+				Level:       EFWSPrimaryTankCapacity,
+				Capacity:    EFWSPrimaryTankCapacity,
+				IsPrimary:   true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
 			MotorPump: EFWSPump{
@@ -145,10 +145,10 @@ func TestEFWS_PrimaryTankDepletesWhilePumpsRunning(t *testing.T) {
 			},
 		},
 	}
-	dt := TimeStep.Seconds()
+	dt := DefaultTimeStep.Seconds()
 	wantLossA := EFWSMotorPumpFlow.Float() * dt
 	wantLossB := EFWSMotorPumpFlow.Float() * dt
-	e2 := e.Step(Temperature{Val: EFWSSecureTemp+10, Unit: u.Fahrenheit}, false)
+	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false)
 	assert.InDelta(t, EFWSPrimaryTankCapacity.Float()-wantLossA,
 		e2.SubsystemA.Tank.Level.Float(), 1e-9,
 		"want SubsystemA.Tank.Level=%v after one step, got %v",
@@ -170,9 +170,9 @@ func TestEFWS_TankDrawSumsBothRunningPumps(t *testing.T) {
 		Active: true,
 		SubsystemA: EFWSSubsystem{
 			Tank: EFWSTank{
-				Level:      EFWSPrimaryTankCapacity,
-				Capacity:   EFWSPrimaryTankCapacity,
-				IsPrimary:  true,
+				Level:       EFWSPrimaryTankCapacity,
+				Capacity:    EFWSPrimaryTankCapacity,
+				IsPrimary:   true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
 			MotorPump: EFWSPump{
@@ -185,9 +185,9 @@ func TestEFWS_TankDrawSumsBothRunningPumps(t *testing.T) {
 			},
 		},
 	}
-	dt := TimeStep.Seconds()
+	dt := DefaultTimeStep.Seconds()
 	wantLoss := (EFWSMotorPumpFlow.Float() + EFWSTurbinePumpFlow.Float()) * dt
-	e2 := e.Step(Temperature{Val: EFWSSecureTemp+10, Unit: u.Fahrenheit}, false)
+	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false)
 	assert.InDelta(t, EFWSPrimaryTankCapacity.Float()-wantLoss,
 		e2.SubsystemA.Tank.Level.Float(), 1e-9,
 		"want SubsystemA.Tank.Level=%v (both pumps deliver), got %v",
@@ -220,26 +220,26 @@ func TestEFWS_SecuredWhenHotLegBelow350FAndRHRSActive(t *testing.T) {
 		Active: true,
 		SubsystemA: EFWSSubsystem{
 			Tank: EFWSTank{
-				Level:      EFWSPrimaryTankCapacity,
-				Capacity:   EFWSPrimaryTankCapacity,
-				IsPrimary:  true,
+				Level:       EFWSPrimaryTankCapacity,
+				Capacity:    EFWSPrimaryTankCapacity,
+				IsPrimary:   true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
-			MotorPump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
+			MotorPump:   EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
 			TurbinePump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
 		},
 		SubsystemB: EFWSSubsystem{
 			Tank: EFWSTank{
-				Level:      EFWSPrimaryTankCapacity,
-				Capacity:   EFWSPrimaryTankCapacity,
-				IsPrimary:  true,
+				Level:       EFWSPrimaryTankCapacity,
+				Capacity:    EFWSPrimaryTankCapacity,
+				IsPrimary:   true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
-			MotorPump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
+			MotorPump:   EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
 			TurbinePump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
 		},
 	}
-	e2 := e.Step(
+	e2 := e.Step(DefaultTimeStep,
 		Temperature{Val: EFWSSecureTemp, Unit: u.Fahrenheit},
 		true,
 	)
@@ -273,29 +273,29 @@ func TestEFWS_SecuresManuallyStartedPumpsToo(t *testing.T) {
 	e := EFWS{
 		SubsystemA: EFWSSubsystem{
 			Tank: EFWSTank{
-				Level:      EFWSPrimaryTankCapacity,
-				Capacity:   EFWSPrimaryTankCapacity,
-				IsPrimary:  true,
+				Level:       EFWSPrimaryTankCapacity,
+				Capacity:    EFWSPrimaryTankCapacity,
+				IsPrimary:   true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
-			MotorPump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
+			MotorPump:   EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
 			TurbinePump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
 		},
 		SubsystemB: EFWSSubsystem{
 			Tank: EFWSTank{
-				Level:      EFWSPrimaryTankCapacity,
-				Capacity:   EFWSPrimaryTankCapacity,
-				IsPrimary:  true,
+				Level:       EFWSPrimaryTankCapacity,
+				Capacity:    EFWSPrimaryTankCapacity,
+				IsPrimary:   true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
-			MotorPump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
+			MotorPump:   EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
 			TurbinePump: EFWSPump{AFWPump: AFWPump{Pump: Pump{Running: true}}},
 		},
 	}
 	assert.False(t, e.Active,
 		"precondition: manually started pumps leave Active=false")
 
-	e2 := e.Step(
+	e2 := e.Step(DefaultTimeStep,
 		Temperature{Val: EFWSSecureTemp, Unit: u.Fahrenheit},
 		true,
 	)
@@ -328,7 +328,7 @@ func TestEFWS_EndToEndSafetyInjectionStartsFeedwaterDelivery(t *testing.T) {
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 	tankA := EFWSPrimaryTankCapacity.Float()
 	tankB := EFWSPrimaryTankCapacity.Float()
-	stepN(&p, int(time.Second/TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	efws := p.AuxiliaryBuilding.EmergencyFeedwaterSystem
 	assert.True(t, efws.Active,
@@ -365,7 +365,7 @@ func TestEFWS_TurbineSteamAdmissionValveOpensWithSGPressure(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
 
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	efws := p.AuxiliaryBuilding.EmergencyFeedwaterSystem
 	assert.Equal(t, 1.0,
 		float64(efws.SubsystemA.TurbinePump.SteamAdmissionValve.Open),
@@ -397,9 +397,9 @@ func TestEFWS_ThrottledValveScalesTankDrawdown(t *testing.T) {
 	e := EFWS{
 		SubsystemA: EFWSSubsystem{
 			Tank: EFWSTank{
-				Level:      EFWSPrimaryTankCapacity,
-				Capacity:   EFWSPrimaryTankCapacity,
-				IsPrimary:  true,
+				Level:       EFWSPrimaryTankCapacity,
+				Capacity:    EFWSPrimaryTankCapacity,
+				IsPrimary:   true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
 			MotorPump: EFWSPump{
@@ -408,9 +408,9 @@ func TestEFWS_ThrottledValveScalesTankDrawdown(t *testing.T) {
 			},
 		},
 	}
-	dt := TimeStep.Seconds()
+	dt := DefaultTimeStep.Seconds()
 	wantLoss := 0.25 * EFWSMotorPumpFlow.Float() * dt
-	e2 := e.Step(Temperature{Val: EFWSSecureTemp+10, Unit: u.Fahrenheit}, false)
+	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false)
 	assert.InDelta(t, EFWSPrimaryTankCapacity.Float()-wantLoss,
 		e2.SubsystemA.Tank.Level.Float(), 1e-9,
 		"want SubsystemA.Tank.Level=%v after one throttled step, got %v",
@@ -428,9 +428,9 @@ func TestEFWS_NoDrawdownWithoutDriveReady(t *testing.T) {
 	e := EFWS{
 		SubsystemA: EFWSSubsystem{
 			Tank: EFWSTank{
-				Level:      EFWSPrimaryTankCapacity,
-				Capacity:   EFWSPrimaryTankCapacity,
-				IsPrimary:  true,
+				Level:       EFWSPrimaryTankCapacity,
+				Capacity:    EFWSPrimaryTankCapacity,
+				IsPrimary:   true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
 			MotorPump: EFWSPump{
@@ -439,7 +439,7 @@ func TestEFWS_NoDrawdownWithoutDriveReady(t *testing.T) {
 			},
 		},
 	}
-	e2 := e.Step(Temperature{Val: EFWSSecureTemp+10, Unit: u.Fahrenheit}, false)
+	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false)
 	assert.InDelta(t, EFWSPrimaryTankCapacity.Float(),
 		e2.SubsystemA.Tank.Level.Float(), 1e-9,
 		"tank must not drain without a ready drive, got %v",
@@ -453,14 +453,14 @@ func TestEFWS_NoDrawdownWithoutDriveReady(t *testing.T) {
 // inventory: that remainder is credited as delivery, and once
 // dry both the tank and the reported flow sit at zero.
 func TestEFWS_DryTankStopsDeliveryAtRemainingInventory(t *testing.T) {
-	dt := TimeStep.Seconds()
+	dt := DefaultTimeStep.Seconds()
 	remaining := 0.5 * EFWSMotorPumpFlow.Float() * dt
 	e := EFWS{
 		SubsystemA: EFWSSubsystem{
 			Tank: EFWSTank{
-				Level:      Volume{Val: remaining, Unit: u.Gallon},
-				Capacity:   EFWSPrimaryTankCapacity,
-				IsPrimary:  true,
+				Level:       Volume{Val: remaining, Unit: u.Gallon},
+				Capacity:    EFWSPrimaryTankCapacity,
+				IsPrimary:   true,
 				Temperature: EFWSPrimaryTankMaxTemp,
 			},
 			MotorPump: EFWSPump{
@@ -469,7 +469,7 @@ func TestEFWS_DryTankStopsDeliveryAtRemainingInventory(t *testing.T) {
 			},
 		},
 	}
-	e2 := e.Step(Temperature{Val: EFWSSecureTemp+10, Unit: u.Fahrenheit}, false)
+	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false)
 	assert.Zero(t, e2.SubsystemA.Tank.Level.Float(),
 		"the step should have emptied the tank, got %v",
 		e2.SubsystemA.Tank.Level.Float())
@@ -477,7 +477,7 @@ func TestEFWS_DryTankStopsDeliveryAtRemainingInventory(t *testing.T) {
 		"delivery must clamp to the remaining inventory, want %v got %v",
 		remaining/dt, e2.DeliveredFlow.Float())
 
-	e3 := e2.Step(Temperature{Val: EFWSSecureTemp+10, Unit: u.Fahrenheit}, false)
+	e3 := e2.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false)
 	assert.Zero(t, e3.DeliveredFlow.Float(),
 		"a dry tank delivers nothing, got %v",
 		e3.DeliveredFlow.Float())
@@ -506,15 +506,15 @@ func TestPlant_EFWSReportedFlowMatchesTankDrawdown(t *testing.T) {
 	beforeA := efws.SubsystemA.Tank.Level.Float()
 	beforeB := efws.SubsystemB.Tank.Level.Float()
 
-	steps := int(time.Second / TimeStep)
-	stepN(&p, steps)
+	steps := int(time.Second / DefaultTimeStep)
+	stepN(&p, steps, DefaultTimeStep)
 
 	after := p.AuxiliaryBuilding.EmergencyFeedwaterSystem
 	drawn := beforeA + beforeB -
 		after.SubsystemA.Tank.Level.Float() -
 		after.SubsystemB.Tank.Level.Float()
 	integrated := p.ReactorBuilding.EFWSFeedwaterFlow.Float() *
-		float64(steps) * TimeStep.Seconds()
+		float64(steps) * DefaultTimeStep.Seconds()
 	assert.InDelta(t, drawn, integrated, 1e-6,
 		"reported flow must equal tank drawdown: drawn=%v integrated=%v",
 		drawn, integrated)

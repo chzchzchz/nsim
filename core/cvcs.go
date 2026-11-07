@@ -2,6 +2,7 @@ package core
 
 import (
 	"math"
+	"time"
 
 	u "github.com/bcicen/go-units"
 )
@@ -93,14 +94,13 @@ import (
 //     temperature, and an isolated recirculating pump conditions
 //     the idle beds toward the opposite of the last exchange mode
 //     so the next anticipated mode finds them ready.
-func (c *CVCS) Step(
+func (c *CVCS) Step(dt time.Duration,
 	makeupFlow Volume,
 	tavg Temperature,
 	pzrLevelFraction float64,
 	pzrPressure Pressure,
 ) CVCS {
 	ret := *c
-	dt := TimeStep
 
 	ret.ProgrammedLevel = programmedPzrLevel(tavg)
 

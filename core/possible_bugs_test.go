@@ -35,7 +35,7 @@ func TestBug_RPVHeatInputRoutesToSGRatedPerLoop(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	got := float64(p.ReactorBuilding.SteamGenerator.HeatInput)
 	assert.LessOrEqual(t, got, float64(SteamGeneratorFullLoadHeatInput)+1e6,
@@ -53,7 +53,7 @@ func TestBug_SGHeatInputEqualsOneSGRatedAtCoreRated(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.DemandInsertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	// The per-SG spec heat input is one SG's worth of
 	// vaporising 480 kg/s (specs/the_westinghouse_pressurized_water_react//chapter_3/page_065.txt:56).
@@ -75,9 +75,10 @@ func TestBug_SGHeatInputEqualsOneSGRatedAtCoreRated(t *testing.T) {
 // combined slope is negative at both chemistries (the fuel-side
 // Doppler base dominates the slightly-positive BOL moderator term)
 // and grows more negative as boron depletes:
-//   "the coefficient is substantially more negative due to
-//    depletion and removal of shim boron"
-//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:119-121
+//
+//	"the coefficient is substantially more negative due to
+//	 depletion and removal of shim boron"
+//	specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:119-121
 func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 	feedbackTerm := func(boron float64) float32 {
 		hot := ReactorPressureVessel{
@@ -89,9 +90,9 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 			Outlet:      Temperature{Val: float64(CoreDopplerReferenceTempF), Unit: u.Fahrenheit},
 		}
 		hot.SeedSteadyStatePower(CoreRatedThermalPower)
-		hot = hot.Step(RCPRatedSpeed, 0)
+		hot = hot.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 		ref.SeedSteadyStatePower(CoreRatedThermalPower)
-		ref = ref.Step(RCPRatedSpeed, 0)
+		ref = ref.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 		return hot.Reactivity - ref.Reactivity
 	}
 
@@ -104,6 +105,7 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 		"want EOL feedback more negative than BOL, got BOL=%v EOL=%v",
 		bolTerm, eolTerm)
 }
+
 // Bug 4 reproduction: MakePlant unconditionally sets
 // ReactorPressureVessel.Outlet to CoreReferenceOutletF and
 // Inlet to CoreReferenceInletF regardless of the loaded
@@ -177,6 +179,7 @@ func TestBug_MakePlantPreservesCallerRPVTemperatures(t *testing.T) {
 //     depletion and removal of shim boron" at EOL (low boron).
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_039.txt:54-55
 //     specs/the_westinghouse_pressurized_water_react/chapter_2/page_037.txt:117-122
+//
 // Diluting soluble boron inserts positive reactivity: with rods
 // fully withdrawn, dropping from 1000 ppm to 0 ppm must raise
 // Reactivity on the common percent-Δk/k scale by roughly the
@@ -190,13 +193,12 @@ func TestBug_MakePlantPreservesCallerRPVTemperatures(t *testing.T) {
 func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
 	// Boron integrates linearly in dt and the asserted swing is a
 	// settled reactivity band, so the widened step preserves both
-	// legs' trajectories while cutting step count 100x. Must not run
-	// in parallel: overrideTimeStep mutates global simulation state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	// legs' trajectories while cutting step count 100x..
+	testDt := 10 * time.Millisecond
 	// Boron is seeded directly in both legs, so Reactivity reflects
 	// the swing as soon as thermal feedback settles; 30 s covers
 	// the relaxation without a full minute of stepping.
-	steps := int(30 * time.Second / TimeStep)
+	steps := int(30 * time.Second / DefaultTimeStep)
 
 	high := MakePlant()
 	high.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
@@ -205,7 +207,7 @@ func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
 	high.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = 1000
 	high.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 1000
 	high.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
-	stepN(&high, steps)
+	stepN(&high, steps, testDt)
 
 	low := MakePlant()
 	low.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
@@ -214,7 +216,7 @@ func TestBug_BoronDilutionInsertsPositiveReactivity(t *testing.T) {
 	low.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration = 0
 	low.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 0
 	low.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
-	stepN(&low, steps)
+	stepN(&low, steps, testDt)
 
 	highReact := high.ReactorBuilding.ReactorPressureVessel.Reactivity
 	lowReact := low.ReactorBuilding.ReactorPressureVessel.Reactivity
@@ -243,7 +245,7 @@ func TestBug_SGWaterExceedsVolume(t *testing.T) {
 
 	// The phantom top-up grew SG water within seconds, so a half
 	// minute window is ample to catch its return.
-	stepN(&p, int(30*time.Second/TimeStep))
+	stepN(&p, int(30*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	water := p.ReactorBuilding.SteamGenerator.Water.Float()
 	volume := p.ReactorBuilding.SteamGenerator.Volume.Float()
@@ -251,7 +253,6 @@ func TestBug_SGWaterExceedsVolume(t *testing.T) {
 		"SG water (%v gal) must not exceed shell volume (%v gal)",
 		water, volume)
 }
-
 
 // The primary-loop fluid edges must not transfer water into the
 // steam generator: the primary and secondary cycles are separated
@@ -263,9 +264,9 @@ func TestBug_SGWaterExceedsVolume(t *testing.T) {
 //
 // Spec justification:
 //   - "Pressurized water reactors utilize a closed-cycle system design
-//      principle. This means that radioactive coolant in the reactor
-//      cycle is completely separated from the turbine-generator cycle.
-//      [...] The link connecting the two cycles is the steam generator."
+//     principle. This means that radioactive coolant in the reactor
+//     cycle is completely separated from the turbine-generator cycle.
+//     [...] The link connecting the two cycles is the steam generator."
 //   - specs/the_westinghouse_pressurized_water_react/chapter_3/page_064.txt:20-27
 func TestPlant_SGInventoryNotToppedUpFromPrimary(t *testing.T) {
 	p := MakePlant()
@@ -274,7 +275,7 @@ func TestPlant_SGInventoryNotToppedUpFromPrimary(t *testing.T) {
 
 	// The phantom top-up grew SG water within seconds, so a half
 	// minute window is ample to catch its return.
-	stepN(&p, int(30*time.Second/TimeStep))
+	stepN(&p, int(30*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	water := p.ReactorBuilding.SteamGenerator.Water.Float()
 	initial := p.ReactorBuilding.SteamGenerator.Volume.Float() * 0.8

@@ -43,7 +43,7 @@ func TestFeedwaterRegulator_StoppedRegulatorHoldsZeroDemand(t *testing.T) {
 		Level:         0,
 		Running:       false,
 	}
-	r2 := r.Step()
+	r2 := r.Step(DefaultTimeStep)
 	assert.Zero(t, r2.ValveDemand,
 		"want ValveDemand=0 when regulator is stopped, got %v",
 		r2.ValveDemand)
@@ -62,7 +62,7 @@ func TestFeedwaterRegulator_LowLevelOpensValve(t *testing.T) {
 		Level:         40,
 		Running:       true,
 	}
-	r2 := r.Step()
+	r2 := r.Step(DefaultTimeStep)
 	assert.InDelta(t, 1.0, r2.ValveDemand, 1e-9,
 		"want ValveDemand clamped to 1.0 with low level, got %v",
 		r2.ValveDemand)
@@ -77,7 +77,7 @@ func TestFeedwaterRegulator_HighLevelClosesValve(t *testing.T) {
 		Level:         80,
 		Running:       true,
 	}
-	r2 := r.Step()
+	r2 := r.Step(DefaultTimeStep)
 	assert.Zero(t, r2.ValveDemand,
 		"want ValveDemand clamped to 0.0 with high level, got %v",
 		r2.ValveDemand)
@@ -93,14 +93,14 @@ func TestFeedwaterRegulator_IntegralAccumulatesWhileRunning(t *testing.T) {
 		Level:         49,
 		Running:       true,
 	}
-	r2 := r.Step()
+	r2 := r.Step(DefaultTimeStep)
 	// First step: integral = 1.0 * dt (1 ms).
-	assert.InDelta(t, 1.0*TimeStep.Seconds(), r2.IntegralError, 1e-12,
+	assert.InDelta(t, 1.0*DefaultTimeStep.Seconds(), r2.IntegralError, 1e-12,
 		"want IntegralError = e*dt after one step, got %v",
 		r2.IntegralError)
-	r3 := r2.Step()
+	r3 := r2.Step(DefaultTimeStep)
 	// Second step: integral = 2.0 * dt.
-	assert.InDelta(t, 2.0*TimeStep.Seconds(), r3.IntegralError, 1e-12,
+	assert.InDelta(t, 2.0*DefaultTimeStep.Seconds(), r3.IntegralError, 1e-12,
 		"want IntegralError doubled after two steps, got %v",
 		r3.IntegralError)
 }
@@ -114,18 +114,18 @@ func TestFeedwaterRegulator_ValveDemandClampedToUnitRange(t *testing.T) {
 		Level:         0,
 		Running:       true,
 	}
-	assert.InDelta(t, 1.0, hi.Step().ValveDemand, 1e-9,
+	assert.InDelta(t, 1.0, hi.Step(DefaultTimeStep).ValveDemand, 1e-9,
 		"want ValveDemand clamped to 1.0 at the high end, got %v",
-		hi.Step().ValveDemand)
+		hi.Step(DefaultTimeStep).ValveDemand)
 	// Very high level to drive a large negative error.
 	lo := FeedwaterRegulator{
 		LevelSetpoint: FeedwaterLevelSetpoint,
 		Level:         100,
 		Running:       true,
 	}
-	assert.Zero(t, lo.Step().ValveDemand,
+	assert.Zero(t, lo.Step(DefaultTimeStep).ValveDemand,
 		"want ValveDemand clamped to 0.0 at the low end, got %v",
-		lo.Step().ValveDemand)
+		lo.Step(DefaultTimeStep).ValveDemand)
 }
 
 // Conditional-integration anti-windup: a long stretch with the level
@@ -144,15 +144,15 @@ func TestFeedwaterRegulator_AntiWindupAllowsRecovery(t *testing.T) {
 		Level:         80,
 		Running:       true,
 	}
-	for range int(120 * time.Second / TimeStep) {
-		r = r.Step()
+	for range int(120 * time.Second / DefaultTimeStep) {
+		r = r.Step(DefaultTimeStep)
 	}
 	assert.Zero(t, r.IntegralError,
 		"want integrator frozen while demand is clamped past its limit, got %v",
 		r.IntegralError)
 
 	r.Level = 49
-	r2 := r.Step()
+	r2 := r.Step(DefaultTimeStep)
 	assert.Greater(t, r2.ValveDemand, 0.45,
 		"want valve reopened by proportional action once level drops below "+
 			"setpoint, got %v", r2.ValveDemand)
@@ -179,7 +179,7 @@ func TestFeedwaterRegulator_SteamFlowFeedforward(t *testing.T) {
 		FeedwaterFlow: halfDesign,
 		Running:       true,
 	}
-	r2 := r.Step()
+	r2 := r.Step(DefaultTimeStep)
 	assert.InDelta(t, 0.5, r2.ValveDemand, 1e-9,
 		"want ValveDemand=0.5 with zero error and half-design steam "+
 			"flow, got %v", r2.ValveDemand)
@@ -205,7 +205,7 @@ func TestFeedwaterRegulator_FeedMismatchTrimsDemand(t *testing.T) {
 			FeedwaterFlow: feed,
 			Running:       true,
 		}
-		return r.Step().ValveDemand
+		return r.Step(DefaultTimeStep).ValveDemand
 	}
 	balanced := base(half)
 	under := base(half / 2)
@@ -226,8 +226,8 @@ func TestPlant_FeedwaterRegulatorDrivesControlValve(t *testing.T) {
 	p.TurbineBuilding.MainFeedwaterPump.Running = true
 	sgVol := p.ReactorBuilding.SteamGenerator.Volume.Float()
 	p.ReactorBuilding.SteamGenerator.Water =
-		Volume{Val: 0.4*sgVol, Unit: u.Gallon}
-	p.Step()
+		Volume{Val: 0.4 * sgVol, Unit: u.Gallon}
+	p.Step(DefaultTimeStep)
 	p.Update()
 	reg := p.TurbineBuilding.FeedwaterRegulator
 	// SG level = 40% < 50% setpoint → valve demand should
@@ -248,7 +248,9 @@ func TestPlant_FeedwaterRegulatorDrivesControlValve(t *testing.T) {
 // the level error persists, and retransfer to automatic resumes from
 // the frozen integral without bumping the valve.
 // "reactor control and steam generator water level control are
-//  transferred to manual operation"
+//
+//	transferred to manual operation"
+//
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:156-159
 func TestFeedwaterRegulator_ManualHoldsOperatorDemand(t *testing.T) {
 	// Small error so the anti-windup does not pin the integrator
@@ -260,7 +262,7 @@ func TestFeedwaterRegulator_ManualHoldsOperatorDemand(t *testing.T) {
 		ManualControl: true,
 		ValveDemand:   0.42,
 	}
-	r2 := r.Step()
+	r2 := r.Step(DefaultTimeStep)
 	assert.InDelta(t, 0.42, r2.ValveDemand, 1e-12,
 		"manual mode must hold the operator's demand, got %v",
 		r2.ValveDemand)
@@ -269,7 +271,7 @@ func TestFeedwaterRegulator_ManualHoldsOperatorDemand(t *testing.T) {
 
 	r3 := r2
 	r3.ManualControl = false
-	r4 := r3.Step()
+	r4 := r3.Step(DefaultTimeStep)
 	assert.Greater(t, r4.IntegralError, r2.IntegralError,
 		"retransfer to automatic must resume integrating")
 }
@@ -288,7 +290,7 @@ func TestPlant_FeedwaterManualTransferHoldsValve(t *testing.T) {
 	require.Truef(t, ok, "want regulator demand control registered")
 	require.NoErrorf(t, vd.Set("0.3"), "Set ValveDemand")
 
-	stepN(&p, 10)
+	stepN(&p, 10, DefaultTimeStep)
 
 	reg := p.TurbineBuilding.FeedwaterRegulator
 	assert.True(t, reg.ManualControl)

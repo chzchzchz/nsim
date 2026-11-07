@@ -41,19 +41,19 @@ func TestCIS_InitialStateHasNeitherPhaseLatched(t *testing.T) {
 func TestCIS_PhaseALatchesOnSafetyInjection(t *testing.T) {
 	cis := ContainmentIsolationSystem{}
 	// First step with safety injection active.
-	s1 := cis.Step(true, 0)
+	s1 := cis.Step(DefaultTimeStep, true, 0)
 	assert.True(t, s1.PhaseAIsolated,
 		"want PhaseAIsolated=true after safety injection, got %v",
 		s1.PhaseAIsolated)
 	// Subsequent step with safety injection cleared, no
 	// manual → Phase A clears (both triggers gone).
-	s2 := s1.Step(false, 0)
+	s2 := s1.Step(DefaultTimeStep, false, 0)
 	assert.False(t, s2.PhaseAIsolated,
 		"want PhaseAIsolated=false after SI clears, got %v",
 		s2.PhaseAIsolated)
 	// Now phase A latches again on SI, and stays latched
 	// while SI persists.
-	s3 := s2.Step(true, 0)
+	s3 := s2.Step(DefaultTimeStep, true, 0)
 	assert.True(t, s3.PhaseAIsolated,
 		"want PhaseAIsolated=true after SI returns, got %v",
 		s3.PhaseAIsolated)
@@ -70,14 +70,14 @@ func TestCIS_PhaseALatchesOnManual(t *testing.T) {
 	cis := ContainmentIsolationSystem{
 		ManualPhaseA: true,
 	}
-	s1 := cis.Step(false, 0)
+	s1 := cis.Step(DefaultTimeStep, false, 0)
 	assert.True(t, s1.PhaseAIsolated,
 		"want PhaseAIsolated=true with ManualPhaseA set, got %v",
 		s1.PhaseAIsolated)
 	// Operator clears manual, no SI signal → Phase A clears.
-	s2 := s1.Step(false, 0)
+	s2 := s1.Step(DefaultTimeStep, false, 0)
 	s2.ManualPhaseA = false
-	s3 := s2.Step(false, 0)
+	s3 := s2.Step(DefaultTimeStep, false, 0)
 	assert.False(t, s3.PhaseAIsolated,
 		"want PhaseAIsolated=false after manual reset, got %v",
 		s3.PhaseAIsolated)
@@ -95,13 +95,13 @@ func TestCIS_PhaseBLatchesOnHighPressure(t *testing.T) {
 	cis := ContainmentIsolationSystem{}
 	hi := CISPhaseBSetpoint + 1
 	// Step with pressure above the setpoint.
-	s1 := cis.Step(false, hi)
+	s1 := cis.Step(DefaultTimeStep, false, hi)
 	assert.True(t, s1.PhaseBIsolated,
 		"want PhaseBIsolated=true above setpoint, got %v",
 		s1.PhaseBIsolated)
 	// Step with pressure below the setpoint, no manual →
 	// Phase B clears.
-	s2 := s1.Step(false, CISPhaseBSetpoint-1)
+	s2 := s1.Step(DefaultTimeStep, false, CISPhaseBSetpoint-1)
 	assert.False(t, s2.PhaseBIsolated,
 		"want PhaseBIsolated=false below setpoint, got %v",
 		s2.PhaseBIsolated)
@@ -118,14 +118,14 @@ func TestCIS_PhaseBLatchesOnManual(t *testing.T) {
 	cis := ContainmentIsolationSystem{
 		ManualPhaseB: true,
 	}
-	s1 := cis.Step(false, 0)
+	s1 := cis.Step(DefaultTimeStep, false, 0)
 	assert.True(t, s1.PhaseBIsolated,
 		"want PhaseBIsolated=true with ManualPhaseB set, got %v",
 		s1.PhaseBIsolated)
 	// Manual reset but pressure is fine — Phase B clears.
-	s2 := s1.Step(false, 0)
+	s2 := s1.Step(DefaultTimeStep, false, 0)
 	s2.ManualPhaseB = false
-	s3 := s2.Step(false, 0)
+	s3 := s2.Step(DefaultTimeStep, false, 0)
 	assert.False(t, s3.PhaseBIsolated,
 		"want PhaseBIsolated=false after manual reset, got %v",
 		s3.PhaseBIsolated)
@@ -165,7 +165,7 @@ func TestCIS_IsIsolatedReportsEitherPhase(t *testing.T) {
 func TestPlant_CIS_PhaseALatchesOnLOCA(t *testing.T) {
 	p := MakePlant()
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	cis := p.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem
 	assert.True(t, cis.PhaseAIsolated,

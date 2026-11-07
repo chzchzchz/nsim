@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // Step advances the Westinghouse Mark III brushless-exciter
 // state machine by one timestep. The simplified model
 // implements the spec's shaft-driven topology from chapter
@@ -28,7 +30,7 @@ package core
 //     power to the automatic voltage regulator which
 //     regulates and controls the output of the exciter."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_212.txt:27-30
-func (e *GeneratorExcitationSystem) Step(
+func (e *GeneratorExcitationSystem) Step(dt time.Duration,
 	shaftVelocity float64,
 ) GeneratorExcitationSystem {
 	ret := *e
@@ -82,7 +84,7 @@ func (e *GeneratorExcitationSystem) Step(
 //   - "Demineralized cooling water is provided for the stator
 //     by a closed recirculating water system."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_209.txt:48-50
-func (c *GeneratorCoolingSystem) Step(
+func (c *GeneratorCoolingSystem) Step(dt time.Duration,
 	h2BlowerFraction float64,
 ) GeneratorCoolingSystem {
 	ret := *c

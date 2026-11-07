@@ -26,13 +26,13 @@ func rpvTavgF(p *Plant) float64 {
 		p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()) / 2
 }
 
-func runDumpRig(tb *TurbineBuilding, tavg Temperature, seconds int) {
+func runDumpRig(tb *TurbineBuilding, tavg Temperature, seconds int, dt time.Duration) {
 	// Above the restoration floor fraction but below the
 	// pressure-mode arm point, so any opening is restoration duty
 	// alone.
 	sgPressure := Pressure(SteamGeneratorShellPressure * 0.99)
-	for i := 0; i < int(time.Duration(seconds)*time.Second/TimeStep); i++ {
-		*tb = tb.StepWithSteam(sgPressure, tavg, true, false, 1.0, 600)
+	for i := 0; i < int(time.Duration(seconds)*time.Second/dt); i++ {
+		*tb = tb.StepWithSteam(dt, sgPressure, tavg, true, false, 1.0, 600)
 	}
 }
 
@@ -44,17 +44,16 @@ func runDumpRig(tb *TurbineBuilding, tavg Temperature, seconds int) {
 // and holds the valve shut when Tavg sits on the program: identical
 // rigs differing only in the Tavg sample must diverge. The header sits
 // below the pressure-mode arm point, so any opening here is restoration
-// duty alone. Must not run in parallel: overrideTimeStep mutates global
 // simulation state.
 func TestSteamDump_RestorationTermTracksProgramExcess(t *testing.T) {
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 
 	hot := dumpRig(t, 0.05)
 	onProgram := dumpRig(t, 0.05)
 	programTavg := programmedRodTavg(0.05)
 
-	runDumpRig(hot, Temperature{Val: programTavg + 14, Unit: u.Fahrenheit}, 20)
-	runDumpRig(onProgram, Temperature{Val: programTavg, Unit: u.Fahrenheit}, 20)
+	runDumpRig(hot, Temperature{Val: programTavg + 14, Unit: u.Fahrenheit}, 20, testDt)
+	runDumpRig(onProgram, Temperature{Val: programTavg, Unit: u.Fahrenheit}, 20, testDt)
 
 	assert.Greater(t, hot.Turbine.DumpValve.Open, 0.02,
 		"a Tavg excess above the program must engage the bypass, got %v",
@@ -68,10 +67,10 @@ func TestSteamDump_RestorationTermTracksProgramExcess(t *testing.T) {
 // term is self-disabling there: no phantom heat-sink draw may compete
 // with the governor.
 func TestSteamDump_AtPowerOnProgramHoldsBypassShut(t *testing.T) {
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 
 	rig := dumpRig(t, 1.0)
-	runDumpRig(rig, Temperature{Val: programmedRodTavg(1.0), Unit: u.Fahrenheit}, 20)
+	runDumpRig(rig, Temperature{Val: programmedRodTavg(1.0), Unit: u.Fahrenheit}, 20, testDt)
 
 	assert.LessOrEqual(t, rig.Turbine.DumpValve.Open, 1e-6,
 		"an on-program at-power lineup must hold the bypass shut, got %v",
@@ -110,7 +109,7 @@ func TestAutoBoron_TurbineLeadErrorKeysOnTurbineSetpoint(t *testing.T) {
 
 	turbineLead := newArmed(TurbineLead)
 	turbineLead.TurbineBuilding.Turbine.Setpoint = 0.05
-	stepN(turbineLead, 20)
+	stepN(turbineLead, 20, DefaultTimeStep)
 
 	cvcs := &turbineLead.AuxiliaryBuilding.ChemicalVolumeControlSystem
 	assert.Equal(t, CVCSBoration, cvcs.Mode,
@@ -125,8 +124,8 @@ func TestAutoBoron_TurbineLeadErrorKeysOnTurbineSetpoint(t *testing.T) {
 	withLoad := newArmed(ReactorLead)
 	withoutLoad := newArmed(ReactorLead)
 	withoutLoad.TurbineBuilding.Turbine.Setpoint = 0.05
-	stepN(withLoad, 20)
-	stepN(withoutLoad, 20)
+	stepN(withLoad, 20, DefaultTimeStep)
+	stepN(withoutLoad, 20, DefaultTimeStep)
 
 	modeWith := withLoad.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode
 	modeWithout := withoutLoad.AuxiliaryBuilding.ChemicalVolumeControlSystem.Mode
@@ -146,24 +145,23 @@ func TestAutoBoron_TurbineLeadErrorKeysOnTurbineSetpoint(t *testing.T) {
 // recorded remaining blocker and is deliberately out of this window.
 //
 // The widened tick stretches the walk; state bands carry assertions.
-// Must not run in parallel: overrideTimeStep mutates global state.
 func TestHouseLoadDescent_PacedWalkTracksProgramWithoutTrip(t *testing.T) {
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := fullPowerLineup()
 	p.PlantOperation.RodControlAuto = true
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.AutoControl = true
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoBoronControl = true
 
 	ratePerSec := float64(TurbineLoadRunbackRate)
-	walkTicks := int(0.95 / ratePerSec * float64(time.Second) / float64(TimeStep))
-	checkpointEvery := int(30 * time.Second / TimeStep)
+	walkTicks := int(0.95 / ratePerSec * float64(time.Second) / float64(testDt))
+	checkpointEvery := int(30 * time.Second / testDt)
 
 	minSgP := 1e9
 	for i := 0; i < walkTicks; i++ {
 		p.TurbineBuilding.Turbine.Setpoint =
 			max(p.TurbineBuilding.Turbine.Setpoint-
-				ratePerSec*TimeStep.Seconds(), 0.05)
-		p.Step()
+				ratePerSec*testDt.Seconds(), 0.05)
+		p.Step(testDt)
 		p.Update()
 		sp := p.TurbineBuilding.Turbine.Setpoint
 		ff := fissionFraction(p.ReactorBuilding.ReactorPressureVessel.FissionPower)

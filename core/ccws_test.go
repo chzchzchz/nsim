@@ -39,7 +39,7 @@ func TestCCWS_PumpsOffFreezeInletAndOutletEqualInlet(t *testing.T) {
 		InletTemp:   Temperature{Val: 110.0, Unit: u.Fahrenheit},
 		OutletTemp:  Temperature{Val: 120.0, Unit: u.Fahrenheit},
 	}
-	c2 := c.Step(Temperature{Val: 70, Unit: u.Fahrenheit}, true)
+	c2 := c.Step(DefaultTimeStep, Temperature{Val: 70, Unit: u.Fahrenheit}, true)
 	assert.InDelta(t, 110.0, c2.InletTemp.Float(), 1e-9,
 		"want InletTemp=110 with pumps off, got %v", c2.InletTemp.Float())
 	assert.InDelta(t, c2.InletTemp.Float(), c2.OutletTemp.Float(), 1e-9,
@@ -66,7 +66,7 @@ func TestCCWS_PumpsRunningInletRecoversTowardSetpoint(t *testing.T) {
 		InletTemp:   Temperature{Val: 120.0, Unit: u.Fahrenheit},
 		OutletTemp:  Temperature{Val: 120.0, Unit: u.Fahrenheit},
 	}
-	c2 := c.Step(Temperature{Val: 70, Unit: u.Fahrenheit}, true)
+	c2 := c.Step(DefaultTimeStep, Temperature{Val: 70, Unit: u.Fahrenheit}, true)
 	gap := 120.0 - CCWSInletSteadyStateTemp
 	frac := 1.0 - (c2.InletTemp.Float()-CCWSInletSteadyStateTemp)/gap
 	// Per-step fraction should match the analytical exponential
@@ -91,7 +91,7 @@ func TestCCWS_PumpsRunningOutletAboveInletByApproachTemp(t *testing.T) {
 		InletTemp:   Temperature{Val: 110.0, Unit: u.Fahrenheit},
 		OutletTemp:  Temperature{Val: 110.0, Unit: u.Fahrenheit},
 	}
-	c2 := c.Step(Temperature{Val: 70, Unit: u.Fahrenheit}, true)
+	c2 := c.Step(DefaultTimeStep, Temperature{Val: 70, Unit: u.Fahrenheit}, true)
 	assert.InDelta(t, c2.InletTemp.Float()+CCHXApproachTemp.Float(),
 		c2.OutletTemp.Float(), 1e-9,
 		"want OutletTemp=InletTemp+CCHXApproachTemp, got %v",
@@ -115,9 +115,8 @@ func TestCCWS_InletRecoversWithinFourHours(t *testing.T) {
 	// so a coarse step cannot distort the relaxation toward the
 	// spec's four-hour recovery point
 	// (specs/the_westinghouse_pressurized_water_react/chapter_5/page_105.txt:108-112,
-	// quoted above). Must not run in parallel: overrideTimeStep
 	// mutates global simulation state.
-	overrideTimeStep(t, time.Minute)
+	testDt := time.Minute
 	c := CCWS{
 		PumpRunning: true,
 		DriveReady:  true,
@@ -126,9 +125,9 @@ func TestCCWS_InletRecoversWithinFourHours(t *testing.T) {
 	}
 	// 4 hours of simulated time at 1 min per step.
 	swSupply := Temperature{Val: 70, Unit: u.Fahrenheit}
-	steps := int(4 * time.Hour / TimeStep)
+	steps := int(4 * time.Hour / testDt)
 	for i := 0; i < steps; i++ {
-		c = c.Step(swSupply, true)
+		c = c.Step(testDt, swSupply, true)
 	}
 	// After 4 tau the gap should have shrunk by 1 - exp(-4) ≈ 0.982.
 	// Allow a small slack to absorb per-step rounding.
@@ -150,7 +149,7 @@ func TestCCWS_HotRiverRaisesInletTarget(t *testing.T) {
 		DriveReady:  true,
 		InletTemp:   Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit},
 	}
-	hot := c.Step(Temperature{Val: 100, Unit: u.Fahrenheit}, true)
+	hot := c.Step(DefaultTimeStep, Temperature{Val: 100, Unit: u.Fahrenheit}, true)
 	assert.Greater(t, hot.InletTemp.Float(), CCWSInletSteadyStateTemp,
 		"want InletTemp > 105 with 100°F supply, got %v",
 		hot.InletTemp.Float())
@@ -176,7 +175,7 @@ func TestCCWS_LossOfServiceWaterSoaksLoopAndZeroesDuty(t *testing.T) {
 		DriveReady:  true,
 		InletTemp:   Temperature{Val: CCWSInletSteadyStateTemp, Unit: u.Fahrenheit},
 	}
-	Soaked := c.Step(Temperature{Val: 75, Unit: u.Fahrenheit}, false)
+	Soaked := c.Step(DefaultTimeStep, Temperature{Val: 75, Unit: u.Fahrenheit}, false)
 	assert.Greater(t, Soaked.InletTemp.Float(), CCWSInletSteadyStateTemp,
 		"want InletTemp > 105 soaking toward 120 without SW flow, got %v",
 		Soaked.InletTemp.Float())
@@ -203,7 +202,7 @@ func TestCCWS_EndToEndSafetyInjectionStartsPumps(t *testing.T) {
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 	// The diesel takes ~10 s to reach ReadyToLoad in this model
 	// (per existing diesel tests).
-	stepN(&p, int(15*time.Second/TimeStep))
+	stepN(&p, int(15*time.Second/DefaultTimeStep), DefaultTimeStep)
 	ccws := p.AuxiliaryBuilding.ComponentCoolingWaterSystem
 	assert.True(t, ccws.PumpRunning,
 		"want CCWS PumpRunning=true after SI+diesel ready, got %v",
@@ -220,9 +219,9 @@ func TestCCWS_SteppedOncePerPlantStep(t *testing.T) {
 	ccws.PumpRunning = true
 	ccws.DriveReady = true
 	ccws.InletTemp = Temperature{Val: 120, Unit: u.Fahrenheit}
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 
-	dtTau := TimeStep.Seconds() / CCWSRecoveryTimeConstant.Seconds()
+	dtTau := DefaultTimeStep.Seconds() / CCWSRecoveryTimeConstant.Seconds()
 	want := 120.0 - (120.0-CCWSInletSteadyStateTemp)*(1.0-math.Exp(-dtTau))
 	got := p.AuxiliaryBuilding.ComponentCoolingWaterSystem.InletTemp.Float()
 	assert.InDelta(t, want, got, 1e-9,

@@ -7,7 +7,7 @@ import (
 	u "github.com/bcicen/go-units"
 )
 
-// Step advances the reactor pressure vessel by TimeStep. It
+// Step advances the reactor pressure vessel by ProductionStep. It
 // implements the primary-side thermal model and the minimal
 // reactivity model described in plans/p7_1.txt and plans/p8_1.txt.
 //
@@ -55,8 +55,8 @@ import (
 //     (6.15 m3/sec) Design head 280 ft (85.3 m)"
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_056.txt:124-130
 //     (cited for context; not directly used in the model).
-func (r *ReactorPressureVessel) Step(rcpSpeed Velocity, secondaryExcess Watts) ReactorPressureVessel {	ret := *r
-	dt := TimeStep
+func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, secondaryExcess Watts) ReactorPressureVessel {
+	ret := *r
 
 	// 0) Trip forces full rod insertion per the scram definition:
 	// "reactor trip — When control rods are rapidly inserted into
@@ -462,7 +462,7 @@ const (
 
 // advanceXenon evolves the iodine-135 / xenon-135 fission-product
 // pair over dt, sub-stepping so callers may pass long horizons (the
-// plant step passes TimeStep). Iodine-135 is normalized to its rated-
+// plant step passes ProductionStep). Iodine-135 is normalized to its rated-
 // power equilibrium (1.0 at rated); Xenon135 is carried as the
 // physical concentration relative to the normalized iodine scale,
 // so its rated equilibrium sits at lambdaI/(lambdaX+burn) ~= 0.1 and
@@ -550,7 +550,6 @@ func netTempCoef(boron float64) float64 {
 	return CoreNetTempCoefAtZeroBoronPcmPerDegF +
 		t*(CoreNetTempCoefAtRefBoronPcmPerDegF-CoreNetTempCoefAtZeroBoronPcmPerDegF)
 }
-
 
 type ReactorPressureVessel struct {
 	Part
@@ -743,7 +742,7 @@ const ECCSInjectionTempF = 100.0
 //     depressurized and voided of coolant."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:16-17
 //   - Break location: specs/pwr_sim/chapter_4/page_053.txt:43-45.
-func (r *ReactorPressureVessel) applyHotLegBreak(pzr *Pressurizer, floor Pressure) {
+func (r *ReactorPressureVessel) applyHotLegBreak(dt time.Duration, pzr *Pressurizer, floor Pressure) {
 	r.BreakFlow = Volume{Val: 0, Unit: u.Gallon}
 	if r.HotLegBreak.Open <= 0 {
 		return
@@ -753,7 +752,7 @@ func (r *ReactorPressureVessel) applyHotLegBreak(pzr *Pressurizer, floor Pressur
 		return
 	}
 	rate := r.HotLegBreak.Open * RCSHotLegBreakGalPerSec
-	gal := min(rate*TimeStep.Seconds(), remaining)
+	gal := min(rate*dt.Seconds(), remaining)
 	// The liquid-equivalent draw comes out of the loop inventory the
 	// surge line exposes as pressurizer water; level falls first and
 	// the free space grows behind it.
@@ -817,13 +816,13 @@ func (r *ReactorPressureVessel) creditSafetyInjection(pzr *Pressurizer, gal floa
 //     reactor coolant system. Therefore, coolant temperature and
 //     pressure will drop."
 //     specs/pwr_sim/chapter_4/page_053.txt:9-11
-func (r *ReactorPressureVessel) applyFaultOvercool(faultExcess Watts,
+func (r *ReactorPressureVessel) applyFaultOvercool(dt time.Duration, faultExcess Watts,
 	sgHeader Pressure) {
 	if faultExcess <= 0 {
 		return
 	}
 	deltaTF := -float64(faultExcess) / (RCSMassKg * SpecificHeatWater) *
-		TimeStep.Seconds() * 9.0 / 5.0
+		dt.Seconds() * 9.0 / 5.0
 	floorF := PressurizerSatTemperatureF(float64(sgHeader))
 	r.Outlet = Temperature{
 		Val: max(r.Outlet.Float()+deltaTF, floorF), Unit: u.Fahrenheit}
@@ -852,7 +851,7 @@ const BlowdownFlashTau = 10.0
 //   - "Both the vapor and the residual liquid are cooled to the
 //     saturation temperature of the liquid at the reduced pressure."
 //     specs/wiki/Flash_evaporation.txt:651
-func (r *ReactorPressureVessel) applyBlowdownCooling(rcsP Pressure) {
+func (r *ReactorPressureVessel) applyBlowdownCooling(dt time.Duration, rcsP Pressure) {
 	if r.BreakFlow.Float() <= 0 {
 		return
 	}
@@ -862,9 +861,10 @@ func (r *ReactorPressureVessel) applyBlowdownCooling(rcsP Pressure) {
 		return
 	}
 	r.Outlet = Temperature{Val: outletF +
-		(targetF-outletF)*(TimeStep.Seconds()/BlowdownFlashTau),
+		(targetF-outletF)*(dt.Seconds()/BlowdownFlashTau),
 		Unit: u.Fahrenheit}
 }
+
 // Reactor core sizing. The spec gives steam-flow and pressure data
 // (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:56,
 // specs/the_westinghouse_pressurized_water_react/chapter_3/page_066.txt:80-82)
@@ -882,11 +882,11 @@ func (r *ReactorPressureVessel) applyBlowdownCooling(rcsP Pressure) {
 // SG, so the per-loop heat flux the SG actually sees is
 // rpv.TotalThermalPower() / SteamGeneratorLoopCount.
 //
-//   "Number and type: 1 vertical, U-tube steam generator with
-//    integral steam-drum per loop"
-//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:31-32
-//   "2-Loop Plant / 3-Loop Plant / 4-Loop Plant"
-//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:41-43
+//	"Number and type: 1 vertical, U-tube steam generator with
+//	 integral steam-drum per loop"
+//	specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:31-32
+//	"2-Loop Plant / 3-Loop Plant / 4-Loop Plant"
+//	specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:41-43
 const (
 	CoreRatedThermalPower Watts = 3_800_000_000
 
@@ -900,6 +900,7 @@ const (
 	// SteamGeneratorFullLoadHeatInput.
 	SteamGeneratorLoopCount = 4
 )
+
 // Decay-heat model constants.
 //
 // Spec justification:
@@ -934,9 +935,9 @@ const (
 	// thermal magnitude; 1e-9 of rated (a few watts) keeps startup
 	// from a fully collapsed chain to full power within minutes of
 	// simulated time while staying thermally invisible.
-	CoreNeutronSourcePower Watts = 1e-9 * CoreRatedThermalPower
-	CoreDecayHeatTimeConstant             = 20 * time.Hour
-	CoreDecayHeatFastTimeConstant         = 50 * time.Second
+	CoreNeutronSourcePower        Watts = 1e-9 * CoreRatedThermalPower
+	CoreDecayHeatTimeConstant           = 20 * time.Hour
+	CoreDecayHeatFastTimeConstant       = 50 * time.Second
 
 	// CoreSourceRangeCountsPerWatt converts fission power into a
 	// source-range count rate. The source-range channels use
@@ -983,7 +984,7 @@ const (
 	// achieve. Derived from the spec's description of RCC
 	// assemblies as the mechanism for "startup or shutdown, to
 	// follow load changes" — implying a finite mechanical speed
-	// rather than instantaneous insertion. At TimeStep=1 ms the
+	// rather than instantaneous insertion. At ProductionStep=1 ms the
 	// per-tick change is 5e-5, effectively continuous at
 	// control-room time scale but preventing instantaneous
 	// scram.
@@ -993,6 +994,7 @@ const (
 	//   specs/the_westinghouse_pressurized_water_react/chapter_2/page_035.txt:88-93
 	RodInsertionSpeed float64 = 0.05 // 5% of full travel per second
 )
+
 // Primary-side thermal model constants (plans/p8_1.txt).
 //
 // Spec justification:
@@ -1160,6 +1162,7 @@ const (
 	// (specs/the_westinghouse_pressurized_water_react//chapter_2/page_037.txt:58).
 	DopplerClampHighF float64 = 700.0
 )
+
 // Reactor Coolant Pump dynamics constants (plans/p33_1.txt).
 //
 // Spec justification:

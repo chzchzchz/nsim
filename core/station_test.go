@@ -19,7 +19,7 @@ import (
 //     voltage, normally 6600 volts"
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:42-44
 func TestStationTransformer_UATEnergizedOnBreakerClose(t *testing.T) {
-	s := (&StationTransformer{}).Step(
+	s := (&StationTransformer{}).Step(DefaultTimeStep,
 		float64(GeneratorRatedVoltage),
 		GridRatedVoltage,
 		true,
@@ -44,7 +44,7 @@ func TestStationTransformer_UATEnergizedOnBreakerClose(t *testing.T) {
 //     sources of power"
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:64-66
 func TestStationTransformer_BreakerOpenTransfersToSAT(t *testing.T) {
-	s := (&StationTransformer{}).Step(
+	s := (&StationTransformer{}).Step(DefaultTimeStep,
 		0,
 		GridRatedVoltage,
 		false,
@@ -65,7 +65,7 @@ func TestStationTransformer_BreakerOpenTransfersToSAT(t *testing.T) {
 // With both generator and grid unavailable, neither transformer
 // is energised and house load cannot be supplied (black-out).
 func TestStationTransformer_BothSourcesDownYieldsBlackOut(t *testing.T) {
-	s := (&StationTransformer{}).Step(0, 0, false)
+	s := (&StationTransformer{}).Step(DefaultTimeStep, 0, 0, false)
 	assert.False(t, s.UATEnergized,
 		"want UAT not energised with no generator, got true")
 	assert.False(t, s.SATEnergized,
@@ -87,17 +87,17 @@ func TestHouseLoad_VariableScalesWithGeneratorFraction(t *testing.T) {
 		FixedMW:    HouseLoadFixed,
 		VariableMW: HouseLoadFixed * HouseLoadVariableFraction,
 	}
-	offline := h.Step(false, 0)
+	offline := h.Step(DefaultTimeStep, false, 0)
 	assert.InDelta(t, HouseLoadFixed, offline.TotalMW, 1e-9,
 		"want TotalMW=FixedMW=%v offline, got %v",
 		HouseLoadFixed, offline.TotalMW)
 
-	halfLoad := h.Step(true, 0.5)
+	halfLoad := h.Step(DefaultTimeStep, true, 0.5)
 	want := HouseLoadFixed + HouseLoadFixed*HouseLoadVariableFraction*0.5
 	assert.InDelta(t, want, halfLoad.TotalMW, 1e-9,
 		"want TotalMW=%v at 0.5 load, got %v", want, halfLoad.TotalMW)
 
-	fullLoad := h.Step(true, 1.0)
+	fullLoad := h.Step(DefaultTimeStep, true, 1.0)
 	wantFull := HouseLoadFixed + HouseLoadFixed*HouseLoadVariableFraction
 	assert.InDelta(t, wantFull, fullLoad.TotalMW, 1e-9,
 		"want TotalMW=%v at full load, got %v", wantFull, fullLoad.TotalMW)
@@ -116,7 +116,7 @@ func TestPlant_GridAndStationDefaultsMatchSpec(t *testing.T) {
 
 	// Run one step so the station transformer / house-load
 	// wiring runs through its step function.
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	s := p.ReactorBuilding.StationTransformer
 	assert.False(t, s.UATEnergized,
 		"want UAT not energised at startup (breaker open), got true")

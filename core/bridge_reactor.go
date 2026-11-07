@@ -59,7 +59,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		}
 	}
 
-
 	// HHSI pump manual start. Manual starting of the HHSI
 	// pumps from the main control board backs up the CVCS
 	// charging pumps for RCS boration.
@@ -84,7 +83,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Accumulator isolation valves (chapter 16 planned-cooldown
 	// lineup). Normally open so the tanks stay discharge-ready;
@@ -111,7 +109,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Simultaneous cold- and hot-leg injection realignment. The
 	// operator performs this control-board switchover about 24
@@ -140,7 +137,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Pressurizer spray valve (chapter 7 pressure control):
 	// "The pressurizer pressure control system ... spray ..."
 	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:11-12
@@ -164,7 +160,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Steam generator main steam isolation valve (chapter 15):
 	// The MSIV isolates the SG secondary side from the
@@ -260,7 +255,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	m["ReactorBuilding/SteamGenerator/MainSteamIsolationValve/Open"] = &bridge.Control{
 		Part:  "ReactorBuilding/SteamGenerator/MainSteamIsolationValve",
 		Label: "Open",
@@ -282,7 +276,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Steam generator atmospheric dump valve (chapter 15).
 	// The atmospheric dump valve (also called "steam dump to
@@ -314,7 +307,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Main steam line break malfunction (pwr_sim exercise 4.19).
 	// Open is the normalized break size upstream of the MSIV; 1
@@ -400,7 +392,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Reactor makeup control valve (chapter 4):
 	// "Because of the influx of makeup water from the reactor
 	// makeup control system [...]"
@@ -482,7 +473,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Pressurizer heaters (chapter 16 startup):
 	// "All pressurizer heaters are energized to start the
 	// heatup of the pressurizer necessary to form the
@@ -505,7 +495,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Automatic pressurizer pressure regulation (chapter 16 trip
 	// response): "Pressurizer pressure will recover as pressurizer
@@ -530,7 +519,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Operator-selected pressurizer pressure for the heater
 	// regulation to hold: staged writes walk heaters and spray along
@@ -561,7 +549,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Pressurizer power-operated relief valve (chapter 3
 	// pressure-limiting train):
@@ -616,7 +603,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Pressurizer ASME-code safety valves (chapter 3):
 	// "If system pressure continues to rise, self-actuating
@@ -674,7 +660,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Reactor coolant loop block valve (chapter 3):
 	// "Reactor coolant loop isolation valves may be closed
 	// to isolate a loop."
@@ -699,7 +684,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Reactor trip (chapter 7 protection system):
 	// "Manual trip signal – Redundant control
@@ -735,7 +719,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Post-trip reset of the RPS trip latch and the ESFAS output
 	// latches. The step function re-declares the trip while trip
@@ -800,7 +783,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Operator block on the SI initiation signals for a planned
 	// cooldown, armed before process variables reach the automatic
@@ -891,7 +873,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Manual safety-injection pushbutton. Table 7-1 lists "Manual
 	// safety injection" among the Safety Injection triggers,
 	// separate from the manual reactor trip; it also carries the
@@ -916,7 +897,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Control rod insertion (chapter 7):
 	// "The control rods are then manually withdrawn to achieve criticality"
@@ -971,7 +951,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// Automatic rod control engage switch. With it latched the
 	// controller integrates the Tavg program error into
 	// DemandInsertion each step; the manual demand path above is
@@ -994,7 +973,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-
 
 	// Rod insertion limit enforcement. The limit caps how far the
 	// banks may sink while operating so a trip retains its required
@@ -1045,7 +1023,6 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-
 	// CVCS boron concentration setpoint. The operator writes the
 	// desired RCS boron concentration in ppm; CVCS.Step latches
 	// tracking toward it and ramps the concentration through the
@@ -1082,94 +1059,94 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronTargetConcentration = v
 			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronSetpointTracking = true
 			return nil
-			},
-		}
-
-		// Dispatcher load reference for this unit in MW against
-		// the 1000 MW machine rating. Plant.Step normalizes it into
-		// Turbine.LoadDemandRef, which the electro-hydraulic control
-		// ramps Setpoint toward while the unit is synchronized; the
-		// operator panel writes the same reference directly:
-		//   "...comparing turbine speed and first-stage pressure with
-		//    reference values established by the dispatcher or
-		//    initiated at the operator's panel."
-		//    specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:36-41
-		m["Electrical/Grid/LoadDemand"] = &bridge.Control{
-			Part:  "Electrical/Grid",
-			Label: "LoadDemand",
-			Kind:  "mw",
-			Get: func() string {
-				return fmt.Sprintf("%v",
-					p.ReactorBuilding.Grid.LoadDemand)
-			},
-			Set: func(s string) error {
-				validated, err := bridge.ConvertControlValue("mw", s)
-				if err != nil {
-					return err
-				}
-				v, err := strconv.ParseFloat(validated, 64)
-				if err != nil {
-					return err
-				}
-				p.ReactorBuilding.Grid.LoadDemand = v
-				return nil
-			},
-		}
-
-		// Refueling-cavity fill and drain commands. Flooding
-		// begins once the vessel head is unseated for refueling:
-		//   "Reactor cavity is filled with borated water to the
-		//    vessel flange."
-		//   specs/the_westinghouse_pressurized_water_react/
-		//   chapter_13/page_185.txt:53-54
-		// Draining accompanies head reseating:
-		//   "When the head is about 1 foot above the vessel
-		//    flange, the refueling cavity is completely drained
-		//    and the flange surface is cleaned."
-		//   specs/the_westinghouse_pressurized_water_react/
-		//   chapter_13/page_186.txt:113-116
-		m["ReactorBuilding/RefuelingOperations/CavityFlooding"] = &bridge.Control{
-			Part:  "ReactorBuilding/RefuelingOperations",
-			Label: "CavityFlooding",
-			Kind:  "bool",
-			Get: func() string {
-				return bridge.BoolToStr(
-					p.ReactorBuilding.RefuelingOperations.CavityFlooding)
-			},
-			Set: func(s string) error {
-				v, err := bridge.StrToBool(s)
-				if err != nil {
-					return err
-				}
-				p.ReactorBuilding.RefuelingOperations.CavityFlooding = v
-				if v {
-					p.ReactorBuilding.RefuelingOperations.CavityDraining = false
-				}
-				return nil
-			},
-		}
-		m["ReactorBuilding/RefuelingOperations/CavityDraining"] = &bridge.Control{
-			Part:  "ReactorBuilding/RefuelingOperations",
-			Label: "CavityDraining",
-			Kind:  "bool",
-			Get: func() string {
-				return bridge.BoolToStr(
-					p.ReactorBuilding.RefuelingOperations.CavityDraining)
-			},
-			Set: func(s string) error {
-				v, err := bridge.StrToBool(s)
-				if err != nil {
-					return err
-				}
-				p.ReactorBuilding.RefuelingOperations.CavityDraining = v
-				if v {
-					p.ReactorBuilding.RefuelingOperations.CavityFlooding = false
-				}
-				return nil
-			},
-		}
-
+		},
 	}
+
+	// Dispatcher load reference for this unit in MW against
+	// the 1000 MW machine rating. Plant.Step normalizes it into
+	// Turbine.LoadDemandRef, which the electro-hydraulic control
+	// ramps Setpoint toward while the unit is synchronized; the
+	// operator panel writes the same reference directly:
+	//   "...comparing turbine speed and first-stage pressure with
+	//    reference values established by the dispatcher or
+	//    initiated at the operator's panel."
+	//    specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:36-41
+	m["Electrical/Grid/LoadDemand"] = &bridge.Control{
+		Part:  "Electrical/Grid",
+		Label: "LoadDemand",
+		Kind:  "mw",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.Grid.LoadDemand)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("mw", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.Grid.LoadDemand = v
+			return nil
+		},
+	}
+
+	// Refueling-cavity fill and drain commands. Flooding
+	// begins once the vessel head is unseated for refueling:
+	//   "Reactor cavity is filled with borated water to the
+	//    vessel flange."
+	//   specs/the_westinghouse_pressurized_water_react/
+	//   chapter_13/page_185.txt:53-54
+	// Draining accompanies head reseating:
+	//   "When the head is about 1 foot above the vessel
+	//    flange, the refueling cavity is completely drained
+	//    and the flange surface is cleaned."
+	//   specs/the_westinghouse_pressurized_water_react/
+	//   chapter_13/page_186.txt:113-116
+	m["ReactorBuilding/RefuelingOperations/CavityFlooding"] = &bridge.Control{
+		Part:  "ReactorBuilding/RefuelingOperations",
+		Label: "CavityFlooding",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.RefuelingOperations.CavityFlooding)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.RefuelingOperations.CavityFlooding = v
+			if v {
+				p.ReactorBuilding.RefuelingOperations.CavityDraining = false
+			}
+			return nil
+		},
+	}
+	m["ReactorBuilding/RefuelingOperations/CavityDraining"] = &bridge.Control{
+		Part:  "ReactorBuilding/RefuelingOperations",
+		Label: "CavityDraining",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.RefuelingOperations.CavityDraining)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.RefuelingOperations.CavityDraining = v
+			if v {
+				p.ReactorBuilding.RefuelingOperations.CavityFlooding = false
+			}
+			return nil
+		},
+	}
+
+}
 
 // addReactorBuildingSensors adds Sensor entries keyed by the namespace managed by this file to m.
 func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
@@ -1217,19 +1194,17 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Steam generator pressure:
 	m["ReactorBuilding/SteamGenerator/Pressure"] = &bridge.Sensor{
 		Part:  "ReactorBuilding/SteamGenerator",
 		Label: "Pressure",
 		// Backing field stores psia; badge now matches the unit.
-		Kind:  "psia",
+		Kind: "psia",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("psia",
 				p.ReactorBuilding.SteamGenerator.Pressure)
 		},
 	}
-
 
 	// Pressurizer pressure (chapter 16):
 	// "operation of pressurizer heaters and spray maintains the system
@@ -1240,13 +1215,12 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Part:  "ReactorBuilding/Pressurizer",
 		Label: "Pressure",
 		// Backing field stores psia; badge now matches the unit.
-		Kind:  "psia",
+		Kind: "psia",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("psia",
 				p.ReactorBuilding.Pressurizer.Pressure)
 		},
 	}
-
 
 	// Steam generator water inventory:
 	m["ReactorBuilding/SteamGenerator/Water"] = &bridge.Sensor{
@@ -1258,7 +1232,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.ReactorBuilding.SteamGenerator.Water.Float())
 		},
 	}
-
 
 	// Containment atmosphere temperature (chapter 6):
 	// "As this water comes in contact with the steam in the
@@ -1331,7 +1304,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Reactor coolant pump running (chapter 4 startup / cooldown):
 	// "One reactor coolant pump is kept running ... until the cooling
 	// temperature is below 160°F (71°C)."
@@ -1346,7 +1318,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Reactor coolant inlet temperature (chapter 3 design data):
 	// "Reactor coolant inlet temperature: 621°F (327°C);
 	// outlet: 558°F (292°C)"
@@ -1360,7 +1331,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.ReactorBuilding.ReactorPressureVessel.Inlet.Float())
 		},
 	}
-
 
 	// Steam generator heat extraction rate (primary-side heat
 	// input from the RPV). The SG is the dominant primary
@@ -1378,7 +1348,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.ReactorBuilding.SteamGenerator.HeatInput)
 		},
 	}
-
 
 	// RCP shaft speed. The shaft-loss heat enters the primary
 	// coolant; reduced flow raises ΔT, providing a secondary
@@ -1410,7 +1379,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		}
 	}
 
-
 	// Reactor pressure vessel pressure:
 	// Operating pressure 2250 psia (155 bar); design pressure 2500 psia.
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:45
@@ -1418,13 +1386,12 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Part:  "ReactorBuilding/ReactorPressureVessel",
 		Label: "Pressure",
 		// Backing field stores psia; badge now matches the unit.
-		Kind:  "psia",
+		Kind: "psia",
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("psia",
 				p.ReactorBuilding.ReactorPressureVessel.Pressure)
 		},
 	}
-
 
 	// Steam generator total volume (chapter 3 design data):
 	// Table 3.4-1: "Overall height: 67 ft, 8 in."
@@ -1438,7 +1405,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.ReactorBuilding.SteamGenerator.Volume.Float())
 		},
 	}
-
 
 	// Main steam isolation valve (chapter 15 steam system):
 	// "ASME Code safety valves and power operated relief and
@@ -1458,7 +1424,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Steam generator safety valve (chapter 15):
 	// "Safety valves in each steam generator outlet main
 	// steam line."
@@ -1472,7 +1437,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.ReactorBuilding.SteamGenerator.SafetyValve.Open)
 		},
 	}
-
 
 	// Steam generator atmospheric dump valve (chapter 15):
 	// "ASME Code safety valves and power operated relief and
@@ -1492,7 +1456,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	m["ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open"] = &bridge.Sensor{
 		Part:  "ReactorBuilding/SteamGenerator/AtmosphericDumpValve",
 		Label: "Open",
@@ -1503,7 +1466,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Reactor coolant boron concentration (chapter 7):
 	// "Control of the reactor coolant's boron concentration
 	// involves both the Boron Thermal Regeneration System (BTRS)
@@ -1533,7 +1495,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration)
 		},
 	}
-
 
 	// Control-rod actual insertion (chapter 2 RCC operation):
 	// "Rod cluster control (RCC) assemblies are used for reactor
@@ -1553,7 +1514,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion)
 		},
 	}
-
 
 	// Bank position indications decompose the lumped rod path into
 	// the shutdown banks and the four control banks under the
@@ -1620,7 +1580,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Tavg rod-control program output (chapter 16):
 	// "programmed function of turbine load"
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:24-27
@@ -1633,7 +1592,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.ReactorBuilding.ReactorPressureVessel.ControlRods.ProgrammedTavg)
 		},
 	}
-
 
 	// Axial flux difference (the axial offset observable): top-half
 	// power minus bottom-half power over total core power. The
@@ -1658,7 +1616,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Reactor makeup control valve flow (chapter 4 CVCS):
 	// "Because of the influx of makeup water from the reactor
 	// makeup control system [...]"
@@ -1670,7 +1627,7 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			// Stored gal/s; presented gpm (x60 at the presentation boundary).
 			return bridge.FormatSensorValue("gpm",
-				p.ReactorBuilding.ReactorMakeupControlValve.Flow.Float() * 60)
+				p.ReactorBuilding.ReactorMakeupControlValve.Flow.Float()*60)
 		},
 	}
 
@@ -1701,7 +1658,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Pressurizer water inventory (chapter 16 startup):
 	// "Drain pressurizer to no-load operating level [...] lower
 	// pressurizer level to the normal range of 20 to 80 percent"
@@ -1715,7 +1671,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.ReactorBuilding.Pressurizer.Water.Float())
 		},
 	}
-
 
 	// Pressurizer PORV position (chapter 3 pressure
 	// limiting):
@@ -1734,7 +1689,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Pressurizer ASME-code safety valve position
 	// (chapter 3):
 	// "If system pressure continues to rise, self-actuating
@@ -1749,7 +1703,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.ReactorBuilding.SafetyValve.Open)
 		},
 	}
-
 
 	// Reactor coolant loop block valve position
 	// (chapter 3):
@@ -1782,7 +1735,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Pressurizer relief tank level (chapter 3):
 	// "Steam from the safety and/or relief valves is piped
 	// to the pressurizer relief tank which contains
@@ -1798,7 +1750,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Containment pressure (chapter 5 safety injection / chapter 7 RPS):
 	// "High containment pressure as reported by two out of four signals."
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:97
@@ -1811,7 +1762,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.ReactorBuilding.ContainmentPressure)
 		},
 	}
-
 
 	// HHSI pump running. Auto-started on safety injection; also
 	// manually started from the main control board for
@@ -1834,7 +1784,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
-
 	// Hot-leg LOCA break discharge. The exercise records the
 	// break flow as a rate into Table V.
 	// "Record the break flow in Table V."
@@ -1846,9 +1795,13 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Label: "BreakFlow",
 		Kind:  "gpm",
 		Get: func() (string, error) {
+			// Per-step volume is gal/step; presented as gpm dividing
+			// out the production tick. Only meaningful at
+			// DefaultTimeStep; widened test ticks mis-scale this one
+			// sensor (no width-invariance test covers it).
 			return bridge.FormatSensorValue("gpm",
-				p.ReactorBuilding.ReactorPressureVessel.BreakFlow.Float() /
-					TimeStep.Seconds()*60)
+				p.ReactorBuilding.ReactorPressureVessel.BreakFlow.Float()/
+					DefaultTimeStep.Seconds()*60)
 		},
 	}
 
@@ -1864,10 +1817,9 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			// Backing field is stored in gal/s; presented gpm.
 			return bridge.FormatSensorValue("gpm",
-				p.ReactorBuilding.SafetyInjectionSystem.HHSIHotLegFlow.Float() * 60)
+				p.ReactorBuilding.SafetyInjectionSystem.HHSIHotLegFlow.Float()*60)
 		},
 	}
-
 
 	// Grid frequency (chapter 11 / turbine governor reference):
 	// "Wide range speed control of the turbine from turning
@@ -1882,7 +1834,6 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.ReactorBuilding.Grid.Frequency)
 		},
 	}
-
 
 	// Off-site grid voltage (chapter 16):
 	// "If offsite power is not available, the long coast"

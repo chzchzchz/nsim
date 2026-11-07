@@ -54,7 +54,7 @@ func TestScenario10_ModeControlDrivesHotStandbyGating(t *testing.T) {
 		"precondition: RHRS out of service")
 
 	setControl(t, &p, "PlantOperation/Mode", "1")
-	stepN(&p, int(time.Second/TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	assert.Equal(t, HotStandby, p.PlantOperation.Mode)
 	assert.True(t, p.PlantOperation.HotStandbyRCPLimitActive,
@@ -74,15 +74,14 @@ func TestScenario10_GradualUnloadReachesHouseLoadWithoutRejection(t *testing.T) 
 	// LoadRejectDetectFraction = 0.10, not when an accumulated rate
 	// crosses it), so the 0.08-step unload ladder cannot false-latch
 	// it at any tick width. Turbine setpoint ramps and power
-	// response are linear in dt. Must not run in parallel: overrideTimeStep mutates global simulation
 	// state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := scenario10FullPowerPlant()
 
 	for _, sp := range []string{"0.92", "0.84", "0.76", "0.68", "0.60",
 		"0.52", "0.44", "0.36", "0.28", "0.20", "0.12", "0.04"} {
 		setControl(t, &p, "TurbineBuilding/Turbine/Setpoint", sp)
-		stepN(&p, int(5*time.Second/TimeStep))
+		stepN(&p, int(5*time.Second/testDt), testDt)
 	}
 
 	assert.LessOrEqual(t, float64(p.TurbineBuilding.Turbine.RealPower), 70e6,
@@ -116,9 +115,8 @@ func TestScenario10_RodInsertionShutsDownReactor(t *testing.T) {
 	// one-percent net negative worth: ten times slower that is
 	// still ~20 s, well inside the 60 s window, and the assertions
 	// are absolute floors and signs, not trajectory shapes. Must
-	// not run in parallel: overrideTimeStep mutates global
 	// simulation state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := scenario10FullPowerPlant()
 
 	// A planned shutdown blocks the SI initiation signals before the
@@ -132,7 +130,7 @@ func TestScenario10_RodInsertionShutsDownReactor(t *testing.T) {
 		"ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock",
 		"true")
 	setControl(t, &p, "ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion", "1")
-	stepN(&p, int(60*time.Second/TimeStep))
+	stepN(&p, int(60*time.Second/testDt), testDt)
 
 	r := p.ReactorBuilding.ReactorPressureVessel
 	assert.Negative(t, r.Reactivity)
@@ -156,9 +154,8 @@ func TestScenario10_LevelAndRateHoldThroughCooldown(t *testing.T) {
 	// pressurizer), the level loop and Tavg program run on dt-scaled
 	// rate clamps, and the cooldown-rate assertion reads the average
 	// pace across a 100 s window rather than any per-step shape.
-	// Must not run in parallel: overrideTimeStep mutates global
 	// simulation state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := scenario10FullPowerPlant()
 	// The evolution runs on the automatic level loop: level follows
 	// the Tavg-referenced program (60 pct at full load toward 25 pct
@@ -166,10 +163,10 @@ func TestScenario10_LevelAndRateHoldThroughCooldown(t *testing.T) {
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = true
 	setControl(t, &p,
 		"ReactorBuilding/ReactorPressureVessel/ControlRods/Insertion", "1")
-	stepN(&p, int(30*time.Second/TimeStep)) // rods in, power collapsed
+	stepN(&p, int(30*time.Second/testDt), testDt) // rods in, power collapsed
 
 	outA := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
-	stepN(&p, int(100*time.Second/TimeStep))
+	stepN(&p, int(100*time.Second/testDt), testDt)
 	outB := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 
 	pzr := p.ReactorBuilding.Pressurizer

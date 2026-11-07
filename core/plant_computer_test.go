@@ -11,7 +11,7 @@ import (
 // not fired, and no alarm is sounding.
 func TestPlantComputer_InitialStateHasAllDisplaysAndSPDS(t *testing.T) {
 	c := PlantComputer{}
-	c = c.Step(true, false, false, false, true, false)
+	c = c.Step(DefaultTimeStep, true, false, false, false, true, false)
 	assert.True(t, c.DataAcquisitionAvailable,
 		"want DataAcquisitionAvailable=true with power, got %v",
 		c.DataAcquisitionAvailable)
@@ -50,7 +50,7 @@ func TestPlantComputer_InitialStateHasAllDisplaysAndSPDS(t *testing.T) {
 // formats are dark and SPDS is not active.
 func TestPlantComputer_NoPowerDegradesAllDisplaysAndSPDS(t *testing.T) {
 	c := PlantComputer{}
-	c = c.Step(false, false, false, false, true, false)
+	c = c.Step(DefaultTimeStep, false, false, false, false, true, false)
 	assert.False(t, c.DataAcquisitionAvailable,
 		"want DataAcquisitionAvailable=false without power, got %v",
 		c.DataAcquisitionAvailable)
@@ -69,7 +69,7 @@ func TestPlantComputer_NoPowerDegradesAllDisplaysAndSPDS(t *testing.T) {
 // safeguard is inoperable.
 func TestPlantComputer_SPDSRequiresSafetyAvailable(t *testing.T) {
 	c := PlantComputer{}
-	c = c.Step(true, false, false, false, false, false)
+	c = c.Step(DefaultTimeStep, true, false, false, false, false, false)
 	assert.False(t, c.SPCSActive,
 		"want SPCSActive=false with safety unavailable, got %v",
 		c.SPCSActive)
@@ -80,11 +80,11 @@ func TestPlantComputer_SPDSRequiresSafetyAvailable(t *testing.T) {
 // subsequent steps while the reactor remains tripped.
 func TestPlantComputer_PostTripReviewLatchesOnTrip(t *testing.T) {
 	c := PlantComputer{}
-	c = c.Step(true, true, true, false, true, false)
+	c = c.Step(DefaultTimeStep, true, true, true, false, true, false)
 	assert.True(t, c.PostTripReviewPrinted,
 		"want PostTripReviewPrinted=true after trip, got %v",
 		c.PostTripReviewPrinted)
-	c = c.Step(true, true, true, false, true, false)
+	c = c.Step(DefaultTimeStep, true, true, true, false, true, false)
 	assert.True(t, c.PostTripReviewPrinted,
 		"want PostTripReviewPrinted=true on second step, got %v",
 		c.PostTripReviewPrinted)
@@ -94,11 +94,11 @@ func TestPlantComputer_PostTripReviewLatchesOnTrip(t *testing.T) {
 // operator acknowledges it via the control room.
 func TestPlantComputer_AlarmLatchesAndAcknowledges(t *testing.T) {
 	c := PlantComputer{}
-	c = c.Step(true, false, false, true, true, false)
+	c = c.Step(DefaultTimeStep, true, false, false, true, true, false)
 	assert.True(t, c.AlarmActive,
 		"want AlarmActive=true with alarm condition, got %v",
 		c.AlarmActive)
-	c = c.Step(true, false, false, false, true, true)
+	c = c.Step(DefaultTimeStep, true, false, false, false, true, true)
 	assert.False(t, c.AlarmActive,
 		"want AlarmActive=false after ack, got %v", c.AlarmActive)
 }
@@ -108,11 +108,11 @@ func TestPlantComputer_AlarmLatchesAndAcknowledges(t *testing.T) {
 // system stations are available.
 func TestPlantComputer_BISIRequiresSafetyAvailable(t *testing.T) {
 	c := PlantComputer{}
-	c = c.Step(true, false, false, false, false, false)
+	c = c.Step(DefaultTimeStep, true, false, false, false, false, false)
 	assert.False(t, c.BypassedInoperableStatusIndication,
 		"want BISI=false without safety available, got %v",
 		c.BypassedInoperableStatusIndication)
-	c = c.Step(true, false, false, false, true, false)
+	c = c.Step(DefaultTimeStep, true, false, false, false, true, false)
 	assert.True(t, c.BypassedInoperableStatusIndication,
 		"want BISI=true with safety available, got %v",
 		c.BypassedInoperableStatusIndication)
@@ -123,7 +123,7 @@ func TestPlantComputer_BISIRequiresSafetyAvailable(t *testing.T) {
 // operational with SPDS active and no alarm.
 func TestPlant_PlantComputer_InitialStatePreserved(t *testing.T) {
 	p := MakePlant()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	c := p.ReactorBuilding.PlantComputer
 	assert.True(t, c.DataAcquisitionAvailable,

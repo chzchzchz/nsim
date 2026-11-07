@@ -24,12 +24,13 @@ func autoCVCS() *CVCS {
 // percent, flat-clamped outside the band.
 //
 // Spec:
-//   "maintain pressurizer level at a programmed value which
-//   varies with RCS average coolant temperature."
-//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
+//
+//	"maintain pressurizer level at a programmed value which
+//	varies with RCS average coolant temperature."
+//	specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
 func TestPzrLevelProgramAnchors(t *testing.T) {
 	fullLoadTavg := Temperature{
-		Val: (CoreReferenceInletF + CoreReferenceOutletF) / 2,
+		Val:  (CoreReferenceInletF + CoreReferenceOutletF) / 2,
 		Unit: u.Fahrenheit,
 	}
 	cases := []struct {
@@ -43,7 +44,7 @@ func TestPzrLevelProgramAnchors(t *testing.T) {
 		{"above band clamps", Temperature{Val: 700, Unit: u.Fahrenheit}, PzrLevelFullLoadPct},
 	}
 	for _, tc := range cases {
-		c := autoCVCS().Step(Volume{}, tc.tavg, 0, 0)
+		c := autoCVCS().Step(DefaultTimeStep, Volume{}, tc.tavg, 0, 0)
 		assert.InDelta(t, tc.want, c.ProgrammedLevel, 1e-9,
 			"%s: want ProgrammedLevel=%v", tc.name, tc.want)
 	}
@@ -53,25 +54,26 @@ func TestPzrLevelProgramAnchors(t *testing.T) {
 // charging and letdown, saturating at the design rates.
 //
 // Spec:
-//   "it must maintain the RCS mass inventory, that is, the
-//   pressurizer level, by balancing the charging flow to the
-//   letdown flow."
-//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:9-12
+//
+//	"it must maintain the RCS mass inventory, that is, the
+//	pressurizer level, by balancing the charging flow to the
+//	letdown flow."
+//	specs/the_westinghouse_pressurized_water_react/chapter_7/page_136.txt:9-12
 func TestPzrLevelControllerBalancesFlows(t *testing.T) {
 	noLoad := Temperature{Val: RCSNoLoadTavgF, Unit: u.Fahrenheit}
 
-	low := autoCVCS().Step(Volume{}, noLoad, 0.05, 0)
+	low := autoCVCS().Step(DefaultTimeStep, Volume{}, noLoad, 0.05, 0)
 	assert.InDelta(t, CVCSDesignChargingFlow.Float(),
 		low.ChargingFlow.Float(), 1e-9, "low level saturates charging")
 	assert.Zero(t, low.LetdownFlow.Float(), "low level closes letdown")
 
-	high := autoCVCS().Step(Volume{}, noLoad, 0.95, 0)
+	high := autoCVCS().Step(DefaultTimeStep, Volume{}, noLoad, 0.95, 0)
 	assert.InDelta(t, CVCSDesignLetdownFlow.Float(),
 		high.LetdownFlow.Float(), 1e-9, "high level saturates letdown")
 	assert.Zero(t, high.ChargingFlow.Float(), "high level closes charging")
 
 	smallErrPct := 2.0
-	mid := autoCVCS().Step(Volume{}, noLoad, (PzrLevelNoLoadPct-smallErrPct)/100, 0)
+	mid := autoCVCS().Step(DefaultTimeStep, Volume{}, noLoad, (PzrLevelNoLoadPct-smallErrPct)/100, 0)
 	// Wiring check: the expected demand recomputes from the same
 	// derived gain constant as production, so this pins the
 	// proportional law, not the constant's magnitude.
@@ -79,7 +81,7 @@ func TestPzrLevelControllerBalancesFlows(t *testing.T) {
 		mid.ChargingFlow.Float(), 1e-9, "proportional demand in linear band")
 	assert.Zero(t, mid.LetdownFlow.Float())
 
-	balanced := autoCVCS().Step(Volume{}, noLoad, PzrLevelNoLoadPct/100, 0)
+	balanced := autoCVCS().Step(DefaultTimeStep, Volume{}, noLoad, PzrLevelNoLoadPct/100, 0)
 	assert.Zero(t, balanced.ChargingFlow.Float(), "zero error gives no flow")
 	assert.Zero(t, balanced.LetdownFlow.Float(), "zero error gives no flow")
 }
@@ -92,13 +94,13 @@ func TestPzrLevelControllerRespectsLatches(t *testing.T) {
 
 	c := autoCVCS()
 	c.ChargingPumpRunning = false
-	out := c.Step(Volume{}, noLoad, 0.05, 0)
+	out := c.Step(DefaultTimeStep, Volume{}, noLoad, 0.05, 0)
 	assert.Zero(t, out.ChargingFlow.Float(),
 		"no charging without the pump even below program")
 
 	c = autoCVCS()
 	c.LetdownValveOpen = false
-	out = c.Step(Volume{}, noLoad, 0.95, 0)
+	out = c.Step(DefaultTimeStep, Volume{}, noLoad, 0.95, 0)
 	assert.Zero(t, out.LetdownFlow.Float(),
 		"no letdown with the valve shut even above program")
 }
@@ -112,7 +114,7 @@ func TestCVCSManualLineupUnchangedByLevelControl(t *testing.T) {
 		ChargingPumpRunning: true,
 		LetdownValveOpen:    true,
 	}
-	out := c.Step(Volume{}, hot, 0.99, 0)
+	out := c.Step(DefaultTimeStep, Volume{}, hot, 0.99, 0)
 	assert.InDelta(t, CVCSDesignChargingFlow.Float(),
 		out.ChargingFlow.Float(), 1e-9)
 	assert.InDelta(t, CVCSDesignLetdownFlow.Float(),
@@ -124,10 +126,11 @@ func TestCVCSManualLineupUnchangedByLevelControl(t *testing.T) {
 // surplus landing in the VCT/BRS path.
 //
 // Spec:
-//   "The pressurizer level control system adjusts charging flow
-//   from the CVCS to maintain pressurizer level at a programmed
-//   value which varies with RCS average coolant temperature."
-//   specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
+//
+//	"The pressurizer level control system adjusts charging flow
+//	from the CVCS to maintain pressurizer level at a programmed
+//	value which varies with RCS average coolant temperature."
+//	specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:36-40
 func TestPzrAutoControlHoldsPlantLevel(t *testing.T) {
 	p := MakePlant()
 	// Forced flow for the rated-power seed: pumpless full power
@@ -153,7 +156,7 @@ func TestPzrAutoControlHoldsPlantLevel(t *testing.T) {
 	startWater := p.ReactorBuilding.Pressurizer.Water.Float()
 	startVCT := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.VCTLevel.Float()
 	startHoldup := p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BRSHoldupLevel.Float()
-	stepN(&p, int(30*time.Second/TimeStep))
+	stepN(&p, int(30*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	water := p.ReactorBuilding.Pressurizer.Water.Float()
 	fraction := 100 * water / p.ReactorBuilding.Pressurizer.Volume.Float()
@@ -202,7 +205,7 @@ func TestPzrAutoControlChargingPumpLossObservable(t *testing.T) {
 	cvcs.AutoLevelControl = true
 	cvcs.ChargingPumpRunning = false
 
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 
 	assert.Zero(t, cvcs.ChargingFlow.Float(),
 		"no charging without the pump despite level below program")

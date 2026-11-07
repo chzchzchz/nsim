@@ -57,9 +57,9 @@ func setGateControls(t *testing.T, p *Plant, values map[string]string) {
 	}
 }
 
-func stepSeconds(p *Plant, seconds int) {
-	for range int(time.Duration(seconds) * time.Second / TimeStep) {
-		p.Step()
+func stepSeconds(p *Plant, seconds int, dt time.Duration) {
+	for range int(time.Duration(seconds) * time.Second / dt) {
+		p.Step(dt)
 		p.Update()
 	}
 }
@@ -85,7 +85,7 @@ func TestStartupLineup_BlockedCrossingHoldsAcross1900Psig(t *testing.T) {
 	})
 
 	levelBefore := p.ReactorBuilding.SafetyInjectionSystem.Accumulator.Level.Float()
-	stepSeconds(p, 6)
+	stepSeconds(p, 6, DefaultTimeStep)
 
 	assert.GreaterOrEqual(t, float64(p.ReactorBuilding.Pressurizer.Pressure),
 		gateCrossPsia,
@@ -113,7 +113,7 @@ func TestStartupGate_WarmSecondaryPermitsUnblockedCrossing(t *testing.T) {
 	setGateControls(t, p, map[string]string{
 		"ReactorBuilding/Pressurizer/HeatersOn": "1",
 	})
-	stepSeconds(p, 4)
+	stepSeconds(p, 4, DefaultTimeStep)
 
 	assert.Greater(t, float64(p.ReactorBuilding.SteamGenerator.Pressure),
 		float64(RPSLowSteamlinePressureTrip),

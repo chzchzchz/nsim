@@ -35,7 +35,7 @@ func TestScenario30_ChargingLetdownLineupDelivers(t *testing.T) {
 		ChargingFlowDemand:  0.5,
 		LetdownValveOpen:    true,
 	}
-	c = c.Step(Volume{}, Temperature{Val: 557, Unit: u.Fahrenheit}, 0.25, 2250)
+	c = c.Step(DefaultTimeStep, Volume{}, Temperature{Val: 557, Unit: u.Fahrenheit}, 0.25, 2250)
 
 	assert.InDelta(t, 0.5*CVCSDesignChargingFlow.Float(),
 		c.ChargingFlow.Float(), 0.05*CVCSDesignChargingFlow.Float(),
@@ -54,9 +54,9 @@ func TestScenario30_BoronSetpointTrackingRampsAndReleases(t *testing.T) {
 	c.BoronSetpointTracking = true
 
 	rate := CVCSDilutionRate // ppm/s ceiling for the evolution
-	steps := int(60 * time.Second / TimeStep)
+	steps := int(60 * time.Second / DefaultTimeStep)
 	for i := 0; i < steps; i++ {
-		c = c.Step(Volume{}, Temperature{}, 0.25, 2250)
+		c = c.Step(DefaultTimeStep, Volume{}, Temperature{}, 0.25, 2250)
 		if !c.BoronSetpointTracking {
 			break
 		}

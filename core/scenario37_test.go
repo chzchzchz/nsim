@@ -23,7 +23,6 @@ import (
 //     hydrogen/oxygen combination results in water."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_118.txt:21-22
 
-// Must not run in parallel: overrideTimeStep mutates global simulation
 // state shared across the package tests.
 
 // hdsScenarioPlant seeds the evolution start state: SI-detected event
@@ -51,17 +50,25 @@ func TestScenario37_VentilationControlDeepensRemoval(t *testing.T) {
 	// 10 ms. If it ever returns, the exact-freeze assertion below
 	// fails loudly, so the widened tick cannot silently rot the
 	// benign premise.
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := DefaultTimeStep
 	key := "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression/"
 
 	p := MakePlant()
+	// Hold the secondary header at its shell pressure so the
+	// low-steamline SI trip cannot latch and gate ventilation:
+	// with the steam stop valve shut, production only builds
+	// pressure, and the fresh-plant SG sits at design pressure.
+	// Spec: "Full load pressure, shell side ... 920 psia".
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_066.txt:36,80
+	p.TurbineBuilding.Turbine.StopValve.Open = 0
+	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
 	p.ReactorBuilding.ContainmentBuilding.
 		HydrogenDetectionSuppression.HydrogenVolumePercent = 1.4
 	cm := p.GetControlMap()
 
 	// Dormant baseline: nothing crosses the wall, concentration
 	// holds exactly.
-	stepN(&p, int(300*time.Second/TimeStep))
+	stepN(&p, int(300*time.Second/testDt), testDt)
 	baseline := p.ReactorBuilding.ContainmentBuilding.
 		HydrogenDetectionSuppression.HydrogenVolumePercent
 	assert.InDelta(t, 1.4, baseline, 1e-9,
@@ -71,7 +78,7 @@ func TestScenario37_VentilationControlDeepensRemoval(t *testing.T) {
 	// stream over the window.
 	require.NoError(t, cm[key+"Ventilation"].Set("1"))
 	const ventWindow = 900 * time.Second
-	stepN(&p, int(ventWindow/TimeStep))
+	stepN(&p, int(ventWindow/testDt), testDt)
 	hds := p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
 	want := baseline - ventWindow.Seconds()/3600.0*HydrogenVentilationRemovalRate
 	assert.InDelta(t, want,
@@ -85,7 +92,7 @@ func TestScenario37_VentilationControlDeepensRemoval(t *testing.T) {
 // operator's acknowledgement; the detector still re-latches on a later
 // excursion so acknowledgement cannot silence the channel.
 func TestScenario37_AlarmAcknowledgementClearsBelowSetpoint(t *testing.T) {
-	overrideTimeStep(t, time.Second)
+	testDt := time.Second
 	p := hdsScenarioPlant(3.0)
 	cm := p.GetControlMap()
 	resetKey := "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression/AlarmReset"
@@ -93,23 +100,23 @@ func TestScenario37_AlarmAcknowledgementClearsBelowSetpoint(t *testing.T) {
 		return &p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
 	}
 
-	stepN(&p, 1)
+	stepN(&p, 1, testDt)
 	require.True(t, hdsOf().HydrogenAlarm,
 		"the seeded excursion must latch the high-hydrogen alarm")
 
 	p.ReactorBuilding.ContainmentBuilding.
 		HydrogenDetectionSuppression.HydrogenVolumePercent = 1.9
-	stepN(&p, 1)
+	stepN(&p, 1, testDt)
 	require.NoError(t, cm[resetKey].Set("Reset"))
 	assert.False(t, hdsOf().HydrogenAlarm,
 		"acknowledgement clears the latched alarm")
-	stepN(&p, 5)
+	stepN(&p, 5, testDt)
 	assert.False(t, hdsOf().HydrogenAlarm,
 		"a sub-setpoint concentration must not re-latch the alarm")
 
 	p.ReactorBuilding.ContainmentBuilding.
 		HydrogenDetectionSuppression.HydrogenVolumePercent = 2.1
-	stepN(&p, 1)
+	stepN(&p, 1, testDt)
 	assert.True(t, hdsOf().HydrogenAlarm,
 		"the detector must re-latch on a fresh excursion")
 }
@@ -118,14 +125,14 @@ func TestScenario37_AlarmAcknowledgementClearsBelowSetpoint(t *testing.T) {
 // lower hysteresis band, and the percentage never reads negative even
 // with every removal stream active against zero generation.
 func TestScenario37_RecombinersDeactivateInLowerBand(t *testing.T) {
-	overrideTimeStep(t, time.Minute)
+	testDt := time.Minute
 	h := HydrogenDetectionSuppression{
 		HydrogenVolumePercent: 3.0,
 		GenerationActive:      false,
 	}
 	deactivated := false
 	for range int(20 * time.Hour / time.Minute) { // 20 h of suppression
-		h = h.Step()
+		h = h.Step(testDt)
 		assert.GreaterOrEqual(t, h.HydrogenVolumePercent, 0.0,
 			"the percentage floor is exact")
 		if !h.RecombinerActive {
@@ -161,7 +168,7 @@ func TestScenario37_VentIsolationStopsExchange(t *testing.T) {
 		HydrogenDetectionSuppression.HydrogenVolumePercent = 1.4
 	cm := p.GetControlMap()
 	require.NoError(t, cm[key+"Ventilation"].Set("1"))
-	stepN(&p, 3000)
+	stepN(&p, 3000, DefaultTimeStep)
 	hds := p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
 	require.True(t, hds.VentilationActive,
 		"precondition: the operator routed the ventilation stream")
@@ -170,7 +177,7 @@ func TestScenario37_VentIsolationStopsExchange(t *testing.T) {
 	// flags mirror these ESFAS outputs each step.
 	p.ReactorBuilding.ReactorProtectionSystem.
 		ContainmentIsolationPhaseAActuated = true
-	stepN(&p, 1000)
+	stepN(&p, 1000, DefaultTimeStep)
 	cis := p.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem
 	require.True(t, cis.PhaseAIsolated, "precondition: Phase A latched")
 	hds = p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
@@ -182,7 +189,7 @@ func TestScenario37_VentIsolationStopsExchange(t *testing.T) {
 	// the boundary, recombiners dormant.
 	before := p.ReactorBuilding.ContainmentBuilding.
 		HydrogenDetectionSuppression.HydrogenVolumePercent
-	stepN(&p, 60000)
+	stepN(&p, 60000, DefaultTimeStep)
 	got := p.ReactorBuilding.ContainmentBuilding.
 		HydrogenDetectionSuppression.HydrogenVolumePercent
 	assert.InDelta(t, before, got, 1e-9,
@@ -195,12 +202,12 @@ func TestScenario37_VentIsolationStopsExchange(t *testing.T) {
 	// returns the valve to operator command.
 	p.ReactorBuilding.ReactorProtectionSystem.
 		ContainmentIsolationPhaseAActuated = false
-	stepN(&p, 1000)
+	stepN(&p, 1000, DefaultTimeStep)
 	require.False(t,
 		p.ReactorBuilding.ContainmentBuilding.ContainmentIsolationSystem.IsIsolated(),
 		"precondition: phases cleared after reset")
 	require.NoError(t, cm[key+"Ventilation"].Set("1"))
-	stepN(&p, 100)
+	stepN(&p, 100, DefaultTimeStep)
 	assert.True(t,
 		p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.VentilationActive,
 		"the operator commands ventilation again once isolated paths clear")

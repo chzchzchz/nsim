@@ -103,20 +103,20 @@ func TestNSimRunCommandIntegration(t *testing.T) {
 		require.NoError(t, json.Unmarshal(merged, &p))
 
 		cmds, err := cmdfile.Parse(strings.NewReader(
-			"0 ReactorBuilding.ReactorCoolantPump.Running 1\n"+
+			"0 ReactorBuilding.ReactorCoolantPump.Running 1\n" +
 				"1000 ReactorBuilding.ReactorCoolantPump.Running 0\n",
 		))
 		require.NoError(t, err)
 		m := p.GetControlMap()
-		steps := int(1.5 / core.TimeStep.Seconds())
+		steps := int(1.5 / core.DefaultTimeStep.Seconds())
 		cmdIndex := 0
 		for i := 0; i < steps; i++ {
-			elapsedMs := i * int(core.TimeStep.Milliseconds())
+			elapsedMs := i * int(core.DefaultTimeStep.Milliseconds())
 			for cmdIndex < len(cmds) && cmds[cmdIndex].TimeOffsetMs <= int64(elapsedMs) {
 				require.NoError(t, cmdfile.Apply(m, cmds[cmdIndex]))
 				cmdIndex++
 			}
-			p.Step()
+			p.Step(core.DefaultTimeStep)
 			p.Update()
 		}
 

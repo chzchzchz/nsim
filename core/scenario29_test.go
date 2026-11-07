@@ -42,7 +42,7 @@ func TestScenario29_LatchedSignalStartsSprayAndSwitchoverStopsAdditive(t *testin
 	require.NoError(t, cm["AuxiliaryBuilding/DieselGenerator/StartSignal"].Set("2"))
 	require.NoError(t, cm["AuxiliaryBuilding/DieselGeneratorB/StartSignal"].Set("2"))
 
-	stepN(&p, int(50*time.Millisecond/TimeStep))
+	stepN(&p, int(50*time.Millisecond/DefaultTimeStep), DefaultTimeStep)
 
 	css := &p.AuxiliaryBuilding.ContainmentSpraySystem
 	assert.True(t, css.Running, "spray pumps must auto-start on the latched signal")
@@ -68,8 +68,8 @@ func TestScenario29_LatchedSignalStartsSprayAndSwitchoverStopsAdditive(t *testin
 		CSSTLevel:              CSSTCapacity,
 		SATLevel:               SATCapacity,
 	}
-	for i := 0; i < int(1*time.Second/TimeStep); i++ {
-		injecting = injecting.Step()
+	for i := 0; i < int(1*time.Second/DefaultTimeStep); i++ {
+		injecting = injecting.Step(DefaultTimeStep)
 	}
 	assert.InDelta(t, CSSTCapacity.Float()-CSSDesignFlow/60.0,
 		injecting.CSSTLevel.Float(), 0.5, "CSST must drain at design flow")
@@ -88,7 +88,7 @@ func TestScenario29_LatchedSignalStartsSprayAndSwitchoverStopsAdditive(t *testin
 	csstAtSwitch := css.CSSTLevel.Float()
 	satAtSwitch := css.SATLevel.Float()
 
-	stepN(&p, int(500*time.Millisecond/TimeStep))
+	stepN(&p, int(500*time.Millisecond/DefaultTimeStep), DefaultTimeStep)
 
 	assert.Equal(t, csstAtSwitch, css.CSSTLevel.Float(),
 		"CSST must stop draining once switched to sump suction")

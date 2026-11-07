@@ -47,10 +47,10 @@ func runReactivityApproach(t *testing.T, boron float64, restInsertion float64, h
 	samples := make([]Watts, 0, 4)
 	for _, demand := range []float64{0.5, 0.1, restInsertion} {
 		r.DemandInsertion = demand
-		steps := int(hold / TimeStep)
+		steps := int(hold / DefaultTimeStep)
 		for range steps {
-			r.ControlRods = r.ControlRods.Step()
-			r = r.Step(0, 0)
+			r.ControlRods = r.ControlRods.Step(DefaultTimeStep)
+			r = r.Step(DefaultTimeStep, 0, 0)
 		}
 		require.InDelta(t, r.DemandInsertion, r.Insertion, 1e-9,
 			"rods must settle before sampling")
@@ -62,8 +62,8 @@ func runReactivityApproach(t *testing.T, boron float64, restInsertion float64, h
 func TestScenario5_DilutionWithRodsInsertedStaysSubcritical(t *testing.T) {
 	r := scenario5Vessel()
 	r.BoronConcentration = CVCSInitialBoron - 400
-	for range int(10 * time.Second / TimeStep) {
-		r = r.Step(0, 0)
+	for range int(10 * time.Second / DefaultTimeStep) {
+		r = r.Step(DefaultTimeStep, 0, 0)
 	}
 	assert.Equal(t, CoreNeutronSourcePower, r.FissionPower,
 		"dilution alone must not lift power off the source floor")
@@ -85,7 +85,7 @@ func rAtRest(t *testing.T, boron float64, insertion float64) float32 {
 	r := scenario5Vessel()
 	r.Insertion = insertion
 	r.BoronConcentration = boron
-	out := r.Step(0, 0)
+	out := r.Step(DefaultTimeStep, 0, 0)
 	return out.Reactivity
 }
 
@@ -103,13 +103,13 @@ func TestScenario5_CrossingStepYieldsSustainedRiseWithoutRodMotion(t *testing.T)
 	r0 := scenario5Vessel()
 	r0.BoronConcentration = boron
 	r0.Insertion = 0
-	constOffset := float64(r0.Step(0, 0).Reactivity)
+	constOffset := float64(r0.Step(DefaultTimeStep, 0, 0).Reactivity)
 	atCritical := constOffset / 4.5
 
 	r := scenario5Vessel()
 	r.BoronConcentration = boron
 	r.Insertion = atCritical
-	r = r.Step(0, 0)
+	r = r.Step(DefaultTimeStep, 0, 0)
 	require.InDelta(t, 0.0, float64(r.Reactivity), 1e-6,
 		"closed-form critical position must null reactivity")
 
@@ -119,8 +119,8 @@ func TestScenario5_CrossingStepYieldsSustainedRiseWithoutRodMotion(t *testing.T)
 	// against ongoing xenon buildup.
 	first := r.FissionPower
 	r.Insertion = atCritical - withdrawStep
-	for range int(measure / TimeStep) {
-		r = r.Step(0, 0)
+	for range int(measure / DefaultTimeStep) {
+		r = r.Step(DefaultTimeStep, 0, 0)
 	}
 	final := r.FissionPower
 
@@ -155,9 +155,9 @@ func TestScenario5_SmallReinsertionRestoresNegativeReactivity(t *testing.T) {
 func TestScenario5_InstrumentsReportCriticalityEvidence(t *testing.T) {
 	r := scenario5Vessel()
 	r.BoronConcentration = 600
-	for range int(5 * time.Second / TimeStep) {
-		r.ControlRods = r.ControlRods.Step()
-		r = r.Step(0, 0)
+	for range int(5 * time.Second / DefaultTimeStep) {
+		r.ControlRods = r.ControlRods.Step(DefaultTimeStep)
+		r = r.Step(DefaultTimeStep, 0, 0)
 	}
 	// Wiring check: 1000 cps is the derived CoreSourceRangeCountsPerWatt
 	// anchor, recomputed from the same production constant.
@@ -176,15 +176,15 @@ func TestScenario5_InstrumentsReportCriticalityEvidence(t *testing.T) {
 	// buildup erodes it.
 	r0 := r
 	r0.Insertion = 0
-	constOffset := float64(r0.Step(0, 0).Reactivity)
+	constOffset := float64(r0.Step(DefaultTimeStep, 0, 0).Reactivity)
 	atCritical := constOffset / 4.5
 
 	firstCounts := r.SourceRangeCounts
 	r.Insertion = atCritical - 0.000625
 	r.DemandInsertion = r.Insertion
-	for range int(2 * time.Second / TimeStep) {
-		r.ControlRods = r.ControlRods.Step()
-		r = r.Step(0, 0)
+	for range int(2 * time.Second / DefaultTimeStep) {
+		r.ControlRods = r.ControlRods.Step(DefaultTimeStep)
+		r = r.Step(DefaultTimeStep, 0, 0)
 	}
 	assert.Greater(t, r.SourceRangeCounts, firstCounts*1.01,
 		"counts climb while the chain builds without rod motion")
@@ -207,9 +207,9 @@ func TestScenario5_BoronSetpointRampsThroughFlowPath(t *testing.T) {
 	c.BoronSetpointTracking = true
 
 	var midRate float64
-	steps := int(150 * time.Second / TimeStep)
+	steps := int(150 * time.Second / DefaultTimeStep)
 	for i := range steps {
-		c = c.Step(Volume{}, Temperature{Val: CoreReferenceInletF}, 0.25, 2250)
+		c = c.Step(DefaultTimeStep, Volume{}, Temperature{Val: CoreReferenceInletF}, 0.25, 2250)
 		if i == steps/2 {
 			midRate = c.DilutionRate
 			midMode := c.Mode
@@ -241,8 +241,8 @@ func TestScenario5_InsertionLimitBlocksDeepRestingPositions(t *testing.T) {
 		EnforceInsertionLimit: true,
 		InsertionLimit:        0.05,
 	}
-	for range int(30 * time.Second / TimeStep) {
-		c = c.Step()
+	for range int(30 * time.Second / DefaultTimeStep) {
+		c = c.Step(DefaultTimeStep)
 	}
 	assert.InDelta(t, 0.05, c.Insertion, 1e-9,
 		"withdrawal demand clamps at the insertion limit")
@@ -250,8 +250,8 @@ func TestScenario5_InsertionLimitBlocksDeepRestingPositions(t *testing.T) {
 		"the clamped demand is what the operator sees")
 
 	c.DemandInsertion = 0.0445
-	for range int(5 * time.Second / TimeStep) {
-		c = c.Step()
+	for range int(5 * time.Second / DefaultTimeStep) {
+		c = c.Step(DefaultTimeStep)
 	}
 	assert.InDelta(t, 0.0445, c.Insertion, 1e-9,
 		"positions shallower than the limit stay reachable")

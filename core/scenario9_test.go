@@ -30,19 +30,19 @@ import (
 func TestScenario9_BorationShiftsReactivityWithXenonPinned(t *testing.T) {
 	p := MakePlant()
 	rpv := &p.ReactorBuilding.ReactorPressureVessel
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	before := rpv.Reactivity
 	xeBefore := xenonNormalized(rpv.Xenon135)
 
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration = 1200
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 
 	delta := rpv.Reactivity - before
 	// The shift carries two terms: the direct boron worth AND the
 	// moderator-coefficient move as the interpolation rides the
 	// boron concentration (the same dc/dB coupling the load-follow
 	// naive-boration check locks in).
-	want := float32((1200.0 - CoreRatedCriticalBoronPpm) / 100.0) * CoreBoronWorthPer100ppm +
+	want := float32((1200.0-CoreRatedCriticalBoronPpm)/100.0)*CoreBoronWorthPer100ppm +
 		float32((float64(CoreReferenceOutletF)-float64(CoreDopplerReferenceTempF))*
 			(netTempCoef(1200)-netTempCoef(CoreRatedCriticalBoronPpm))/1000)
 	assert.InDelta(t, want, delta, 0.005,
@@ -58,7 +58,7 @@ func TestScenario9_BorationShiftsReactivityWithXenonPinned(t *testing.T) {
 // without tripping the protection system.
 func TestScenario9_RodDemandManeuversReactorDown(t *testing.T) {
 	p := MakePlant()
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	before := p.ReactorBuilding.ReactorPressureVessel.Reactivity
 
 	setControl(t, &p,
@@ -66,7 +66,7 @@ func TestScenario9_RodDemandManeuversReactorDown(t *testing.T) {
 	// RodInsertionSpeed slews five percent of full travel per second,
 	// so five seconds moves the banks visibly without completing the
 	// maneuver.
-	stepFor(&p, 5*time.Second)
+	stepFor(&p, 5*time.Second, DefaultTimeStep)
 
 	rpv := p.ReactorBuilding.ReactorPressureVessel
 	assert.Greater(t, rpv.Insertion, 0.0,

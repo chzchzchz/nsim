@@ -21,8 +21,8 @@ func TestHeater_LPProducesTemperatureRise(t *testing.T) {
 		DrainValve: Valve{Open: 1.0},
 	}
 	const fwInletF = 120.0
-	for i := 0; i < int(5*time.Second/TimeStep); i++ {
-		h = h.Step(fwInletF, 1.0)
+	for i := 0; i < int(5*time.Second/DefaultTimeStep); i++ {
+		h = h.Step(DefaultTimeStep, fwInletF, 1.0)
 	}
 	assert.Positive(t, h.TemperatureRise.Float(),
 		"want TemperatureRise > 0 with steam flow")
@@ -38,13 +38,13 @@ func TestHeater_LPNoSteamNoRise(t *testing.T) {
 	h := LowPressureHeater{
 		DrainValve: Valve{Open: 1.0},
 	}
-	h = h.Step(120.0, 0)
+	h = h.Step(DefaultTimeStep, 120.0, 0)
 	assert.Zero(t, h.TemperatureRise.Float(),
 		"want TemperatureRise == 0 with zero steam flow")
 	h2 := LowPressureHeater{
 		DrainValve: Valve{Open: 0},
 	}
-	h2 = h2.Step(120.0, 1.0)
+	h2 = h2.Step(DefaultTimeStep, 120.0, 1.0)
 	assert.Zero(t, h2.TemperatureRise.Float(),
 		"want TemperatureRise == 0 with drain closed")
 }
@@ -57,7 +57,7 @@ func TestHeater_LPDrainAccumulates(t *testing.T) {
 	const steamFlow = 1.0
 	const steps = 1000
 	for i := 0; i < steps; i++ {
-		h = h.Step(120.0, steamFlow)
+		h = h.Step(DefaultTimeStep, 120.0, steamFlow)
 	}
 	assert.Positive(t, h.DrainLevel.Float(), "want DrainLevel > 0")
 }
@@ -70,8 +70,8 @@ func TestHeater_HPClampedAtPerStageMax(t *testing.T) {
 		DrainValve: Valve{Open: 1.0},
 	}
 	// High steam flow forces the model toward its clamp.
-	for i := 0; i < int(5*time.Second/TimeStep); i++ {
-		h = h.Step(380.0, 100.0)
+	for i := 0; i < int(5*time.Second/DefaultTimeStep); i++ {
+		h = h.Step(DefaultTimeStep, 380.0, 100.0)
 	}
 	assert.LessOrEqual(t, h.TemperatureRise.Float(), HPTemperatureRisePerStage*2,
 		"want TemperatureRise clamped at %v, got %v",
@@ -87,8 +87,8 @@ func TestHeater_LPTrainCumulativeRise(t *testing.T) {
 	}
 	fwIn := Temperature{Val: 120.0, Unit: u.Fahrenheit}
 	for i := 0; i < 4; i++ {
-		h = h.Step(fwIn.Float(), 1.0)
-		fwIn = Temperature{Val: h.Inlet.Float()+h.TemperatureRise.Float(), Unit: u.Fahrenheit}
+		h = h.Step(DefaultTimeStep, fwIn.Float(), 1.0)
+		fwIn = Temperature{Val: h.Inlet.Float() + h.TemperatureRise.Float(), Unit: u.Fahrenheit}
 	}
 	assert.Greater(t, fwIn.Float(), 120.0,
 		"want cumulative LP train outlet > 120°F, got %v", fwIn.Float())
@@ -100,13 +100,13 @@ func TestHeater_FullTrainCumulativeRise(t *testing.T) {
 	lp := LowPressureHeater{DrainValve: Valve{Open: 1.0}}
 	fwIn := Temperature{Val: 120.0, Unit: u.Fahrenheit}
 	for i := 0; i < 4; i++ {
-		lp = lp.Step(fwIn.Float(), 1.0)
-		fwIn = Temperature{Val: lp.Inlet.Float()+lp.TemperatureRise.Float(), Unit: u.Fahrenheit}
+		lp = lp.Step(DefaultTimeStep, fwIn.Float(), 1.0)
+		fwIn = Temperature{Val: lp.Inlet.Float() + lp.TemperatureRise.Float(), Unit: u.Fahrenheit}
 	}
 	hp := HighPressureHeater{DrainValve: Valve{Open: 1.0}}
 	for i := 0; i < 2; i++ {
-		hp = hp.Step(fwIn.Float(), 0.5)
-		fwIn = Temperature{Val: hp.Inlet.Float()+hp.TemperatureRise.Float(), Unit: u.Fahrenheit}
+		hp = hp.Step(DefaultTimeStep, fwIn.Float(), 0.5)
+		fwIn = Temperature{Val: hp.Inlet.Float() + hp.TemperatureRise.Float(), Unit: u.Fahrenheit}
 	}
 	assert.Greater(t, fwIn.Float(), 125.0,
 		"want cumulative LP+HP train outlet > 125°F, got %v", fwIn.Float())

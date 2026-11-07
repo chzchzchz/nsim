@@ -43,8 +43,7 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 	// collapse is verified at the production tick by
 	// TestPlant_TurbineTripAtPowerScramsSupersedingStepback, so this
 	// sequence test runs at 10 ms and asserts the fold only coarsely.
-	// Must not run in parallel.
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
@@ -52,14 +51,14 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 		CoreRatedThermalPower)
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	synchronizeAndCloseBreaker(&p)
-	stepFor(&p, 5*time.Second)
+	stepFor(&p, 5*time.Second, testDt)
 	require.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State)
 
 	// Trip the machine: stop/governor valves shut, breaker opens, MW
 	// collapse, and the automatic stepback latches.
 	setControl(t, &p, "TurbineBuilding/Turbine/StopValve", "0")
 	setControl(t, &p, "TurbineBuilding/Generator/BreakerClosed", "0")
-	stepFor(&p, 3*time.Second)
+	stepFor(&p, 3*time.Second, testDt)
 	require.Equal(t, TurbineTripped, p.TurbineBuilding.Turbine.State)
 	require.True(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
 		"the at-power machine loss must scram the reactor")
@@ -73,7 +72,7 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 	// low-steamline protection channel.
 	maxDump := 0.0
 	for i := 0; i < int(30*time.Second/scenario15Tick); i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, testDt)
 		maxDump = max(maxDump, p.TurbineBuilding.Turbine.DumpValve.Open)
 	}
 	rpv := p.ReactorBuilding.ReactorPressureVessel
@@ -102,18 +101,18 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 		if float64(p.TurbineBuilding.Turbine.Velocity) < 1e-3 {
 			break
 		}
-		stepN(&p, 1)
+		stepN(&p, 1, testDt)
 	}
 	require.Less(t, float64(p.TurbineBuilding.Turbine.Velocity), 1e-3,
 		"the rotor must reach rest within the coast-down window")
 	setControl(t, &p, "TurbineBuilding/Turbine/Reset", "Reset")
-	stepN(&p, 10)
+	stepN(&p, 10, testDt)
 	require.Equal(t, TurbineOff, p.TurbineBuilding.Turbine.State)
 	// The RPS latch clears only once the machine is shut and its trip
 	// can no longer re-declare: reset cannot bypass an active trip.
 	setControl(t, &p,
 		"ReactorBuilding/ReactorProtectionSystem/Reset", "Reset")
-	stepN(&p, 10)
+	stepN(&p, 10, testDt)
 	require.False(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
 		"the operator reset clears the scram from hot standby")
 	require.False(t, p.ReactorBuilding.ReactorPressureVessel.Trip)
@@ -140,7 +139,7 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 	// turbine-scale admission is sustainable - so the opening surge
 	// cannot crash the header into the low-steamline setpoint.
 	for i := 0; i < int(900*time.Second/scenario15Tick); i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, testDt)
 		if float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower) >=
 			StepbackPowerFraction*float64(CoreFissionPowerAtRated) &&
 			float64(p.ReactorBuilding.SteamGenerator.Pressure) >
@@ -157,7 +156,7 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 	setControl(t, &p, "TurbineBuilding/Turbine/SpeedDemand", "1")
 	setControl(t, &p, "TurbineBuilding/Turbine/StopValve", "1")
 	for i := 0; i < int(80*time.Second/scenario15Tick); i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, testDt)
 		if float64(p.TurbineBuilding.Turbine.Velocity) >=
 			float64(TurbineRatedSpeed)-20 {
 			break
@@ -169,7 +168,7 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 	// the rotor exactly on the demand target, so poll to that pin
 	// before throwing the breaker (an out-of-tolerance close pops).
 	for i := 0; i < int(10*time.Second/scenario15Tick); i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, testDt)
 		if p.TurbineBuilding.Generator.Voltage >= 0.95*24000 &&
 			float64(p.TurbineBuilding.Turbine.Velocity) >=
 				float64(TurbineRatedSpeed)-0.01 {
@@ -177,7 +176,7 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 		}
 	}
 	setControl(t, &p, "TurbineBuilding/Generator/BreakerClosed", "1")
-	stepFor(&p, 2*time.Second)
+	stepFor(&p, 2*time.Second, testDt)
 	require.True(t, p.TurbineBuilding.Generator.BreakerClosed,
 		"a synchronized close must hold after the recovery")
 	assert.InDelta(t, float64(TurbineRatedSpeed),
@@ -199,7 +198,7 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 	setControl(t, &p, "Electrical/Grid/LoadDemand", "100")
 	maxSgP := 0.0
 	for i := 0; i < int(140*time.Second/scenario15Tick); i++ {
-		stepN(&p, 1)
+		stepN(&p, 1, testDt)
 		maxSgP = max(maxSgP, float64(p.ReactorBuilding.SteamGenerator.Pressure))
 		assert.LessOrEqual(t, float64(p.TurbineBuilding.Turbine.RealPower),
 			p.TurbineBuilding.Turbine.Setpoint*float64(TurbineRatedkW)+1e-6,

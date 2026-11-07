@@ -10,21 +10,21 @@ import (
 // The step function implements four state machines that run in
 // parallel for each of the two subsystems (A and B):
 //
-//   1. Tank depletion: the subsystem's primary tank level
-//      decreases by exactly the flow its pumps deliver to the
-//      steam generators (valve-scaled, gated by Running &&
-//      DriveReady), so secondary-side inventory is conserved.
-//   2. SG feedwater delivery: the total EFWS feedwater flow
-//      equals the sum of all running pumps' rated flows, gated
-//      by each pump's DriveReady.
-//   3. Secured condition: once the primary system hot-leg
-//      temperature falls to EFWSSecureTemp and the RHRS has
-//      taken over, the EFWS is secured and all pump Running
-//      flags are cleared.
-//   4. DriveReady for the turbine-driven pump: the turbine
-//      pump's DriveReady tracks SG pressure (set in
-//      Plant.Step); the SteamAdmissionValve is fail-open when
-//      SG pressure is present.
+//  1. Tank depletion: the subsystem's primary tank level
+//     decreases by exactly the flow its pumps deliver to the
+//     steam generators (valve-scaled, gated by Running &&
+//     DriveReady), so secondary-side inventory is conserved.
+//  2. SG feedwater delivery: the total EFWS feedwater flow
+//     equals the sum of all running pumps' rated flows, gated
+//     by each pump's DriveReady.
+//  3. Secured condition: once the primary system hot-leg
+//     temperature falls to EFWSSecureTemp and the RHRS has
+//     taken over, the EFWS is secured and all pump Running
+//     flags are cleared.
+//  4. DriveReady for the turbine-driven pump: the turbine
+//     pump's DriveReady tracks SG pressure (set in
+//     Plant.Step); the SteamAdmissionValve is fail-open when
+//     SG pressure is present.
 //
 // Spec justification:
 //   - Tank sizing language: "Each tank contains a quantity of
@@ -56,12 +56,11 @@ import (
 //     minutes, and for this period it is assumed that these
 //     valves will be full open."
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:36-39
-func (e *EFWS) Step(
+func (e *EFWS) Step(dt time.Duration,
 	rpvOutlet Temperature,
 	rhrsActive bool,
 ) EFWS {
 	ret := *e
-	dt := TimeStep
 
 	// Secured condition: when the RCS hot-leg temperature has
 	// been reduced to EFWSSecureTemp and the RHRS has taken
@@ -76,9 +75,9 @@ func (e *EFWS) Step(
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:101-104
 	if rpvOutlet.Float() <= EFWSSecureTemp && rhrsActive {
 		ret.SubsystemA.MotorPump.Running = false
-			ret.SubsystemA.TurbinePump.Running = false
-			ret.SubsystemB.MotorPump.Running = false
-			ret.SubsystemB.TurbinePump.Running = false
+		ret.SubsystemA.TurbinePump.Running = false
+		ret.SubsystemB.MotorPump.Running = false
+		ret.SubsystemB.TurbinePump.Running = false
 		ret.Active = false
 		ret.AutoStartElapsed = 0
 		ret.DeliveredFlow = Volume{Val: 0, Unit: u.Gallon}

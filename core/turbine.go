@@ -6,7 +6,7 @@ import (
 	u "github.com/bcicen/go-units"
 )
 
-// Step advances the turbine by TimeStep on a 1 ms tick. The caller
+// Step advances the turbine by ProductionStep on a 1 ms tick. The caller
 // passes the upstream steam pressure, downstream condenser pressure,
 // and a stop-valve-gated admission factor. When stopValveOpen is
 // nil, admission is the MakeupValve.Open fraction (legacy
@@ -41,9 +41,8 @@ import (
 // headers: design full-load flow scaled by valve admission and header
 // pressure. The turbine converts it into angular Velocity up to
 // TurbineRatedSpeed and into RealPower up to TurbineRatedkW.
-func (t *Turbine) Step(sgPressure, condPressure Pressure, tavg Temperature, reset bool, stopValveOpen *float64) Turbine {
+func (t *Turbine) Step(dt time.Duration, sgPressure, condPressure Pressure, tavg Temperature, reset bool, stopValveOpen *float64) Turbine {
 	ret := *t
-	dt := TimeStep
 
 	// Consume the operator's latched reset request so the command
 	// is edge-triggered: one Step evaluates it exactly once, then
@@ -452,8 +451,8 @@ func (t *Turbine) Step(sgPressure, condPressure Pressure, tavg Temperature, rese
 	// the HP steam flow; with ExtractionSteamFlow = total HP steam
 	// flow, applying MSRDesignExtractionFraction gives the design
 	// reheat duty.
-	reheatFlow := Volume{Val: ret.ExtractionSteamFlow.Float()*MSRDesignExtractionFraction, Unit: u.Gallon}
-	ret.MoistureSeparatorReheater = ret.MoistureSeparatorReheater.Step(
+	reheatFlow := Volume{Val: ret.ExtractionSteamFlow.Float() * MSRDesignExtractionFraction, Unit: u.Gallon}
+	ret.MoistureSeparatorReheater = ret.MoistureSeparatorReheater.Step(dt,
 		ret.HPExhaustPressure,
 		ret.HPExhaustQuality,
 		inletTemp,

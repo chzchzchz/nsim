@@ -2,9 +2,10 @@ package core
 
 import (
 	u "github.com/bcicen/go-units"
+	"time"
 )
 
-// Step advances the steam generator by TimeStep. It implements the
+// Step advances the steam generator by ProductionStep. It implements the
 type SteamGenerator struct {
 	Part
 	Pressure
@@ -122,6 +123,7 @@ func (s *SteamGenerator) Update() SteamGenerator {
 	ret := *s
 	return ret
 }
+
 // SteamGenerator shell-side operating pressure and the latent heat of
 // vaporisation used by the heat-transfer step.
 //
@@ -157,8 +159,8 @@ const (
 	// approaches zero psig" — page_227.txt:141-143). Slightly above
 	// atmospheric to admit a settling header.
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:141-143
-	SGWetLayupMaxHeaderPsia = 20.0
-	LatentHeatOfSteamization          Watts    = 2.26e6
+	SGWetLayupMaxHeaderPsia        = 20.0
+	LatentHeatOfSteamization Watts = 2.26e6
 
 	// GallonsPerCubicMeter converts the liquid-equivalent evaporation
 	// rate into the gallon-denominated shell inventory.
@@ -218,6 +220,7 @@ const (
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:118-122
 	SGDrainValveGalPerSec = 25.0
 )
+
 // SteamGeneratorFullLoadSteamFlow is the per-SG steam flow at rated
 // load, sized for 480 kg/s of saturated steam at 920 psia. The spec
 // quotes 3,813,000 lb/hr (480 kg/s) per steam generator.
@@ -228,7 +231,7 @@ const (
 // giving a volumetric flow in ft^3/hr which we then express in
 // gallons. The exact conversion is not load-bearing — the value
 // drives the boil-rate integration only.
-var SteamGeneratorFullLoadSteamFlow = Volume{Val: 480*2.2046*3600*0.47/7.4805, Unit: u.Gallon}
+var SteamGeneratorFullLoadSteamFlow = Volume{Val: 480 * 2.2046 * 3600 * 0.47 / 7.4805, Unit: u.Gallon}
 
 // SteamGeneratorFullLoadHeatInput is the per-SG primary-to-secondary
 // vaporisation duty at rated load. The lumped single SG carries one
@@ -250,7 +253,7 @@ var SteamGeneratorFullLoadSteamFlow = Volume{Val: 480*2.2046*3600*0.47/7.4805, U
 var SteamGeneratorFullLoadHeatInput = Watts(float64(CoreRatedThermalPower) /
 	float64(SteamGeneratorLoopCount))
 
-// Step advances the steam generator by TimeStep. It implements the
+// Step advances the steam generator by ProductionStep. It implements the
 // shell-side heat-transfer / boil-off step described in plans/p6_1.txt,
 // the steam offtake drawn by turbine admission and the condenser dump
 // (passed in as a fraction of rated steam flow), and the atmospheric
@@ -271,9 +274,8 @@ var SteamGeneratorFullLoadHeatInput = Watts(float64(CoreRatedThermalPower) /
 //     valves and to the atmosphere for the initial phase of large load
 //     reductions."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:6-8
-func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
+func (s *SteamGenerator) Step(dt time.Duration, steamOutflowFraction float64) SteamGenerator {
 	ret := *s
-	dt := TimeStep
 
 	// Rated boil-off capacity in liquid-equivalent gal/s, the design
 	// reference the offtake fraction is measured against.
@@ -379,7 +381,7 @@ func (s *SteamGenerator) Step(steamOutflowFraction float64) SteamGenerator {
 		ventFraction = ret.SteamlineVent.Open *
 			SteamlineVentCapacityFraction * pressureRatio
 		ret.VentFlow = Volume{Val: ventFraction *
-			SteamGeneratorFullLoadSteamFlow.Float()/SecondsPerHour*
+			SteamGeneratorFullLoadSteamFlow.Float() / SecondsPerHour *
 			dt.Seconds(), Unit: u.Gallon}
 	}
 

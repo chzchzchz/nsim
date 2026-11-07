@@ -27,7 +27,7 @@ func TestGraph_CondensatePumpStopsAtEmptyHotwell(t *testing.T) {
 		Volume{Val: 500, Unit: u.Gallon}
 	p.TurbineBuilding.CondensatePump.Running = true
 	for i := 0; i < 10000; i++ {
-		p.Step()
+		p.Step(DefaultTimeStep)
 		p.Update()
 		assert.GreaterOrEqual(t,
 			p.TurbineBuilding.Condenser.HotwellLevel.Float(), 0.0,
@@ -111,7 +111,7 @@ func TestFluidFlow_ValveOpen_MovesWater(t *testing.T) {
 	p.ReactorBuilding.SteamGenerator.Water = Volume{Val: 1000, Unit: u.Gallon}
 
 	beforeSG := p.ReactorBuilding.SteamGenerator.Water.Float()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	afterSG := p.ReactorBuilding.SteamGenerator.Water.Float()
 
@@ -134,7 +134,7 @@ func TestFluidFlow_ValveClosed_NoMovement(t *testing.T) {
 	p.ReactorBuilding.SteamGenerator.HeatInput = 0
 
 	before := p.ReactorBuilding.SteamGenerator.Water.Float()
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	after := p.ReactorBuilding.SteamGenerator.Water.Float()
 	delta := after - before
@@ -163,7 +163,7 @@ func TestFluidFlow_PumpRunning_DrivesFlowAlongEdge(t *testing.T) {
 	cstBefore := p.Outside.CondensateStorageTank.Level.Float()
 	p.TurbineBuilding.CondensatePump.Running = false
 	for i := 0; i < 1000; i++ {
-		p.Step()
+		p.Step(DefaultTimeStep)
 		p.Update()
 	}
 	mid := p.TurbineBuilding.Condenser.HotwellLevel.Float()
@@ -172,7 +172,7 @@ func TestFluidFlow_PumpRunning_DrivesFlowAlongEdge(t *testing.T) {
 
 	p.TurbineBuilding.CondensatePump.Running = true
 	for i := 0; i < 1000; i++ {
-		p.Step()
+		p.Step(DefaultTimeStep)
 		p.Update()
 	}
 	after := p.TurbineBuilding.Condenser.HotwellLevel.Float()
@@ -197,7 +197,7 @@ func TestFluidFlow_ValveHalfOpen_HalvesFlow(t *testing.T) {
 		p.ReactorBuilding.SteamGenerator.Water = Volume{Val: 100000, Unit: u.Gallon}
 		before := p.ReactorBuilding.SteamGenerator.Water.Float()
 		for i := 0; i < 1000; i++ {
-			p.Step()
+			p.Step(DefaultTimeStep)
 			p.Update()
 		}
 		return before - p.ReactorBuilding.SteamGenerator.Water.Float()

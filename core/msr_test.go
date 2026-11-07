@@ -19,7 +19,7 @@ import (
 func TestMSR_FullQualityReachesReheatTarget(t *testing.T) {
 	inlet := Temperature{Val: 560.0, Unit: u.Fahrenheit}
 	reheatFlow := Volume{Val: FeedwaterDesignFlow.Float(), Unit: u.Gallon}
-	m := (&MoistureSeparatorReheater{}).Step(
+	m := (&MoistureSeparatorReheater{}).Step(DefaultTimeStep,
 		SteamGeneratorShellPressure,
 		HPExhaustQualityFullLoad,
 		inlet,
@@ -42,14 +42,14 @@ func TestMSR_FullQualityReachesReheatTarget(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:62-63
 func TestMSR_LowQualityIncreasesMoistureDrain(t *testing.T) {
 	reheatFlow := Volume{Val: FeedwaterDesignFlow.Float(), Unit: u.Gallon}
-	dry := (&MoistureSeparatorReheater{}).Step(
+	dry := (&MoistureSeparatorReheater{}).Step(DefaultTimeStep,
 		SteamGeneratorShellPressure,
 		HPExhaustQualityFullLoad,
 		Temperature{Val: 560.0, Unit: u.Fahrenheit},
 		reheatFlow,
 		SteamGeneratorShellPressure*0.98,
 	)
-	wet := (&MoistureSeparatorReheater{}).Step(
+	wet := (&MoistureSeparatorReheater{}).Step(DefaultTimeStep,
 		SteamGeneratorShellPressure,
 		HPExhaustQualityLowLoad,
 		Temperature{Val: 560.0, Unit: u.Fahrenheit},
@@ -71,14 +71,14 @@ func TestMSR_ReheatScalesWithReheatSteamFlow(t *testing.T) {
 	// the linear region of the model (the model caps at the
 	// design point).
 	designReheat := FeedwaterDesignFlow.Float() * MSRDesignExtractionFraction
-	lowFlow := Volume{Val: designReheat*0.25, Unit: u.Gallon}
-	highFlow := Volume{Val: designReheat*0.75, Unit: u.Gallon}
+	lowFlow := Volume{Val: designReheat * 0.25, Unit: u.Gallon}
+	highFlow := Volume{Val: designReheat * 0.75, Unit: u.Gallon}
 
-	mLow := (&MoistureSeparatorReheater{}).Step(
+	mLow := (&MoistureSeparatorReheater{}).Step(DefaultTimeStep,
 		SteamGeneratorShellPressure, HPExhaustQualityFullLoad,
 		inlet, lowFlow, SteamGeneratorShellPressure*0.98,
 	)
-	mHigh := (&MoistureSeparatorReheater{}).Step(
+	mHigh := (&MoistureSeparatorReheater{}).Step(DefaultTimeStep,
 		SteamGeneratorShellPressure, HPExhaustQualityFullLoad,
 		inlet, highFlow, SteamGeneratorShellPressure*0.98,
 	)
@@ -99,7 +99,7 @@ func TestTurbineExtractionSteamFlow_ScalesWithLoad(t *testing.T) {
 	condP := Pressure(0)
 	stopOpen := 1.0
 
-	tr := (&Turbine{}).Step(sgP, condP, Temperature{Val: 600}, false, &stopOpen)
+	tr := (&Turbine{}).Step(DefaultTimeStep, sgP, condP, Temperature{Val: 600}, false, &stopOpen)
 	// First step: rotor spinning up, partial load.
 	zeroLoadFlow := tr.ExtractionSteamFlow.Float()
 
@@ -114,7 +114,7 @@ func TestTurbineExtractionSteamFlow_ScalesWithLoad(t *testing.T) {
 		BearingOilPressure: BearingOilDesignPressure,
 	}
 	for i := 0; i < 1000; i++ {
-		rated = rated.Step(sgP, condP, Temperature{Val: 600}, false, &stopOpen)
+		rated = rated.Step(DefaultTimeStep, sgP, condP, Temperature{Val: 600}, false, &stopOpen)
 	}
 	ratedFlow := rated.ExtractionSteamFlow.Float()
 
@@ -142,7 +142,7 @@ func TestMSR_HalfLoadPowerGivesSuperheatedLPInlet(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 
-	stepN(&p, int(5*time.Second/TimeStep))
+	stepN(&p, int(5*time.Second/DefaultTimeStep), DefaultTimeStep)
 	require.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State,
 		"turbine should be running at power")
 
@@ -171,7 +171,7 @@ func TestMSR_DrainFlowsToHotwell(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	hotwellBefore := p.TurbineBuilding.Condenser.HotwellLevel.Float()
 
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 	hotwellAfter := p.TurbineBuilding.Condenser.HotwellLevel.Float()
 	assert.Greater(t, hotwellAfter, hotwellBefore,
 		"want hotwell to rise from MSR drain accumulation, before=%v after=%v",

@@ -23,6 +23,7 @@ import (
 //     the turbine trip devices [...] causes all steam control
 //     valves to close."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_205.txt:28-34
+//
 // The seeded pressurizer must describe a plant that exists before the
 // first Step: the steam bubble is the vapor space above the liquid
 // inventory, so Water + SteamBubble must equal Volume exactly.
@@ -51,7 +52,7 @@ func TestPlant_MakePlantPressurizerSeedCoherent(t *testing.T) {
 func TestPlant_MakePlantIdlesAtHotStandby(t *testing.T) {
 	t.Parallel()
 	p := MakePlant()
-	stepN(&p, int(2*time.Minute/TimeStep))
+	stepN(&p, int(2*time.Minute/DefaultTimeStep), DefaultTimeStep)
 	pzr := p.ReactorBuilding.Pressurizer
 	assert.Positive(t, pzr.Water.Float(),
 		"idle draining dried out the pressurizer: water=%v", pzr.Water.Float())
@@ -71,11 +72,11 @@ func TestPlant_ReactorTripCascadesToTurbine(t *testing.T) {
 	// Bring the reactor to rated power; let the SG build pressure.
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 	// Manually trip the reactor.
 	p.ReactorBuilding.ReactorPressureVessel.Trip = true
 	// Step past StopValveCloseDelay.
-	stepN(&p, int(100*time.Millisecond/TimeStep))
+	stepN(&p, int(100*time.Millisecond/DefaultTimeStep), DefaultTimeStep)
 	assert.Zero(t, p.TurbineBuilding.Turbine.StopValve.Open,
 		"want StopValve.Open == 0 after reactor trip, got %v",
 		p.TurbineBuilding.Turbine.StopValve.Open)
@@ -97,8 +98,8 @@ func TestPlant_CondenserVacuumRecoversAfterTrip(t *testing.T) {
 	p.TurbineBuilding.Condenser.VacuumPumpRunning = true
 	p.TurbineBuilding.Condenser.Pressure = AtmosphericPressure
 	// Vacuum recovery only — no reactor or turbine dynamics needed.
-	for i := 0; i < int(5*time.Second/TimeStep); i++ {
-		p.TurbineBuilding.Condenser = p.TurbineBuilding.Condenser.Step(
+	for i := 0; i < int(5*time.Second/DefaultTimeStep); i++ {
+		p.TurbineBuilding.Condenser = p.TurbineBuilding.Condenser.Step(DefaultTimeStep,
 			p.TurbineBuilding.Condenser.CirculatingWaterIn,
 			true,
 			true,
@@ -122,7 +123,7 @@ func TestPlant_MinFlowRecirculationToDeaerator(t *testing.T) {
 	p := MakePlant()
 	p.TurbineBuilding.MainFeedwaterPump.Running = false
 	before := p.TurbineBuilding.HeaterDrainTank.Level.Float()
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 	after := p.TurbineBuilding.HeaterDrainTank.Level.Float()
 	assert.Greater(t, after, before,
 		"want HeaterDrainTank.Level to rise from min-flow recirculation, before=%v after=%v",
@@ -145,7 +146,7 @@ func TestPlant_HeaterTrainRaisesFeedwaterTemperature(t *testing.T) {
 	p := MakePlant()
 	p.TurbineBuilding.LowPressureHeater.DrainValve = Valve{Open: 1.0}
 	p.TurbineBuilding.HighPressureHeater.DrainValve = Valve{Open: 1.0}
-	stepN(&p, int(5*time.Second/TimeStep))
+	stepN(&p, int(5*time.Second/DefaultTimeStep), DefaultTimeStep)
 	rise := p.TurbineBuilding.HighPressureHeater.TemperatureRise.Float()
 	assert.GreaterOrEqual(t, rise, 0.0, "want non-negative HP heater rise, got %v", rise)
 }
@@ -158,8 +159,8 @@ func TestPlant_HeaterTrainRaisesFeedwaterTemperature(t *testing.T) {
 // would immediately clear a close onto an out-of-step machine.
 func synchronizeAndCloseBreaker(p *Plant) {
 	p.TurbineBuilding.Generator.BreakerClosed = false
-	for i := 0; i < int(30*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(30*time.Second/DefaultTimeStep); i++ {
+		p.Step(DefaultTimeStep)
 		p.Update()
 		g := p.TurbineBuilding.Generator
 		fOK := g.Frequency >= GridRatedFrequency-SyncFreqToleranceHz
@@ -193,11 +194,11 @@ func TestPlant_ReactorTripOpensBreaker(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	synchronizeAndCloseBreaker(&p)
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 	require.True(t, p.TurbineBuilding.Generator.BreakerClosed,
 		"precondition: want BreakerClosed before trip, got false")
 	p.ReactorBuilding.ReactorPressureVessel.Trip = true
-	stepN(&p, int(100*time.Millisecond/TimeStep))
+	stepN(&p, int(100*time.Millisecond/DefaultTimeStep), DefaultTimeStep)
 	assert.False(t, p.TurbineBuilding.Generator.BreakerClosed,
 		"want BreakerClosed=false after reactor trip, got true")
 }
@@ -216,7 +217,7 @@ func TestPlant_BreakerOpenZerosRealPower(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Generator.BreakerClosed = false
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
-	stepN(&p, int(5*time.Second/TimeStep))
+	stepN(&p, int(5*time.Second/DefaultTimeStep), DefaultTimeStep)
 	assert.Zero(t, p.TurbineBuilding.Generator.RealPower,
 		"want RealPower=0 with breaker open, got %v",
 		p.TurbineBuilding.Generator.RealPower)
@@ -240,7 +241,7 @@ func TestPlant_BreakerCloseEnergizesUATAndSubtractsHouseLoad(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	synchronizeAndCloseBreaker(&p)
-	stepN(&p, int(5*time.Second/TimeStep))
+	stepN(&p, int(5*time.Second/DefaultTimeStep), DefaultTimeStep)
 	require.True(t, p.TurbineBuilding.Generator.BreakerClosed,
 		"precondition: want BreakerClosed, got false")
 	assert.Equal(t, "UAT", p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom,
@@ -285,13 +286,13 @@ func TestPlant_ReactorTripTransfersHouseLoadToSAT(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	synchronizeAndCloseBreaker(&p)
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 	require.Equal(t, "UAT",
 		p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom,
 		"precondition: want UAT supplying before trip, got %q",
 		p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom)
 	p.ReactorBuilding.ReactorPressureVessel.Trip = true
-	stepN(&p, int(200*time.Millisecond/TimeStep))
+	stepN(&p, int(200*time.Millisecond/DefaultTimeStep), DefaultTimeStep)
 	assert.Equal(t, "SAT",
 		p.ReactorBuilding.StationTransformer.HouseLoadSuppliedFrom,
 		"want HouseLoadSuppliedFrom=SAT after trip, got %q",
@@ -311,12 +312,12 @@ func TestPlant_ReactorTripTransfersHouseLoadToSAT(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_222.txt:79-86
 func TestPlantOperation_ColdShutdownResetsRamping(t *testing.T) {
 	po := PlantOperation{
-		RampingUp:           true,
-		RampingDown:         true,
-		AuxFeedwaterInUse:   false,
-		StartupPhase:        50,
+		RampingUp:         true,
+		RampingDown:       true,
+		AuxFeedwaterInUse: false,
+		StartupPhase:      50,
 	}
-	out := po.Step(
+	out := po.Step(DefaultTimeStep,
 		ColdShutdown,
 		Temperature{Val: 120, Unit: u.Fahrenheit},
 		Pressure(200),
@@ -345,7 +346,7 @@ func TestPlantOperation_ColdShutdownResetsRamping(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:104-108
 func TestPlantOperation_HotStandbyRCPCap(t *testing.T) {
 	po := PlantOperation{}
-	withRHRS := po.Step(
+	withRHRS := po.Step(DefaultTimeStep,
 		HotStandby,
 		Temperature{Val: 550, Unit: u.Fahrenheit},
 		Pressure(2250),
@@ -355,7 +356,7 @@ func TestPlantOperation_HotStandbyRCPCap(t *testing.T) {
 	)
 	assert.False(t, withRHRS.HotStandbyRCPLimitActive,
 		"want HotStandbyRCPLimitActive=false when RHRS in service")
-	withoutRHRS := po.Step(
+	withoutRHRS := po.Step(DefaultTimeStep,
 		HotStandby,
 		Temperature{Val: 550, Unit: u.Fahrenheit},
 		Pressure(2250),
@@ -380,7 +381,7 @@ func TestPlantOperation_HotStandbyRCPCap(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:129-133
 func TestPlantOperation_AuxToMainFeedwaterTransition(t *testing.T) {
 	po := PlantOperation{}
-	below := po.Step(
+	below := po.Step(DefaultTimeStep,
 		PowerOperation,
 		Temperature{Val: 580, Unit: u.Fahrenheit},
 		Pressure(2250),
@@ -390,7 +391,7 @@ func TestPlantOperation_AuxToMainFeedwaterTransition(t *testing.T) {
 	)
 	assert.True(t, below.AuxFeedwaterInUse,
 		"want AuxFeedwaterInUse=true below 3.5%% threshold")
-	above := po.Step(
+	above := po.Step(DefaultTimeStep,
 		PowerOperation,
 		Temperature{Val: 580, Unit: u.Fahrenheit},
 		Pressure(2250),
@@ -405,7 +406,7 @@ func TestPlantOperation_AuxToMainFeedwaterTransition(t *testing.T) {
 // Power-raise rate limit. With the target setpoint above the
 // current power by more than one tick of the 5%/min ramp, RampingUp
 // must be true and the per-tick increment must not exceed
-// OpPowerRaiseRate × ratedPower × TimeStep.
+// OpPowerRaiseRate × ratedPower × ProductionStep.
 //
 // Spec justification:
 //   - "plant loading is continued to full power at a rate not to
@@ -415,7 +416,7 @@ func TestPlantOperation_PowerRaiseRateLimit(t *testing.T) {
 	po := PlantOperation{}
 	// Plant at zero power; target setpoint = full load.
 	// Demand delta = CoreRatedThermalPower ≫ one tick of ramp.
-	out := po.Step(
+	out := po.Step(DefaultTimeStep,
 		PowerOperation,
 		Temperature{Val: 580, Unit: u.Fahrenheit},
 		Pressure(2250),
@@ -435,8 +436,8 @@ func TestPlantOperation_PowerRaiseRateLimit(t *testing.T) {
 func TestPlantOperation_PowerOperationSettles(t *testing.T) {
 	po := PlantOperation{}
 	tinyDelta := OpPowerRaiseRate * float64(CoreRatedThermalPower) *
-		TimeStep.Seconds() / 2
-	out := po.Step(
+		DefaultTimeStep.Seconds() / 2
+	out := po.Step(DefaultTimeStep,
 		PowerOperation,
 		Temperature{Val: 580, Unit: u.Fahrenheit},
 		Pressure(2250),
@@ -460,7 +461,7 @@ func TestPlantOperation_PowerOperationSettles(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_231.txt:112
 func TestPlantOperation_PowerLowerRateLimit(t *testing.T) {
 	po := PlantOperation{}
-	out := po.Step(
+	out := po.Step(DefaultTimeStep,
 		PowerOperation,
 		Temperature{Val: 580, Unit: u.Fahrenheit},
 		Pressure(2250),
@@ -489,7 +490,7 @@ func TestPlantOperation_PowerLowerRateLimit(t *testing.T) {
 func TestPlantOperation_LoadFollow15To100(t *testing.T) {
 	po := PlantOperation{}
 	for _, frac := range []float64{0.15, 0.50, 1.00} {
-		out := po.Step(
+		out := po.Step(DefaultTimeStep,
 			PowerOperation,
 			Temperature{Val: 580, Unit: u.Fahrenheit},
 			Pressure(2250),
@@ -532,7 +533,7 @@ func TestClampRate_Passthrough(t *testing.T) {
 func TestPlant_StepPropagatesPlantOperation(t *testing.T) {
 	p := MakePlant()
 	p.PlantOperation.Mode = ColdShutdown
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.Equal(t, ColdShutdown, p.PlantOperation.Mode,
 		"want Mode=ColdShutdown after step")
 	assert.True(t, p.PlantOperation.AuxFeedwaterInUse,
@@ -553,7 +554,7 @@ func TestPlant_StepAdvancesConfiguredHotStandby(t *testing.T) {
 	p.PlantOperation.Mode = HotStandby
 	require.False(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.Running,
 		"precondition: RHRS secured so the hot-standby RCP cap arms")
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 	assert.Equal(t, HotStandby, p.PlantOperation.Mode,
 		"want the configured mode preserved through Step")
 	assert.True(t, p.PlantOperation.HotStandbyRCPLimitActive,
@@ -573,7 +574,7 @@ func TestPlant_BreakerCloseRequiresSyncTolerance(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Generator.BreakerClosed = true
-	stepN(&p, int(time.Second/TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 	assert.False(t, p.TurbineBuilding.Generator.BreakerClosed,
 		"want breaker popped when closed out of synchronism")
 }
@@ -595,12 +596,12 @@ func TestPlant_LoadRejectOpensDumpAndRoutesSteam(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	synchronizeAndCloseBreaker(&p)
-	stepN(&p, int(5*time.Second/TimeStep))
+	stepN(&p, int(5*time.Second/DefaultTimeStep), DefaultTimeStep)
 	require.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State,
 		"precondition: want turbine running")
 
 	p.TurbineBuilding.Turbine.Setpoint = 0.5
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 	assert.Greater(t, p.TurbineBuilding.Turbine.DumpValve.Open, 0.9,
 		"want dump valves opened by load rejection, got %v",
 		p.TurbineBuilding.Turbine.DumpValve.Open)
@@ -633,13 +634,13 @@ func TestPlant_StopValveClosureHoldsDumpUntilReset(t *testing.T) {
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	synchronizeAndCloseBreaker(&p)
-	stepN(&p, int(5*time.Second/TimeStep))
+	stepN(&p, int(5*time.Second/DefaultTimeStep), DefaultTimeStep)
 	require.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State,
 		"precondition: want turbine running")
 
 	p.TurbineBuilding.Turbine.StopValve.Open = 0
 	p.TurbineBuilding.Generator.BreakerClosed = false
-	stepN(&p, int(3*time.Second/TimeStep))
+	stepN(&p, int(3*time.Second/DefaultTimeStep), DefaultTimeStep)
 	require.Equal(t, TurbineTripped, p.TurbineBuilding.Turbine.State,
 		"steam-loss deadline should latch the trip")
 	assert.Equal(t, Watts(0), p.TurbineBuilding.Turbine.RealPower,
@@ -651,23 +652,23 @@ func TestPlant_StopValveClosureHoldsDumpUntilReset(t *testing.T) {
 		"the post-scram dump response holds the header clear of "+
 			"the low-steamline setpoint")
 
-	stepN(&p, int(10*time.Second/TimeStep))
+	stepN(&p, int(10*time.Second/DefaultTimeStep), DefaultTimeStep)
 	p.TurbineBuilding.Turbine.ResetRequest = true
-	stepN(&p, int(10*time.Millisecond/TimeStep))
+	stepN(&p, int(10*time.Millisecond/DefaultTimeStep), DefaultTimeStep)
 	require.Equal(t, TurbineOff, p.TurbineBuilding.Turbine.State,
 		"reset at rest should clear the trip to off")
 	// The auto-stop-oil forcing keeps the stop valves shut while the
 	// RPS latch stands, so the operator clears the scram before
 	// re-admitting steam.
 	p.ReactorBuilding.ReactorProtectionSystem.Reset()
-	stepN(&p, int(10*time.Millisecond/TimeStep))
+	stepN(&p, int(10*time.Millisecond/DefaultTimeStep), DefaultTimeStep)
 	require.False(t, p.ReactorBuilding.ReactorPressureVessel.Trip)
 	// Admission cracks in on a throttled governor: with only decay
 	// heat behind the header, a full-admission surge would crash it
 	// into the low-steamline setpoint.
 	p.TurbineBuilding.Turbine.GoverningValve.Open = 0.1
 	p.TurbineBuilding.Turbine.StopValve.Open = 1
-	stepN(&p, int(2*time.Second/TimeStep))
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 	assert.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State,
 		"steam admission after both resets should return the "+
 			"machine to service")
@@ -694,7 +695,7 @@ func TestPlant_AtmosphericDumpRelievesSGOnly(t *testing.T) {
 		p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 		p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 		p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open = atmOpen
-		stepN(&p, int(5*time.Second/TimeStep))
+		stepN(&p, int(5*time.Second/DefaultTimeStep), DefaultTimeStep)
 		return p.ReactorBuilding.SteamGenerator.Pressure,
 			p.TurbineBuilding.Condenser.CondensingRate
 	}
@@ -750,19 +751,19 @@ func TestPowerGenerator_MVAEnforced(t *testing.T) {
 //     certain power level initiates a reactor trip"
 //     specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:33-34
 func TestPlant_TurbineTripAtPowerScramsSupersedingStepback(t *testing.T) {
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	synchronizeAndCloseBreaker(&p)
-	stepN(&p, int(5*time.Second/TimeStep))
+	stepN(&p, int(5*time.Second/testDt), testDt)
 	require.Equal(t, TurbineRunning, p.TurbineBuilding.Turbine.State,
 		"precondition: want turbine running")
 
 	p.TurbineBuilding.Turbine.StopValve.Open = 0
 	p.TurbineBuilding.Generator.BreakerClosed = false
-	stepN(&p, int(3*time.Second/TimeStep))
+	stepN(&p, int(3*time.Second/testDt), testDt)
 	require.True(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
 		"the at-power turbine trip must scram the reactor")
 	require.False(t, p.PlantOperation.StepbackActive,
@@ -773,7 +774,7 @@ func TestPlant_TurbineTripAtPowerScramsSupersedingStepback(t *testing.T) {
 	require.Equal(t, 1.0, float64(rpv.ControlRods.Insertion),
 		"rods fall full in on the scram")
 
-	stepN(&p, int(30*time.Second/TimeStep))
+	stepN(&p, int(30*time.Second/testDt), testDt)
 	park := StepbackPowerFraction * float64(CoreFissionPowerAtRated)
 	assert.Less(t, float64(rpv.FissionPower), 0.5*park,
 		"the scram folds far below the stepback park level")
@@ -799,7 +800,7 @@ func TestPlant_MainFeedwaterReplenishesSGFromHotwell(t *testing.T) {
 		p.TurbineBuilding.Condenser.HotwellLevel =
 			Volume{Val: 50000, Unit: u.Gallon}
 		p.TurbineBuilding.MainFeedwaterPump.Running = pumpOn
-		stepN(&p, int(10*time.Second/TimeStep))
+		stepN(&p, int(10*time.Second/DefaultTimeStep), DefaultTimeStep)
 		return p.ReactorBuilding.SteamGenerator.Water.Float(),
 			p.TurbineBuilding.Condenser.HotwellLevel.Float()
 	}
@@ -821,10 +822,9 @@ func TestPlant_MainFeedwaterReplenishesSGFromHotwell(t *testing.T) {
 // the steam offtake drain the generator into its low-level trips and
 // the protection cascade behind them.
 func TestPlant_FreshAtPowerIdlesWithoutSpuriousTrips(t *testing.T) {
-	// Must not run in parallel: overrideTimeStep mutates global
 	// simulation state. The 250 ms step keeps the regulator's
 	// discrete integration honest while covering an hour of idle.
-	overrideTimeStep(t, 250*time.Millisecond)
+	testDt := 250 * time.Millisecond
 	p := MakePlant()
 	// The full-load seed requires forced flow: "Natural circulation
 	// flow is sufficient only for decay heat removal of a shutdown
@@ -833,7 +833,7 @@ func TestPlant_FreshAtPowerIdlesWithoutSpuriousTrips(t *testing.T) {
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 
 	for range int(time.Hour / (250 * time.Millisecond)) {
-		stepN(&p, 1)
+		stepN(&p, 1, testDt)
 		rps := &p.ReactorBuilding.ReactorProtectionSystem
 		assert.False(t, rps.ReactorTripped,
 			"the fresh plant must not scram while idling at power")
@@ -858,15 +858,14 @@ func TestPlant_FreshAtPowerIdlesWithoutSpuriousTrips(t *testing.T) {
 //
 // Spec justification:
 //   - "Raise pressurizer level above no-load value in anticipation of
-//      coolant contraction" (the surge coupling, either sign).
-//      specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:70-72
+//     coolant contraction" (the surge coupling, either sign).
+//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:70-72
 func TestPlant_PressurizerSurgeTracksCoolantExpansion(t *testing.T) {
 	// Heatup runs through dt-scaled thermal lags and the surge
 	// coupling integrates expansion linearly in dt; the conservation
 	// ledger holds by construction at any width. Directional
-	// assertions only. Must not run in parallel: overrideTimeStep
 	// mutates global simulation state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
@@ -886,7 +885,7 @@ func TestPlant_PressurizerSurgeTracksCoolantExpansion(t *testing.T) {
 	p.TurbineBuilding.Turbine.StopValve.Open = 0
 	p.TurbineBuilding.Turbine.DumpValve.Open = 0
 	p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve.Open = 0
-	stepN(&p, int(45*time.Second/TimeStep))
+	stepN(&p, int(45*time.Second/testDt), testDt)
 
 	outlet := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 	assert.Greater(t, outlet, startOutlet,
@@ -906,8 +905,8 @@ func TestPlant_PressurizerSurgeTracksCoolantExpansion(t *testing.T) {
 //
 // Spec justification:
 //   - "Wide range speed control of the turbine from turning gear to
-//      rated speed."
-//      specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
+//     rated speed."
+//     specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:70-72
 func TestTurbine_RollingSteamDrawScalesWithSpeed(t *testing.T) {
 	base := Turbine{
 		State:          TurbineRunning,
@@ -915,10 +914,10 @@ func TestTurbine_RollingSteamDrawScalesWithSpeed(t *testing.T) {
 		Synchronized:   false,
 		GoverningValve: Valve{Open: 1},
 	}
-	half := base.Step(SteamGeneratorShellPressure, CondenserDesignVacuum, Temperature{Val: 600}, false, nil)
+	half := base.Step(DefaultTimeStep, SteamGeneratorShellPressure, CondenserDesignVacuum, Temperature{Val: 600}, false, nil)
 	syncd := base
 	syncd.Synchronized = true
-	full := syncd.Step(SteamGeneratorShellPressure, CondenserDesignVacuum, Temperature{Val: 600}, false, nil)
+	full := syncd.Step(DefaultTimeStep, SteamGeneratorShellPressure, CondenserDesignVacuum, Temperature{Val: 600}, false, nil)
 
 	speedFrac := max(float64(base.Velocity)/float64(TurbineRatedSpeed),
 		TurbineRollMinSteamFraction)
@@ -938,17 +937,17 @@ func TestTurbine_RollingSteamDrawScalesWithSpeed(t *testing.T) {
 //
 // Spec justification:
 //   - "the boiler pressure safety relief valve will open on high
-//      boiler pressure"
-//      specs/pwr_sim/chapter_3/page_041.txt:20-22
+//     boiler pressure"
+//     specs/pwr_sim/chapter_3/page_041.txt:20-22
 //   - "self-actuating ASME-code [safety valves] which open
-//      automatically to reduce steam pressure"
-//      specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:34-38
+//     automatically to reduce steam pressure"
+//     specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:34-38
 func TestPlant_SGSafetyValvePopsAndReseats(t *testing.T) {
 	pop := MakePlant().ReactorBuilding.SteamGenerator
 	pop.HeatInput = SteamGeneratorFullLoadHeatInput
 	pop.Water = Volume{Val: 80000, Unit: u.Gallon}
 	pop.Pressure = SteamGeneratorSafetyValveSetpointPsia
-	pop = pop.Step(0)
+	pop = pop.Step(DefaultTimeStep, 0)
 	require.Greater(t, pop.SafetyValve.Open, 0.9,
 		"valves should pop at setpoint")
 	assert.Less(t, pop.Water.Float(), 80000.0,
@@ -959,7 +958,7 @@ func TestPlant_SGSafetyValvePopsAndReseats(t *testing.T) {
 	// capacity, so the header sags and the valves reseat.
 	reseat.HeatInput = SteamGeneratorFullLoadHeatInput / 4
 	for i := 0; i < 8000; i++ {
-		reseat = reseat.Step(0)
+		reseat = reseat.Step(DefaultTimeStep, 0)
 	}
 	assert.Equal(t, 0.0, reseat.SafetyValve.Open,
 		"valves should reseat once pressure decays below blowdown")
@@ -982,15 +981,14 @@ func TestPlant_FullLoadHoldsShellPressureAndRatedOutput(t *testing.T) {
 	// state, insensitive to tick width), the SG header relaxes toward
 	// its anchor through dt-scaled lags, and every assertion is a
 	// wide band around that settled point (+/-40 psia against a
-	// 920 psia anchor). Must not run in parallel: overrideTimeStep
 	// mutates global simulation state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	testDt := 10 * time.Millisecond
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	synchronizeAndCloseBreaker(&p)
-	stepN(&p, int(60*time.Second/TimeStep))
+	stepN(&p, int(60*time.Second/testDt), testDt)
 
 	sgP := float64(p.ReactorBuilding.SteamGenerator.Pressure)
 	assert.InDelta(t, float64(SteamGeneratorShellPressure), sgP, 40,
@@ -1014,8 +1012,8 @@ func TestPlant_FullLoadHoldsShellPressureAndRatedOutput(t *testing.T) {
 //
 // Spec justification:
 //   - "turbine bypass valves open automatically on turbine trip,
-//      then modulate to pass steam to the condenser and hold boiler
-//      pressure at the constant setpoint"
+//     then modulate to pass steam to the condenser and hold boiler
+//     pressure at the constant setpoint"
 //     specs/pwr_sim/chapter_3/page_041.txt:37-45
 //   - SG pressure must stay far above the low-steamline trip:
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt
@@ -1025,7 +1023,7 @@ func TestPlant_TripBypassModulatesAndHoldsHeaderPressure(t *testing.T) {
 	// (880 psia floor, safety-valve ceiling) rather than per-step
 	// shape.
 	//
-	// Fidelity note: this hold used to require the default TimeStep.
+	// Fidelity note: this hold used to require the default ProductionStep.
 	// The stepback fold follows the reactor's per-step reactivity
 	// compounding, so a coarser tick folded power more slowly against
 	// the tripped turbine's fixed offtake and pushed the header peak
@@ -1033,19 +1031,18 @@ func TestPlant_TripBypassModulatesAndHoldsHeaderPressure(t *testing.T) {
 	// a uniform 10 ms tick and 985.04 psia at 5 ms. That compounding
 	// is now anchored to DefaultTimeStep (see
 	// TestReactorFissionPower_WidthInvariance), so the ride-through
-	// runs wide and the valve stays seated at any width. Must not run
-	// in parallel: overrideTimeStep mutates global simulation state.
-	overrideTimeStep(t, 10*time.Millisecond)
+	// runs wide and the valve stays seated at any width.
+	testDt := 10 * time.Millisecond
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
 	p.TurbineBuilding.Turbine.Setpoint = 1.0
 	synchronizeAndCloseBreaker(&p)
-	stepN(&p, int(5*time.Second/TimeStep))
+	stepN(&p, int(5*time.Second/testDt), testDt)
 
 	p.TurbineBuilding.Turbine.StopValve.Open = 0
 	p.TurbineBuilding.Generator.BreakerClosed = false
-	stepN(&p, int(3*time.Second/TimeStep))
+	stepN(&p, int(3*time.Second/testDt), testDt)
 	require.Equal(t, TurbineTripped, p.TurbineBuilding.Turbine.State,
 		"precondition: want the trip latched")
 	require.True(t, p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped,
@@ -1053,8 +1050,8 @@ func TestPlant_TripBypassModulatesAndHoldsHeaderPressure(t *testing.T) {
 
 	minP, maxP := 1e9, 0.0
 	modulated := false
-	for i := 0; i < int(60*time.Second/TimeStep); i++ {
-		p.Step()
+	for i := 0; i < int(60*time.Second/testDt); i++ {
+		p.Step(testDt)
 		p.Update()
 		sgP := float64(p.ReactorBuilding.SteamGenerator.Pressure)
 		minP = min(minP, sgP)
@@ -1106,7 +1103,7 @@ func TestPlant_UnmarshalReconcilesBoronStorage(t *testing.T) {
 		p.ReactorBuilding.ReactorPressureVessel.ControlRods.BoronConcentration,
 		"the reactivity model must start at the CVCS boron value")
 
-	p.Step()
+	p.Step(DefaultTimeStep)
 	p.Update()
 	assert.Equal(t, seeded,
 		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.BoronConcentration,
@@ -1132,9 +1129,8 @@ func TestPlant_UnmarshalReconcilesBoronStorage(t *testing.T) {
 	full, err := json.Marshal(MakePlant())
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(full, &r))
-	r.Step()
+	r.Step(DefaultTimeStep)
 	r.Update()
 	_, err = json.Marshal(&r)
 	require.NoError(t, err)
 }
-

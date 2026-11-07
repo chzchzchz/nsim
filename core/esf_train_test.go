@@ -11,16 +11,16 @@ import (
 // loopFixture declares a loss of offsite power on a fresh plant whose
 // main generator breaker is open, so both ESF buses go dark and each
 // train's diesel must answer its own bus.
-func loopFixture(t *testing.T) *Plant {
+func loopFixture(t *testing.T) (*Plant, time.Duration) {
 	t.Helper()
-	overrideTimeStep(t, 100*time.Millisecond)
+	testDt := 100 * time.Millisecond
 	p := MakePlant()
 	p.TurbineBuilding.Generator.BreakerClosed = false
 	controls := p.GetControlMap()
 	loop := controls["ReactorBuilding/PlantElectricalSystems/OffsitePowerAvailable"]
 	require.NotNil(t, loop)
 	require.NoError(t, loop.Set("0"))
-	return &p
+	return &p, testDt
 }
 
 // Each train's diesel answers only its own ESF bus: killing one diesel
@@ -34,10 +34,10 @@ func loopFixture(t *testing.T) *Plant {
 //     power buses, is physically and electrically independent."
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:30-36
 func TestPlant_IndependentDieselsFeedIndependentTrains(t *testing.T) {
-	p := loopFixture(t)
+	p, testDt := loopFixture(t)
 
 	for i := 0; i < 160; i++ {
-		p.Step()
+		p.Step(testDt)
 		p.Update()
 	}
 	require.True(t, p.Electrical.ESFBusA.Energized, "precondition: bus A transferred to its diesel")
@@ -50,7 +50,7 @@ func TestPlant_IndependentDieselsFeedIndependentTrains(t *testing.T) {
 	p.AuxiliaryBuilding.DieselGenerator.Fuel.Level =
 		Volume{Val: 0, Unit: p.AuxiliaryBuilding.DieselGenerator.Fuel.Level.Unit}
 	for i := 0; i < 20; i++ {
-		p.Step()
+		p.Step(testDt)
 		p.Update()
 	}
 
@@ -72,7 +72,7 @@ func TestPlant_IndependentDieselsFeedIndependentTrains(t *testing.T) {
 //     of overload trip due to simultaneous starting loads."
 //     specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:52-55
 func TestPlant_DieselTransferSequencesLargeLoads(t *testing.T) {
-	p := loopFixture(t)
+	p, testDt := loopFixture(t)
 
 	// Step until the diesels pick up their buses (ready 10 s +
 	// field flashing margin), then sample inside and past the
@@ -80,16 +80,16 @@ func TestPlant_DieselTransferSequencesLargeLoads(t *testing.T) {
 	busUp := false
 	var sinceTransfer int
 	for i := 0; i < 300 && !busUp; i++ {
-		p.Step()
+		p.Step(testDt)
 		p.Update()
 		busUp = p.Electrical.ESFBusA.Energized &&
 			p.Electrical.ESFBusA.OnDiesel
 	}
 	require.True(t, busUp, "precondition: bus A transferred to its diesel")
 
-	stageDelaySteps := int(esfLoadSequenceStageDelay / TimeStep)
+	stageDelaySteps := int(esfLoadSequenceStageDelay / testDt)
 	for sinceTransfer = 0; sinceTransfer < stageDelaySteps/2; sinceTransfer++ {
-		p.Step()
+		p.Step(testDt)
 		p.Update()
 		assert.False(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.DriveReady,
 			"RHR pump must wait out its sequence stage after the transfer")
@@ -97,7 +97,7 @@ func TestPlant_DieselTransferSequencesLargeLoads(t *testing.T) {
 			"EFWS motor pump is a stage-0 load and returns with the bus")
 	}
 	for ; sinceTransfer < stageDelaySteps+10; sinceTransfer++ {
-		p.Step()
+		p.Step(testDt)
 		p.Update()
 	}
 	assert.True(t, p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.DriveReady,
@@ -116,7 +116,7 @@ func TestPlant_DieselTransferSequencesLargeLoads(t *testing.T) {
 //     operation and supply power for its own auxiliaries."
 //     specs/the_westinghouse_pressurized_water_react/chapter_16/page_233.txt:55-58
 func TestPlant_IslandedUnitCarriesESFBusesWithoutDieselStart(t *testing.T) {
-	overrideTimeStep(t, 100*time.Millisecond)
+	testDt := 100 * time.Millisecond
 	p := MakePlant()
 	// A synchronized, spinning unit with its exciter active holds
 	// terminal voltage (core/plant.go generator-terminal block).
@@ -131,7 +131,7 @@ func TestPlant_IslandedUnitCarriesESFBusesWithoutDieselStart(t *testing.T) {
 	require.NoError(t, loop.Set("0"))
 
 	for i := 0; i < 30; i++ {
-		p.Step()
+		p.Step(testDt)
 		p.Update()
 	}
 
@@ -148,7 +148,7 @@ func TestPlant_IslandedUnitCarriesESFBusesWithoutDieselStart(t *testing.T) {
 	assert.False(t, p.ReactorBuilding.PlantElectricalSystems.StationBlackout)
 
 	p.TurbineBuilding.Generator.BreakerClosed = false
-	p.Step()
+	p.Step(testDt)
 	p.Update()
 
 	assert.False(t, p.Electrical.ESFBusA.Energized,
@@ -180,18 +180,18 @@ func TestRPS_SteamlineIsolationBlockGatesOnlySteamlineTrigger(t *testing.T) {
 
 	lvl, tcold, cont, pw := nominalArgs()
 	blocked := ReactorProtectionSystem{SteamlineIsolationBlocked: true}
-	r := blocked.Step(lowHeader, PressurizerHeaterTarget, lvl, tcold, cont, pw, 1, 0,
+	r := blocked.Step(DefaultTimeStep, lowHeader, PressurizerHeaterTarget, lvl, tcold, cont, pw, 1, 0,
 		false)
 	assert.False(t, r.SteamlineIsolationActuated,
 		"a blocked low-steamline trigger must not isolate the steamlines")
 
-	r = blocked.Step(nominalSl, PressurizerHeaterTarget, lvl, tcold, hotContainment, pw, 1, 0,
+	r = blocked.Step(DefaultTimeStep, nominalSl, PressurizerHeaterTarget, lvl, tcold, hotContainment, pw, 1, 0,
 		false)
 	assert.True(t, r.SteamlineIsolationActuated,
 		"high containment pressure must stay live while blocked")
 
 	unblocked := ReactorProtectionSystem{}
-	r = unblocked.Step(lowHeader, PressurizerHeaterTarget, lvl, tcold, cont, pw, 1, 0,
+	r = unblocked.Step(DefaultTimeStep, lowHeader, PressurizerHeaterTarget, lvl, tcold, cont, pw, 1, 0,
 		false)
 	assert.True(t, r.SteamlineIsolationActuated,
 		"an unblocked low header must isolate the steamlines")

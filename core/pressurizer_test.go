@@ -26,7 +26,7 @@ func TestPressurizer_HeatersDrivePressureUp(t *testing.T) {
 	p.ReactorBuilding.Pressurizer.HeatersOn = true
 
 	before := p.ReactorBuilding.Pressurizer.Pressure
-	stepN(&p, int(time.Second/TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	after := p.ReactorBuilding.Pressurizer.Pressure
 	assert.Greater(t, after, before,
@@ -62,7 +62,7 @@ func TestPressurizer_SprayDrivesPressureDown(t *testing.T) {
 		p.ReactorBuilding.ReactorPressureVessel.Outlet.Float())
 
 	before := p.ReactorBuilding.Pressurizer.Pressure
-	stepN(&p, int(time.Second/TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	after := p.ReactorBuilding.Pressurizer.Pressure
 	assert.Less(t, after, before,
@@ -78,12 +78,15 @@ func TestPressurizer_SprayDrivesPressureDown(t *testing.T) {
 // ReactorPressureVessel left the fluid graph (the primary and
 // secondary loops are closed cycles that exchange only heat across
 // the SG tubes:
-//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_064.txt:20-27),
+//
+//	specs/the_westinghouse_pressurized_water_react/chapter_3/page_064.txt:20-27),
+//
 // tracked inflow arrives through the CVCS charging line:
-//   "pressurizer level represents a balance of injection water flow
-//    into the RCS and water letdown flow into the Chemical and
-//    Volume Control System."
-//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65
+//
+//	"pressurizer level represents a balance of injection water flow
+//	 into the RCS and water letdown flow into the Chemical and
+//	 Volume Control System."
+//	specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65
 func TestPressurizer_InflowRaisesLevelWithoutMovingPressure(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.Pressurizer.Volume = Volume{Val: 1000, Unit: u.Gallon}
@@ -100,12 +103,12 @@ func TestPressurizer_InflowRaisesLevelWithoutMovingPressure(t *testing.T) {
 	waterBefore := p.ReactorBuilding.Pressurizer.Water.Float()
 	before := p.ReactorBuilding.Pressurizer.Pressure
 
-	stepN(&p, int(time.Second/TimeStep))
+	stepN(&p, int(time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	after := p.ReactorBuilding.Pressurizer.Pressure
 	wantDrift := float64(PressurizerAmbientDecay)
 	assert.InDelta(t, float64(before), float64(after), wantDrift+1,
-		"charging inflow must not drive pressure; only idle drift allowed: " +
+		"charging inflow must not drive pressure; only idle drift allowed: "+
 			"before %v after %v", before, after)
 	assert.Greater(t, p.ReactorBuilding.Pressurizer.Water.Float(), waterBefore,
 		"Water should have risen via charging inflow")
@@ -118,7 +121,7 @@ func TestPressurizer_PORVOpensOverTrip(t *testing.T) {
 	p.ReactorBuilding.Pressurizer.Water = Volume{Val: 500, Unit: u.Gallon} // big bubble
 	p.ReactorBuilding.Pressurizer.Pressure = PressurizerPORVTrip + 100
 
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 
 	assert.NotZero(t, p.ReactorBuilding.PORV.Open,
 		"PORV should open over trip threshold, Open=%v", p.ReactorBuilding.PORV.Open)
@@ -143,8 +146,8 @@ func TestPressurizer_BubbleFormationFromWaterSolid(t *testing.T) {
 		HeatersOn: true,
 	}
 	// The window must cover (target-seed)/rate seconds of drive.
-	for range int(6 * time.Second / TimeStep) {
-		pz, _ = pz.Step(hotLeg, nil, nil, nil, 1, 0)
+	for range int(6 * time.Second / DefaultTimeStep) {
+		pz, _ = pz.Step(DefaultTimeStep, hotLeg, nil, nil, nil, 1, 0)
 	}
 
 	assert.InDelta(t, float64(PressurizerHeaterTarget), float64(pz.Pressure), 10,
@@ -175,11 +178,11 @@ func TestPressurizer_LetdownDrainHoldsPressure(t *testing.T) {
 		HeatersOn: true,
 	}
 	netLetdown := (CVCSDesignLetdownFlow.Float() - CVCSDesignChargingFlow.Float()) *
-		TimeStep.Seconds()
+		DefaultTimeStep.Seconds()
 	hotLeg := Temperature{Val: CoreReferenceInletF + 3, Unit: u.Fahrenheit}
 
 	for pz.Water.Float() > 375 {
-		pz, _ = pz.Step(hotLeg, nil, nil, nil, 1, 0)
+		pz, _ = pz.Step(DefaultTimeStep, hotLeg, nil, nil, nil, 1, 0)
 		pz.Water = vol(pz.Water, pz.Water.Float()-netLetdown)
 
 		require.Less(t, float64(pz.Pressure), float64(PressurizerPORVTrip),
@@ -207,8 +210,8 @@ func TestPressurizer_IdleCooldownCondensesBubble(t *testing.T) {
 		Water:    Volume{Val: 1200, Unit: u.Gallon},
 		Pressure: PressurizerHeaterTarget,
 	}
-	for range int(time.Second / TimeStep) {
-		pz, _ = pz.Step(hotLeg, nil, nil, nil, 1, 0)
+	for range int(time.Second / DefaultTimeStep) {
+		pz, _ = pz.Step(DefaultTimeStep, hotLeg, nil, nil, nil, 1, 0)
 	}
 
 	assert.Less(t, float64(pz.Pressure), float64(PressurizerHeaterTarget),
@@ -237,8 +240,8 @@ func TestPressurizer_HeaterAutoControlRecoversSag(t *testing.T) {
 	rcsTemp := Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
 
 	maxPressure := 0.0
-	for i := 0; i < int(3*time.Second/TimeStep); i++ {
-		pzr, _ = pzr.Step(rcsTemp, nil, nil, nil, 0, 0)
+	for i := 0; i < int(3*time.Second/DefaultTimeStep); i++ {
+		pzr, _ = pzr.Step(DefaultTimeStep, rcsTemp, nil, nil, nil, 0, 0)
 		maxPressure = max(maxPressure, float64(pzr.Pressure))
 	}
 	assert.GreaterOrEqual(t, maxPressure, float64(PressurizerHeaterTarget),
@@ -267,10 +270,10 @@ func TestPressurizer_HeaterAutoControlHoldsThroughCooldown(t *testing.T) {
 	rcsTemp := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 
 	minArmed := float64(PressurizerHeaterTarget)
-	for i := 0; i < int(20*time.Second/TimeStep); i++ {
+	for i := 0; i < int(20*time.Second/DefaultTimeStep); i++ {
 		rcsTemp.Val -= 0.0025 // 50 F/hr program cooldown
-		armed, _ = armed.Step(rcsTemp, nil, nil, nil, 0, 0)
-		manual, _ = manual.Step(rcsTemp, nil, nil, nil, 0, 0)
+		armed, _ = armed.Step(DefaultTimeStep, rcsTemp, nil, nil, nil, 0, 0)
+		manual, _ = manual.Step(DefaultTimeStep, rcsTemp, nil, nil, nil, 0, 0)
 		minArmed = min(minArmed, float64(armed.Pressure))
 	}
 	assert.GreaterOrEqual(t, minArmed,
@@ -300,8 +303,8 @@ func TestPressurizer_PressureSetpointRegulatesBand(t *testing.T) {
 	rcsTemp := Temperature{Val: 138, Unit: u.Fahrenheit}
 
 	minPressure, maxPressure := 415.0, 415.0
-	for i := 0; i < int(60*time.Second/TimeStep); i++ {
-		pzr, _ = pzr.Step(rcsTemp, nil, nil, nil, 0, 0)
+	for i := 0; i < int(60*time.Second/DefaultTimeStep); i++ {
+		pzr, _ = pzr.Step(DefaultTimeStep, rcsTemp, nil, nil, nil, 0, 0)
 		minPressure = min(minPressure, float64(pzr.Pressure))
 		maxPressure = max(maxPressure, float64(pzr.Pressure))
 	}
@@ -324,8 +327,8 @@ func TestPressurizer_ManualHeatersHoldAtSetpoint(t *testing.T) {
 	}
 	rcsTemp := Temperature{Val: 138, Unit: u.Fahrenheit}
 
-	for i := 0; i < int(30*time.Second/TimeStep); i++ {
-		pzr, _ = pzr.Step(rcsTemp, nil, nil, nil, 0, 0)
+	for i := 0; i < int(30*time.Second/DefaultTimeStep); i++ {
+		pzr, _ = pzr.Step(DefaultTimeStep, rcsTemp, nil, nil, nil, 0, 0)
 	}
 	assert.InDelta(t, 415.0, float64(pzr.Pressure), 0.5,
 		"manual heaters must stop at the selected pressure: got %v",
@@ -339,7 +342,7 @@ func TestPlant_RPVPressureTracksPressurizer(t *testing.T) {
 	p := MakePlant()
 	p.ReactorBuilding.Pressurizer.Pressure = 2100
 
-	stepN(&p, 1)
+	stepN(&p, 1, DefaultTimeStep)
 
 	assert.Equal(t,
 		float64(p.ReactorBuilding.Pressurizer.Pressure),
@@ -375,8 +378,8 @@ func TestPressurizer_AutoSprayRelievesOvershoot(t *testing.T) {
 	rcsTemp := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 
 	latched := false
-	for i := 0; i < int(5*time.Second/TimeStep); i++ {
-		pzr, _ = pzr.Step(rcsTemp, nil, nil, nil, 1, 0)
+	for i := 0; i < int(5*time.Second/DefaultTimeStep); i++ {
+		pzr, _ = pzr.Step(DefaultTimeStep, rcsTemp, nil, nil, nil, 1, 0)
 		latched = latched || pzr.AutoSprayOn
 	}
 	assert.True(t, latched, "the spray latch must engage on overshoot")
@@ -400,8 +403,8 @@ func TestPressurizer_AutoSprayNeedsRCPFlow(t *testing.T) {
 	rcsTemp := Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 
 	before := float64(pzr.Pressure)
-	for i := 0; i < int(2*time.Second/TimeStep); i++ {
-		pzr, _ = pzr.Step(rcsTemp, nil, nil, nil, 0, 0)
+	for i := 0; i < int(2*time.Second/DefaultTimeStep); i++ {
+		pzr, _ = pzr.Step(DefaultTimeStep, rcsTemp, nil, nil, nil, 0, 0)
 	}
 	assert.True(t, pzr.AutoSprayOn, "the latch arms on overshoot")
 	assert.Equal(t, before, float64(pzr.Pressure),

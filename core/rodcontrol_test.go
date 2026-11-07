@@ -65,15 +65,15 @@ func TestRPC_RateClampOnOperatorEntry(t *testing.T) {
 
 	run := func(rate float64, seconds float64) float64 {
 		po := PlantOperation{
-			RodControlAuto:       true,
-			LeadLagMode:          ReactorLead,
-			PowerSetpointDemand:  0.90,
-			PowerRateDemand:      rate,
+			RodControlAuto:        true,
+			LeadLagMode:           ReactorLead,
+			PowerSetpointDemand:   0.90,
+			PowerRateDemand:       rate,
 			DemandedPowerSetpoint: 0,
 		}
-		steps := int(seconds / TimeStep.Seconds())
+		steps := int(seconds / DefaultTimeStep.Seconds())
 		for range steps {
-			po.StepRPC(rpv, turbine, TimeStep)
+			po.StepRPC(rpv, turbine, DefaultTimeStep)
 		}
 		return po.DemandedPowerSetpoint
 	}
@@ -107,9 +107,8 @@ func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
 	// (specs/pwr_sim/chapter_2/page_024.txt:3-12), and the
 	// integrator scales linearly with dt, so the widened step still
 	// lands exactly on target while cutting step count 20x. Must
-	// not run in parallel: overrideTimeStep mutates global
 	// simulation state.
-	overrideTimeStep(t, 50*time.Millisecond)
+	testDt := 50 * time.Millisecond
 	p := rpcReactorLeadPlant()
 
 	setControl(t, &p, "PlantOperation/LeadLagMode", "1")
@@ -135,10 +134,10 @@ func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
 		convergeSeconds = 700.0 // measured band entry near t~1220 s total
 		holdSeconds     = 120.0 // envelope window after first band entry
 	)
-	checkEvery := int(200 * time.Millisecond / TimeStep)
+	checkEvery := int(200 * time.Millisecond / testDt)
 
-	for range int(shadowSeconds / TimeStep.Seconds()) {
-		p.Step()
+	for range int(shadowSeconds / testDt.Seconds()) {
+		p.Step(testDt)
 		p.Update()
 	}
 	// Anchor to the fixture's own achieved power, not a literal
@@ -158,8 +157,8 @@ func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
 			stage)
 	}
 
-	for range int(descentSeconds / TimeStep.Seconds()) {
-		p.Step()
+	for range int(descentSeconds / testDt.Seconds()) {
+		p.Step(testDt)
 		p.Update()
 	}
 	sampleGuards("descent")
@@ -170,8 +169,8 @@ func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
 	// entry instead, then hold the envelope across a following window
 	// per the fixed-horizon honesty rule.
 	enteredAt := -1
-	for i := range int(convergeSeconds / TimeStep.Seconds()) {
-		p.Step()
+	for i := range int(convergeSeconds / testDt.Seconds()) {
+		p.Step(testDt)
 		p.Update()
 		if i%checkEvery != 0 {
 			continue
@@ -185,8 +184,8 @@ func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
 	require.GreaterOrEqual(t, enteredAt, 0,
 		"fission power must enter the plateau band within the horizon")
 
-	for i := range int(holdSeconds / TimeStep.Seconds()) {
-		p.Step()
+	for i := range int(holdSeconds / testDt.Seconds()) {
+		p.Step(testDt)
 		p.Update()
 		if i%checkEvery == 0 {
 			sampleGuards("hold")
@@ -244,7 +243,7 @@ func TestRPC_DefaultStateLeavesRodsManual(t *testing.T) {
 	turbine.Setpoint = 0.77
 
 	po := PlantOperation{}
-	po.StepRPC(rpv, turbine, TimeStep)
+	po.StepRPC(rpv, turbine, DefaultTimeStep)
 
 	assert.Equal(t, 0.42, rpv.ControlRods.DemandInsertion,
 		"manual rod authority untouched with auto off")
@@ -278,7 +277,7 @@ func TestRPC_BumplessEngagementAndDeadbandDirection(t *testing.T) {
 	rpv.ControlRods.DemandInsertion = 0.30
 	turbine := &Turbine{}
 	po := PlantOperation{}
-	po.StepRPC(rpv, turbine, TimeStep)
+	po.StepRPC(rpv, turbine, DefaultTimeStep)
 	assert.InDelta(t, 0.9, po.DemandedPowerSetpoint, 1e-12)
 
 	// Engage at the matching target: first tick is a no-op.
@@ -287,7 +286,7 @@ func TestRPC_BumplessEngagementAndDeadbandDirection(t *testing.T) {
 	po.PowerSetpointDemand = 0.90
 	po.PowerRateDemand = 0.0008
 	before := rpv.ControlRods.DemandInsertion
-	po.StepRPC(rpv, turbine, TimeStep)
+	po.StepRPC(rpv, turbine, DefaultTimeStep)
 	assert.Equal(t, before, rpv.ControlRods.DemandInsertion,
 		"engaging auto at matched state moves no rods")
 	assert.InDelta(t, 0.9, po.DemandedPowerSetpoint, 1e-12,
@@ -297,7 +296,7 @@ func TestRPC_BumplessEngagementAndDeadbandDirection(t *testing.T) {
 	// past the deadband the drive withdraws rods.
 	po.PowerSetpointDemand = 0.95
 	for range 22000 {
-		po.StepRPC(rpv, turbine, TimeStep)
+		po.StepRPC(rpv, turbine, DefaultTimeStep)
 	}
 	assert.Less(t, rpv.ControlRods.DemandInsertion, before,
 		"Tavg below Tref beyond the deadband withdraws rods")
@@ -312,7 +311,7 @@ func TestRPC_BumplessEngagementAndDeadbandDirection(t *testing.T) {
 		PowerSetpointDemand:   0.90,
 		DemandedPowerSetpoint: 0.90,
 	}
-	po.StepRPC(rpv, turbine, TimeStep)
+	po.StepRPC(rpv, turbine, DefaultTimeStep)
 	assert.Greater(t, rpv.ControlRods.DemandInsertion, 0.30,
 		"Tavg above Tref beyond the deadband inserts rods")
 }
@@ -449,8 +448,8 @@ func TestRPV_PartLoadLineTracksTavgProgram(t *testing.T) {
 		rpv.Inlet = Temperature{Val: RCSNoLoadTavgF, Unit: u.Fahrenheit}
 		rpv.Outlet = Temperature{Val: RCSNoLoadTavgF + load*
 			(CoreReferenceOutletF-RCSNoLoadTavgF), Unit: u.Fahrenheit}
-		for i := 0; i < int(900*time.Second/TimeStep); i++ {
-			rpv = rpv.Step(RCPRatedSpeed, 0)
+		for i := 0; i < int(900*time.Second/DefaultTimeStep); i++ {
+			rpv = rpv.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 			// Pin the neutron population: this test exercises the
 			// thermal program, not the kinetics.
 			rpv.FissionPower = fissionW
@@ -466,8 +465,10 @@ func TestRPV_PartLoadLineTracksTavgProgram(t *testing.T) {
 // hot atmosphere trims the power target down (insertion), a cold one
 // trims it up (withdrawal), within the trim's bounded span.
 // "The needed control rod movement is based on the reactor coolant
-//  temperature needed to meet the turbine power demand [...] and the
-//  measured reactor coolant temperature."
+//
+//	temperature needed to meet the turbine power demand [...] and the
+//	measured reactor coolant temperature."
+//
 // specs/the_westinghouse_pressurized_water_react/chapter_7/page_130.txt:68-76
 func TestRodControl_MeasuredTavgTrimsPowerTarget(t *testing.T) {
 	newRods := func() ControlRods {
@@ -481,11 +482,11 @@ func TestRodControl_MeasuredTavgTrimsPowerTarget(t *testing.T) {
 		return Temperature{Val: programmedRodTavg(0.5) + offset,
 			Unit: u.Fahrenheit}
 	}
-	steps := int(30 * time.Second / TimeStep)
+	steps := int(30 * time.Second / DefaultTimeStep)
 	runCase := func(offset float64) float64 {
 		c := newRods()
 		for i := 0; i < steps; i++ {
-			c.applyAutoControl(tavgAt(offset), 0.5, 0.5, 0)
+			c.applyAutoControl(DefaultTimeStep, tavgAt(offset), 0.5, 0.5, 0)
 		}
 		return c.DemandInsertion
 	}

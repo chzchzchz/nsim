@@ -2,25 +2,26 @@ package core
 
 import (
 	u "github.com/bcicen/go-units"
+	"time"
 )
 
 // Step advances the Containment Spray System by one timestep.
 // The step function implements the four state machines described
 // in the spec:
 //
-//   1. CSST / SAT depletion. During the injection phase the
-//      CSST drains at the design flow rate when the spray
-//      header is open, or at a reduced rate when the header is
-//      closed (miniflow recirc). The SAT drains proportionally
-//      with the CSST so the spray additive ratio is preserved.
-//   2. Sump pH adjustment. When CSSTLevel falls below the
-//      "Lo-Lo" setpoint, SumpPHAdjusted latches true; the long-
-//      term containment sump pH is adequate for the
-//      recirculation phase.
-//   3. Recirculation switchover. When CSSTLevel drops below the
-//      Lo-Lo setpoint the operator switches to sump suction
-//      (SuctionSump = true). Additive is no longer injected in
-//      this mode.
+//  1. CSST / SAT depletion. During the injection phase the
+//     CSST drains at the design flow rate when the spray
+//     header is open, or at a reduced rate when the header is
+//     closed (miniflow recirc). The SAT drains proportionally
+//     with the CSST so the spray additive ratio is preserved.
+//  2. Sump pH adjustment. When CSSTLevel falls below the
+//     "Lo-Lo" setpoint, SumpPHAdjusted latches true; the long-
+//     term containment sump pH is adequate for the
+//     recirculation phase.
+//  3. Recirculation switchover. When CSSTLevel drops below the
+//     Lo-Lo setpoint the operator switches to sump suction
+//     (SuctionSump = true). Additive is no longer injected in
+//     this mode.
 //
 // The auto-start decision (turning Running on, opening the spray
 // header) is made by the caller in Plant.Step, where the
@@ -59,9 +60,9 @@ import (
 //   - Pump miniflow line: "A pump miniflow line, containing a
 //     heat exchanger and flow limiting orifice."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:20-22
-func (c *ContainmentSpraySystem) Step() ContainmentSpraySystem {
+func (c *ContainmentSpraySystem) Step(dt time.Duration) ContainmentSpraySystem {
 	ret := *c
-	dt := TimeStep.Seconds()
+	dtSec := dt.Seconds()
 
 	// DriveReady reflects whether the ESF bus that feeds
 	// the spray pumps is energised. Without bus power the
@@ -87,7 +88,7 @@ func (c *ContainmentSpraySystem) Step() ContainmentSpraySystem {
 	// rate. After switchover to sump suction, the CSST no
 	// longer drains (the pumps draw from the containment sump).
 	if !ret.SuctionSump {
-		dV := flowGpm * (dt / 60.0)
+		dV := flowGpm * (dtSec / 60.0)
 		newCSST := ret.CSSTLevel.Float() - dV
 		newCSST = max(newCSST, 0)
 		ret.CSSTLevel = Volume{Val: newCSST, Unit: u.Gallon}
@@ -146,4 +147,3 @@ func (c *ContainmentSpraySystem) Step() ContainmentSpraySystem {
 
 	return ret
 }
-

@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // AuxiliaryBuilding models the auxiliary building that surrounds the
 // containment. It groups the redundant electrical and fluid auxiliary
 // systems required for safe shutdown and normal plant operation.
@@ -136,7 +138,7 @@ type AuxiliaryBuilding struct {
 // brsHoldupGal is the CVCS holdup-tank inventory available to the
 // reclaim train; the BRS reports its draw through HoldupDrawn, which
 // Plant.Step debits from the CVCS after this step.
-func (a *AuxiliaryBuilding) Step(
+func (a *AuxiliaryBuilding) Step(dt time.Duration,
 	swSupplyTemp Temperature,
 	swFlowGPM float64,
 	sfpcDriveReady bool,
@@ -144,13 +146,13 @@ func (a *AuxiliaryBuilding) Step(
 ) AuxiliaryBuilding {
 	ret := *a
 	ret.ComponentCoolingWaterSystem =
-		ret.ComponentCoolingWaterSystem.Step(swSupplyTemp, swFlowGPM > 0)
+		ret.ComponentCoolingWaterSystem.Step(dt, swSupplyTemp, swFlowGPM > 0)
 	ret.SpentFuelPoolCoolingSystem =
-		ret.SpentFuelPoolCoolingSystem.Step(sfpcDriveReady)
+		ret.SpentFuelPoolCoolingSystem.Step(dt, sfpcDriveReady)
 	ret.BoronRecycleSystem =
-		ret.BoronRecycleSystem.Step(brsHoldupGal)
-	ret.DieselGenerator = ret.DieselGenerator.Step(swFlowGPM)
-	ret.DieselGeneratorB = ret.DieselGeneratorB.Step(swFlowGPM)
+		ret.BoronRecycleSystem.Step(dt, brsHoldupGal)
+	ret.DieselGenerator = ret.DieselGenerator.Step(dt, swFlowGPM)
+	ret.DieselGeneratorB = ret.DieselGeneratorB.Step(dt, swFlowGPM)
 	return ret
 }
 

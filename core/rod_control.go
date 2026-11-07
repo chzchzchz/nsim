@@ -1,6 +1,6 @@
 package core
 
-
+import "time"
 
 // Rod Control System — the automatic rod control layer of the NSSS
 // Power Control System. It holds Tavg at a programmed function of
@@ -169,7 +169,7 @@ func (c ControlRods) ControlBankInsertions() [RodControlBankCount]float64 {
 	wc := max(w-CoreShutdownBankWorthShare, 0) /
 		(1 - CoreShutdownBankWorthShare)
 	unit := 1 / (float64(RodControlBankCount) -
-			float64(RodControlBankCount-1)*RodBankOverlapFrac)
+		float64(RodControlBankCount-1)*RodBankOverlapFrac)
 	for k := range RodControlBankCount {
 		start := float64(k) * unit * (1 - RodBankOverlapFrac)
 		outFrac := min(max((wc-start)/unit, 0), 1)
@@ -177,6 +177,7 @@ func (c ControlRods) ControlBankInsertions() [RodControlBankCount]float64 {
 	}
 	return out
 }
+
 // programmedRodTavg maps turbine load demand onto the Tavg program,
 // anchored at hot-standby no-load (557°F) and the rated inlet/outlet
 // midpoint, clamped outside [0,1].
@@ -214,7 +215,7 @@ func programPowerFraction(programTavgF float64) float64 {
 // on AutoControl and an unlatched trip; while tripped, Insertion is
 // forced to 1 regardless of demand and integrating would pre-spin
 // withdrawal for a post-trip reset.
-func (c *ControlRods) applyAutoControl(
+func (c *ControlRods) applyAutoControl(dt time.Duration,
 	tavg Temperature,
 	loadFraction float64,
 	powerFraction float64,
@@ -226,7 +227,7 @@ func (c *ControlRods) applyAutoControl(
 		c.programTargetFraction = powerFraction
 		c.programPrimed = true
 	}
-	maxStep := RodCtrlProgramSlewPerSec * TimeStep.Seconds()
+	maxStep := RodCtrlProgramSlewPerSec * dt.Seconds()
 	c.programTargetFraction += min(max(program-
 		c.programTargetFraction, -maxStep), maxStep)
 	target := c.programTargetFraction
@@ -258,6 +259,6 @@ func (c *ControlRods) applyAutoControl(
 	maxSlew := RodCtrlMaxDemandSlewPerSec
 	slew := min(max(RodCtrlRhoRegainPerSecPerPct*
 		(reactivityPct-rhoSetpoint), -maxSlew), maxSlew)
-	c.DemandInsertion += slew * TimeStep.Seconds()
+	c.DemandInsertion += slew * dt.Seconds()
 	c.DemandInsertion = min(max(c.DemandInsertion, 0), 1)
 }
