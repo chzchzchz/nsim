@@ -39,17 +39,23 @@ import "time"
 //   - Explosive mixture concern: "controlling hydrogen to avoid
 //     an explosive mixture."
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_107.txt:54-55
-func (h *HydrogenDetectionSuppression) Step(dt time.Duration) HydrogenDetectionSuppression {
+func (h *HydrogenDetectionSuppression) Step(dt time.Duration,
+	hydrogenSourceRate float64) HydrogenDetectionSuppression {
 	ret := *h
 
 	dtSec := dt.Seconds()
 
 	// Volume balance. Rates are in % per hour; convert to per
-	// step by multiplying by dt/3600.
+	// step by multiplying by dt/3600. Single invariant: source =
+	// derived rate (Plant.Step, from inventory/thermal state,
+	// plans/x/gap_hydrogen_kinetics.md §1) plus the training-mode
+	// fallback pin; never a double count of either component.
 	var dH2 float64
+	source := hydrogenSourceRate
 	if ret.GenerationActive {
-		dH2 += HydrogenGenerationRate * dtSec / 3600.0
+		source += HydrogenGenerationRate
 	}
+	dH2 += source * dtSec / 3600.0
 	if ret.RecombinerActive {
 		dH2 -= HydrogenRecombinerRemovalRate *
 			float64(HydrogenNumRecombiners) * dtSec / 3600.0

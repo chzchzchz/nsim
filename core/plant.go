@@ -1805,7 +1805,43 @@ func (p *Plant) Step(dt time.Duration) {
 	//     release of hydrogen gas."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:30-33
 	hds := p.nextPlant.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
-	hds.GenerationActive = locaSensed
+	// H2 generation: thermal-availability- and inventory-driven
+	// rather than SI-latched. Source term is zero when the SI signal
+	// fires but the primary is still liquid-covered at saturation
+	// temperature (small break, injection holding), and nonzero on
+	// blowdown-opened uncovery (large break, injection denied,
+	// pressure fell). Decay heat (incl. SBO) feeds the ramp only
+	// once the gate has opened; without a pressure drop there is
+	// no steam to react with.
+	//   - LOCA phenomenology: "In the unlikely event of a LOCA, the
+	//     SIS is designed to limit increases in fuel clad
+	//     temperatures, core geometry distortion, and metal-water
+	//     reaction for all breaks up to and including the
+	//     double-ended severance of a reactor coolant loop."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_094.txt:52-55
+	//   - Source: "Under accident conditions, coolant
+	//     radioactivity and the Zirconium water reaction can result
+	//     in the release of hydrogen gas to the containment
+	//     atmosphere."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:30-33
+	rpv := &p.nextPlant.ReactorBuilding.ReactorPressureVessel
+	pzr := &p.nextPlant.ReactorBuilding.Pressurizer
+	var generationRate float64
+	inventoryFrac := rpv.BreakDischarged.Float() / RCSDrainableInventoryGal
+	coreHeatW := float64(rpv.TotalThermalPower())
+	superheatF := rpv.Outlet.Float() -
+		PressurizerSatTemperatureF(float64(pzr.Pressure))
+	if superheatF <= HydrogenSuperheatGateF && inventoryFrac < HydrogenInventoryGateFraction {
+		generationRate = 0.0
+	} else {
+		// HydrogenHeatNormW ~= decay heat shortly post-trip at rated
+		// power (3800 MWt rated, 6.5% shutdown decay fraction =
+		// ~247 MW at full trip). Reads ~0.49 initially, decaying
+		// toward ~0.11 by 4h (spec 1.5% decay at 1h); the conservative
+		// normalisation deliberately saturates at HydrogenHeatNormW.
+		generationRate = HydrogenGenerationRate *
+			min(max(inventoryFrac+max(coreHeatW/HydrogenHeatNormW, 0), 0), 1)
+	}
 	// Containment vent isolation (Table 7-1): with either phase
 	// latched, the atmosphere-exchange path through the wall is
 	// shut and hydrogen control shifts to the recombiners, which
@@ -1818,7 +1854,7 @@ func (p *Plant) Step(dt time.Duration) {
 		ContainmentIsolationSystem.IsIsolated() {
 		hds.VentilationActive = false
 	}
-	hds = hds.Step(dt)
+	hds = hds.Step(dt, generationRate)
 	p.nextPlant.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression = hds
 
 	// SWS: the service water picks up the heat rejected by the
@@ -3455,14 +3491,14 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 			// recordGraphFlow's * dt.Seconds() lands the per-step
 			// amount exactly once (CHECK_SKILL.md §2: one scale
 			// per sum).
-					return rhrs.TrainA.ReturnFlow.Float() / dt.Seconds()
+			return rhrs.TrainA.ReturnFlow.Float() / dt.Seconds()
 		}
 		return 0
 	})
 	flowEdge("RHRS_B", "InjectionSink", nil, &rhrs.TrainB.Pump, func(dt time.Duration) float64 {
 		if rhrs.TrainB.SuctionValves[0].Open == 1 && rhrs.TrainB.SuctionValves[1].Open == 1 {
 			// Per-step gallons -> gal/s (see TrainA above).
-					return rhrs.TrainB.ReturnFlow.Float() / dt.Seconds()
+			return rhrs.TrainB.ReturnFlow.Float() / dt.Seconds()
 		}
 		return 0
 	})

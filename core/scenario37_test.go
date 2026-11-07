@@ -134,7 +134,7 @@ func TestScenario37_RecombinersDeactivateInLowerBand(t *testing.T) {
 	}
 	deactivated := false
 	for range int(20 * time.Hour / time.Minute) { // 20 h of suppression
-		h = h.Step(testDt)
+		h = h.Step(testDt, 0)
 		assert.GreaterOrEqual(t, h.HydrogenVolumePercent, 0.0,
 			"the percentage floor is exact")
 		if !h.RecombinerActive {

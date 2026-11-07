@@ -4995,8 +4995,14 @@ type HydrogenDetectionSuppression struct {
 	// ventilation system is circulating to remove hydrogen.
 	VentilationActive bool
 
-	// GenerationActive is true when the Zirconium-water
-	// reaction is producing hydrogen (the early-LOCA phase).
+	// GenerationActive is the training-mode fallback of the
+	// zirconium-water reaction: it pins the hydrogen source at
+	// HydrogenGenerationRate regardless of inventory/thermal state.
+	// It is set only by the operator/training harness, never by
+	// physics, and is documented as not a production LOCA trigger.
+	// Production generation is driven by the derived
+	// hydrogenSourceRate HDS.Step receives from Plant.Step
+	// (plans/x/gap_hydrogen_kinetics.md §1).
 	GenerationActive bool
 }
 
@@ -5058,6 +5064,34 @@ const (
 	// hour). The spec does not state a rate; 1.0 %/hour is
 	// representative of the early-phase generation spike.
 	HydrogenGenerationRate float64 = 1.0
+
+	// HydrogenInventoryGateFraction is the fraction of
+	// drainable primary inventory (BreakDischarged net of
+	// injection credit, over RCSDrainableInventoryGal) above
+	// which H2 generation is allowed even when the core is at
+	// or below saturation. Below it and subcooled, the derived
+	// rate is zero. plans/x/gap_hydrogen_kinetics.md §1.
+	HydrogenInventoryGateFraction float64 = 0.5
+
+	// HydrogenSuperheatGateF is the superheat above which H2
+	// generation engages on steam existence alone (steam at
+	// hot clad); at or below it, generation requires ≥50%
+	// drainable lost. Post-blowdown coolant tracks Tsat in
+	// this tree (applyBlowdownCooling), so superheat never
+	// reaches large positive values after a blowdown; the
+	// inventory leg carries blowdown-driven cases.
+	// plans/x/gap_hydrogen_kinetics.md §1.
+	HydrogenSuperheatGateF float64 = 5.0
+
+	// HydrogenHeatNormW normalises the decay-heat ramp term:
+	// coreHeatW/HydrogenHeatNormW reads ~0.49 at post-trip
+	// initial decay heat (3800 MWt rated, 6.5% shutdown decay
+	// fraction = ~247 MW), decaying toward ~0.11 by 4h (spec
+	// 1.5% decay at 1h). At full power the term saturates
+	// (3.8 GW/5e8 = 7.6), so any gate opening at power goes
+	// straight to the 1.0 %/hour ceiling; the ramp only exists
+	// post-trip. plans/x/gap_hydrogen_kinetics.md §1.
+	HydrogenHeatNormW = 5e8
 
 	// HydrogenRecombinerHysteresis is the volume percent
 	// above the alarm setpoint at which the recombiners
