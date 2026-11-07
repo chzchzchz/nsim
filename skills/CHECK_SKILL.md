@@ -673,3 +673,10 @@ Change classification and conflicts:
 - Record only generic lessons: mechanism plus catching check, placed in
   the section they belong to, in the same terse style. If nothing new
   surfaced, say so and move on — no padding with restatements.
+- **Look-alike production and bridged fields need dedicated negative
+  assertions.** A plant value present in both the protection input
+  shape and a bridged scalar (ContainmentBuilding.Pressure vs
+  ContainmentPressure) type-checks against either; exercising only
+  the high side passes with the wrong reader. Assert presence on
+  the high input and absence when only the look-alike is high,
+  so the wrong field fails by name. (§5)

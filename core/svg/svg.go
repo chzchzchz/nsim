@@ -423,10 +423,51 @@ var alarmParts = map[core.AlarmID][]string{
 	core.AlarmIDTurbineLowTavg:     {"Turbine"},
 	core.AlarmIDContainmentSpray:   {"CSSTank", "SATTank"},
 	// Low-steamline-pressure, low-Tcold, and containment-high-
-	// pressure annunciators are declared in core/alarm.go but never
-	// raised (their alarm docs say so), so mapping them would be dead
-	// configuration; the containment dome wash already encodes high
-	// pressure visually.
+	// pressure keys (raised from core/alarm.go via Plant.Alarms()).
+	core.AlarmIDLowSteamlinePressure: {"SG"},
+	core.AlarmIDLowTcold:             {"RPV"},
+	core.AlarmIDContainmentHighPress: {"CIS"},
+}
+
+// alarmHaloExemption records why an id has no halo target.
+type alarmHaloExemption struct {
+	ID        core.AlarmID
+	Rationale string
+}
+
+var alarmHaloExempt = []alarmHaloExemption{}
+
+// alarmRaiseSite lists ids with a live raise site in
+// Plant.Alarms() (core/alarm.go). It is the explicit,
+// reviewable counterpart to the compiler's knowledge of the
+// Alarms() body — the closure test asserts presence through this
+// table.
+var alarmRaiseSite = map[core.AlarmID]bool{
+	core.AlarmIDOPCAlarm:              true,
+	core.AlarmIDOPCTrip:               true,
+	core.AlarmIDReactorTrip:           true,
+	core.AlarmIDSCCWLowFlow:           true,
+	core.AlarmIDSCCWNoFlow:            true,
+	core.AlarmIDDieselCoolant:         true,
+	core.AlarmIDDieselTripped:         true,
+	core.AlarmIDDieselLowFuel:         true,
+	core.AlarmIDContainmentHighPress:  true,
+	core.AlarmIDSGLowLevel:            true,
+	core.AlarmIDSGHighLevel:           true,
+	core.AlarmIDLowSteamlinePressure:  true,
+	core.AlarmIDLowTcold:              true,
+	core.AlarmIDTurbineTripVacuum:     true,
+	core.AlarmIDTurbineTripBearingOil: true,
+	core.AlarmIDTurbineStepback:       true,
+	core.AlarmIDTurbineLowTavg:        true,
+	core.AlarmIDGeneratorMVALimit:     true,
+	core.AlarmIDSIActuated:            true,
+	core.AlarmIDSteamlineIsolation:    true,
+	core.AlarmIDContainmentSpray:      true,
+	core.AlarmIDContainmentIsolA:      true,
+	core.AlarmIDContainmentIsolB:      true,
+	core.AlarmIDAFWStart:              true,
+	core.AlarmIDFeedwaterIsolation:    true,
 }
 
 // haloTint is the resolved overlay state for one part: halo colour

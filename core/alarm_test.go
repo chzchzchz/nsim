@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
@@ -138,6 +139,21 @@ func TestPlant_Alarms_SCCWAlarm(t *testing.T) {
 // the alarm only disappears from the next Alarms() call if the
 // underlying condition has cleared. Trip-severity alarms keep
 // the annunciator latched even after acknowledgement.
+
+func TestPlant_Alarms_RPSInitiatingSignals_AcknowledgedKeepsSeverity(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	p.ReactorBuilding.SteamGenerator.Pressure = RPSLowSteamlinePressureTrip - 1
+	p.Step(DefaultTimeStep)
+	p.Update()
+	// Stamp the entry first (control-room step stamps on that tick).
+	c := p.ReactorBuilding.PlantControlRoom
+	require.Contains(t, c.AlarmSet, AlarmIDLowSteamlinePressure)
+	c.ResetAlarm(AlarmIDLowSteamlinePressure)
+	a := c.AlarmSet[AlarmIDLowSteamlinePressure]
+	require.True(t, a.Acknowledged, "want acknowledged=true after ResetAlarm")
+}
+
 func TestPlantControlRoom_ResetAlarm_ClearsAcknowledged(t *testing.T) {
 	t.Parallel()
 	p := MakePlant()
@@ -305,6 +321,190 @@ func TestPlantControlRoom_AlarmSet_TimestampsActivationTime(t *testing.T) {
 	assert.Equal(t, int64(DefaultTimeStep),
 		int64(p.ReactorBuilding.PlantControlRoom.AlarmSet[AlarmIDOPCTrip].Timestamp),
 		"stamp should hold while the condition stays active")
+}
+
+// Below-P-7 children of MakePlant: at-power is true by default
+// (fission ~0.935); zeroing to 1/20 of rated drops the P-7
+// permissive. Shared by the per-id drivers below.
+func setBelowPower(p *Plant) {
+	p.ReactorBuilding.ReactorPressureVessel.FissionPower = CoreRatedThermalPower / 20
+}
+
+func alarmPresent(t *testing.T, p *Plant, id AlarmID) Alarm {
+	t.Helper()
+	for _, a := range p.Alarms() {
+		if a.ID == id {
+			require.True(t, a.Active, "want %v Active=true", id)
+			return a
+		}
+	}
+	require.True(t, false,
+		"want %v in alarm list, got %v", id, p.Alarms())
+	return Alarm{}
+}
+
+func TestPlant_Alarms_LowSteamlinePressure(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	p.ReactorBuilding.SteamGenerator.Pressure = RPSLowSteamlinePressureTrip - 1
+	p.Step(DefaultTimeStep)
+	p.Update()
+	a := alarmPresent(t, &p, AlarmIDLowSteamlinePressure)
+	require.Equal(t, SeverityTrip, a.Severity)
+
+	p = MakePlant()
+	setBelowPower(&p)
+	p.ReactorBuilding.SteamGenerator.Pressure = RPSLowSteamlinePressureTrip - 1
+	p.Step(DefaultTimeStep)
+	p.Update()
+	require.False(t, func() bool {
+		for _, x := range p.Alarms() {
+			if x.ID == AlarmIDLowSteamlinePressure {
+				return true
+			}
+		}
+		return false
+	}(), "want no low-steamline alarm below P-7")
+}
+
+func TestPlant_Alarms_LowSteamlinePressure_ChannelTestStillAnnunciates(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	p.ReactorBuilding.SteamGenerator.Pressure = RPSLowSteamlinePressureTrip - 1
+	p.ReactorBuilding.ReactorProtectionSystem.ChannelTest = RPSSteamlineChannelInTest
+	p.Step(DefaultTimeStep)
+	p.Update()
+	a := alarmPresent(t, &p, AlarmIDLowSteamlinePressure)
+	require.Equal(t, SeverityTrip, a.Severity,
+		"ChannelTest must not suppress annunciation")
+}
+
+func TestPlant_Alarms_LowTcold(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.Inlet = Temperature{Val: RPSLowTcoldTrip - 1, Unit: u.Fahrenheit}
+	p.Step(DefaultTimeStep)
+	p.Update()
+	a := alarmPresent(t, &p, AlarmIDLowTcold)
+	require.Equal(t, SeverityTrip, a.Severity)
+
+	p = MakePlant()
+	setBelowPower(&p)
+	p.ReactorBuilding.ReactorPressureVessel.Inlet = Temperature{Val: RPSLowTcoldTrip - 1, Unit: u.Fahrenheit}
+	p.Step(DefaultTimeStep)
+	p.Update()
+	require.False(t, func() bool {
+		for _, x := range p.Alarms() {
+			if x.ID == AlarmIDLowTcold {
+				return true
+			}
+		}
+		return false
+	}(), "want no low-Tcold alarm below P-7")
+}
+
+func TestPlant_Alarms_ContainmentHighPressure(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	p.Step(DefaultTimeStep)
+	p.Update()
+	p.ReactorBuilding.ContainmentBuilding.Pressure =
+		AtmosphericPressure + ContainmentDesignPressure + 1
+	a := alarmPresent(t, &p, AlarmIDContainmentHighPress)
+	require.Equal(t, SeverityTrip, a.Severity)
+
+	// Flat scalar is not the RPS input: high flat, atmospheric building.
+	p = MakePlant()
+	p.ReactorBuilding.ContainmentPressure = 1000
+	p.ReactorBuilding.ContainmentBuilding.Pressure = AtmosphericPressure
+	p.Step(DefaultTimeStep)
+	p.Update()
+	require.False(t, func() bool {
+		for _, x := range p.Alarms() {
+			if x.ID == AlarmIDContainmentHighPress {
+				return true
+			}
+		}
+		return false
+	}(), "flat ContainmentPressure must not raise the alarm")
+
+	// Unconditional: present below P-7 as well.
+	p = MakePlant()
+	setBelowPower(&p)
+	p.Step(DefaultTimeStep)
+	p.Update()
+	p.ReactorBuilding.ContainmentBuilding.Pressure =
+		AtmosphericPressure + ContainmentDesignPressure + 1
+	alarmPresent(t, &p, AlarmIDContainmentHighPress)
+}
+
+func TestPlant_Alarms_SGLowHighLevel(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	p.ReactorBuilding.SteamGenerator.Water = Volume{Val: 10000, Unit: u.Gallon} // 10% of 100k
+	p.Step(DefaultTimeStep)
+	p.Update()
+	a := alarmPresent(t, &p, AlarmIDSGLowLevel)
+	require.Equal(t, SeverityWarning, a.Severity)
+
+	p = MakePlant()
+	p.ReactorBuilding.SteamGenerator.Water = Volume{Val: 95000, Unit: u.Gallon} // 95%
+	p.Step(DefaultTimeStep)
+	p.Update()
+	a = alarmPresent(t, &p, AlarmIDSGHighLevel)
+	require.Equal(t, SeverityWarning, a.Severity)
+
+	p = MakePlant()
+	setBelowPower(&p)
+	p.ReactorBuilding.SteamGenerator.Water = Volume{Val: 10000, Unit: u.Gallon}
+	p.Step(DefaultTimeStep)
+	p.Update()
+	require.False(t, func() bool {
+		for _, x := range p.Alarms() {
+			if x.ID == AlarmIDSGLowLevel || x.ID == AlarmIDSGHighLevel {
+				return true
+			}
+		}
+		return false
+	}(), "want no SG-level alarm below P-7")
+}
+
+func TestPlant_Alarms_NewIdsEmptyAtConstructionStep(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	p.Step(DefaultTimeStep)
+	p.Update()
+	for _, id := range []AlarmID{
+		AlarmIDLowSteamlinePressure,
+		AlarmIDLowTcold,
+		AlarmIDContainmentHighPress,
+		AlarmIDSGLowLevel,
+		AlarmIDSGHighLevel,
+	} {
+		require.False(t, func() bool {
+			for _, x := range p.Alarms() {
+				if x.ID == id {
+					return true
+				}
+			}
+			return false
+		}(), "want no %v at default lineup", id)
+	}
+}
+
+func TestPlant_Alarms_OneTickLag(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	p.ReactorBuilding.SteamGenerator.Pressure = RPSLowSteamlinePressureTrip - 1
+	pre := p.ReactorBuilding.PlantControlRoom.SimTimeNs
+	p.Step(DefaultTimeStep)
+	p.Update()
+	a, ok := p.ReactorBuilding.PlantControlRoom.AlarmSet[AlarmIDLowSteamlinePressure]
+	require.True(t, ok, "want low-steamline in AlarmSet after one step, got %v",
+		p.ReactorBuilding.PlantControlRoom.AlarmSet)
+	require.True(t, a.Active)
+	require.Equal(t, time.Duration(pre), a.Timestamp,
+		"stamp must be the start-of-tick SimTimeNs")
 }
 
 // The Plant/Alarms bridge sensor carries the activation time in

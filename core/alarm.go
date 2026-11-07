@@ -68,6 +68,38 @@ const (
 	AlarmIDFeedwaterIsolation    AlarmID = "rps.feedwater_isolation"
 )
 
+// AllAlarmIDs enumerates every declared AlarmID in const-block order.
+// The closure test in package svg (core/svg/alarm_closure_test.go)
+// asserts halo coverage and raise-site coverage against this list,
+// so a declared id with neither fails loudly.
+var AllAlarmIDs = []AlarmID{
+	AlarmIDOPCAlarm,
+	AlarmIDOPCTrip,
+	AlarmIDReactorTrip,
+	AlarmIDSCCWLowFlow,
+	AlarmIDSCCWNoFlow,
+	AlarmIDDieselCoolant,
+	AlarmIDDieselTripped,
+	AlarmIDDieselLowFuel,
+	AlarmIDContainmentHighPress,
+	AlarmIDSGLowLevel,
+	AlarmIDSGHighLevel,
+	AlarmIDLowSteamlinePressure,
+	AlarmIDLowTcold,
+	AlarmIDTurbineTripVacuum,
+	AlarmIDTurbineTripBearingOil,
+	AlarmIDTurbineStepback,
+	AlarmIDTurbineLowTavg,
+	AlarmIDGeneratorMVALimit,
+	AlarmIDSIActuated,
+	AlarmIDSteamlineIsolation,
+	AlarmIDContainmentSpray,
+	AlarmIDContainmentIsolA,
+	AlarmIDContainmentIsolB,
+	AlarmIDAFWStart,
+	AlarmIDFeedwaterIsolation,
+}
+
 // String returns the human-readable one-line summary used by
 // the HMI to render the alarm list.
 func (a Alarm) String() string {
@@ -140,6 +172,18 @@ func alarmDescription(id AlarmID) string {
 	return string(id)
 }
 
+// rpsAtPower reports whether the P-7 at-power permissive is
+// satisfied, recomputed from the committed fission power with the
+// same ratio Plant.Step passes to RPS.Step
+// (core/plant.go:264-265). The helper deliberately uses
+// FissionPower/CoreRatedThermalPower, not
+// CoreFissionPowerAtRated, so the annunciator and the vote
+// agree at the P-7 boundary.
+func rpsAtPower(p *Plant) bool {
+	return float64(p.ReactorBuilding.ReactorPressureVessel.FissionPower)/
+		float64(CoreRatedThermalPower) >= RPSAtPowerPermissiveFraction
+}
+
 // Alarms returns the current alarm list, aggregated across all
 // plant subsystems. The list contains only entries whose
 // underlying condition is currently active; the control room
@@ -183,6 +227,84 @@ func (p *Plant) Alarms() []Alarm {
 			ID:          AlarmIDReactorTrip,
 			Description: alarmDescription(AlarmIDReactorTrip),
 			Severity:    SeverityTrip,
+			Active:      true,
+		})
+	}
+
+	// RPS initiating signals: the individual trip channels that
+	// preceded the voted reactor trip and the ESFAS latches. Each
+	// is raised from its live process value at the same setpoint
+	// and P-7 permissive the RPS Step votes on (core/rps.go),
+	// so a channel that has not yet reached 2/4 voting, or that
+	// actuated no ESFAS at all, still annunciates. The blocks
+	// deliberately read the raw process values without consulting
+	// ChannelTest: a test-isolated channel is precisely the one
+	// the operator must watch unfiltered; suppression belongs to
+	// voting/ESFAS only (core/rps.go:91-108).
+	//
+	// Low steamline pressure (trip vote + SI/steamline-isolation
+	// input). The healthy reading is sub-setpoint below P-7
+	// (planned cooldown), exactly as the RPS vote.
+	//   "Low steamline pressure"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:12-14
+	atPower := rpsAtPower(p)
+	if float64(p.ReactorBuilding.SteamGenerator.Pressure) < float64(RPSLowSteamlinePressureTrip) &&
+		atPower {
+		list = append(list, Alarm{
+			ID:          AlarmIDLowSteamlinePressure,
+			Description: alarmDescription(AlarmIDLowSteamlinePressure),
+			Severity:    SeverityTrip,
+			Active:      true,
+		})
+	}
+	// Low Tcold (at-power permissive, same setpoint).
+	//   "Low Tcold"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:14
+	if p.ReactorBuilding.ReactorPressureVessel.Inlet.Float() < RPSLowTcoldTrip &&
+		atPower {
+		list = append(list, Alarm{
+			ID:          AlarmIDLowTcold,
+			Description: alarmDescription(AlarmIDLowTcold),
+			Severity:    SeverityTrip,
+			Active:      true,
+		})
+	}
+	// High containment pressure (unconditional, matching the RPS
+	// vote/ESFAS gates). Gauge psig end to end.
+	//   "High containment pressure"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_140.txt:12
+	if float64(p.ReactorBuilding.ContainmentBuilding.Pressure-AtmosphericPressure) >
+		float64(RPSHighContainmentPressureTrip) {
+		list = append(list, Alarm{
+			ID:          AlarmIDContainmentHighPress,
+			Description: alarmDescription(AlarmIDContainmentHighPress),
+			Severity:    SeverityTrip,
+			Active:      true,
+		})
+	}
+	// SG low/high level (warnings, at-power permissive for the
+	// same wet-layup reason the vote uses — low level normal
+	// during drain-down rehearsals, hi level normal wet-layup
+	// fill below P-7).
+	//   "Low feedwater flow and low water level trip signals [...]
+	//    High water level trip signals"
+	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:25-29
+	sgLevelPct := 0.0
+	if v := p.ReactorBuilding.SteamGenerator.Volume.Float(); v > 0 {
+		sgLevelPct = 100.0 * p.ReactorBuilding.SteamGenerator.Water.Float() / v
+	}
+	if sgLevelPct < RPSLowSteamGeneratorLevelTrip && atPower {
+		list = append(list, Alarm{
+			ID:          AlarmIDSGLowLevel,
+			Description: alarmDescription(AlarmIDSGLowLevel),
+			Severity:    SeverityWarning,
+			Active:      true,
+		})
+	} else if sgLevelPct > RPSHighSteamGeneratorLevelTrip && atPower {
+		list = append(list, Alarm{
+			ID:          AlarmIDSGHighLevel,
+			Description: alarmDescription(AlarmIDSGHighLevel),
+			Severity:    SeverityWarning,
 			Active:      true,
 		})
 	}

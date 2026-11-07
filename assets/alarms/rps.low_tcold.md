@@ -4,7 +4,7 @@ Over-cooling is a reactivity event as much as a thermal one: denser coolant mode
 
 Usual suspects: excessive steam dump demand ([dump valves](TurbineBuilding/Turbine/DumpValve)), an atmospheric relief left open, or feedwater over-delivery. The [inlet temperature](ReactorBuilding/ReactorPressureVessel/Inlet) trend and [boron concentration](ReactorBuilding/ReactorPressureVessel/BoronConcentration) identify which.
 
-Model note: protection trips cold-leg temperature below 530F in the RPS logic, but this annunciator itself is declared yet not wired - watch [inlet temperature](ReactorBuilding/ReactorPressureVessel/Inlet) directly.
+Model note: raised directly off [inlet temperature](ReactorBuilding/ReactorPressureVessel/Inlet) against the 530F RPS plate when the P-7 at-power permissive is satisfied.
 
 Source: specs/pwr_sim/chapter_2/page_023.txt:32-35
 

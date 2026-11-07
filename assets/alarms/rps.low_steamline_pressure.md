@@ -4,7 +4,7 @@ Discriminate by trend: recovering pressure points at load, continuing decline po
 
 Secondary side inventory leaves with escaping steam, so track [SG water](ReactorBuilding/SteamGenerator/Water) alongside pressure; feedwater must replace what the break takes.
 
-Model note: protection does trip on low steamline pressure (600 psig plate in the RPS logic), but this annunciator itself is declared yet not wired - watch [steam pressure](ReactorBuilding/SteamGenerator/Pressure) directly.
+Model note: raised directly off [steam pressure](ReactorBuilding/SteamGenerator/Pressure) against the 600 psig RPS plate when the P-7 at-power permissive is satisfied.
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
 

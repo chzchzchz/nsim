@@ -4,7 +4,7 @@ Work the feed path: [control valve position](TurbineBuilding/MainFeedwaterContro
 
 Remember swell and shrink: apparent level swings with pressure transients faster than real inventory changes, so read level trends against steam pressure before concluding mass is truly leaving.
 
-Model note: this annunciator is declared but not yet wired to a process condition in the simulator - the emergency feedwater auto-start it describes is real, so watch SG level directly.
+Model note: raised directly off [SG level](ReactorBuilding/SteamGenerator/Water) against the 15% RPS plate when the P-7 at-power permissive is satisfied.
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_5/page_101.txt:1-9
 Source: specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:33-36

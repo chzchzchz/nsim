@@ -132,6 +132,54 @@ func TestSteamLineBreak_ProtectionResponse(t *testing.T) {
 		"a synchronized machine must not keep exporting rated power into the break")
 }
 
+func TestSteamLineBreak_LowSteamlinePressureAnnunciates(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion = 0
+	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(CoreRatedThermalPower)
+	p.TurbineBuilding.Turbine.Setpoint = 1.0
+	synchronizeAndCloseBreaker(&p)
+	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
+
+	sm := p.GetControlMap()
+	key := "ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open"
+	ctrl, ok := sm[key]
+	require.True(t, ok, "break control must be registered")
+	require.NoError(t, ctrl.Set("1"))
+
+	crossed := false
+	for i := 0; i < 5000; i++ {
+		p.Step(DefaultTimeStep)
+		p.Update()
+		if p.ReactorBuilding.SteamGenerator.Pressure < RPSLowSteamlinePressureTrip {
+			if !crossed {
+				crossed = true
+				found := false
+				for _, a := range p.Alarms() {
+					if a.ID == AlarmIDLowSteamlinePressure {
+						found = true
+						require.Equal(t, SeverityTrip, a.Severity)
+					}
+				}
+				require.True(t, found,
+					"low-steamline alarm must appear at the crossing tick")
+				// Persist through the break window.
+				alarms := p.Alarms()
+				present := false
+				for _, a := range alarms {
+					if a.ID == AlarmIDLowSteamlinePressure {
+						present = true
+					}
+				}
+				require.True(t, present, "alarm must persist through the break window")
+				return
+			}
+		}
+	}
+	require.True(t, crossed || p.ReactorBuilding.SteamGenerator.Pressure < RPSLowSteamlinePressureTrip,
+		"header must cross 600 psia within 5 sim-seconds of a full break")
+}
+
 // The sink-draw imbalance splits into its two regimes: the paced share
 // (turbine offtake + atmospheric dump) stays under the operational rate
 // envelope inside ReactorPressureVessel.Step, while the break discharge

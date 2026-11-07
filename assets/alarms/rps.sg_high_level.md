@@ -4,7 +4,7 @@ Throttle [feedwater control valves](TurbineBuilding/MainFeedwaterControlValve/Op
 
 High level typically accompanies large load rejections, where rapid pressure changes move apparent level far faster than feedwater errors alone could - which is why automatic level control exists and why manual overreach during transients makes things worse.
 
-Model note: declared but not yet wired to a process condition here; SG level sensors and the feedwater controls remain the live indicators.
+Model note: raised directly off [SG level](ReactorBuilding/SteamGenerator/Water) against the 90% RPS plate when the P-7 at-power permissive is satisfied.
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:33-36
 
