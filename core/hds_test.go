@@ -255,12 +255,19 @@ func TestPlant_HDS_PocketVentilationMovesHydrogen(t *testing.T) {
 	// per hour, so both plants' upper nodes rise ~2%/h; ventilation
 	// exchange (PocketExchangePerHour=0.2/h) moves upper toward
 	// lower with tau ~5h, so over 2s the gap moves only slightly.
-	// Assert direction and growth: upper node must exceed lower
-	// in both, and the vented gap must be smaller.
+	// Assert direction pinned by the plan: vented upper strictly
+	// below secured upper (CHECK_SKILL §8 tier-1, physics-forced
+	// direction), and the same source keeps the mixtures equal
+	// at commit within integration tolerance. Gap floor: the
+	// exchange moves ~1/3600 of the gap per tick at tau 5h, so
+	// the 2000-tick separation is well above float noise; the
+	// 1e-9 mixture band is deliberately wider than the residual.
 	upperA := a.ReactorBuilding.ContainmentBuilding.UpperHydrogenPercent
 	upperB := b.ReactorBuilding.ContainmentBuilding.UpperHydrogenPercent
 	lowerA := a.ReactorBuilding.ContainmentBuilding.LowerHydrogenPercent
 	lowerB := b.ReactorBuilding.ContainmentBuilding.LowerHydrogenPercent
+	assert.Less(t, upperA, upperB,
+		"vented upper must be strictly below secured upper (a=%v b=%v)", upperA, upperB)
 	assert.Positive(t, upperA-lowerA, "a must have a pocket")
 	assert.Positive(t, upperB-lowerB, "b must have a pocket")
 	assert.Less(t, upperA-lowerA, upperB-lowerB,

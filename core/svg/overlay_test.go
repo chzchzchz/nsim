@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/rand"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -137,6 +138,40 @@ func TestOverlay_Coverage(t *testing.T) {
 		sis.Sump = core.Volume{Val: 42000, Unit: u.Gallon}
 		assert.Regexp(t, `sump 42000 gal`, renderPlant(t, &p),
 			"spilled inventory reads on the containment systems skid")
+	})
+
+	t.Run("containment sump level gauge fill tracks Sump over capacity", func(t *testing.T) {
+		// The gauge fill fraction is SIS.Sump / SumpCapacityGal
+		// (CHECK_SKILL §8 tier-1: the direction is physics-forced
+		// once level handling exists; the exact pixel heights are
+		// wiring). An empty basin must render an empty fill rect
+		// and a half-full one a strictly taller fill.
+		p := core.MakePlant()
+		empty := renderPlant(t, &p)
+		assert.Equal(t, len(levelAccessors),
+			strings.Count(empty, `class="level-gauge"`))
+
+		sis := &p.ReactorBuilding.SafetyInjectionSystem
+		sis.Sump = core.Volume{Val: 7500, Unit: u.Gallon}
+		half := renderPlant(t, &p)
+
+		// The gauge fill rect is the second <rect> in each
+		// level-gauge group (outline first). The SUMP part's
+		// underline sits to the left of the RWST tank; the
+		// placed Sump gauge is the last one before the Exciter
+		// group. Anchor on the placed (non-symbol-def)
+		// `<g data-part="ReactorBuilding/SafetyInjectionSystem"`
+		// group: the last `<g class="level-gauge">` after it
+		// carries the sump fill.
+		emptyM, halfM := sumpGaugeFills(t, empty, half)
+		require.NotEmpty(t, emptyM)
+		require.NotEmpty(t, halfM)
+		emptyFill, errEmpty := strconv.ParseFloat(emptyM[1], 64)
+		halfFill, errHalf := strconv.ParseFloat(halfM[1], 64)
+		require.NoError(t, errEmpty)
+		require.NoError(t, errHalf)
+		assert.Greater(t, halfFill, emptyFill,
+			"half-full sump must fill taller than an empty basin")
 	})
 
 	t.Run("pzr pressure and level readouts", func(t *testing.T) {
@@ -314,6 +349,22 @@ func TestOverlay_Coverage(t *testing.T) {
 		cst.Level = core.Volume{Val: 1e9, Unit: u.Gallon}
 		assert.Equal(t, full, renderPlant(t, &p))
 	})
+}
+
+// sumpGaugeFills returns the placed (non-symbol-def) Sump part's
+// level-gauge fill rect height for each render. The gauge fill
+// rect is the second <rect> in a class="level-gauge" group
+// (outline first), anchored just after the placed SUMP part's
+// caption text.
+func sumpGaugeFills(t *testing.T, empty, half string) ([]string, []string) {
+	t.Helper()
+	fills := func(out string) []string {
+		idx := strings.LastIndex(out, `>SUMP</text>`)
+		require.Greater(t, idx, 0)
+		re := regexp.MustCompile(`class="level-gauge">.*?<rect[^>]*height="([0-9.]+)"[^>]*fill="#aad4ff"`)
+		return re.FindStringSubmatch(out[idx:])
+	}
+	return fills(empty), fills(half)
 }
 
 // TestViewportGroupWrapsContent ensures all diagram content sits

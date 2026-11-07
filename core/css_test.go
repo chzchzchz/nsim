@@ -295,3 +295,42 @@ func TestCSS_EndToEndHighContainmentPressureStartsCSS(t *testing.T) {
 		"want CSSTLevel < CSSTCapacity after stepping with CSS running, got %v",
 		css.CSSTLevel.Float())
 }
+
+// A running CSS with no relief produces a pressure step that is
+// NOT reproducible by the relief path alone: the spray pressure
+// drag (plant.go, CSSSprayEffectiveness) removes pressure
+// proportionally to the excess over atmosphere, while the
+// relief path can only add (PRT burst) or leave it alone.
+// Twin plants share the same seeded excess; the spray-running
+// twin is dragged down, the spray-secure twin is not. This is
+// CHECK_SKILL §8 tier-1 (direction physics-forced): the test
+// would fail on the spuriously-deleted-spray-drag code where
+// the burst term could never be caught.
+func TestCSS_RunningSprayDragsPressureWithoutRelief(t *testing.T) {
+	t.Parallel()
+	seedExcess := float64(AtmosphericPressure) + 20
+
+	on := MakePlant()
+	on.ReactorBuilding.ContainmentBuilding.Pressure = Pressure(seedExcess)
+	oncss := &on.AuxiliaryBuilding.ContainmentSpraySystem
+	oncss.Running = true
+	oncss.DriveReady = true
+	oncss.SprayHeaderOpen = true
+	oncss.SprayFlow = 10.0
+
+	off := MakePlant()
+	off.ReactorBuilding.ContainmentBuilding.Pressure = Pressure(seedExcess)
+
+	stepN(&on, 100, DefaultTimeStep)
+	stepN(&off, 100, DefaultTimeStep)
+
+	assert.Less(t, float64(on.ReactorBuilding.ContainmentBuilding.Pressure),
+		float64(off.ReactorBuilding.ContainmentBuilding.Pressure),
+		"running spray must drag pressure down with no relief (on=%v off=%v)",
+		on.ReactorBuilding.ContainmentBuilding.Pressure,
+		off.ReactorBuilding.ContainmentBuilding.Pressure)
+	assert.GreaterOrEqual(t,
+		float64(on.ReactorBuilding.ContainmentBuilding.Pressure),
+		float64(AtmosphericPressure),
+		"the drag must floor at atmospheric")
+}
