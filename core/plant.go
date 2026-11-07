@@ -1208,6 +1208,9 @@ type Plant struct {
 	//     specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:148-150
 	PlantOperation PlantOperation
 	nextPlant      *Plant
+	cachedGraph    *PlantGraph
+	cachedTarget   *Plant
+	cachedPumps    [7]*Pump
 }
 
 func (p *Plant) Step(dt time.Duration) {
@@ -3352,6 +3355,35 @@ func (p *Plant) BuildGraph() *PlantGraph { return p.BuildGraphFor(p) }
 // specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt
 // (AFWS pumps, common pipe header).
 func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
+	if p.cachedGraph != nil && p.cachedTarget == target {
+		g := p.cachedGraph
+		for _, n := range g.Nodes {
+			if rec, ok := n.Ref.(flowRecorder); ok {
+				rec.resetFlow()
+			}
+		}
+		aux := &target.AuxiliaryBuilding
+		sis := &target.ReactorBuilding.SafetyInjectionSystem
+		cvcs := &aux.ChemicalVolumeControlSystem
+		css := &aux.ContainmentSpraySystem
+		ccws := &aux.ComponentCoolingWaterSystem
+		sfpc := &aux.SpentFuelPoolCoolingSystem
+		genCooling := &target.TurbineBuilding.Generator.GeneratorCoolingSystem
+		cvcsDrive := target.Electrical.ESFBusA.Energized || target.Electrical.ESFBusB.Energized
+		sfpcRunning := sfpc.LoopAPumpRunning || sfpc.LoopBPumpRunning || sfpc.StandbyRunning
+		setPump := func(i int, running, drive bool) {
+			p.cachedPumps[i].Running = running
+			p.cachedPumps[i].DriveReady = drive
+		}
+		setPump(0, cvcs.ChargingPumpRunning, cvcsDrive)
+		setPump(1, sis.HHSIPumpRunning, sis.HHSIDriveReady)
+		setPump(2, css.Running, css.DriveReady)
+		setPump(3, cvcs.BTRSRecirculationPumpRunning, cvcsDrive)
+		setPump(4, ccws.PumpRunning, ccws.DriveReady)
+		setPump(5, sfpcRunning, sfpc.DriveReady)
+		setPump(6, genCooling.SCCWPumpRunning, true)
+		return g
+	}
 	g := &PlantGraph{Nodes: map[string]GraphNode{}}
 
 	add := func(id, kind string, ref interface{}) {
@@ -3617,19 +3649,27 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	// CVCS has no DriveReady field; charging pumps feed from the
 	// ESF bus (parts.go:2388-2391), so drive is ESF energised.
 	cvcsDrive := target.Electrical.ESFBusA.Energized || target.Electrical.ESFBusB.Energized
-	chgPump := boolPump(cvcs.ChargingPumpRunning, cvcsDrive)
-	hhsiPump := boolPump(sis.HHSIPumpRunning, sis.HHSIDriveReady)
-	cssPump := boolPump(css.Running, css.DriveReady)
-	btrsPump := boolPump(cvcs.BTRSRecirculationPumpRunning, cvcsDrive)
-	ccwsPump := boolPump(ccws.PumpRunning, ccws.DriveReady)
+	getPump := func(i int, running, drive bool) *Pump {
+		if p.cachedPumps[i] == nil {
+			p.cachedPumps[i] = &Pump{}
+		}
+		p.cachedPumps[i].Running = running
+		p.cachedPumps[i].DriveReady = drive
+		return p.cachedPumps[i]
+	}
+	chgPump := getPump(0, cvcs.ChargingPumpRunning, cvcsDrive)
+	hhsiPump := getPump(1, sis.HHSIPumpRunning, sis.HHSIDriveReady)
+	cssPump := getPump(2, css.Running, css.DriveReady)
+	btrsPump := getPump(3, cvcs.BTRSRecirculationPumpRunning, cvcsDrive)
+	ccwsPump := getPump(4, ccws.PumpRunning, ccws.DriveReady)
 	// One loop, three latches: duty A/B share the SFPPA hop;
 	// Standby is the SFPPB label on the same edge. Gate is "any".
 	sfpcRunning := sfpc.LoopAPumpRunning || sfpc.LoopBPumpRunning || sfpc.StandbyRunning
-	sfpcPump := boolPump(sfpcRunning, sfpc.DriveReady)
+	sfpcPump := getPump(5, sfpcRunning, sfpc.DriveReady)
 	// SCCW drive: generator MCC, derived, spec silent (p63_1).
 	// GeneratorCoolingSystem has no DriveReady field; the pump
 	// is ready iff commanded on, so drive mirrors the latch.
-	sccwPump := boolPump(genCooling.SCCWPumpRunning, true)
+	sccwPump := getPump(6, genCooling.SCCWPumpRunning, true)
 
 	// HHSI RWST / Sump phase edges share one guard shape; they
 	// differ only in the suction source being aligned.
@@ -3814,6 +3854,13 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	})
 	edge("SCCWPump", "Generator", nil, nil)
 
+	// Cache for the hot Step loop: the graph structure (nodes,
+	// edges, closures, adapter pointers) is only a function of
+	// the target Plant's address, not of tick-varying state.
+	// Reusing it avoids rebuilding the map, slice, ~30 closures
+	// and adapter wrappers every tick.
+	p.cachedGraph = g
+	p.cachedTarget = target
 	return g
 }
 

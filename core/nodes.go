@@ -85,6 +85,7 @@ func (s *injectionSink) capacity() Volume   { return zeroVolume }
 func (s *injectionSink) recordFlow(gal float64) {
 	s.DeliveredFlow += gal
 }
+func (s *injectionSink) resetFlow() { s.DeliveredFlow = 0 }
 
 // cisSink is the infinite sink for CSS spray edges ("Cold water can
 // be sprayed into the pressurizer relief tank...", spray to
@@ -98,6 +99,7 @@ func (s *cisSink) capacity() Volume   { return zeroVolume }
 func (s *cisSink) recordFlow(gal float64) {
 	s.DeliveredFlow += gal
 }
+func (s *cisSink) resetFlow() { s.DeliveredFlow = 0 }
 
 // accNode adapts SIS.Accumulator.Level (bank of 4 tanks, one
 // combined level). Discharge rate and isolation are read by the
@@ -140,6 +142,7 @@ func (n *passThroughNode) capacity() Volume   { return zeroVolume }
 func (n *passThroughNode) recordFlow(gal float64) {
 	n.DeliveredFlow += gal
 }
+func (n *passThroughNode) resetFlow() { n.DeliveredFlow = 0 }
 
 // turbineNode adapts the main turbine as a pass-through flow node
 // on the secondary steam path SG -> Turbine -> Condenser. The
@@ -173,3 +176,4 @@ func (n *turbineNode) capacity() Volume   { return zeroVolume }
 func (n *turbineNode) recordFlow(gal float64) {
 	n.DeliveredFlow += gal
 }
+func (n *turbineNode) resetFlow() { n.DeliveredFlow = 0 }

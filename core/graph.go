@@ -188,6 +188,7 @@ const pumpHead = 1472.0
 // never feeds back into any Step ledger.
 type flowRecorder interface {
 	recordFlow(gal float64)
+	resetFlow()
 }
 
 func recordGraphFlow(g *PlantGraph, e GraphEdge, dt time.Duration) {
@@ -259,7 +260,8 @@ func simulateFluidFlow(g *PlantGraph, dt time.Duration, efwsBlocked ...bool) {
 		efwsActive = true
 	}
 	dtSec := dt.Seconds()
-	for _, e := range g.Edges {
+	for i := range g.Edges {
+		e := &g.Edges[i]
 		fn, ok := g.Nodes[e.From]
 		if !ok {
 			continue
@@ -274,7 +276,7 @@ func simulateFluidFlow(g *PlantGraph, dt time.Duration, efwsBlocked ...bool) {
 		// it here would count the same gallons twice. Record the
 		// tick's volume on the sink instead and skip deltaP.
 		if e.Flow != nil {
-			recordGraphFlow(g, e, dt)
+			recordGraphFlow(g, *e, dt)
 			continue
 		}
 		// Interlock: when EFWS is actively crediting SG water this
