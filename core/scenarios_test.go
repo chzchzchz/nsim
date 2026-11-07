@@ -30,7 +30,7 @@ func TestScenarioCatalogIdentifiers(t *testing.T) {
 		assert.NotEmpty(t, s.StartState)
 		assert.NotEmpty(t, s.Objective)
 	}
-	assert.Len(t, Scenarios(), 38)
+	assert.Len(t, Scenarios(), 39)
 
 	s, ok := ScenarioByID("porv-stuck-open")
 	require.True(t, ok)

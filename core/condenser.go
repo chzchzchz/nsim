@@ -143,6 +143,13 @@ type Condenser struct {
 	Pressure
 	Level              Volume
 	HotwellLevel       Volume
+	// HotwellRadiation is the normalized condenser-effluent
+	// radiation reading (1 = trip level), driven by leaked primary
+	// water that condensed into the hotwell. Diagnostic-only: it
+	// never drives the steam-line auto-isolate latch (Plant.Step
+	// updates it after the SG step, with a slower tau, so a stopped
+	// leak does not hold isolation closed).
+	HotwellRadiation   float64
 	VacuumPumpRunning  bool
 	CirculatingWaterIn Temperature
 	CWOut              Temperature

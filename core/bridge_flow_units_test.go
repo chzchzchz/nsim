@@ -43,6 +43,11 @@ func TestBridge_FlowSensorsPresentGPM(t *testing.T) {
 	// 1 ms tick is the 120 gal/s full-open break rate = 7200 gpm.
 	p.ReactorBuilding.ReactorPressureVessel.BreakFlow =
 		Volume{Val: 0.12, Unit: u.Gallon}
+	// SGTubeRuptureFlow stores a PER-STEP volume like BreakFlow:
+	// 0.0025 gal/step at the 1 ms tick is the 2.5 gal/s full-open
+	// rate = 150 gpm.
+	p.ReactorBuilding.SteamGenerator.SGTubeRuptureFlow =
+		Volume{Val: 0.0025, Unit: u.Gallon}
 	// HHSIHotLegFlow stores a rate in gal/s (design 970/60 gal/s x the
 	// hot-leg fraction); presented like any other gal/s field.
 	p.ReactorBuilding.SafetyInjectionSystem.HHSIHotLegFlow =
@@ -66,6 +71,7 @@ func TestBridge_FlowSensorsPresentGPM(t *testing.T) {
 		{"Outside/CirculatingWaterSystem/Flow", "gpm", 550000},
 		{"AuxiliaryBuilding/SpentFuelPoolCoolingSystem/PurificationFlow", "gpm", 100},
 		{"ReactorBuilding/ReactorPressureVessel/BreakFlow", "gpm", 7200},
+		{"ReactorBuilding/SteamGenerator/SGTubeRuptureFlow", "gpm", 150},
 		{"ReactorBuilding/SafetyInjectionSystem/HHSIHotLegFlow", "gpm", 480},
 		{"AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRSBedSaturation", "percent", 50},
 		{"AuxiliaryBuilding/ChemicalVolumeControlSystem/ProgrammedLevel", "percent", 40},

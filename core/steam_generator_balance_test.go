@@ -40,7 +40,7 @@ func TestSteamGenerator_FullPowerDrainMatchesSpecFlow(t *testing.T) {
 	sg.HeatInput = SteamGeneratorFullLoadHeatInput
 
 	before := sg.Water.Float()
-	after := sg.Step(DefaultTimeStep, 1.0) // full turbine admission
+	after := sg.Step(DefaultTimeStep, 1.0, PressurizerHeaterTarget, nil, nil) // full turbine admission
 	drainedPerStep := before - after.Water.Float()
 
 	ratedKgPerSec := float64(CoreRatedThermalPower) /
@@ -67,12 +67,12 @@ func TestSteamGenerator_OfftakeDoesNotDebitLiquidStock(t *testing.T) {
 	}
 
 	before := sg.Water.Float()
-	after := sg.Step(DefaultTimeStep, 1.0) // full demand, zero heat input
+	after := sg.Step(DefaultTimeStep, 1.0, PressurizerHeaterTarget, nil, nil) // full demand, zero heat input
 	assert.InDelta(t, before, after.Water.Float(), 1e-9,
 		"condenser-directed offtake is internal recirculation and "+
 			"must not spend shell inventory")
 
-	after = sg.Step(DefaultTimeStep, 0.0) // nothing boiling, nothing drawing
+	after = sg.Step(DefaultTimeStep, 0.0, PressurizerHeaterTarget, nil, nil) // nothing boiling, nothing drawing
 	assert.InDelta(t, before, after.Water.Float(), 1e-9,
 		"an idle shell holds its liquid stock")
 }

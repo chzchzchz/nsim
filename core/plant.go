@@ -482,7 +482,8 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 			float64(rpv.TotalThermalPower()) / float64(SteamGeneratorLoopCount),
 		)
 	}
-	ret.SteamGenerator = ret.SteamGenerator.Step(dt, sgSteamOutflowFraction)
+	ret.SteamGenerator = ret.SteamGenerator.Step(dt, sgSteamOutflowFraction,
+		ret.Pressurizer.Pressure, &ret.ReactorPressureVessel, &ret.Pressurizer)
 
 	// Surge line: the loop "breathes" into and out of the pressurizer
 	// as coolant temperature moves; the displacement itself lives in
@@ -1990,7 +1991,9 @@ func (p *Plant) Step(dt time.Duration) {
 	//    steam line pressure or on a high-high containment
 	//    pressure signal [...]"
 	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:71-75
-	if p.nextPlant.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationActuated {
+	sgIsolated := p.nextPlant.ReactorBuilding.SteamGenerator.SteamlineIsolated
+	if p.nextPlant.ReactorBuilding.ReactorProtectionSystem.SteamlineIsolationActuated ||
+		sgIsolated {
 		p.nextPlant.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open = 0
 	}
 	// RecirculateValve credits the CST on Outside (plans/p59_1.txt §3).
@@ -2019,6 +2022,22 @@ func (p *Plant) Step(dt time.Duration) {
 			p.nextPlant.TurbineBuilding.Condenser.HotwellLevel.Float()+sgDrawn)
 	}
 
+	// Condenser-effluent radiation monitor: updated here, after
+	// StepWithSteam (which runs Condenser.Step), because the
+	// condenser step cannot see this tick's leak. One-tick lag is
+	// intentional; the monitor is diagnostic-only with a slow decay
+	// and never drives the isolate latch.
+	{
+		leakedGal := p.nextPlant.ReactorBuilding.SteamGenerator.SGTubeRuptureFlow.Float()
+		target := 0.0
+		if leakedGal > 0 {
+			target = 1.0
+		}
+		alpha := dt.Seconds() / SGTubeRuptureEffluentTauSec
+		cond := &p.nextPlant.TurbineBuilding.Condenser
+		cond.HotwellRadiation = cond.HotwellRadiation*(1-alpha) + target*alpha
+	}
+
 	// Feedwater regulator step. The simplified model collapses
 	// the spec's per-SG regulators into a single shared
 	// regulator that reads the lumped SteamGenerator (plans/p22_1.txt).
@@ -2039,7 +2058,7 @@ func (p *Plant) Step(dt time.Duration) {
 		sgLevelPct = 100.0 * sg.Water.Float() / sg.Volume.Float()
 	}
 	fwi := p.nextPlant.ReactorBuilding.ReactorProtectionSystem.
-		FeedwaterIsolationActuated
+		FeedwaterIsolationActuated || sgIsolated
 	reg := p.nextPlant.TurbineBuilding.FeedwaterRegulator
 	priorDemand := reg.ValveDemand
 	reg.Level = sgLevelPct

@@ -979,7 +979,7 @@ func TestPlant_SGSafetyValvePopsAndReseats(t *testing.T) {
 	pop.HeatInput = SteamGeneratorFullLoadHeatInput
 	pop.Water = Volume{Val: 80000, Unit: u.Gallon}
 	pop.Pressure = SteamGeneratorSafetyValveSetpointPsia
-	pop = pop.Step(DefaultTimeStep, 0)
+	pop = pop.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, nil, nil)
 	require.Greater(t, pop.SafetyValve.Open, 0.9,
 		"valves should pop at setpoint")
 	assert.Less(t, pop.Water.Float(), 80000.0,
@@ -990,7 +990,7 @@ func TestPlant_SGSafetyValvePopsAndReseats(t *testing.T) {
 	// capacity, so the header sags and the valves reseat.
 	reseat.HeatInput = SteamGeneratorFullLoadHeatInput / 4
 	for i := 0; i < 8000; i++ {
-		reseat = reseat.Step(DefaultTimeStep, 0)
+		reseat = reseat.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, nil, nil)
 	}
 	assert.Equal(t, 0.0, reseat.SafetyValve.Open,
 		"valves should reseat once pressure decays below blowdown")

@@ -335,6 +335,31 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	// Steam generator tube rupture malfunction (gap G2). Open is the
+	// normalized rupture size; 1 inserts the double-ended-equivalent
+	// full break of the largest tube.
+	m["ReactorBuilding/SteamGenerator/SGTubeRupture/Open"] = &bridge.Control{
+		Part:  "ReactorBuilding/SteamGenerator/SGTubeRupture",
+		Label: "Open",
+		Kind:  "normalized",
+		Get: func() string {
+			return fmt.Sprintf("%v",
+				p.ReactorBuilding.SteamGenerator.SGTubeRupture.Open)
+		},
+		Set: func(s string) error {
+			validated, err := bridge.ConvertControlValue("normalized", s)
+			if err != nil {
+				return err
+			}
+			v, err := strconv.ParseFloat(validated, 64)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.SteamGenerator.SGTubeRupture.Open = v
+			return nil
+		},
+	}
+
 	// Hot-leg LOCA malfunction (pwr_sim exercise 4.20). Open is
 	// the normalized break size at the RPV outlet nozzle; 1
 	// inserts the full "RC hot leg #1 LOCA break".
@@ -1827,6 +1852,45 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 			return bridge.FormatSensorValue("gpm",
 				p.ReactorBuilding.ReactorPressureVessel.BreakFlow.Float()/
 					DefaultTimeStep.Seconds()*60)
+		},
+	}
+
+	// SG tube rupture leak flow (gap G2). Per-step volume presented
+	// as gpm exactly like BreakFlow above.
+	m["ReactorBuilding/SteamGenerator/SGTubeRuptureFlow"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator",
+		Label: "SGTubeRuptureFlow",
+		Kind:  "gpm",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gpm",
+				p.ReactorBuilding.SteamGenerator.SGTubeRuptureFlow.Float()/
+					DefaultTimeStep.Seconds()*60)
+		},
+	}
+
+	// Steam-line radiation monitor (gap G2), normalized against its
+	// trip level, beside the BRS distillate analog.
+	// "The steamline monitor is located on the steam line and monitors
+	// the radiation levels through the steam line walls."
+	// specs/the_westinghouse_pressurized_water_react/chapter_10/page_162.txt:88-92
+	m["ReactorBuilding/SteamGenerator/SteamlineRadiation"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator",
+		Label: "SteamlineRadiation",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.SteamGenerator.SteamlineRadiation)
+		},
+	}
+
+	// Auto-isolate latch driven by the steam-line radiation monitor.
+	m["ReactorBuilding/SteamGenerator/SteamlineIsolated"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator",
+		Label: "SteamlineIsolated",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.SteamGenerator.SteamlineIsolated)
 		},
 	}
 

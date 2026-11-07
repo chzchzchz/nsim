@@ -34,12 +34,12 @@ func TestSteamGenerator_BreakDischargeScalesWithHeader(t *testing.T) {
 
 	require.Zero(t, sg.MainSteamLineBreak.Open,
 		"precondition: intact header")
-	closed := sg.Step(DefaultTimeStep, 0)
+	closed := sg.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, nil, nil)
 	assert.Zero(t, closed.BreakFlow.Float(),
 		"an intact header must not discharge")
 
 	sg.MainSteamLineBreak.Open = 1
-	full := sg.Step(DefaultTimeStep, 0)
+	full := sg.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, nil, nil)
 	require.Greater(t, full.BreakFlow.Float(), 0.0,
 		"an open break must discharge")
 	wantFull := SteamLineBreakCapacityFraction *
@@ -54,7 +54,7 @@ func TestSteamGenerator_BreakDischargeScalesWithHeader(t *testing.T) {
 
 	half := sg
 	half.Pressure = SteamGeneratorShellPressure / 2
-	dropped := half.Step(DefaultTimeStep, 0)
+	dropped := half.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, nil, nil)
 	assert.InDelta(t, dropped.BreakFlow.Float(), full.BreakFlow.Float(),
 		full.BreakFlow.Float()*1e-9,
 		"choked blowdown must hold the rated fraction while any header pressure remains")

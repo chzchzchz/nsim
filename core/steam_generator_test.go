@@ -18,7 +18,7 @@ func TestSteamGenerator_FullHeatInputRaisesPressure(t *testing.T) {
 		HeatInput: SteamGeneratorFullLoadHeatInput,
 	}
 	for i := 0; i < int(time.Second/DefaultTimeStep); i++ {
-		sg = sg.Step(DefaultTimeStep, 0)
+		sg = sg.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, nil, nil)
 	}
 	assert.Positive(t, sg.Pressure, "Pressure should rise with HeatInput")
 	assert.LessOrEqual(t, sg.Pressure, SteamGeneratorShellPressure,
@@ -34,7 +34,7 @@ func TestSteamGenerator_NoHeatInputNoSteam(t *testing.T) {
 		Water:  Volume{Val: 1000, Unit: u.Gallon},
 	}
 	for i := 0; i < int(time.Second/DefaultTimeStep); i++ {
-		sg = sg.Step(DefaultTimeStep, 0)
+		sg = sg.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, nil, nil)
 	}
 	assert.Zero(t, sg.Pressure, "Pressure should stay at 0 with no HeatInput")
 }
@@ -50,7 +50,7 @@ func TestSteamGenerator_WaterDepletionDecaysPressure(t *testing.T) {
 		HeatInput: SteamGeneratorFullLoadHeatInput,
 	}
 	for i := 0; i < int(10*time.Second/DefaultTimeStep); i++ {
-		sg = sg.Step(DefaultTimeStep, 0)
+		sg = sg.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, nil, nil)
 	}
 	assert.Zero(t, sg.Water.Float(), "Water should be fully depleted")
 	assert.Less(t, sg.Pressure, SteamGeneratorShellPressure,
@@ -67,7 +67,7 @@ func TestSteamGenerator_PressureClampedAtDesign(t *testing.T) {
 		HeatInput: SteamGeneratorFullLoadHeatInput,
 	}
 	for i := 0; i < 1000; i++ {
-		sg = sg.Step(DefaultTimeStep, 0)
+		sg = sg.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, nil, nil)
 	}
 	assert.LessOrEqual(t, sg.Pressure, SteamGeneratorShellDesignPressure,
 		"Pressure should be clamped at %v, got %v", SteamGeneratorShellDesignPressure, sg.Pressure)
@@ -92,7 +92,7 @@ func TestSteamGenerator_BalancedDemandHoldsShellPressure(t *testing.T) {
 			HeatInput: Watts(supply * float64(SteamGeneratorFullLoadHeatInput)),
 		}
 		for i := 0; i < int(10*time.Second/DefaultTimeStep); i++ {
-			sg = sg.Step(DefaultTimeStep, supply)
+			sg = sg.Step(DefaultTimeStep, supply, PressurizerHeaterTarget, nil, nil)
 		}
 		assert.InDelta(t, float64(SteamGeneratorShellPressure),
 			float64(sg.Pressure), 1e-6,
@@ -113,7 +113,7 @@ func TestSteamGenerator_UndersupplySagsHeader(t *testing.T) {
 		HeatInput: Watts(0.01 * float64(SteamGeneratorFullLoadHeatInput)),
 	}
 	for i := 0; i < int(30*time.Second/DefaultTimeStep); i++ {
-		sg = sg.Step(DefaultTimeStep, 0.04)
+		sg = sg.Step(DefaultTimeStep, 0.04, PressurizerHeaterTarget, nil, nil)
 	}
 	want := float64(SteamGeneratorShellPressure) * 0.01 / 0.04
 	assert.InDelta(t, want, float64(sg.Pressure), want*0.05,

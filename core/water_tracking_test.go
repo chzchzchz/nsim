@@ -144,7 +144,7 @@ func TestSG_AtmosphericDumpDebitsInventory(t *testing.T) {
 		}
 		sg.AtmosphericDumpValve.Open = atmOpen
 		for i := 0; i < int(time.Second/DefaultTimeStep); i++ {
-			sg = sg.Step(DefaultTimeStep, 1.0)
+			sg = sg.Step(DefaultTimeStep, 1.0, PressurizerHeaterTarget, nil, nil)
 		}
 		return seededWater - sg.Water.Float()
 	}

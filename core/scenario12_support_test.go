@@ -197,7 +197,7 @@ func TestSteamGenerator_WetLayupFillTopsToVents(t *testing.T) {
 	live.Pressure = Pressure(SGWetLayupMaxHeaderPsia + 100)
 	live.WetLayupFillValve = Valve{Open: 1}
 	for range int(60 * time.Second / DefaultTimeStep) {
-		live = live.Step(DefaultTimeStep, 0)
+		live = live.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, nil, nil)
 	}
 	assert.Equal(t, 30000.0, live.Water.Float(),
 		"a live header must not accept layup fill")
@@ -209,14 +209,14 @@ func TestSteamGenerator_WetLayupFillTopsToVents(t *testing.T) {
 	vented.Pressure = Pressure(5)
 	vented.WetLayupFillValve = Valve{Open: 1}
 	for range int(60 * time.Second / DefaultTimeStep) {
-		vented = vented.Step(DefaultTimeStep, 0)
+		vented = vented.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, nil, nil)
 	}
 	wantGain := SGWetLayupFillGalPerSec * 60.0
 	assert.InDelta(t, 30000+wantGain, vented.Water.Float(), wantGain*0.01,
 		"fill should add the design rate while below the vents")
 
 	for range int(3500 * time.Second / DefaultTimeStep) {
-		vented = vented.Step(DefaultTimeStep, 0)
+		vented = vented.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, nil, nil)
 	}
 	assert.Equal(t, 100000.0, vented.Water.Float(),
 		"fill clamps at the vents (shell full)")

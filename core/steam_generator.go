@@ -117,6 +117,43 @@ type SteamGenerator struct {
 	// is lost from the secondary: Plant.Step converts it into
 	// containment enthalpy input instead of condenser makeup.
 	BreakFlow Volume
+
+	// SGTubeRupture is the malfunction path modeling a steam
+	// generator tube rupture: primary coolant leaks from the tube
+	// bundle (inside pressure ~RCS) into the secondary shell
+	// (~header pressure) through a pinhole in the tube sheet. Open
+	// is the normalized rupture size (0 intact, 1 double-ended-
+	// equivalent full break of the largest tube).
+	//
+	// "Tube Sheet (thick plate separating primary/secondary at bottom)"
+	// specs/the_westinghouse_pressurized_water_react/imgs/023.md:4
+	//
+	// This is NOT the main steam line break: it does not vent the
+	// header to containment (that is MainSteamLineBreak), and it
+	// cannot be isolated by the MSIV — it terminates only when the
+	// RCS depressurizes below the shell pressure. The discharged
+	// volume lands in SGTubeRuptureFlow for the monitors and the
+	// inventory ledger.
+	SGTubeRupture Valve
+
+	// SGTubeRuptureFlow is the per-step volume leaked through
+	// SGTubeRupture during the most recent Step (gallons per step,
+	// same convention as BreakFlow). The same call debits
+	// RPV.BreakDischarged and credits shell water, and hands the
+	// flow to the radiation monitors.
+	SGTubeRuptureFlow Volume
+
+	// SteamlineRadiation is the normalized steam-line radiation
+	// monitor reading (1 = trip level), driven by leaked primary
+	// water that boiled into the header. First-order lag toward 1
+	// while the leak flows, decaying after it stops.
+	SteamlineRadiation float64
+
+	// SteamlineIsolated is the auto-isolate latch driven by the
+	// steam-line radiation monitor (trip/release hysteresis). While
+	// latched Plant.Step closes the MSIV and secures main
+	// feedwater.
+	SteamlineIsolated bool
 }
 
 func (s *SteamGenerator) Update() SteamGenerator {
@@ -213,6 +250,44 @@ const (
 	//   specs/pwr_sim/chapter_4/page_053.txt:3-5
 	SteamLineBreakCapacityFraction = 1.0
 
+	// SGTubeRuptureGalPerSec is the full-open leak rate at the design
+	// differential (RCS 2250 psia − SG shell 920 psia): 150 gpm liquid-
+	// equivalent.
+	//
+	// Derived, not quoted: the spec names no tube leak rate. The
+	// magnitude is sized against the existing inventory constants so the
+	// transient reads on operational timescales: ~15× the letdown-into-
+	// evaporator duty (10 gpm,
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:72-74),
+	// ~1.7× the full-power CVCS charging flow (87 gpm), and equal to one
+	// EFWS motor pump (150 gpm) — a leak an operator notices on the SG-
+	// level and pressurizer-level indications within a minute, terminates
+	// in tens of minutes of depressurization, and does not void the
+	// pressurizer the way RCSHotLegBreakGalPerSec's 120 gal/s does in
+	// seconds.
+	SGTubeRuptureGalPerSec = 2.5 // 150 gpm / 60 s
+
+	// SGTubeRuptureMonitorTauSec is the first-order response time of
+	// the lumped steam-line radiation monitor (seconds). Derived: the
+	// spec describes the monitor's location and function, not its
+	// response (chapter_10/page_162.txt:88-92). The BRS distillate
+	// monitor's 30 s (BRSSRadiationTauSec) is the family anchor; the
+	// steam-line monitor sits in a faster path, so it is set at 20 s.
+	SGTubeRuptureMonitorTauSec = 20.0
+
+	// SGTubeRuptureEffluentTauSec is the slower first-order response
+	// of the condenser-effluent monitor (seconds). Derived: the
+	// hotwell only accumulates leaked activity, so its reading decays
+	// slowly. Labelled an assumption; the monitor is diagnostic-only
+	// and never drives the isolate latch.
+	SGTubeRuptureEffluentTauSec = 600.0
+
+	// SGTubeRuptureMonitorTripFrac / ReleaseFrac mirror the BRS
+	// monitor's hysteresis fractions (parts.go:4592/4597) so a
+	// hovering monitor does not chatter the isolate latch.
+	SGTubeRuptureMonitorTripFrac    = 0.95
+	SGTubeRuptureMonitorReleaseFrac = 0.05
+
 	// SGDrainValveGalPerSec sizes the shell drain at full open so
 	// draining from the wet-layup fill to the normal operating band
 	// takes on the order of an hour. Assumption; the spec gives no
@@ -274,7 +349,8 @@ var SteamGeneratorFullLoadHeatInput = Watts(float64(CoreRatedThermalPower) /
 //     valves and to the atmosphere for the initial phase of large load
 //     reductions."
 //     specs/the_westinghouse_pressurized_water_react/chapter_15/page_216.txt:6-8
-func (s *SteamGenerator) Step(dt time.Duration, steamOutflowFraction float64) SteamGenerator {
+func (s *SteamGenerator) Step(dt time.Duration, steamOutflowFraction float64,
+	rcsPressure Pressure, rpv *ReactorPressureVessel, pzr *Pressurizer) SteamGenerator {
 	ret := *s
 
 	// Rated boil-off capacity in liquid-equivalent gal/s, the design
@@ -364,6 +440,17 @@ func (s *SteamGenerator) Step(dt time.Duration, steamOutflowFraction float64) St
 		ret.BreakFlow = Volume{Val: take, Unit: u.Gallon}
 		ret.Water = vol(ret.Water, ret.Water.Float()-take)
 	}
+
+	// Tube rupture, beside the MSLB block so both breaks see a single
+	// ordering on shell water and header pressure. The debit lands
+	// inside applyTubeRupture on the same call that produces the flow
+	// (see "Primary inventory ledger" in plans/p60_1.txt). Nil pointers
+	// (direct unit-test callers) skip the leak without touching the
+	// primary ledger.
+	if rpv != nil && pzr != nil {
+		ret.applyTubeRupture(dt, rcsPressure, rpv, pzr)
+	}
+	ret.applyRadiationMonitors(dt, ret.SGTubeRuptureFlow.Float())
 
 	// Steamline vent draw. The vent bank passes its capacity
 	// fraction of rated flow at full open and draws from the same
@@ -486,4 +573,84 @@ func (s *SteamGenerator) Step(dt time.Duration, steamOutflowFraction float64) St
 	ret.Pressure = Pressure(pressure)
 
 	return ret
+}
+
+// applyTubeRupture discharges the tube rupture: flow scales linearly
+// with the RCS-over-SG pressure differential (the driving head across
+// the tube sheet), capped at the design differential, and stops when
+// RCS pressure falls to the shell pressure (the depressurization
+// termination). The leaked volume is credited to shell water and
+// debited from the primary ledger the LOCA uses (RPV.BreakDischarged
+// + pressurizer level), so RCSDrainableInventoryGal bounds net loss
+// across both break classes on one currency. Mass stays in the
+// secondary (shell water), never the containment sump.
+//
+// The linear-in-dP law is a choked-flow approximation consistent with
+// the model's other unscaled conventions (the MSLB's constant-fraction
+// blowdown): it does not integrate a two-phase critical discharge
+// calculation the spec never asks for.
+//
+// "Tube Sheet (thick plate separating primary/secondary at bottom)"
+// specs/the_westinghouse_pressurized_water_react/imgs/023.md:4
+func (s *SteamGenerator) applyTubeRupture(dt time.Duration, rcsPressure Pressure,
+	rpv *ReactorPressureVessel, pzr *Pressurizer) {
+	s.SGTubeRuptureFlow = Volume{Val: 0, Unit: u.Gallon}
+	if s.SGTubeRupture.Open <= 0 {
+		return
+	}
+	remaining := RCSDrainableInventoryGal - rpv.BreakDischarged.Float()
+	if remaining <= 0 {
+		return // primary inventory exhausted; an empty primary cannot feed the leak
+	}
+	dP := float64(rcsPressure) - float64(s.Pressure)
+	if dP <= 0 {
+		return // depressurized at/below the shell: flow stops (termination)
+	}
+	designDP := float64(PressurizerHeaterTarget) - float64(SteamGeneratorShellPressure)
+	rate := s.SGTubeRupture.Open * SGTubeRuptureGalPerSec * min(dP/designDP, 1)
+	gal := min(rate*dt.Seconds(), remaining)
+	s.SGTubeRuptureFlow = Volume{Val: gal, Unit: u.Gallon}
+	// Mass stays in the secondary: it becomes shell water (the source
+	// of the rising shell level the operator sees on SG-level
+	// indication).
+	s.Water = vol(s.Water, min(s.Water.Float()+gal, s.Volume.Float()))
+	// Debit the primary lumped inventory the LOCA tracks, so
+	// RCSDrainableInventoryGal bounds net loss across both break
+	// classes on one currency.
+	rpv.BreakDischarged = vol(rpv.BreakDischarged,
+		rpv.BreakDischarged.Float()+gal)
+	// The volume drop *is* the pressurizer level signal (pzr.Water
+	// -= gal), same as the hot-leg break (reactor.go applyHotLegBreak).
+	// Do not also debit pzr.Pressure: the SGTR holds RCS pressure up
+	// through the heaters until the operator bleeds it.
+	water := max(pzr.Water.Float()-gal, 0)
+	pzr.Water = vol(pzr.Water, water)
+	pzr.SteamBubble = vol(pzr.SteamBubble,
+		pzr.Volume.Float()-pzr.Water.Float())
+}
+
+// applyRadiationMonitors advances the steam-line radiation monitor:
+// first-order lag toward 1 while leaked primary is actually crossing
+// the tubes, with hysteresis latch/release, matching the BRS
+// distillate monitor (brs.go).
+//
+// "The steamline monitor is located on the steam line and monitors the
+// radiation levels through the steam line walls."
+// specs/the_westinghouse_pressurized_water_react/chapter_10/page_162.txt:88-92
+func (s *SteamGenerator) applyRadiationMonitors(dt time.Duration, leakedGal float64) {
+	target := 0.0
+	if leakedGal > 0 {
+		target = 1.0
+	}
+	alpha := dt.Seconds() / SGTubeRuptureMonitorTauSec
+	s.SteamlineRadiation = s.SteamlineRadiation*(1-alpha) + target*alpha
+	if s.SteamlineRadiation >= SGTubeRuptureMonitorTripFrac {
+		s.SteamlineIsolated = true
+	}
+	if leakedGal <= 0 && s.SteamlineRadiation < SGTubeRuptureMonitorReleaseFrac {
+		s.SteamlineIsolated = false
+	}
+	// The MSIV-close write-back is deliberately NOT here: it is a
+	// Plant.Step write beside the existing SteamlineIsolationActuated
+	// MSIV write, so the latch and the valve share one writer site.
 }

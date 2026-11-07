@@ -748,6 +748,19 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Condenser-effluent radiation monitor (gap G2), normalized
+	// against its trip level. Diagnostic-only; never drives the
+	// steam-line auto-isolate latch.
+	m["TurbineBuilding/Condenser/HotwellRadiation"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/Condenser",
+		Label: "HotwellRadiation",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.TurbineBuilding.Condenser.HotwellRadiation)
+		},
+	}
+
 	// Extraction nonreturn valve status (chapter 15): latched shut on
 	// any turbine trip.
 	// "Extraction line nonreturn valves."

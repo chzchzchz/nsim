@@ -1111,8 +1111,26 @@ var scenarioCatalog = []Scenario{
 		},
 	},
 	{
+		ID:       "sg-tube-rupture",
+		Number:   39,
+		Category: "Malfunction transients",
+		Title:    "Steam generator tube rupture",
+		StartState: "At-power lineup; a tube leak opens 30 seconds in.",
+		Objective: "Catch the primary-to-secondary leak on the steam-line " +
+			"radiation monitor, verify auto-isolate closes the MSIV and " +
+			"secures feedwater, then cool down and depressurize until the " +
+			"leak flow stops.",
+		Apply: func(p *Plant) { *p = fullPowerLineup() },
+		DurationHint: "tens of minutes simulated",
+		Script: []ScriptCommand{
+			{AtMs: scenarioTriggerDelayMs,
+				ControlKey: "ReactorBuilding/SteamGenerator/SGTubeRupture/Open",
+				Value:      "1"},
+		},
+	},
+	{
 		ID:       "sg-preventive-maintenance",
-		Number:   38,
+		Number:   40,
 		Category: "Maintenance outage (between refuelings)",
 		Title:    "Steam generator and primary equipment preventive maintenance",
 		StartState: "Water-solid cold shutdown at 140 F and 415 psia held " +
@@ -1550,6 +1568,20 @@ var scenarioChecks = map[string]func(*Plant) CheckResult{
 		c.require(rps.ReactorTripped &&
 			p.ReactorBuilding.ReactorPressureVessel.ControlRods.Insertion >= 1,
 			"reactor tripped and stabilized")
+		return c.result()
+	},
+	"sg-tube-rupture": func(p *Plant) CheckResult {
+		var c checkBounds
+		// End state: detection latched the auto-isolate, and the
+		// leak flow has terminated after depressurization below the
+		// shell pressure. The monitor latch may still stand at this
+		// check instant; the flow-zero bound is the termination
+		// evidence (see plans/p60_1.txt acceptance criterion 5).
+		sg := &p.ReactorBuilding.SteamGenerator
+		c.require(sg.SteamlineIsolated || sg.SteamlineRadiation >= SGTubeRuptureMonitorTripFrac,
+			"steam-line radiation monitor detected the leak")
+		c.require(sg.SGTubeRuptureFlow.Float() == 0,
+			"leak flow terminated after depressurization")
 		return c.result()
 	},
 	"porv-stuck-open": func(p *Plant) CheckResult {
