@@ -132,6 +132,7 @@ var diagramParts = []diagramPart{
 	{"EBTD", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump", "EmergencyFeedwaterPumpTD", "EFWS B TD"},
 	{"CIS", "ReactorBuilding/ContainmentIsolationSystem", "ContainmentIsolation", "CIS"},
 	{"HDS", "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression", "HydrogenRecombiner", "HDS"},
+	{"Sump", "ReactorBuilding/SafetyInjectionSystem", "ContainmentSump", "SUMP"},
 	{"EXCITER", "TurbineBuilding/Generator/ExcitationSystem", "BrushlessExciter", "Exciter"},
 	{"DieselB", "AuxiliaryBuilding/DieselGeneratorB", "DieselGenerator", "EDG B"},
 	{"FuelTankB", "AuxiliaryBuilding/DieselGeneratorB", "FuelTank", "EDG B Fuel"},
@@ -355,6 +356,10 @@ var levelAccessors = map[string]func(*core.Plant) (core.Volume, core.Volume){
 	"SATTank": func(p *core.Plant) (core.Volume, core.Volume) {
 		return p.AuxiliaryBuilding.ContainmentSpraySystem.SATLevel,
 			core.SATCapacity
+	},
+	"Sump": func(p *core.Plant) (core.Volume, core.Volume) {
+		return p.ReactorBuilding.SafetyInjectionSystem.Sump,
+			core.SumpCapacityGal
 	},
 	"FuelTankB": func(p *core.Plant) (core.Volume, core.Volume) {
 		t := p.AuxiliaryBuilding.DieselGeneratorB.Fuel
@@ -1613,7 +1618,7 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		// caption directly beneath stays collision-aware.
 		// data-cluster lets embedders hit-test buildings without
 		// re-deriving cluster geometry Go-side.
-	fmt.Fprintf(&b, `<g data-cluster="%s">`+"\n", name)
+		fmt.Fprintf(&b, `<g data-cluster="%s">`+"\n", name)
 		if name == "cluster_containment" {
 			// The dome asset is a 400x400 viewBox (square wall,
 			// hemispherical top) drawn to a rectangle; members

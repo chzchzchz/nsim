@@ -193,26 +193,89 @@ func (c *ContainmentBuilding) Step(dt time.Duration,
 	ret := *c
 	dtSec := dt.Seconds()
 
-	netW := float64(heatIn) - float64(heatOutRCFC)
 	volumeM3 := ret.FreeVolume * ft3ToM3
 	massKg := volumeM3 * containmentAirDensity
+	massUpper := massKg * UpperVolumeFraction
+	massLower := massKg - massUpper
+
+	// Node exchange on the temperature gap: the same
+	// PocketExchangePerHour transport that drives the
+	// hydrogen gap in hds.go, conserving the volume-weighted
+	// mean. Applied before the energy integration so the
+	// pressure law and sink see the exchanged average.
+	// MakePlant seeds Upper/Lower to 120F; a zero node means
+	// an unseeded ContainmentBuilding (e.g. a test struct
+	// literal). In that case the exchange is skipped and the
+	// nodes are initialized from the legacy Temperature so
+	// the single-node heat-balance pins keep their old
+	// semantics.
+	zeroNodes := ret.UpperTemperature.Val == 0 && ret.LowerTemperature.Val == 0
+	if zeroNodes {
+		ret.UpperTemperature = ret.Temperature
+		ret.LowerTemperature = ret.Temperature
+	} else {
+		gap := ret.UpperTemperature.Float() - ret.LowerTemperature.Float()
+		dGap := PocketExchangePerHour * gap * dtSec / 3600.0
+		ret.UpperTemperature = Temperature{Val: ret.UpperTemperature.Float() - dGap, Unit: u.Fahrenheit}
+		ret.LowerTemperature = Temperature{Val: ret.LowerTemperature.Float() + dGap*(UpperVolumeFraction/(1-UpperVolumeFraction)), Unit: u.Fahrenheit}
+	}
+	avgF := ret.UpperTemperature.Float()*UpperVolumeFraction + ret.LowerTemperature.Float()*(1-UpperVolumeFraction)
+
 	// Passive structure sink: walls, floors, and internals absorb
 	// and condense steam, returning heat when the atmosphere runs
 	// cooler than the structures. Zero at the seeded state; the
 	// first-order pull bounds any sustained release's equilibrium
 	// instead of letting an unbounded gas heat past the design
-	// basis.
-	structureSinkW := float64(ret.Temperature.Float()-ContainmentStructuresTempF) /
+	// basis. Sink stays on the average (wall temperature), not
+	// per node, matching the RCFC reading site in Plant.Step.
+	netW := float64(heatIn) - float64(heatOutRCFC)
+	structureSinkW := float64(avgF-ContainmentStructuresTempF) /
 		ContainmentStructureTau * (massKg * airCp)
 	netW -= structureSinkW
-	deltaK := netW / (massKg * airCp) * dtSec
-	newTempF := ret.Temperature.Float() + deltaK*9.0/5.0
+
+	// Absolute pressure depends on Tavg, but the average is
+	// recomputed below from the node temperatures each tick.
+	// Zero-exchange fidelity for the pressure law is therefore
+	// derived from the per-node deltaK below: with equal nodes,
+	// the average advances exactly as the single-node model,
+	// so the ideal-gas pressure matches the single-node
+	// trajectory to 1e-12.
+	//
+	// Per-node integration: each node's deltaK divides by its
+	// own mass, so zero exchange with equal nodes advances the
+	// average exactly as the single-node model (f * (W*f)/(M*f)
+	// = W/M; see plans/x/gap_two_node_containment.md §1).
+	deltaKUpper := netW * UpperVolumeFraction / (massUpper * airCp) * dtSec
+	deltaKLower := netW * (1 - UpperVolumeFraction) / (massLower * airCp) * dtSec
+	newUpper := max(ret.UpperTemperature.Float()+deltaKUpper*9.0/5.0, -459.67)
+	newLower := max(ret.LowerTemperature.Float()+deltaKLower*9.0/5.0, -459.67)
+	ret.UpperTemperature = Temperature{Val: newUpper, Unit: u.Fahrenheit}
+	ret.LowerTemperature = Temperature{Val: newLower, Unit: u.Fahrenheit}
+
+	newTempF := ret.UpperTemperature.Float()*UpperVolumeFraction + ret.LowerTemperature.Float()*(1-UpperVolumeFraction)
 	newTempF = max(newTempF, -459.67)
 	ret.Temperature = Temperature{Val: newTempF, Unit: u.Fahrenheit}
 
+	// Pressure carries a non-thermal offset component:
+	// MakePlant seeds 14.7 psia at 120F, but the ideal-gas law
+	// alone reads ~16.1 at that temperature (gas constant,
+	// density, and volume are an internally inconsistent sizing,
+	// pre-existing since the single-node model). An offset-aware
+	// law (algebraic pressure delta over thermal delta) keeps
+	// the seeded equilibrium pinned at 14.7 — otherwise
+	// ContainmentPressure jumps on the first step, destroying
+	// the relief "stays at atmosphere" pin and CSS trigger
+	// semantics — and it is also the state the relocated
+	// PRT-burst increment accumulates in: Plant.Step adds
+	// ContainmentVentRatePSIGPerS*dt into ret.Pressure after
+	// this step, so the incoming pressure must be trusted as
+	// input and only its change decomposed, or each tick would
+	// erase the burst accumulation.
 	kelvin := (newTempF + 459.67) * 5.0 / 9.0
+	kelvinOld := (avgF + 459.67) * 5.0 / 9.0
 	pPa := massKg * airSpecificGasConst * kelvin / volumeM3
-	ret.Pressure = Pressure(pPa / paPerPsi)
+	pPaOld := massKg * airSpecificGasConst * kelvinOld / volumeM3
+	ret.Pressure = Pressure(float64(c.Pressure) + (pPa-pPaOld)/paPerPsi)
 
 	return ret
 }

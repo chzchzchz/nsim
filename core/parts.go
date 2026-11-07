@@ -3854,13 +3854,12 @@ const (
 	// (dimensionless). The spec does not state a pressure-
 	// reduction coefficient; this constant is a simulation
 	// parameter that must be calibrated against plant data. A
-	// value of 0.5 means each gal/min of spray condenses 0.5
-	// gal/min of steam.
+	// value of 0.5 means each gal/s of spray condenses 0.5
+	// gal/s of steam.
 	// "comes in contact with the steam in the containment
 	// atmosphere, the steam is condensed and falls to the
-	// containment floor as drops of a borated sodium hydroxide
-	// solution."
-	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:8-11
+	// sump."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:14-20
 	CSSSprayEffectiveness = 0.5 // simulation parameter, must be calibrated
 
 	// CSSContainmentPressureSetpoint is the containment pressure
@@ -4013,9 +4012,28 @@ type ContainmentBuilding struct {
 	// Pressure is the absolute containment pressure (psia).
 	Pressure Pressure
 
-	// Temperature is the lumped containment atmosphere
-	// temperature (°F).
+	// Temperature is the volume-weighted mean containment
+	// atmosphere temperature (°F) derived from the two node
+	// temperatures below; it is never integrated directly.
 	Temperature Temperature
+
+	// UpperTemperature / LowerTemperature are the integrated
+	// node temperatures of the two-node containment atmosphere
+	// (plans/x/gap_two_node_containment.md). The spec gives
+	// only the total free volume, so the upper/lower split is
+	// derived.
+	// "A containment ventilation system that circulates the
+	// containment atmosphere to remove pockets of high
+	// hydrogen concentration after an accident."
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:19-21
+	UpperTemperature Temperature
+	LowerTemperature Temperature
+
+	// UpperHydrogenPercent / LowerHydrogenPercent are the
+	// integrated node hydrogen concentrations behind the
+	// derived mixture on HydrogenDetectionSuppression.
+	UpperHydrogenPercent float64
+	LowerHydrogenPercent float64
 
 	// DesignPressure is the containment design pressure (psig).
 	// 60 psig per the spec.
@@ -4236,6 +4254,29 @@ const (
 	ContainmentDesignPressure Pressure = 60.0 // psig
 	ContainmentFreeVolume     float64  = 2_000_000.0
 )
+
+// UpperVolumeFraction is the derived upper-node share of the
+// containment free volume (0.5). The Westinghouse PWR manual
+// states only the total (2,000,000 ft³, chapter_6/page_109.txt:11-12),
+// so the split is an assumption; the AP600 data sheet
+// (specs/pwr_sim/appendix_1/page_090.txt) likewise lists a free
+// volume with no node split and a different total, so the 0.5
+// split follows the primary-source total, not a secondary
+// design. (plans/x/gap_two_node_containment.md)
+const UpperVolumeFraction float64 = 0.5
+
+// SumpCapacityGal sizes the containment sump level gauge. The
+// Westinghouse PWR manual describes the sump functionally
+// (containment sump recirculation lines,
+// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:92-96)
+// with no volume; the 15000 gal value is derived from the
+// CSST/SAT scale (CSSTCapacity) and, like the CSST sizing, is a
+// representative magnitude for the gauge fraction, not a spec
+// total. The AP600 and BWRX-300 documents likewise size sumps
+// functionally without a stated volume
+// (specs/pwr_sim/appendix_1/page_090.txt,
+// specs/BWRX-300-General-Description/chapter_8/page_072.txt:31).
+var SumpCapacityGal Volume = Volume{Val: 15000, Unit: u.Gallon}
 
 // Containment Isolation System design constants (plans/p23_1.txt).
 //
@@ -5092,12 +5133,27 @@ const (
 	// representative of a large catalytic recombiner.
 	HydrogenRecombinerRemovalRate float64 = 0.5
 
-	// HydrogenVentilationRemovalRate is the volumetric
-	// removal rate of the containment ventilation system
-	// (% per hour). The spec does not state a rate; 0.2
-	// %/hour is representative of containment air
-	// circulation through a filter train.
-	HydrogenVentilationRemovalRate float64 = 0.2
+	// PocketExchangePerHour is the inter-region transport
+	// rate of the two-node containment atmosphere (% per
+	// hour of gap per hour). It drives both the hydrogen
+	// node gap (hds.go) and the temperature node gap
+	// (rcfc.go); the Westinghouse PWR manual describes the
+	// ventilation function ("remove pockets of high
+	// hydrogen concentration", chapter_6/page_117.txt:19-21)
+	// with no rate, and neither the AP600 data sheet
+	// (specs/pwr_sim/appendix_1/page_090.txt) nor BWRX-300
+	// (specs/BWRX-300-General-Description/chapter_3/) state
+	// an inter-region rate either, so 0.2/h is a derived
+	// hourscale assumption carried over from the retired
+	// HydrogenVentilationRemovalRate magnitude
+	// (plans/x/gap_two_node_containment.md).
+	PocketExchangePerHour float64 = 0.2
+
+	// NaturalExchangePerHour is the same inter-region
+	// transport at ventilation off (buoyancy only), weaker
+	// than PocketExchangePerHour but nonzero so a secured
+	// plant stratifies rather than freezes.
+	NaturalExchangePerHour float64 = 0.05
 
 	// HydrogenGenerationRate is the volumetric production
 	// rate of hydrogen in the containment atmosphere during

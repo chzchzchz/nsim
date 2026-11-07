@@ -277,6 +277,7 @@ func TestCSS_EndToEndHighContainmentPressureStartsCSS(t *testing.T) {
 	// rupture-disc burst (see prt_relief_test.go), so this test
 	// presets the signal to exercise the CSS auto-start path.
 	p.ReactorBuilding.PORV.Open = 1
+	p.ReactorBuilding.ContainmentBuilding.Pressure = CSSContainmentPressureSetpoint + 10
 	p.ReactorBuilding.ContainmentPressure = CSSContainmentPressureSetpoint + 10
 	// Step long enough for the diesel to reach ReadyToLoad.
 	stepN(&p, int(15*time.Second/DefaultTimeStep), DefaultTimeStep)

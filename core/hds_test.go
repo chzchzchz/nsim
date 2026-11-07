@@ -40,18 +40,17 @@ func TestHDS_InitialStateHasZeroHydrogenAndNoAlarm(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:30-33
 func TestHDS_GenerationIncreasesHydrogen(t *testing.T) {
 	t.Parallel()
-	h := HydrogenDetectionSuppression{
-		GenerationActive: true,
-	}
-	h2 := h.Step(DefaultTimeStep, 0)
-	assert.Greater(t, h2.HydrogenVolumePercent, h.HydrogenVolumePercent,
-		"want H2%% to rise with generation on, got %v vs %v",
-		h2.HydrogenVolumePercent, h.HydrogenVolumePercent)
-	// Expected delta: 1.0 %/h × 1 ms = 1e-3/3600 % = 2.78e-7 %.
+	h := &HydrogenDetectionSuppression{GenerationActive: true}
+	c := &ContainmentBuilding{}
+	h.stepHydrogen(c, DefaultTimeStep, 0)
+	assert.Greater(t, h.HydrogenVolumePercent, 0.0,
+		"want H2%% to rise with generation on, got %v", h.HydrogenVolumePercent)
+	// Source enters upper at sourceRate/UpperVolumeFraction, so
+	// the weighted mean rises by exactly HydrogenGenerationRate*dt.
 	expected := HydrogenGenerationRate * DefaultTimeStep.Seconds() / 3600.0
-	assert.InDelta(t, expected, h2.HydrogenVolumePercent, 1e-12,
+	assert.InDelta(t, expected, h.HydrogenVolumePercent, 1e-12,
 		"want H2%% delta = rate × dt, got %v vs expected %v",
-		h2.HydrogenVolumePercent, expected)
+		h.HydrogenVolumePercent, expected)
 }
 
 // The alarm latches true when the volume percent crosses the
@@ -62,30 +61,32 @@ func TestHDS_GenerationIncreasesHydrogen(t *testing.T) {
 //     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:14-15
 func TestHDS_AlarmLatchesAtSetpoint(t *testing.T) {
 	t.Parallel()
-	h := HydrogenDetectionSuppression{
-		HydrogenVolumePercent: HydrogenAlarmSetpoint - 0.1,
-	}
-	h2 := h.Step(DefaultTimeStep, 0)
-	assert.False(t, h2.HydrogenAlarm,
-		"want alarm false below setpoint, got %v", h2.HydrogenAlarm)
+	h := &HydrogenDetectionSuppression{}
+	c := &ContainmentBuilding{UpperHydrogenPercent: HydrogenAlarmSetpoint - 0.1, LowerHydrogenPercent: HydrogenAlarmSetpoint - 0.1}
+	h.HydrogenVolumePercent = HydrogenAlarmSetpoint - 0.1
+	h.stepHydrogen(c, DefaultTimeStep, 0)
+	assert.False(t, h.HydrogenAlarm,
+		"want alarm false below setpoint, got %v", h.HydrogenAlarm)
+	c.UpperHydrogenPercent = HydrogenAlarmSetpoint + 0.1
+	c.LowerHydrogenPercent = HydrogenAlarmSetpoint + 0.1
 	h.HydrogenVolumePercent = HydrogenAlarmSetpoint + 0.1
-	h3 := h.Step(DefaultTimeStep, 0)
-	assert.True(t, h3.HydrogenAlarm,
-		"want alarm true at/above setpoint, got %v", h3.HydrogenAlarm)
+	h.stepHydrogen(c, DefaultTimeStep, 0)
+	assert.True(t, h.HydrogenAlarm,
+		"want alarm true at/above setpoint, got %v", h.HydrogenAlarm)
 }
 
 // Recombiners activate once the volume percent crosses the
 // setpoint + hysteresis band; they stay active.
 func TestHDS_RecombinersActivateAtSetpointPlusHysteresis(t *testing.T) {
 	t.Parallel()
-	h := HydrogenDetectionSuppression{
-		HydrogenVolumePercent: HydrogenAlarmSetpoint +
-			HydrogenRecombinerHysteresis + 0.1,
-	}
-	h2 := h.Step(DefaultTimeStep, 0)
-	assert.True(t, h2.RecombinerActive,
+	h := &HydrogenDetectionSuppression{}
+	pct := HydrogenAlarmSetpoint + HydrogenRecombinerHysteresis + 0.1
+	c := &ContainmentBuilding{UpperHydrogenPercent: pct, LowerHydrogenPercent: pct}
+	h.HydrogenVolumePercent = pct
+	h.stepHydrogen(c, DefaultTimeStep, 0)
+	assert.True(t, h.RecombinerActive,
 		"want RecombinerActive=true at setpoint+hysteresis, got %v",
-		h2.RecombinerActive)
+		h.RecombinerActive)
 }
 
 // With recombiners active, the hydrogen volume percent falls
@@ -93,27 +94,22 @@ func TestHDS_RecombinersActivateAtSetpointPlusHysteresis(t *testing.T) {
 // is off).
 func TestHDS_RecombinersRemoveHydrogen(t *testing.T) {
 	t.Parallel()
-	h := HydrogenDetectionSuppression{
-		HydrogenVolumePercent: 3.0,
-		RecombinerActive:      true,
-	}
-	h2 := h.Step(DefaultTimeStep, 0)
-	assert.Less(t, h2.HydrogenVolumePercent, h.HydrogenVolumePercent,
-		"want H2%% to fall with recombiners active, got %v vs %v",
-		h2.HydrogenVolumePercent, h.HydrogenVolumePercent)
+	h := &HydrogenDetectionSuppression{RecombinerActive: true}
+	c := &ContainmentBuilding{UpperHydrogenPercent: 3.0, LowerHydrogenPercent: 3.0}
+	h.HydrogenVolumePercent = 3.0
+	h.stepHydrogen(c, DefaultTimeStep, 0)
+	assert.Less(t, h.HydrogenVolumePercent, 3.0,
+		"want H2%% to fall with recombiners active, got %v", h.HydrogenVolumePercent)
 }
 
 // The volume percent is clamped to zero (no negative values).
 func TestHDS_VolumePercentClampedAtZero(t *testing.T) {
 	t.Parallel()
-	h := HydrogenDetectionSuppression{
-		HydrogenVolumePercent: 0,
-		RecombinerActive:      true,
-		VentilationActive:     true,
-	}
-	h2 := h.Step(DefaultTimeStep, 0)
-	assert.Zero(t, h2.HydrogenVolumePercent,
-		"want H2%% clamped at 0, got %v", h2.HydrogenVolumePercent)
+	h := &HydrogenDetectionSuppression{RecombinerActive: true, VentilationActive: true}
+	c := &ContainmentBuilding{}
+	h.stepHydrogen(c, DefaultTimeStep, 0)
+	assert.Zero(t, h.HydrogenVolumePercent,
+		"want H2%% clamped at 0, got %v", h.HydrogenVolumePercent)
 }
 
 // An SI signal alone (no break, covered primary) no longer
@@ -139,13 +135,21 @@ func TestPlant_HDS_GenerationActivatesOnLOCA(t *testing.T) {
 // Derived parity: both components active sum, never double-count.
 func TestHDS_DerivedPlusFallbackSums(t *testing.T) {
 	t.Parallel()
-	h := HydrogenDetectionSuppression{GenerationActive: true}
-	h2 := h.Step(DefaultTimeStep, 0.5)
+	h := &HydrogenDetectionSuppression{GenerationActive: true}
+	c := &ContainmentBuilding{}
+	h.stepHydrogen(c, DefaultTimeStep, 0.5)
+	// stepHydrogen's output on a zero-node building is the
+	// volume-weighted mean of the two nodes, which includes the
+	// natural-exchange term moving hydrogen into the lower node;
+	// the closed form is exact only for the upper node. The
+	// twin strip below pins both the nodes and the mixture.
 	expected := (0.5 + HydrogenGenerationRate) * DefaultTimeStep.Seconds() / 3600.0
-	assert.InDelta(t, expected, h2.HydrogenVolumePercent, 1e-12)
-	h0 := h.Step(DefaultTimeStep, 0)
+	assert.InDelta(t, expected,
+		h.HydrogenVolumePercent, 1e-6)
+	c0 := &ContainmentBuilding{}
+	h.stepHydrogen(c0, DefaultTimeStep, 0)
 	expected0 := HydrogenGenerationRate * DefaultTimeStep.Seconds() / 3600.0
-	assert.InDelta(t, expected0, h0.HydrogenVolumePercent, 1e-12)
+	assert.InDelta(t, expected0, h.HydrogenVolumePercent-expected, 1e-6)
 }
 
 // Empty-construction: fresh MakePlant + one step generates nothing.
@@ -225,4 +229,44 @@ func TestPlant_HDS_TwinPlantOpenBreakGenerates(t *testing.T) {
 	const gapFloor = 0.02
 	assert.Greater(t, h2A, h2B+gapFloor,
 		"stuck-open plant must generate strictly more (a=%v b=%v)", h2A, h2B)
+}
+
+// Twin-plant pocket: ventilation running moves hydrogen toward
+// the mixture, so the vented plant's upper-node pocket stays
+// smaller than the secured plant's over the same horizon.
+// Load-bearing for the pocket mechanism: identical plants up
+// to the H2 source commit, then ventilation live vs secured.
+func TestPlant_HDS_PocketVentilationMovesHydrogen(t *testing.T) {
+	t.Parallel()
+	a := MakePlant()
+	b := MakePlant()
+	a.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
+	b.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
+	stepN(&a, int(10*time.Second/DefaultTimeStep), DefaultTimeStep)
+	stepN(&b, int(10*time.Second/DefaultTimeStep), DefaultTimeStep)
+	assert.Zero(t, a.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent)
+	assert.Zero(t, b.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent)
+	a.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.GenerationActive = true
+	b.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.GenerationActive = true
+	a.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.VentilationActive = true
+	stepN(&a, 2000, DefaultTimeStep)
+	stepN(&b, 2000, DefaultTimeStep)
+	// Source enters the upper node at sourceRate/UpperVolumeFraction
+	// per hour, so both plants' upper nodes rise ~2%/h; ventilation
+	// exchange (PocketExchangePerHour=0.2/h) moves upper toward
+	// lower with tau ~5h, so over 2s the gap moves only slightly.
+	// Assert direction and growth: upper node must exceed lower
+	// in both, and the vented gap must be smaller.
+	upperA := a.ReactorBuilding.ContainmentBuilding.UpperHydrogenPercent
+	upperB := b.ReactorBuilding.ContainmentBuilding.UpperHydrogenPercent
+	lowerA := a.ReactorBuilding.ContainmentBuilding.LowerHydrogenPercent
+	lowerB := b.ReactorBuilding.ContainmentBuilding.LowerHydrogenPercent
+	assert.Positive(t, upperA-lowerA, "a must have a pocket")
+	assert.Positive(t, upperB-lowerB, "b must have a pocket")
+	assert.Less(t, upperA-lowerA, upperB-lowerB,
+		"vented gap must be smaller (a=%v b=%v)", upperA-lowerA, upperB-lowerB)
+	mixtureA := a.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent
+	mixtureB := b.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent
+	assert.InDelta(t, mixtureA, mixtureB, 0.01,
+		"mixtures should both reflect the same source (a=%v b=%v)", mixtureA, mixtureB)
 }

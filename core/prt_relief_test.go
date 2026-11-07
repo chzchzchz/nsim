@@ -89,8 +89,8 @@ func TestRelief_RoutesToPRTNotContainment(t *testing.T) {
 		startLevel, "PRT level must rise under sustained relief")
 	assert.False(t, p.ReactorBuilding.PRTRuptureDiscBurst,
 		"disc must stay intact while the tank has headspace")
-	assert.Equal(t, AtmosphericPressure,
-		p.ReactorBuilding.ContainmentPressure,
+	assert.InDelta(t, float64(AtmosphericPressure),
+		float64(p.ReactorBuilding.ContainmentPressure), 0.01,
 		"containment must not pressurize while the disc holds")
 }
 

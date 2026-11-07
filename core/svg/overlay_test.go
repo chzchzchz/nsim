@@ -29,6 +29,8 @@ func TestDomeWash_AppearsAboveDesignPressure(t *testing.T) {
 	p := core.MakePlant()
 	assert.NotContains(t, renderPlant(t, &p), "dome-wash")
 
+	p.ReactorBuilding.ContainmentBuilding.Pressure =
+		core.AtmosphericPressure + core.ContainmentDesignPressure + 5
 	p.ReactorBuilding.ContainmentPressure =
 		core.AtmosphericPressure + core.ContainmentDesignPressure + 5
 	assert.Contains(t, renderPlant(t, &p), `class="dome-wash"`)

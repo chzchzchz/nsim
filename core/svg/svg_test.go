@@ -689,7 +689,7 @@ func TestComputeLayout_RCPBetweenSGAndRPV(t *testing.T) {
 	// Pressurizer above the hot leg (smaller Y is higher after
 	// the Y flip).
 	assert.Less(t, pzr.Y, rpv.Y)
-	assert.Equal(t, 125, len(symbolCount(t)), "symbol count drift (post-anchors)")
+	assert.Equal(t, 126, len(symbolCount(t)), "symbol count drift (post-anchors)")
 }
 
 // symbolCount counts top-level <use> outside <defs> in a render.

@@ -583,7 +583,6 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 	//     initiated automatically in response to a containment
 	//     high pressure signal."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-57
-	csP := float64(ret.ContainmentPressure)
 	if reliefDischarge.Float() > 0 {
 		if !ret.PRTRuptureDiscBurst {
 			lvl := min(ret.PressurizedReliefTank.Level.Float()+
@@ -593,8 +592,6 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 			if lvl >= PressurizedReliefTankCapacityGal {
 				ret.PRTRuptureDiscBurst = true
 			}
-		} else {
-			csP += ContainmentVentRatePSIGPerS * dt.Seconds()
 		}
 	}
 	if ret.PRTSprayValve.Open > 0 {
@@ -604,19 +601,14 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 		ret.PressurizedReliefTank.Level = vol(
 			ret.PressurizedReliefTank.Level, lvl)
 	}
-	cssRunning := ret.Aux.ContainmentSpraySystem.Running
-	if cssRunning && ret.Aux.ContainmentSpraySystem.SprayHeaderOpen {
-		// Spray condenses steam: effectiveness × spray flow
-		// × (P - P_atm) drag toward atmospheric.
-		excess := csP - float64(AtmosphericPressure)
-		if excess > 0 {
-			csP -= CSSSprayEffectiveness *
-				ret.Aux.ContainmentSpraySystem.SprayFlow * excess *
-				dt.Seconds()
-			csP = max(csP, float64(AtmosphericPressure))
-		}
-	}
-	ret.ContainmentPressure = Pressure(csP)
+	// Spray drag deleted: CSS condensation acts via cssHeatOut
+	// (plant.go:1724-1728); the PRT-burst increment is relocated
+	// into Plant.Step after the containment step. ret.ContainmentPressure
+	// remains a mirror copy from Plant.Step.
+	// ret.ContainmentPressure is synced in Plant.Step after the
+	// containment step; keep it for any in-ReactorBuilding-step
+	// reader by copying the last structured value.
+	ret.ContainmentPressure = ret.ContainmentBuilding.Pressure
 	ret.Aux.ContainmentSpraySystem = ret.Aux.ContainmentSpraySystem.Step(dt)
 
 	return ret
@@ -1640,7 +1632,7 @@ func (p *Plant) Step(dt time.Duration) {
 	// the AFWPump pattern (latch Running on the start signal;
 	// DriveReady gates effective flow).
 	if !css.Running &&
-		(p.ReactorBuilding.ContainmentPressure > CSSContainmentPressureSetpoint ||
+		(p.ReactorBuilding.ContainmentBuilding.Pressure > CSSContainmentPressureSetpoint ||
 			p.nextPlant.ReactorBuilding.ReactorProtectionSystem.ContainmentSprayActuated) {
 		css.Running = true
 		css.SprayHeaderOpen = true
@@ -1758,6 +1750,49 @@ func (p *Plant) Step(dt time.Duration) {
 		p.nextPlant.ReactorBuilding.ContainmentBuilding.Step(dt,
 			steamBreakHeatIn+locaHeatIn-cssHeatOut, rcfcHeatOut,
 		)
+	if p.nextPlant.ReactorBuilding.PRTRuptureDiscBurst {
+		p.nextPlant.ReactorBuilding.ContainmentBuilding.Pressure +=
+			Pressure(ContainmentVentRatePSIGPerS * dt.Seconds())
+	}
+	// CSS spray condensation: pressure drag toward atmospheric,
+	// the pressure-side companion of the cssHeatOut enthalpy
+	// withdrawal above. ContainmentBuilding.Step derives
+	// pressure from the thermal state alone; without this drag
+	// the PRT-burst term above could never be caught by a
+	// running spray (pressure would climb monotonically and
+	// the CSS auto-start's catch could never fire). The drag
+	// is proportional to the excess over atmosphere, so it
+	// removes no mass when already at atmosphere.
+	{
+		css3 := &p.nextPlant.AuxiliaryBuilding.ContainmentSpraySystem
+		if css3.Running && css3.SprayHeaderOpen {
+			excess := float64(p.nextPlant.ReactorBuilding.ContainmentBuilding.Pressure) -
+				float64(AtmosphericPressure)
+			if excess > 0 {
+				p.nextPlant.ReactorBuilding.ContainmentBuilding.Pressure -=
+					Pressure(CSSSprayEffectiveness * css3.SprayFlow * excess * dt.Seconds())
+				if p.nextPlant.ReactorBuilding.ContainmentBuilding.Pressure < AtmosphericPressure {
+					p.nextPlant.ReactorBuilding.ContainmentBuilding.Pressure = AtmosphericPressure
+				}
+			}
+		}
+	}
+	p.nextPlant.ReactorBuilding.ContainmentPressure =
+		p.nextPlant.ReactorBuilding.ContainmentBuilding.Pressure
+	// CSS auto-start runs after the containment step in
+	// Plant.Step; reading the prior tick's mirror here cannot
+	// see this tick's burst presssure, so the check runs on the
+	// structured field just synced.
+	{
+		css2 := &p.nextPlant.AuxiliaryBuilding.ContainmentSpraySystem
+		if !css2.Running &&
+			(p.nextPlant.ReactorBuilding.ContainmentBuilding.Pressure > CSSContainmentPressureSetpoint ||
+				p.nextPlant.ReactorBuilding.ReactorProtectionSystem.ContainmentSprayActuated) {
+			css2.Running = true
+			css2.SprayHeaderOpen = true
+			css2.SATIsolationValveBOpen = true
+		}
+	}
 
 	// RPS-driven CIS manual flags. The Reactor Protection
 	// System is the "brain" that decides when to actuate
@@ -1815,7 +1850,8 @@ func (p *Plant) Step(dt time.Duration) {
 	//     the Zirconium water reaction can result in the
 	//     release of hydrogen gas."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:30-33
-	hds := p.nextPlant.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
+	cb := &p.nextPlant.ReactorBuilding.ContainmentBuilding
+	hds := &cb.HydrogenDetectionSuppression
 	// H2 generation: thermal-availability- and inventory-driven
 	// rather than SI-latched. Source term is zero when the SI signal
 	// fires but the primary is still liquid-covered at saturation
@@ -1865,8 +1901,7 @@ func (p *Plant) Step(dt time.Duration) {
 		ContainmentIsolationSystem.IsIsolated() {
 		hds.VentilationActive = false
 	}
-	hds = hds.Step(dt, generationRate)
-	p.nextPlant.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression = hds
+	hds.stepHydrogen(cb, dt, generationRate)
 
 	// SWS: the service water picks up the heat rejected by the
 	// RCFC coils plus the component cooling heat exchangers, and
@@ -2978,6 +3013,7 @@ func MakePlant() Plant {
 		SprayFlow:              0,
 	}
 	p.ReactorBuilding.ContainmentPressure = AtmosphericPressure
+	p.ReactorBuilding.ContainmentBuilding.Pressure = AtmosphericPressure
 
 	// Pressurizer relief path defaults: the PRT starts half full
 	// ("contains sufficient water to condense the steam") with an
@@ -3036,10 +3072,14 @@ func MakePlant() Plant {
 	//     cubic feet (56,600 m³)."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_109.txt:11-12
 	p.ReactorBuilding.ContainmentBuilding = ContainmentBuilding{
-		Pressure:       AtmosphericPressure,
-		Temperature:    Temperature{Val: 120.0, Unit: u.Fahrenheit},
-		DesignPressure: ContainmentDesignPressure,
-		FreeVolume:     ContainmentFreeVolume,
+		Pressure:             AtmosphericPressure,
+		Temperature:          Temperature{Val: 120.0, Unit: u.Fahrenheit},
+		UpperTemperature:     Temperature{Val: 120.0, Unit: u.Fahrenheit},
+		LowerTemperature:     Temperature{Val: 120.0, Unit: u.Fahrenheit},
+		UpperHydrogenPercent: 0,
+		LowerHydrogenPercent: 0,
+		DesignPressure:       ContainmentDesignPressure,
+		FreeVolume:           ContainmentFreeVolume,
 		// CIS defaults (plans/p23_1.txt). At construction
 		// neither phase is latched, both manual flags are
 		// false, and the design-qualification flags

@@ -166,10 +166,12 @@ func TestRCFC_RCFCUnitsRunningCountsRunningUnits(t *testing.T) {
 func TestContainmentBuilding_TemperatureAndPressureTrackHeatBalance(t *testing.T) {
 	t.Parallel()
 	c := ContainmentBuilding{
-		Pressure:       AtmosphericPressure,
-		Temperature:    Temperature{Val: 120, Unit: u.Fahrenheit},
-		DesignPressure: ContainmentDesignPressure,
-		FreeVolume:     ContainmentFreeVolume,
+		Pressure:         AtmosphericPressure,
+		Temperature:      Temperature{Val: 120, Unit: u.Fahrenheit},
+		UpperTemperature: Temperature{Val: 120, Unit: u.Fahrenheit},
+		LowerTemperature: Temperature{Val: 120, Unit: u.Fahrenheit},
+		DesignPressure:   ContainmentDesignPressure,
+		FreeVolume:       ContainmentFreeVolume,
 	}
 	// No heat in, no heat out → temperature unchanged.
 	c2 := c.Step(DefaultTimeStep, Watts(0), Watts(0))

@@ -107,6 +107,7 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	// (specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:19-26).
 	{"CIS", "cluster_containment", "ContainmentIsolation"},
 	{"HDS", "cluster_containment", "HydrogenRecombiner"},
+	{"Sump", "cluster_containment", "ContainmentSump"},
 
 	// Brushless exciter on the generator shaft
 	// (specs/the_westinghouse_pressurized_water_react/chapter_15/page_208.txt:23-24).
