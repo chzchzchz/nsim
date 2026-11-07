@@ -207,7 +207,10 @@ var clusterFor = map[string]string{
 func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 	var b strings.Builder
 	b.WriteString("digraph plant {\n")
-	b.WriteString(`  graph [splines=true, overlap=false, sep="+8,+8", nodesep=0.18, ranksep=0.44, dpi=96];` + "\n")
+	// Spacing tunes how tightly dot packs the row-chunked
+	// buildings (layoutRows): a wider drawing fits tighter, but
+	// ranksep below 0.30 crowds captions on adjacent rows.
+	b.WriteString(`  graph [rankdir=TB, splines=true, overlap=false, sep="+8,+8", nodesep=0.10, ranksep=0.30, dpi=96];` + "\n")
 	b.WriteString(`  node [shape=none];` + "\n")
 
 	// Cluster definitions, keyed by cluster name.
@@ -233,10 +236,11 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 	}
 
 	// Dot parks disconnected nodes in the first rank, which after
-	// the Y flip floats the auxiliary and electrical buildings
-	// above the plant with no physical meaning. Invisible edges
-	// from a low turbine-building node sink them into the drawing's
-	// bottom band; clusters keep each building contiguous.
+	// the Y flip floats them above the plant with no physical
+	// meaning. layoutRows folds them into per-building rank rows
+	// (the spec's plant section, chapter_1/page_025.txt:75-77,
+	// Figure 1-4 cross-section) so the drawing stays near the
+	// viewport aspect instead of stretching one row across it.
 	connected := map[string]bool{}
 	for _, e := range g.Edges {
 		connected[e.From] = true
@@ -276,14 +280,24 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 		"cluster_electrical":  "Electrical / ESF",
 	}
 
-	// Deterministic cluster order: map iteration would shuffle the
-	// emitted DOT between runs, and dot's layout jitters with it.
-	names := make([]string, 0, len(clusters))
-	for name := range clusters {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
+	// Emission order: cluster name order is the cluster
+	// declaration order in the layoutRows chain below (so dot
+	// folds rows in chain order); the unclustered catch-all
+	// emits first only when it holds the intake/circulation
+	// heat-rejection parts, which sit outside the buildings
+	// (chapter_12/page_169.txt:29-34, Figure 1-4).
+	emitOrder := []string{"", "cluster_containment", "cluster_turbine",
+		"cluster_auxiliary", "cluster_electrical"}
+	// Row-chunk the bridge-connected-less nodes per building
+	// (layoutRows) and collect flow-relative orderings as dot
+	// subgraph ranks (layoutRankRows): the connected edges give
+	// each platform's upstream/downstream order, and the
+	// constraint edges keep a platform's rank groups in that
+	// order without collapsing them into one strip. Pinned
+	// layouts (pos != nil) skip the ranks so hand-supplied
+	// coordinates survive.
+	rows := layoutRows(g, clusters, connected)
+	for _, name := range emitOrder {
 		body := clusters[name]
 		if body.Len() == 0 {
 			continue
@@ -300,18 +314,13 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 			fmt.Fprintf(&b, `    fillcolor="#f8f8f8";`+"\n")
 		}
 		b.WriteString(body.String())
+		for _, r := range layoutRankRows(rows[name]) {
+			fmt.Fprintf(&b, "    {rank=same; %s}\n", joinStrings(r, " "))
+		}
 		b.WriteString("  }\n")
 	}
-
-	// Sink the isolated auxiliary/electrical buildings to the bottom
-	// rank via invisible edges (see note above).
-	for _, id := range ids {
-		switch clusterAssignments[id] {
-		case "cluster_auxiliary", "cluster_electrical":
-			if !connected[id] {
-				fmt.Fprintf(&b, `  "Condenser" -> "%s" [style=invis];`+"\n", id)
-			}
-		}
+	for _, e := range layoutRankEdges(rows) {
+		fmt.Fprintf(&b, "  %q -> %q [style=invis];\n", e[0], e[1])
 	}
 
 	// Emit edges routed through any inline pump/valve hops so the
@@ -339,6 +348,199 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 	}
 	b.WriteString("}\n")
 	return b.String(), nil
+}
+
+// layoutRowOrder chains the building rows in rankdir=TB flow
+// order: containment first (the nuclear island of Figure 3-1,
+// chapter_3/page_043.txt:12-15), then turbine, auxiliary, and
+// electrical.
+var layoutRowOrder = []string{
+	"cluster_containment", "cluster_turbine",
+	"cluster_auxiliary", "cluster_electrical",
+}
+
+// layoutRowWidths caps each building's disconnected-node rows so
+// dot stacks several short rows instead of one drawing-width row.
+// The values roughly equalize the drawn row widths across
+// buildings; electrical holds only the two ESF buses, grid, and
+// inverter, so one row suffices.
+//
+// Sorted ids alone interleave unrelated subsystems (diesels next
+// to spray tanks), because alphabetical order ignores the plant's
+// ticketing. layoutRowGroups instead groups them by subsystem
+// prefix so a row reads as one system (chapter_5/page_097.txt
+// safety-injection grouping, Figure 4.1-1 CVCS groups).
+var layoutRowWidths = map[string]int{
+	"cluster_containment": 6,
+	"cluster_turbine":     6,
+	"cluster_auxiliary":   8,
+	"cluster_electrical":  4,
+}
+
+// rowGroupRank orders disconnected-node sections so the turbine
+// and auxiliary buildings read in steam-path order: power
+// conversion first, then feed and cooling, then safety systems.
+var rowGroupRank = []string{"Turbine", "Generator", "Condenser", "HDT", "CST", "Exciter", "Diesel", "EFW", "RHR", "CVCS", "CSS", "BRS", "BTRS", "SFP", "SIS", "Containment"}
+
+
+// layoutRows chunks each cluster's bridge-disconnected nodes into
+// rank rows of layoutRowWidths[cluster] nodes, in DOT emission
+// order. Connected nodes keep their flow positions and are
+// excluded; a cluster holding only connected nodes gets no rows.
+func layoutRows(g *core.PlantGraph, clusters map[string]*strings.Builder, connected map[string]bool) map[string][][]string {
+	rows := map[string][][]string{}
+	for name, body := range clusters {
+		if name == "" || body.Len() == 0 {
+			continue
+		}
+		width := layoutRowWidths[name]
+		if width <= 0 {
+			continue
+		}
+		var disc []string
+		for id := range g.Nodes {
+			if clusterAssignments[id] != name || connected[id] {
+				continue
+			}
+			disc = append(disc, id)
+		}
+		sort.Strings(disc)
+		for i := 0; i < len(disc); i += width {
+			end := i + width
+			if end > len(disc) {
+				end = len(disc)
+			}
+			rows[name] = append(rows[name], disc[i:end])
+		}
+	}
+	// Extra nodes (dispatcher rows such as Turbine extras and
+	// standalone valves) are not plant-graph nodes; append them in
+	// extraNodes declaration order after the sorted graph ids so
+	// the sequence stays deterministic.
+	for _, en := range extraNodes {
+		if connected[en.id] {
+			continue
+		}
+		width := layoutRowWidths[en.cluster]
+		if width <= 0 {
+			continue
+		}
+		cr := rows[en.cluster]
+		if len(cr) == 0 || len(cr[len(cr)-1]) >= width {
+			cr = append(cr, []string{})
+		}
+		cr[len(cr)-1] = append(cr[len(cr)-1], en.id)
+		rows[en.cluster] = cr
+	}
+	return rows
+}
+
+// layoutRowGroups folds one building's row chunks into the rank
+// groups dot should treat as indivisible: singleton rows join the
+// next chunk so a two-node platform never merges onto a neighbour
+// building's outline. Groups are unquoted node ids; layoutRankRows
+// renders them quoted.
+func layoutRowGroups(rowCh [][]string) [][]string {
+	return layoutRowGroupsSubsystem(rowCh)
+}
+
+// layoutRowGroupsSubsystem sorts each building's disconnected
+// nodes by subsystem prefix (rowGroupRank, then id), which pins
+// the sort to the plant's ticketing and keeps unrelated
+// subsystems from interleaving inside one row. Rows are NOT
+// re-chunked afterwards: graphviz scores long ranked groups
+// against the flow's own ranks and settles them as its fitting
+// basis, which reorders the flow's ranks around the group
+// (verified empirically). The alphabetical chunks stay small
+// and flow-sized instead.
+func layoutRowGroupsSubsystem(rowCh [][]string) [][]string {
+	var groups [][]string
+	for _, row := range rowCh {
+		if len(row) < 3 {
+			continue
+		}
+		ids := append([]string{}, row...)
+		sort.SliceStable(ids, func(i, j int) bool {
+			ri, rj := rowGroupRankOf(ids[i]), rowGroupRankOf(ids[j])
+			if ri != rj {
+				return ri < rj
+			}
+			return ids[i] < ids[j]
+		})
+		groups = append(groups, ids)
+	}
+	// Singleton chunks from the last partial row stay singletons:
+	// dot would merge a two-node platform onto a neighbour
+	// building's outline, so they drop out instead.
+	return groups
+}
+
+// rowGroupRankOf maps a node id to its subsystem section rank.
+// Prefix matching keeps train-suffix ids (EAMD/EBMD, RAS1/RBS1)
+// together.
+func rowGroupRankOf(id string) int {
+	for i, prefix := range rowGroupRank {
+		if strings.HasPrefix(id, prefix) {
+			return i
+		}
+	}
+	return len(rowGroupRank)
+}
+
+// layoutRankRows renders one building's row groups as quoted
+// "{rank=same; ...}" subgraphs.
+func layoutRankRows(rowCh [][]string) [][]string {
+	groups := layoutRowGroups(rowCh)
+	out := make([][]string, 0, len(groups))
+	for _, ids := range groups {
+		quoted := make([]string, len(ids))
+		for i, id := range ids {
+			quoted[i] = fmt.Sprintf("%q", id)
+		}
+		out = append(out, quoted)
+	}
+	return out
+}
+
+// layoutRankEdges orders the rank groups in flow order: each
+// group's head is constrained after the previous group's tail so
+// dot stacks the groups in chunk order, and cross-building links
+// keep the steam path RPV -> SG -> Condenser contiguous in rank
+// order.
+func layoutRankEdges(rows map[string][][]string) [][2]string {
+	var edges [][2]string
+	var prevTail string
+	for _, name := range layoutRowOrder {
+		groups := layoutRowGroups(rows[name])
+		for _, ids := range groups {
+			if prevTail != "" {
+				edges = append(edges, [2]string{prevTail, ids[0]})
+			}
+			for i := 0; i+1 < len(ids); i++ {
+				edges = append(edges, [2]string{ids[i], ids[i+1]})
+			}
+			prevTail = ids[len(ids)-1]
+		}
+	}
+	// Steam-path order: keep the secondary loop flowing
+	// RPV -> SG -> Condenser in rank order so the containment and
+	// turbine outlines read as one path. The loop's return legs
+	// (condensate, feed, AFW) already constrain the turbine
+	// building above; these two links pin the containment
+	// building's row stack beside the steam line it serves.
+	edges = append(edges, [2]string{"SG", "Condenser"})
+	return edges
+}
+
+func joinStrings(parts []string, sep string) string {
+	var b strings.Builder
+	for i, p := range parts {
+		if i > 0 {
+			b.WriteString(sep)
+		}
+		b.WriteString(p)
+	}
+	return b.String()
 }
 
 func emitEdgeNode(clusters map[string]*strings.Builder, id, cluster, kind string, pos map[string]Anchor) {

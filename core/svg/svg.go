@@ -882,6 +882,67 @@ func scaledFont(symH float64) float64 {
 		math.Max(captionMinUnits, symH*0.55))
 }
 
+// captionFree decides whether a part's caption should print given
+// its neighbours' laid-out footprints: a caption whose box would
+// cross a neighbour symbol's box is dropped (the part stays
+// clickable and titled; the web UI shows the name on hover).
+// taken holds already-drawn caption boxes in document space so
+// two captions never stack; neighbours holds symbol boxes.
+// The box width follows the estimated text width, not the symbol
+// width, so a long caption on a narrow symbol (a heater, a tank)
+// still proves its neighbours clear before it prints.
+func captionFree(cx, cy, w, h float64, text string, fs float64, neighbours, taken [][4]float64) bool {
+	_ = w
+	textW := float64(len(text)) * fs * 0.6
+	capBox := [4]float64{cx - textW/2, cy - h/2, cx + textW/2, cy + h/2}
+	overlaps := func(b [4]float64) bool {
+		return capBox[0] < b[2] && b[0] < capBox[2] &&
+			capBox[1] < b[3] && b[1] < capBox[3]
+	}
+	for _, n := range neighbours {
+		if overlaps(n) {
+			return false
+		}
+	}
+	for _, t := range taken {
+		if overlaps(t) {
+			return false
+		}
+	}
+	return true
+}
+
+// readoutFree reports whether a live readout of the given text
+// at font size fs, anchored at its part's bottom edge + dy,
+// avoids every other part's symbol box and every already-placed
+// readout box. Readouts share the readout stack with the caption
+// above the next vessel (e.g. PZR pressure sits in the gap above
+// the RPV caption), so a colliding readout drops instead of
+// printing through the caption; the value stays in the part's
+// <title> tooltip.
+func readoutFree(cx, cy float64, text string, fs float64, owner string, neighbours [][4]float64, taken [][4]float64) bool {
+	textW := float64(len(text)) * fs * 0.6
+	box := [4]float64{cx - textW/2, cy - fs*1.2, cx + textW/2, cy}
+	for _, nbox := range neighbours {
+		if boxesOverlap(box, nbox) {
+			return false
+		}
+	}
+	for _, tbox := range taken {
+		if boxesOverlap(box, tbox) {
+			return false
+		}
+	}
+	return true
+}
+
+// boxesOverlap reports whether two axis-aligned boxes intersect;
+// it backs the caption-spacing tests that pin the legend's free
+// corner.
+func boxesOverlap(a, b [4]float64) bool {
+	return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
+}
+
 // kindOf returns the symbolTable key bound to a diagram part id.
 func (r *renderer) kindOf(id string) string {
 	return diagramKindByID[id]
@@ -1388,6 +1449,41 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// add pan/zoom transforms without touching document markup.
 	b.WriteString(`<g id="viewport">` + "\n")
 
+	// Legend names the flow colour convention so the pipe colours
+	// read as systems, not decoration. Colour identities follow
+	// the pipeColourForEdge table in piping.go (red primary,
+	// brown secondary, blue feed/cooling water, pale-blue visual
+	// CVCS lines); building captions sit at the P&ID margin.
+	writeLegend := func() {
+		const (
+			lx, ly   = 12.0, DocumentHeight - 118.0
+			legFs    = captionMinUnits
+			legRowH  = 14.0
+			legW     = 176.0
+			legH     = legRowH*5 + 12.0
+		)
+		fmt.Fprintf(&b,
+			`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" fill="%s" stroke="%s" stroke-width="1"/>`+"\n",
+			lx, ly, legW, legH, pidBackground, pidBuildingEdge)
+		fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="%.1f" fill="%s">FLOW</text>`+"\n",
+			lx+8, ly+legRowH-2, legFs, pidText)
+		rows := []struct{ colour, label string }{
+			{"red", "RCS primary"},
+			{"brown", "Steam / secondary"},
+			{"blue", "Feed / cooling water"},
+			{cvcsColour, "CVCS visual lines"},
+			{"black", "Blocked / other"},
+		}
+		for i, r := range rows {
+			y := ly + legRowH*(float64(i)+1) + 4
+			fmt.Fprintf(&b,
+				`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="2"/>`+"\n",
+				lx+8, y, lx+34, y, r.colour)
+			fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="%.1f" fill="%s">%s</text>`+"\n",
+				lx+40, y+legFs*0.35, legFs, pidText, html.EscapeString(r.label))
+		}
+	}
+
 	useAt := func(sym string, cx, cy, w, h float64) string {
 		return fmt.Sprintf(
 			`<use href="#%s" x="%.0f" y="%.0f" `+
@@ -1415,24 +1511,29 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// always enclose the symbols graphviz grouped together. The
 	// containment outline is the dome asset rather than a rect.
 	for _, name := range []string{
-		"cluster_containment", "cluster_turbine",
-		"cluster_auxiliary", "cluster_electrical",
-	} {
-		bx, by, bw, bh, ok := r.clusterBox(name)
-		if !ok {
-			continue
-		}
-		// Building outlines are backgrounds: intersect with the
-		// viewport so padded extents never spill off-canvas.
-		bx, by = math.Max(bx, 0), math.Max(by, 0)
-		bw = math.Min(bw, DocumentWidth-bx)
-		bh = math.Min(bh, DocumentHeight-by)
-		// data-cluster lets embedders hit-test buildings without
-		// re-deriving cluster geometry Go-side.
-		fmt.Fprintf(&b, `<g data-cluster="%s">`+"\n", name)
-		if name == "cluster_containment" {
-			writePartEl("ReactorBuilding/ContainmentBuilding", "",
-				useAt("containment-dome", bx+bw/2, by+bh/2, bw, bh))
+	"cluster_containment", "cluster_turbine",
+	"cluster_auxiliary", "cluster_electrical",
+} {
+	bx, by, bw, bh, ok := r.clusterBox(name)
+	if !ok {
+		continue
+	}
+	// Building outlines are backgrounds: intersect with the
+	// viewport so padded extents never spill off-canvas.
+	bx, by = math.Max(bx, 0), math.Max(by, 0)
+	bw = math.Min(bw, DocumentWidth-bx)
+	bh = math.Min(bh, DocumentHeight-by)
+	// Building captions sit inside the outline just above the
+	// first row's symbols, not on the outline edge: captions
+	// on the edge collided with the first row's part captions
+	// (e.g. "Auxiliary Building" over RHRS A/B). The part
+	// caption directly beneath stays collision-aware.
+	// data-cluster lets embedders hit-test buildings without
+	// re-deriving cluster geometry Go-side.
+	fmt.Fprintf(&b, `<g data-cluster="%s">`+"\n", name)
+	if name == "cluster_containment" {
+		writePartEl("ReactorBuilding/ContainmentBuilding", "",
+			useAt("containment-dome", bx+bw/2, by+bh/2, bw, bh))
 			// Over-pressure wash: above the 60 psig containment
 			// design pressure the outline gets a translucent red
 			// fill plus heavy stroke.
@@ -1461,12 +1562,21 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 					`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" class="h2-wash" fill="%s" fill-opacity="%.2f"/>`+"\n",
 					bx, by, bw, bh, fill, alpha)
 			}
-			writeLabel(bx+bw/2, by-6, captionMaxUnits, buildingLabels[name])
+			// Containment caption sits inside the dome below its
+			// topmost crane rail, clear of the Cont psig readout
+			// above it (see writeLiveOverlays).
+			writeLabel(bx+bw/2, by+18, captionMaxUnits, buildingLabels[name])
 		} else {
 			fmt.Fprintf(&b, `<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" `+
 				`fill="%s" stroke="%s" stroke-width="1.5"/>`+"\n",
 				bx, by, bw, bh, pidBackground, pidBuildingEdge)
-			writeLabel(bx+bw/2, by+14, captionMaxUnits, buildingLabels[name])
+			// Caption left-aligned at the top-right corner, not
+			// centered on the top edge: centered it sat directly
+			// on the first row's part captions (e.g. "Auxiliary
+			// Building" over RHRS A/B, "Electrical / ESF" over the
+			// ESF buses). Inside the corner it reads at the
+			// margin, clear of the first row centrally.
+			writeLabel(bx+bw-76, by+16, captionMinUnits, buildingLabels[name])
 		}
 		b.WriteString("</g>\n")
 	}
@@ -1510,6 +1620,10 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		}
 	}
 
+	// Legend after building outlines so it sits above them, but
+	// before pipes so process lines never cross the legend box.
+	writeLegend()
+
 	// Electrical one-line ties between the dot-placed grid,
 	// transformer, generator, and ESF buses, with a live contact
 	// glyph on each (see electricalTies).
@@ -1525,8 +1639,13 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	}
 
 	// Visual pipes: spec-cited connections the fluid graph does not
-	// model. They render as dim lines and stream while their flow
+	// model. They render as straight segments clipped at the
+	// endpoint symbols' boundaries and stream while their flow
 	// open fraction is positive; seated valves read their polyline.
+	// They stay straight (no graphviz routing) because the fluid
+	// graph never positions their intermediates, and dimming them
+	// via DrawPipePathIdle keeps the 500-unit CVCS/RHR diagonals
+	// from reading as process lines over building outlines.
 	visRoutes := map[string][]Anchor{}
 	for _, vp := range visualPipes {
 		fa, okF := r.anchor(vp.from)
@@ -1559,6 +1678,17 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// exports carry state the web UI otherwise injects.
 	tints := tintsByPart(alarms)
 	liveVals := readoutValues(p)
+	// Neighbour boxes for caption collision: every laid-out part's
+	// symbol footprint, so a caption drops when it would print
+	// over a neighbour glyph (captionFree).
+	symBoxes := make([][4]float64, 0, len(diagramParts))
+	for _, dp := range diagramParts {
+		if a, ok := r.anchor(dp.id); ok {
+			sw, sh := r.size(dp.kind)
+			symBoxes = append(symBoxes, [4]float64{a.X - sw/2, a.Y - sh/2, a.X + sw/2, a.Y + sh/2})
+		}
+	}
+	var captionBoxes [][4]float64
 	for _, dp := range diagramParts {
 		a, ok := r.anchor(dp.id)
 		if !ok {
@@ -1580,7 +1710,12 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		}
 		if dp.label != "" {
 			fs := scaledFont(sh)
-			writeLabel(a.X, a.Y-sh/2-fs*0.75, fs, dp.label)
+			if captionFree(a.X, a.Y-sh/2-fs*0.75, sw, fs*1.2, dp.label, fs, symBoxes, captionBoxes) {
+				writeLabel(a.X, a.Y-sh/2-fs*0.75, fs, dp.label)
+				textW := float64(len(dp.label)) * fs * 0.6
+				capBox := [4]float64{a.X - textW/2, a.Y - sh/2 - fs*1.35, a.X + textW/2, a.Y - sh/2 - fs*0.15}
+				captionBoxes = append(captionBoxes, capBox)
+			}
 		}
 		acc, okP := pumpAccessors[dp.id]
 		if okP {
@@ -1996,6 +2131,25 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms [
 		return Anchor{X: a.X, Y: a.Y + h/2}, h, true
 	}
 
+	// Neighbour boxes for readout collision: every laid-out
+	// part's symbol footprint plus its printed caption (see the
+	// caption pass for the same boxes). Readouts below a vessel
+	// share the caption band above the next vessel (PZR pressure
+	// above the RPV caption), so captions must be obstacles too.
+	symBoxes := make([][4]float64, 0, len(diagramParts))
+	for _, dp := range diagramParts {
+		if a, ok := r.anchor(dp.id); ok {
+			sw, sh := r.size(dp.kind)
+			symBoxes = append(symBoxes, [4]float64{a.X - sw/2, a.Y - sh/2, a.X + sw/2, a.Y + sh/2})
+			if dp.label != "" {
+				fs := scaledFont(sh)
+				textW := float64(len(dp.label)) * fs * 0.6
+				capY := a.Y - sh/2 - fs*0.75
+				symBoxes = append(symBoxes, [4]float64{a.X - textW/2, capY - fs*0.6, a.X + textW/2, capY + fs*0.6})
+			}
+		}
+	}
+	var taken [][4]float64
 	for _, ro := range readouts {
 		if ro.show != nil && !ro.show(p) {
 			continue
@@ -2005,16 +2159,24 @@ func (r *renderer) writeLiveOverlays(b *strings.Builder, p *core.Plant, alarms [
 			// Readout offsets were tuned for the old 10-unit
 			// font; shrink them with the text so lines hug
 			// small symbols.
-			text(a, ro.dy*fs/captionMaxUnits, fs, ro.text(p))
+			body := ro.text(p)
+			cx, cy := a.X, a.Y+ro.dy*fs/captionMaxUnits
+			if readoutFree(cx, cy, body, fs, ro.id, symBoxes, taken) {
+				text(a, ro.dy*fs/captionMaxUnits, fs, body)
+				textW := float64(len(body)) * fs * 0.6
+				taken = append(taken, [4]float64{cx - textW/2, cy - fs*1.2, cx + textW/2, cy})
+			}
 		}
 	}
 
-	// Containment pressure readout above the dome label; the
+	// Containment pressure readout just inside the dome; the
 	// translucent red dome wash appears above design pressure
-	// (see the containment-outline pass in writePlantSVG).
+	// (see the containment-outline pass in writePlantSVG). The
+	// building caption moved inside the dome with it so the two
+	// never share the edge.
 	cp := p.ReactorBuilding.ContainmentPressure - core.AtmosphericPressure
 	if cont, ok := r.containmentTop(); ok {
-		text(cont, -8, captionMaxUnits, fmt.Sprintf("Cont %.1f psig", float64(cp)))
+		text(cont, +8, captionMinUnits, fmt.Sprintf("Cont %.1f psig", float64(cp)))
 	}
 
 	activeAlarms := map[core.AlarmID]bool{}

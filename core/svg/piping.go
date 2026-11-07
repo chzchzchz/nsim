@@ -219,6 +219,13 @@ func projectAnchorDist(pts []Anchor, a Anchor) float64 {
 
 // ColourForEdge returns the pipe colour for an edge between the
 // given source and destination graph node IDs.
+//
+// Legend mapping: red = RCS primary (RPV, pressurizer, RCP),
+// brown = secondary/steam, blue = feedwater/cooling water (SG
+// feed legs and circulating water), black = blocked/other
+// (DrawPipePathDead reroutes shut-valve legs to black).
+// Spec: primary coolant steel in chapter_3/page_071.txt:93-96;
+// main steam stop/check valves in chapter_15/page_214.txt:70-81.
 func ColourForEdge(fromID, toID string) string {
 	switch {
 	case fromID == "CoolingTower" || toID == "CoolingTower":
@@ -233,10 +240,10 @@ func ColourForEdge(fromID, toID string) string {
 		fromID == "Pressurizer" || toID == "Pressurizer" ||
 		fromID == "RCP" || toID == "RCP":
 		return "red"
-	case fromID == "SG" || toID == "SG":
-		return "blue"
 	case fromID == "Condenser" || toID == "Condenser":
 		return "brown"
+	case fromID == "SG" || toID == "SG":
+		return "blue"
 	}
 	return "black"
 }
