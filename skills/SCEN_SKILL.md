@@ -332,6 +332,40 @@ When a Phase-3 operator action has no matching `GetControlMap` entry:
    `specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:15-19`).
 5. **Return to Phase 3** with the new control path added to the mapping table.
 
+## Gap ledger and closure
+
+Gaps are tracked in three ledgers; a model gap is not done until all
+three agree. One gap = one slice plan (`plans/x/gap_*.md` or
+`plans/p*_1.txt`), written before code:
+
+- **Plant-fidelity index — `plans/x/gaps.md`**: per item, the
+  **State** (evidence in `core/`), the **Spec** (full-path citations),
+  **Blocked scenarios**, and a **Slice scope**. Closed items keep the
+  entry, get a `Landed` / `Closed` pointer to the implementing plan
+  and the durable test names, and move to the `## Closed` index.
+- **Model-fidelity audit — `plans/x/big_gaps.md`**: model-level
+  divergences ordered by fidelity cost, each with explicit
+  **Done when** criteria. Items closed in that audit go into its
+  "Closed during this audit" section.
+- **Scenario rollup — `plans/x/scenario/remaining_gaps.md`**: a
+  table of "Scenarios with remaining gaps" (a gap counts as
+  remaining only if its own per-scenario ledger
+  `plans/x/scenario/<N>.txt` still records it open and no later core
+  work supersedes it) and "Scenarios with zero remaining gaps".
+
+Closure checklist (same commit as the fix):
+
+1. Mark the item in `plans/x/gaps.md` (pointer + tests) and, when
+   the fix changes model behavior, `plans/x/big_gaps.md`.
+2. Refresh the scenario's own ledger (`plans/x/scenario/<N>.txt`
+   standing notes and pass/fail table) if the scenario is affected.
+3. Update `plans/x/scenario/remaining_gaps.md`: remove or annotate
+   the row, per the rule above. Superseded-but-unrefreshed entries
+   are noted rather than silently dropped.
+4. A remaining gap that is merely an accepted band (a
+   scram superseding a stepback, a conceded convention) is recorded
+   in place as accepted-band behavior, not left OPEN.
+
 ## Definition of done for a scenario
 
 - Implementation plan with the validation verdict, the three lists, command

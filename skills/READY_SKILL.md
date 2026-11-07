@@ -30,6 +30,12 @@ plans/SCEN_SKILL.md).
    listed in the handoff as out-of-scope with their owning slice, not
    silently folded in and not silently skipped.
 
+   If the task is a gap slice or a scenario step, the gap ledgers
+   (`plans/x/gaps.md`, `plans/x/big_gaps.md`,
+   `plans/x/scenario/remaining_gaps.md` — SCEN_SKILL.md "Gap ledger
+   and closure") must have been updated in the same change; an
+   untouched ledger row is not ready.
+
 6. Commit only the files the task touched. This workspace keeps
    plans/ and specs/ as untracked symlinks into a sibling repository -
    never stage them broadly. If the patch turned out already upstream

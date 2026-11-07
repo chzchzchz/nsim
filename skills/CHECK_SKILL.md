@@ -521,7 +521,11 @@ Mechanical sweeps:
   applies when an index item CLOSES: every ledger row that says
   "blocked by item N" is silently stale from that moment — re-derive or
   re-point each dependent reference as part of the closing slice, not
-  someday.
+  someday. The closure checklist is in SCEN_SKILL.md ("Gap ledger and
+  closure"): `plans/x/gaps.md`, `plans/x/big_gaps.md`, the
+  per-scenario ledger (`plans/x/scenario/<N>.txt`), and
+  `plans/x/scenario/remaining_gaps.md` must all agree in the same
+  commit.
 - Verify edits landed: re-grep for the new symbol after applying.
   Editing tools report success on stale buffers.
 - Sweep for siblings of every bug found by inspection: one
