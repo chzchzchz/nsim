@@ -43,6 +43,9 @@ export const UNITS: Record<string, UnitInfo> = {
     // Startup rate in decades per minute; signed because a
     // subcritical core reads a negative rate.
     dpm:         { unit: "dpm",  range: null,    numeric: true },
+    // Demanded reactor power ramp rate in percent of rated power
+    // per second; the model caps acceptance at 0.8 %/s.
+    pctpersec:   { unit: "%/s",  range: "[0, 0.8]", numeric: true },
     string:      { unit: "",     range: null,    numeric: false },
     enum:        { unit: "",     range: null,    numeric: false },
     alarm:       { unit: "",     range: null,    numeric: false },

@@ -133,18 +133,20 @@ func addPlantOperationControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-	// Reactor power setpoint target (chapter 3 pop-up):
-	//   "Enter 'reactor power SP target' = 90 %"
-	//   specs/pwr_sim/chapter_3/page_036.txt:37-38
+	// Reactor power setpoint target (chapter 3 pop-up). The operator
+	// enters percent — "Enter 'reactor power SP target' = 90 %"
+	// specs/pwr_sim/chapter_3/page_036.txt:39-40 — while storage and
+	// the RPC integrator work in fractions of rated power, so the
+	// boundary converts once in each direction.
 	m["PlantOperation/PowerSetpointTarget"] = &bridge.Control{
 		Part:  "PlantOperation",
 		Label: "PowerSetpointTarget",
-		Kind:  "normalized",
+		Kind:  "percent",
 		Get: func() string {
-			return fmt.Sprintf("%v", p.PlantOperation.PowerSetpointDemand)
+			return strconv.FormatFloat(p.PlantOperation.PowerSetpointDemand*100, 'f', -1, 64)
 		},
 		Set: func(s string) error {
-			validated, err := bridge.ConvertControlValue("normalized", s)
+			validated, err := bridge.ConvertControlValue("percent", s)
 			if err != nil {
 				return err
 			}
@@ -152,26 +154,28 @@ func addPlantOperationControls(p *Plant, m bridge.ControlMap) {
 			if err != nil {
 				return err
 			}
-			p.PlantOperation.PowerSetpointDemand = v
+			p.PlantOperation.PowerSetpointDemand = v / 100
 			return nil
 		},
 	}
 
-	// Reactor power ramp rate (chapter 3 pop-up), entered as a
-	// fraction of rated power per second; the integrator clamps
-	// it to RodControlMaxRatePerSec (0.008 = 0.8 %/s).
-	//   "limited by the maximum rate of 0.8 % of full power per
-	//    second"
-	//   specs/pwr_sim/chapter_2/page_024.txt:3-5
+	// Reactor power ramp rate (chapter 3 pop-up), entered as percent
+	// of rated power per second — "enter 'power rate' = 0.08 %/sec"
+	// specs/pwr_sim/chapter_3/page_036.txt:39-40 — limited by the
+	// maximum rate of 0.8 % of full power per second
+	// specs/pwr_sim/chapter_2/page_024.txt:3-5 (RodControlMaxRatePerSec
+	// stores that cap as a fraction). Storage stays fraction-per-second;
+	// without the ÷100 here the documented entry reads as ten times the
+	// cap and the clamp silently hides it.
 	m["PlantOperation/PowerRateDemand"] = &bridge.Control{
 		Part:  "PlantOperation",
 		Label: "PowerRateDemand",
-		Kind:  "normalized",
+		Kind:  "pctpersec",
 		Get: func() string {
-			return fmt.Sprintf("%v", p.PlantOperation.PowerRateDemand)
+			return strconv.FormatFloat(p.PlantOperation.PowerRateDemand*100, 'f', -1, 64)
 		},
 		Set: func(s string) error {
-			validated, err := bridge.ConvertControlValue("normalized", s)
+			validated, err := bridge.ConvertControlValue("pctpersec", s)
 			if err != nil {
 				return err
 			}
@@ -179,7 +183,7 @@ func addPlantOperationControls(p *Plant, m bridge.ControlMap) {
 			if err != nil {
 				return err
 			}
-			p.PlantOperation.PowerRateDemand = v
+			p.PlantOperation.PowerRateDemand = v / 100
 			return nil
 		},
 	}

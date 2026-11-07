@@ -48,8 +48,8 @@ func TestScenario13_ReactorLeadReturnToFullPower(t *testing.T) {
 
 	setControl(t, &p, "PlantOperation/LeadLagMode", "1")
 	setControl(t, &p, "PlantOperation/RodControlAuto", "true")
-	setControl(t, &p, "PlantOperation/PowerSetpointTarget", "0.90")
-	setControl(t, &p, "PlantOperation/PowerRateDemand", "0.0002")
+	setControl(t, &p, "PlantOperation/PowerSetpointTarget", "90")
+	setControl(t, &p, "PlantOperation/PowerRateDemand", "0.02")
 
 	rpv := &p.ReactorBuilding.ReactorPressureVessel
 
@@ -68,7 +68,7 @@ func TestScenario13_ReactorLeadReturnToFullPower(t *testing.T) {
 
 	// Return to full power at the same selectable rate and let the
 	// loop stabilize.
-	setControl(t, &p, "PlantOperation/PowerSetpointTarget", "1")
+	setControl(t, &p, "PlantOperation/PowerSetpointTarget", "100")
 	tripped := false
 	for i := 0; i < int((ascentSeconds+returnSeconds)/TimeStep.Seconds()); i++ {
 		p.Step()

@@ -99,7 +99,7 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 		"shadow phase parked the integrator at achieved power")
 	setControl(t, &p, "PlantOperation/LeadLagMode", "1")
 	setControl(t, &p, "PlantOperation/RodControlAuto", "true")
-	setControl(t, &p, "PlantOperation/PowerRateDemand", "0.005")
+	setControl(t, &p, "PlantOperation/PowerRateDemand", "0.5")
 
 	// Guards are sampled every checkEvery-th step: the descent takes
 	// minutes while the trip/pressure physics move on second scales,
@@ -112,7 +112,7 @@ func TestScenario14_ReactorLeadGlideToZeroFP(t *testing.T) {
 		text  string
 		value float64
 	}{
-		{"0.75", 0.75}, {"0.50", 0.50}, {"0.25", 0.25}, {"0.00", 0.00},
+		{"75", 0.75}, {"50", 0.50}, {"25", 0.25}, {"0", 0.00},
 	} {
 		setControl(t, &p, "PlantOperation/PowerSetpointTarget", tgt.text)
 		settledAt := -1

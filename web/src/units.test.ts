@@ -38,12 +38,14 @@ describe("unit metadata", () => {
     it("exposes control ranges only where bounded", () => {
         expect(rangeFor("normalized")).toBe("[0, 1]");
         expect(rangeFor("percent")).toBe("[0, 100]");
+        expect(rangeFor("pctpersec")).toBe("[0, 0.8]");
         expect(rangeFor("signedpercent")).toBeNull();
         expect(rangeFor("rpm")).toBeNull();
     });
 
     it("knows the taxonomy and rejects gaps", () => {
         expect(knownKind("gpm")).toBe(true);
+        expect(knownKind("pctpersec")).toBe(true);
         expect(knownKind("alarm")).toBe(true);
         expect(knownKind("furlongs")).toBe(false);
     });

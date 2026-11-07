@@ -113,8 +113,8 @@ func TestRPC_ReactorLeadDescentTo90PercentHoldsPlateau(t *testing.T) {
 	p := rpcReactorLeadPlant()
 
 	setControl(t, &p, "PlantOperation/LeadLagMode", "1")
-	setControl(t, &p, "PlantOperation/PowerSetpointTarget", "0.90")
-	setControl(t, &p, "PlantOperation/PowerRateDemand", "0.0002")
+	setControl(t, &p, "PlantOperation/PowerSetpointTarget", "90")
+	setControl(t, &p, "PlantOperation/PowerRateDemand", "0.02")
 
 	rpv := &p.ReactorBuilding.ReactorPressureVessel
 
@@ -347,15 +347,13 @@ func TestRPC_BridgeControlsAndSensorsRoundTrip(t *testing.T) {
 	}
 	assert.Equal(t, ReactorLead, p.PlantOperation.LeadLagMode)
 
-	v, err := bridge.ConvertControlValue("normalized", "0.90")
-	require.NoError(t, err)
-	require.NoError(t, cm["PlantOperation/PowerSetpointTarget"].Set(v))
+	require.NoError(t, cm["PlantOperation/PowerSetpointTarget"].Set("90"))
 	assert.InDelta(t, 0.90, p.PlantOperation.PowerSetpointDemand, 1e-12)
+	assert.Equal(t, "90", cm["PlantOperation/PowerSetpointTarget"].Get())
 
-	v, err = bridge.ConvertControlValue("normalized", "0.0008")
-	require.NoError(t, err)
-	require.NoError(t, cm["PlantOperation/PowerRateDemand"].Set(v))
+	require.NoError(t, cm["PlantOperation/PowerRateDemand"].Set("0.08"))
 	assert.InDelta(t, 0.0008, p.PlantOperation.PowerRateDemand, 1e-15)
+	assert.Equal(t, "0.08", cm["PlantOperation/PowerRateDemand"].Get())
 
 	require.NoError(t, cm["PlantOperation/RodControlAuto"].Set("true"))
 	assert.True(t, p.PlantOperation.RodControlAuto)

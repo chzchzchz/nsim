@@ -130,7 +130,7 @@ func TestScenario15_RecoveryAfterTurbineTrip(t *testing.T) {
 	// rods run the core to rated against a no-load machine.
 	setControl(t, &p, "PlantOperation/RodControlAuto", "1")
 	setControl(t, &p, "PlantOperation/PowerSetpointTarget",
-		fmt.Sprintf("%v", StepbackPowerFraction))
+		fmt.Sprintf("%v", StepbackPowerFraction*100))
 	// Rods lead the restore: withdrawn rods recover power before any
 	// steam is re-admitted ("Control rods are manually withdrawn to
 	// raise reactor power",
