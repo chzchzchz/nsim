@@ -205,6 +205,20 @@ var clusterFor = map[string]string{
 	"Grid":  "cluster_electrical",
 }
 
+// dockingExtrasForRPV are disconnected nodes (graph nodes with no
+// fluid edge, or renderer-only extras) that Fig 3-1 shows
+// injecting into the RCS at the RPV/cold leg. Invisible constraint
+// edges dock them adjacent to RPV instead of leaving them in the
+// disconnected rank rows. Connected nodes are skipped by the
+// connected[] guard at the emit site, so the list may safely
+// include ids that later gain a real edge.
+//
+// Disconnected graph nodes (in BuildGraphFor, no edges):
+// SISAccumulators, RHRS_A, RHRS_B (core/plant.go:3255,3258-3259).
+// True renderer-only extras (in extraNodes only):
+// RWST, HHSI, ChgPump, BTRS (layout.go extraNodes entries).
+var dockingExtrasForRPV = []string{"SISAccumulators", "RHRS_A", "RHRS_B", "RWST", "HHSI", "ChgPump", "BTRS"}
+
 // BuildDot generates a DOT description of the plant graph with
 // layout clusters, node sizes, and optional pinned positions.
 // When pos is non-nil, each known node gets pos="X,Y" and pin=true
@@ -326,6 +340,17 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 	}
 	for _, e := range layoutRankEdges(rows) {
 		fmt.Fprintf(&b, "  %q -> %q [style=invis];\n", e[0], e[1])
+	}
+	// Dock safety-system extras to the RPV per Fig 3-1 injection
+	// topology; pinned layouts (pos != nil) skip ranks in the
+	// layoutRows path above, so skip docking edges there too.
+	if pos == nil {
+		for _, id := range dockingExtrasForRPV {
+			if connected[id] || !mainNodes[id] {
+				continue
+			}
+			fmt.Fprintf(&b, "  %q -> %q [style=invis];\n", id, "RPV")
+		}
 	}
 
 	// Emit edges routed through any inline pump/valve hops so the

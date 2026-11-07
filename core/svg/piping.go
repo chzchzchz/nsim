@@ -90,9 +90,10 @@ func DrawPipePath(pts []Anchor, colour string) string {
 		}
 		fmt.Fprintf(&b, "%.1f,%.1f", p.X, p.Y)
 	}
-	// vector-effect keeps the 2px stroke crisp when the host page
-	// scales g#viewport for pan/zoom.
-	fmt.Fprintf(&b, `" fill="none" stroke="%s" stroke-width="2" `, colour)
+	// vector-effect keeps the stroke crisp when the host page
+	// scales g#viewport for pan/zoom. Width encodes system class
+	// per pipeWeightByColour (svg.go): primary > secondary > aux.
+	fmt.Fprintf(&b, `" fill="none" stroke="%s" stroke-width="%.1f" `, colour, pipeWeightByColourFor(colour))
 	fmt.Fprintf(&b, `vector-effect="non-scaling-stroke" `)
 	fmt.Fprintf(&b, `marker-mid="url(#arrow-%s)"/>`, colour)
 	return b.String()

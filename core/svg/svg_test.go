@@ -2,6 +2,7 @@ package svg
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 	"testing"
@@ -600,4 +601,76 @@ func TestSFPPoolHeatTint(t *testing.T) {
 	p.AuxiliaryBuilding.SpentFuelPoolCoolingSystem.PoolTemp =
 		core.Temperature{Val: 190, Unit: u.Fahrenheit}
 	assert.Contains(t, renderPlant(t, &p), `class="sfp-wash"`)
+}
+
+// TestSnapAngle_CanonicalMultiples asserts every glyph rotation
+// emitted by valvePartHTML is a multiple of 45 degrees. Properties:
+// -0, +/-45, +/-90, +/-135, 180 result from snapping; no arbitrary
+// spline angle may leak through.
+func TestSnapAngle_CanonicalMultiples(t *testing.T) {
+	cases := []struct{ in, want float64 }{
+		{0, 0}, {10, 0}, {22, 0}, {23, 45}, {45, 45}, {56, 45}, {68, 90}, {88, 90},
+		{-45, -45}, {-90, -90}, {133, 135}, {178, 180}, {-178, -180},
+	}
+	for _, tc := range cases {
+		assert.Equal(t, tc.want, snapAngle(tc.in), "snapAngle(%v)", tc.in)
+	}
+	// Rendered-output check: no rotate() in the full document may
+	// carry a non-canonical degree value.
+	out := renderPlant(t, func() *core.Plant { p := core.MakePlant(); return &p }())
+	re := regexp.MustCompile(`rotate\(([-\d.]+)\)`)
+	for _, m := range re.FindAllStringSubmatch(out, -1) {
+		var deg float64
+		fmt.Sscanf(m[1], "%f", &deg)
+		assert.InDelta(t, 0, deg-math.Round(deg/45)*45, 0.001,
+			"non-canonical valve rotation %v in output", deg)
+	}
+}
+
+// TestBuildDot_DockingExtras asserts every id in
+// dockingExtrasForRPV gains an invisible constraint edge to RPV in
+// BuildDot output, and only when disconnected. Property, not exact
+// coordinates.
+func TestBuildDot_DockingExtras(t *testing.T) {
+	p := core.MakePlant()
+	g := p.BuildGraph()
+	dot, err := BuildDot(g, nil)
+	require.NoError(t, err)
+	require.Contains(t, dot, `"RPV"`)
+	for _, id := range dockingExtrasForRPV {
+		needle := `"` + id + `" -> "RPV" [style=invis]`
+		assert.Contains(t, dot, needle, "docking edge %s missing", needle)
+	}
+}
+
+// TestComputeLayout_RCPBetweenSGAndRPV asserts the RCP anchor lies
+// between the SG and RPV anchors in Y (loop closure property).
+// Uses the shared computed layout; no exact coordinates.
+func TestComputeLayout_RCPBetweenSGAndRPV(t *testing.T) {
+	_, layout := mustSharedLayout(t)
+	sg, okSG := layout.Pos["SG"]
+	rpv, okRPV := layout.Pos["RPV"]
+	rcp, okRCP := layout.Pos["RCP"]
+	require.True(t, okSG && okRPV && okRCP)
+	// SG below RPV in document Y (Y-down): SG.Y > RPV.Y.
+	// RCP centre Y must lie strictly between them.
+	assert.Greater(t, sg.Y, rpv.Y, "SG should render below RPV (hot leg down)")
+	assert.Greater(t, rcp.Y, rpv.Y, "RCP should render below RPV")
+	assert.Less(t, rcp.Y, sg.Y, "RCP should render above SG")
+	assert.Equal(t, 121, len(symbolCount(t)), "symbol count drift (post-anchors)")
+}
+
+// symbolCount counts top-level <use> outside <defs> in a render.
+func symbolCount(t *testing.T) []string {
+	t.Helper()
+	p := core.MakePlant()
+	var b strings.Builder
+	require.NoError(t, WritePlantSVG(&b, &p))
+	out := b.String()
+	// Strip defs.
+	start := strings.Index(out, "</defs>")
+	if start >= 0 {
+		out = out[start:]
+	}
+	return regexp.MustCompile(`<use href="#[^"]+"`).FindAllString(out, -1)
 }

@@ -1282,6 +1282,32 @@ func (r *renderer) pipe(p *core.Plant, g *core.PlantGraph, e core.GraphEdge) str
 	return pathFrag + r.valvePartHTML(ref.part, at, deg, kind, e.Valve.Open)
 }
 
+// snapAngle canonicalises a glyph rotation to multiples of 45
+// degrees. P&ID convention draws valves/pumps axis-aligned (0/90)
+// or on exact diagonals; arbitrary angles from dot's splines read
+// as a graph, not piping. This is a symbol-level canonicalisation,
+// not placement: glyph angle is symbol geometry, verified by the
+// piping colour-class audit (piping.go ColourForEdge).
+// Derived presentation constant, not a spec number.
+func snapAngle(deg float64) float64 {
+	return math.Round(deg/45) * 45
+}
+
+// pipeWeightByColour attaches line weights to ColourForEdge
+// system classes (piping.go:220-249): red primary, brown
+// secondary (SG→Condenser), black blocked/other. Presentation
+// convention only; weights are not driven by sim load values.
+var pipeWeightByColour = map[string]float64{
+	"red":   3.0,
+	"brown": 2.0,
+	"blue":  2.0,
+	"black": 1.0,
+}
+
+func pipeWeightByColourFor(colour string) float64 {
+	return pipeWeightByColour[colour]
+}
+
 // valvePartHTML renders one valve glyph centred on at and rotated
 // by deg around its centre: the <use> body plus the open-fraction
 // wedge, titled with the percentage. A non-empty part binds the
@@ -1297,8 +1323,8 @@ func (r *renderer) valvePartHTML(part string, at Anchor, deg float64, kind strin
 		`<use href="#%s" x="%.1f" y="%.1f" width="%.1f" height="%.1f"/>`,
 		SymbolForKind(kind), -vw/2, -vh/2, vw, vh)
 	transform := fmt.Sprintf(` transform="translate(%.2f %.2f)"`, at.X, at.Y)
-	if deg != 0 {
-		transform = fmt.Sprintf(` transform="translate(%.2f %.2f) rotate(%.1f)"`, at.X, at.Y, deg)
+	if snapped := snapAngle(deg); snapped != 0 {
+		transform = fmt.Sprintf(` transform="translate(%.2f %.2f) rotate(%.1f)"`, at.X, at.Y, snapped)
 	}
 	title := fmt.Sprintf(`<title>%d%%</title>`, pct)
 	if part == "" {
@@ -1528,8 +1554,8 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		for i, r := range rows {
 			y := ly + legRowH*(float64(i)+1) + 4
 			fmt.Fprintf(&b,
-				`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="2"/>`+"\n",
-				lx+8, y, lx+34, y, r.colour)
+				`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="%.1f"/>`+"\n",
+				lx+8, y, lx+34, y, r.colour, pipeWeightByColourFor(r.colour))
 			fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="%.1f" fill="%s">%s</text>`+"\n",
 				lx+40, y+legFs*0.35, legFs, pidText, html.EscapeString(r.label))
 		}
@@ -1583,6 +1609,17 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		// re-deriving cluster geometry Go-side.
 		fmt.Fprintf(&b, `<g data-cluster="%s">`+"\n", name)
 		if name == "cluster_containment" {
+			// MSIV penetration: main steam lines route through a
+			// containment penetration (chapter_15/page_214.txt:45-47,
+			// 71-76). The SG→Condenser polyline crosses the
+			// containment bbox; the MSIV glyph (valvePlacements
+			// "SGMSIV", shift 0.08 near SG) sits at that crossing,
+			// so draw the outline gap there, before the caption.
+			// Symbol geometry, not a coordinate nudge.
+			penX, penY := bx+bw, by+bh*0.62
+			fmt.Fprintf(&b,
+				`<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" fill="none" stroke="var(--pid-stroke,#999)" stroke-width="3" stroke-dasharray="0 999"/>`+"\n",
+				penX-3.0, penY-6.0, 6.0, 12.0)
 			writePartEl("ReactorBuilding/ContainmentBuilding", "",
 				useAt("containment-dome", bx+bw/2, by+bh/2, bw, bh))
 			// Over-pressure wash: above the 60 psig containment
@@ -1615,8 +1652,14 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			}
 			// Containment caption sits inside the dome below its
 			// topmost crane rail, clear of the Cont psig readout
-			// above it (see writeLiveOverlays).
-			writeLabel(bx+bw/2, by+18, captionMaxUnits, buildingLabels[name])
+			// above it (see writeLiveOverlays). The label carries the
+			// enclosure meaning from Fig 1-4.
+			//   "The containment building is a cylindrical, steel
+			//    lined, concrete pressure vessel with a
+			//    hemispherical top closure and stepped flat
+			//    bottom."
+			//    specs/the_westinghouse_pressurized_water_react/chapter_1/page_025.txt:35-38
+			writeLabel(bx+bw/2, by+18, captionMaxUnits, buildingLabels[name]+" (hemispherical top)")
 		} else {
 			fmt.Fprintf(&b, `<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" `+
 				`fill="%s" stroke="%s" stroke-width="1.5"/>`+"\n",

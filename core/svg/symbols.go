@@ -20,11 +20,11 @@ type symbolSpec struct {
 // Footprints match the Westinghouse P&ID figure proportions cited
 // in the package comment of svg.go.
 var symbolTable = map[string]symbolSpec{
-	"ReactorPressureVessel":        {100.0 / 96.0, 240.0 / 96.0, "reactor_vessel.svg"},
-	"Pressurizer":                  {60.0 / 96.0, 200.0 / 96.0, "pressurizer.svg"},
+	"ReactorPressureVessel":        {110.0 / 96.0, 250.0 / 96.0, "reactor_vessel.svg"},
+	"Pressurizer":                  {70.0 / 96.0, 210.0 / 96.0, "pressurizer.svg"},
 	"SteamGenerator":               {190.0 / 96.0, 430.0 / 96.0, "steam_generator.svg"},
 	"Condenser":                    {400.0 / 96.0, 100.0 / 96.0, "condenser.svg"},
-	"ReactorCoolantPump":           {50.0 / 96.0, 160.0 / 96.0, "pump-rcp.svg"},
+	"ReactorCoolantPump":           {80.0 / 96.0, 200.0 / 96.0, "pump-rcp.svg"},
 	"CondensatePump":               {60.0 / 96.0, 40.0 / 96.0, "pump-horizontal.svg"},
 	"MainFeedwaterPump":            {60.0 / 96.0, 40.0 / 96.0, "pump-horizontal.svg"},
 	"HeaterDrainPump":              {60.0 / 96.0, 40.0 / 96.0, "pump-horizontal.svg"},
