@@ -745,17 +745,17 @@ var valvePlacements = map[string]valvePlacement{
 	// "The main steam lines are provided with a stop valve and a
 	// check valve in each line just outside the containment."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:71-76
-	"SGMSIV": {from: "SG", to: "Condenser", near: "SG", shift: 0.08},
+	"SGMSIV": {from: "SG", to: "Turbine", near: "SG", shift: 0.08},
 	// Startup SG valves ride the same SG outlet edge near the
 	// generator; citations are the diagramParts rows above.
-	"SteamlineVent":     {from: "SG", to: "Condenser", near: "SG", shift: 0.05},
-	"DrainValve":        {from: "SG", to: "Condenser", near: "SG", shift: 0.12},
-	"WetLayupFillValve": {from: "SG", to: "Condenser", near: "SG", shift: 0.16},
+	"SteamlineVent":     {from: "SG", to: "Turbine", near: "SG", shift: 0.05},
+	"DrainValve":        {from: "SG", to: "Turbine", near: "SG", shift: 0.12},
+	"WetLayupFillValve": {from: "SG", to: "Turbine", near: "SG", shift: 0.16},
 	// The overspeed trip closes "the main steam stop and governing
 	// valves" feeding the turbine.
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:40-43
-	"TSTOP": {from: "SG", to: "Condenser", near: "Turbine", shift: -0.06},
-	"TGOV":  {from: "SG", to: "Condenser", near: "Turbine", shift: -0.02},
+	"TSTOP": {from: "SG", to: "Turbine", near: "Turbine", shift: -0.06},
+	"TGOV":  {from: "SG", to: "Turbine", near: "Turbine", shift: -0.02},
 	// "dumping the steam to the condenser"; during cooldown "steam
 	// is dumped to the condensers".
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:104-118
@@ -824,7 +824,7 @@ var decorativeValves = []struct {
 	// "The main steam stop valves automatically close ... The swing
 	// check valves protect against backflow of [steam]."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:76-82
-	{id: "SGCHK", kind: "swing_check", from: "SG", to: "Condenser", near: "SG", shift: 0.16},
+	{id: "SGCHK", kind: "swing_check", from: "SG", to: "Turbine", near: "SG", shift: 0.16},
 }
 
 // renderer composes one SVG document against a specific layout,
@@ -1172,10 +1172,38 @@ func classifyPipe(g *core.PlantGraph, e core.GraphEdge) pipeWater {
 		return pipeFlowing
 	}
 	// Step-owned Flow edges (plans/p59_1.txt): the Step already
-	// moved the volume, so a positive rate means the pipe is
-	// wet even when the pressure snapshot does not differ.
-	if e.Flow != nil && e.Flow(core.DefaultTimeStep) > 0 {
-		return pipeFlowing
+	// moved the volume. Trust this closure over the pressure
+	// snapshot: a closed valve (already returned pipeBlocked
+	// above), a secured turbine/dump valve, or an MSIV shut
+	// header all read as zero here and must not let the
+	// static-differential fallback below re-animate a pipe the
+	// model says is dead. Rate semantics: closures return
+	// gal/step (audit flow for Steps whose volume is a per-step
+	// measure, e.g. SteamDemandGalPerStep); other Flow edges
+	// return gal/sec (EFWS/SIS closures). classifyPipe only
+	// uses >0, so the unit fork does not affect the flowing
+	// decision. Downstream animation speed (pipe() in svg.go:
+	//1247-1267) applies flowDurationSec to nominalDrivenVelocity
+	// for these legs; a gal/step value fed through that formula
+	// would animate at the pump-driven rate rather than at
+	// gal/sec, but only affects cue speed, not the flowing/wet
+	// distinction.
+	if e.Flow != nil {
+		// Returning >0 flowing / 0 static is sufficient: the
+		// caller renders pipeFlowing with a positive-duration
+		// animation period.
+		if e.Flow(core.DefaultTimeStep) > 0 {
+			return pipeFlowing
+		}
+		fLevel, _, fOK := g.Nodes[e.From].FluidState()
+		tLevel, _, tOK := g.Nodes[e.To].FluidState()
+		if (fOK && fLevel.Val > 0) || (tOK && tLevel.Val > 0) {
+			// Topology visible when fluid exists at an
+			// endpoint, even with no driven flow this tick
+			// (mirrors the unreadable-side fallback below).
+			return pipeWet
+		}
+		return pipeEmpty
 	}
 	fLevel, fPress, fOK := g.Nodes[e.From].FluidState()
 	tLevel, tPress, tOK := g.Nodes[e.To].FluidState()
@@ -1246,7 +1274,10 @@ func (r *renderer) pipe(p *core.Plant, g *core.PlantGraph, e core.GraphEdge) str
 	if e.Valve == nil {
 		return pathFrag
 	}
-	ref, _ := valveHopFor(e)
+	ref, okHop := valveHopFor(e)
+	if !okHop {
+		return pathFrag
+	}
 	at, okA := r.anchor(ref.id)
 	if !okA {
 		r.missing[ref.id] = true

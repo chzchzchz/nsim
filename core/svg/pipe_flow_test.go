@@ -3,9 +3,10 @@ package svg
 import (
 	"math"
 	"regexp"
-	"strings"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
@@ -79,6 +80,33 @@ func TestClassifyPipe(t *testing.T) {
 	}
 }
 
+// TestClassifyPipe_FlowClosureTrusted is a physics-forced invariant
+// (CHECK_SKILL §2, §4): a Flow edge whose Step closure reads zero
+// must not re-animate from a static pressure snapshot. Pre-fix, the
+// deltaP fallback could animate SG->Turbine after a turbine trip
+// because the SG stayed pressurized. Flow closures carry the
+// turbine/dump/MSIV state, so they own the decision.
+func TestClassifyPipe_FlowClosureTrusted(t *testing.T) {
+	wetHigh := wetNode(500, 900)
+	wetLow := wetNode(500, 15)
+
+	zeroFlow := wetHigh
+	zeroFlowEdge := core.GraphEdge{
+		From: "F", To: "T",
+		Flow: func(time.Duration) float64 { return 0 },
+	}
+	g := graphFor(wetHigh, wetLow)
+	assert.Equal(t, pipeWet, classifyPipe(g, zeroFlowEdge),
+		"zero Flow closure must stay static despite positive deltaP")
+
+	flowEdge := core.GraphEdge{
+		From: "F", To: "T",
+		Flow: func(time.Duration) float64 { return 100 },
+	}
+	assert.Equal(t, pipeFlowing, classifyPipe(g, flowEdge),
+		"positive Flow closure must stream")
+	_ = zeroFlow
+}
 
 // TestRouteProjection covers the arc-length helpers the visual
 // valve placement uses: midpoints, clamping at the ends, nearest-

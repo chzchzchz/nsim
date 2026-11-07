@@ -43,6 +43,16 @@ func (c *Condenser) Step(dt time.Duration, cwIn Temperature, vacuumPumpRunning, 
 	// TurbineBuilding.StepWithSteam before this call and represents
 	// the per-step steam mass condensed (in gallons). Convert to
 	// condensate level on the shell side.
+	// Level and HotwellLevel are the same condensed mass kept in
+	// two ledgers and must not both be summed downstream: Level is
+	// the shell-side trace (never drained by a pump graph edge,
+	// only seeded for level gauges), HotwellLevel is the
+	// inventory the condensate/feed pumps actually suction from
+	// (graph Condenser node -> condensate pump edge uses
+	// HotwellLevel; feedwater delivery debits HotwellLevel at
+	// plant.go:2116-2125). Both gain the same steamMass here so
+	// Level stays coherent with HotwellLevel, but only
+	// HotwellLevel leaves the condenser.
 	steamMass := ret.CondensingRate.Float()
 	ret.Level = Volume{Val: ret.Level.Float() + steamMass, Unit: u.Gallon}
 
@@ -94,6 +104,10 @@ func (c *Condenser) Step(dt time.Duration, cwIn Temperature, vacuumPumpRunning, 
 	ret.CWOut = Temperature{Val: cwIn.Float() + cwDelta, Unit: u.Fahrenheit}
 
 	// 5) Hotwell level. Accumulates the per-step condensed steam.
+	// HotwellLevel is the only condenser ledger that downstream
+	// consumers read onward (condensate pump suction, feedwater
+	// delivery). Level (above) is a mirror of the same mass for
+	// gauge purposes only - see the note at step 1.
 	// Suction is the condensate pump's job and is drawn by
 	// TurbineBuilding.StepWithSteam, which owns the pump latch and
 	// routes the suction through the LP heater train to the

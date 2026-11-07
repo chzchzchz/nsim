@@ -1030,7 +1030,10 @@ func (t *TurbineBuilding) StepWithSteam(dt time.Duration,
 	condenseGalPerStep := 0.0
 	turbineFrac := 0.0
 	if ret.Turbine.State == TurbineRunning {
-		condenseGalPerStep = ret.Turbine.SteamDemandGalPerStep() * msivAdmission
+		// SteamDemandGalPerStep is already MSIV-gated inside
+		// Turbine.Step via stopOpen (above); multiplying here
+		// again would count the MSIV twice.
+		condenseGalPerStep = ret.Turbine.SteamDemandGalPerStep()
 		if CondenserDesignSteamLoadGalPer > 0 {
 			turbineFrac = condenseGalPerStep / CondenserDesignSteamLoadGalPer
 		}
@@ -1040,6 +1043,7 @@ func (t *TurbineBuilding) StepWithSteam(dt time.Duration,
 	pressureRatio := min(max(float64(sgPressure)/float64(SteamGeneratorShellPressure), 0), 1)
 	dumpedGalPerStep := ret.Turbine.DumpValve.Open * SteamDumpCapacityGalPerStep *
 		pressureRatio * msivAdmission
+	ret.Turbine.dumpedGalPerStep = dumpedGalPerStep
 	dumpFrac := ret.Turbine.DumpValve.Open * SteamDumpDesignFraction *
 		pressureRatio * msivAdmission
 	ret.Condenser.CondensingRate = Volume{Val: condenseGalPerStep + dumpedGalPerStep, Unit: u.Gallon}
@@ -3336,7 +3340,94 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 		&target.TurbineBuilding.LowPressureHeater)
 	add("HPHeaterDrain", "HighPressureHeaterDrain",
 		&target.TurbineBuilding.HighPressureHeater)
-	edge("SG", "Condenser", &target.TurbineBuilding.MakeupValve, nil)
+	// Secondary steam path through the turbine (Figure 15.3-1):
+	// the turbine stores no inventory, so both legs are
+	// Step-owned audit-only Flow edges. The turbine draw is the
+	// throttled steam demand; dump delivery bypasses the turbine
+	// to the condenser.
+	//   "During operation, the four steam generators deliver
+	//    saturated steam through four steam lines to the main
+	//    turbine. [...] A flow diagram of a typical steam,
+	//    condensate, and feedwater system is shown in Figure
+	//    15.3-1. [...] The greater portion of the steam is fully
+	//    expanded through the turbine before being exhausted to
+	//    the condenser."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:20-42
+	//   "The main steam lines are provided with a stop valve and a
+	//    check valve in each line just outside the containment.
+	//    The main steam stop valves automatically close on low steam
+	//    line pressure or on a high-high containment pressure signal,
+	//    and can be actuated manually from the main control room or
+	//    local panels."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:70-79
+	// Audit-only legs: the Step already debit/credited the
+	// volumes; simulateFluidFlow runs last and must not move
+	// them again. The throttled demand is the Step's steam
+	// demand; the dump is its dump-delivery. MSIV is a derived
+	// lumped-model gate with no direct spec text: the spec
+	// stop valves close on low pressure and isolate the header
+	// (page_214.txt:70-79 above), and the MSIV admission used
+	// for the model matches that isolation behaviour. Assumption;
+	// source is silent on a single lumped MSIV field - disclosed
+	// here so an injected derived gate is not mistaken for spec
+	// backing.
+	// Valve wiring: the turbine legs carry the MSIV in the edge's
+	// Valve field so classifyPipe sees it as a bearing the flow and
+	// DrawPipePathDead shows it shut, and recordGraphFlow zeroes a
+	// closed valve. The Flow closure itself must NOT multiply by
+	// MSIV again - Turbine.Step already gated admission via
+	// stopOpen (plant.go:729-737), so a second factor would square
+	// a throttled MSIV. The condenser dump leg carries no Valve
+	// field: the DumpValve already gated dumpedGalPerStep inside
+	// StepWithSteam, and putting MakeupValve there blocked it in
+	// recordGraphFlow whenever makeup was shut. The exhaust leg is
+	// unvalved; DumpValve.Open has no bearing on turbine exhaust -
+	// dumps bypass via SG->Condenser, dumps close as steam is
+	// admitted (page_215.txt:108-113). Exhaust is credited iff the
+	// turbine actually through-flowed: Running plus positive
+	// demand.
+	//
+	// Spec: "The greater portion of the steam is fully expanded
+	// through the turbine before being exhausted to the condenser."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:39-42
+	add("Turbine", "Turbine", &turbineNode{t: &target.TurbineBuilding.Turbine})
+	flowEdge("SG", "Turbine", &target.ReactorBuilding.SteamGenerator.MainSteamIsolationValve, nil,
+		func(time.Duration) float64 {
+			if target.TurbineBuilding.Turbine.State != TurbineRunning {
+				return 0
+			}
+			return target.TurbineBuilding.Turbine.SteamDemandGalPerStep()
+		})
+	flowEdge("Turbine", "Condenser", nil, nil,
+		func(time.Duration) float64 {
+			if target.TurbineBuilding.Turbine.State != TurbineRunning {
+				return 0
+			}
+			return target.TurbineBuilding.Turbine.SteamDemandGalPerStep()
+		})
+	// Steam-dump leg: dumps steam to the condenser when turbine
+	// demand cannot take inertial heat.
+	//   "This heat is rejected to the condenser through the steam
+	//    dump valves and to the atmosphere for the initial phase of
+	//    large load reductions. These valves open under a sudden
+	//    reduction in turbine-generator load (in excess of 10%) or a
+	//    turbine trip."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:85-91
+	//   "The main condenser condenses the exhaust from the main
+	//    turbines and the two feedwater pump turbines. There is also
+	//    sufficient surface to condense steam from the steam dump
+	//    system with an acceptable increase in turbine back pressure."
+	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:93-99
+	flowEdge("SG", "Condenser", nil, nil,
+		func(time.Duration) float64 {
+			// Already MSIV- and pressure-gated inside
+			// StepWithSteam; return the Step's own value
+			// verbatim so audit and ledger cannot diverge.
+			if target.TurbineBuilding.Turbine.DumpValve.Open <= 0 {
+				return 0
+			}
+			return target.TurbineBuilding.Turbine.DumpedGalPerStep()
+		})
 	edge("Condenser", "CST", &target.TurbineBuilding.RecirculateValve, nil)
 	// The condensate pumps take suction from the condenser hotwell
 	// (the Condenser graph node carries HotwellLevel) and deliver

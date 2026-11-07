@@ -330,6 +330,14 @@ type Turbine struct {
 	// Read back by Plant.Step through SteamDemandGalPerStep().
 	steamDemandGalPerStep float64
 
+	// dumpedGalPerStep is the per-step steam volume the dump valves
+	// routed to the condenser during the most recent TurbineBuilding
+	// StepWithSteam, in gallons (already MSIV-gated by the Step).
+	// Read back through DumpedGalPerStep by the SG->Condenser flow
+	// edge so the audit matches the Step's own accounting instead of
+	// re-deriving it from DumpValve.Open alone.
+	dumpedGalPerStep float64
+
 	// DumpHoldTimer counts down how much longer a trip or load-
 	// rejection edge holds the condenser dump valves open before the
 	// automatic-reclose logic may shut them.
@@ -404,6 +412,13 @@ type Turbine struct {
 // into the condenser mass balance.
 func (t *Turbine) SteamDemandGalPerStep() float64 {
 	return t.steamDemandGalPerStep
+}
+
+// DumpedGalPerStep is the per-step steam volume the dump valves
+// routed to the condenser during the most recent StepWithSteam,
+// in gallons (already MSIV-gated by the Step).
+func (t *Turbine) DumpedGalPerStep() float64 {
+	return t.dumpedGalPerStep
 }
 
 // MoistureSeparatorReheater models one combined moisture separator-

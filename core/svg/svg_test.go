@@ -170,7 +170,7 @@ func TestMotionGuards(t *testing.T) {
 // its pie wedge and exact-percentage tooltip.
 func TestValveWedgeRendersWhenOpen(t *testing.T) {
 	p := core.MakePlant()
-	p.TurbineBuilding.MakeupValve.Open = 0.5
+	p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve.Open = 0.5
 	var b strings.Builder
 	require.NoError(t, WritePlantSVG(&b, &p))
 	assert.Contains(t, b.String(), "<title>50%</title>")
@@ -284,7 +284,7 @@ func TestValveKindForEdge(t *testing.T) {
 	}{
 		{"RPV", "Pressurizer", "safety"},
 		{"Pressurizer", "RPV", "modulating"},
-		{"SG", "Condenser", "modulating"},
+		{"SG", "Turbine", "stop"},
 		{"Condenser", "CST", "stop"},
 		{"CST", "DieselAFWPump", "gate"},
 	}
@@ -455,7 +455,7 @@ func TestEdgeValvesBindToBridgeRows(t *testing.T) {
 	for _, part := range []string{
 		"TurbineBuilding/MainFeedwaterControlValve",
 		"ReactorBuilding/SafetyValve",
-		"TurbineBuilding/MakeupValve",
+		"ReactorBuilding/SteamGenerator/MainSteamIsolationValve",
 		"TurbineBuilding/RecirculateValve",
 		"Outside/DieselAFWPump/CSTValve",
 		"Outside/MotorAFWPump/ServiceWaterValve",

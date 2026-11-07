@@ -111,3 +111,36 @@ func (n *accNode) pressure() Pressure { return SISAccumulatorPrechargePressure }
 func (n *accNode) level() Volume      { return *n.vol }
 func (n *accNode) setLevel(v Volume)  { *n.vol = v }
 func (n *accNode) capacity() Volume   { return *n.capVol }
+
+// turbineNode adapts the main turbine as a pass-through flow node
+// on the secondary steam path SG -> Turbine -> Condenser. The
+// turbine stores no inventory; its FirstStagePressure reports
+// admitted header pressure and level is zero, so Flow edges
+// through it are audit-only (graph.go: recordGraphFlow) and
+// never move volume in simulateFluidFlow. Zero level/capacity
+// prevents the integrator from inventing inventory at the
+// pass-through, matching the spec's series steam path where
+// the turbine expands steam and exhausts it to the condenser
+// without an intervening storage tank:
+//   "The greater portion of the steam is fully expanded through
+//    the turbine before being exhausted to the condenser."
+//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:39-42
+type turbineNode struct {
+	t  *Turbine
+	// DeliveredFlow is the audit-local accumulator for the
+	// SG->Turbine leg (recordGraphFlow seam, plans/p59_1.txt §5):
+	// the SG->Turbine Flow edge credits its tick's volume here so
+	// tests can prove the turbine actually through-flowed. It
+	// never feeds back into any Step ledger.
+	DeliveredFlow float64
+}
+
+func (n *turbineNode) pressure() Pressure {
+	return Pressure(float64(n.t.FirstStagePressure))
+}
+func (n *turbineNode) level() Volume      { return zeroVolume }
+func (n *turbineNode) setLevel(Volume)    {}
+func (n *turbineNode) capacity() Volume   { return zeroVolume }
+func (n *turbineNode) recordFlow(gal float64) {
+	n.DeliveredFlow += gal
+}

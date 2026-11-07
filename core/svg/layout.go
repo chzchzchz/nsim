@@ -44,7 +44,6 @@ func EmptyLayout() *Layout {
 // must appear in the P&ID. Adding them to the DOT lets graphviz
 // position them next to their cluster peers.
 var extraNodes = []struct{ id, cluster, kind string }{
-	{"Turbine", "cluster_turbine", "Turbine"},
 	{"Generator", "cluster_turbine", "Generator"},
 	{"PRT", "cluster_containment", "PressurizerReliefTank"},
 	{"MainFeedValve", "cluster_turbine", "modulating"},
@@ -655,19 +654,21 @@ func layoutRankEdges(rows map[string][][]string) [][2]string {
 	}
 	// Steam/feed rank order (Figures 1-2/15.3-1): the forward
 	// chain runs SG -> Turbine -> MSR -> Condenser -> LP
-	// heaters -> HDT -> feed pumps -> HP heaters -> SG. The
-	// real graph carries the return legs (Condenser->HDT,
+	// heaters -> HDT -> feed pumps -> HP heaters -> SG per
+	// "A flow diagram of a typical steam, condensate, and
+	// feedwater system is shown in Figure 15.3-1."
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:20-28
+	// The real graph carries SG->Turbine, Turbine->Condenser
+	// (steam path) and the return legs (Condenser->HDT,
 	// HDT->SG, LPHeaterDrain->Condenser, HPHeaterDrain->HDT),
-	// so only the unmodeled steam-path nodes need invisible
-	// constraints: Turbine and MSR have no real edges, and
-	// re-adding a feed-heater chain would fight the real
-	// drain-cascade directions (probed: dot breaks the cycle
-	// arbitrarily). These constraints keep the rank placement
-	// in chain order so dot routes the SG->Condenser polyline
-	// through Turbine/MSR instead of cutting a diagonal across
-	// both buildings.
+	// so only the unmodeled MSR node needs an invisible
+	// constraint, and re-adding a feed-heater chain would fight
+	// the real drain-cascade directions (probed: dot breaks the
+	// cycle arbitrarily). These constraints keep the rank
+	// placement in chain order so dot routes the steam-leg
+	// polylines through MSR instead of cutting a diagonal
+	// across both buildings.
 	edges = append(edges,
-		[2]string{"SG", "Turbine"},
 		[2]string{"Turbine", "MSR"},
 		[2]string{"MSR", "Condenser"},
 	)
@@ -760,8 +761,14 @@ func valveHopFor(e core.GraphEdge) (edgeHopRef, bool) {
 		r = edgeHopRef{"SafetyValve", clusterFor["RPV"], "safety", "ReactorBuilding/SafetyValve"}
 	case e.From == "Pressurizer" && e.To == "RPV":
 		r = edgeHopRef{"ModulatingValve", clusterFor["Pressurizer"], "modulating", "ReactorBuilding/Pressurizer/ModulatingValve"}
+	case e.From == "SG" && e.To == "Turbine":
+		r = edgeHopRef{"SGMSIV", clusterFor["SG"], "stop", "ReactorBuilding/SteamGenerator/MainSteamIsolationValve"}
 	case e.From == "SG" && e.To == "Condenser":
-		r = edgeHopRef{"MakeupValve", clusterFor["SG"], "modulating", "TurbineBuilding/MakeupValve"}
+		// Dump leg: no hop here — TDUMP seats on this route
+		// via valvePlacements. A MakeupValve hop here drew a
+		// valve glyph that implied the makeup valve gates the
+		// dump; it does not.
+		return edgeHopRef{}, false
 	case e.From == "HDT" && e.To == "SG":
 		r = edgeHopRef{"MainFeedValve", clusterFor["HDT"], "modulating", "TurbineBuilding/MainFeedwaterControlValve"}
 	case e.From == "Condenser" && e.To == "CST":

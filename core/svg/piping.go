@@ -241,6 +241,18 @@ func ColourForEdge(fromID, toID string) string {
 		fromID == "Pressurizer" || toID == "Pressurizer" ||
 		fromID == "RCP" || toID == "RCP":
 		return "red"
+	case fromID == "Turbine" || toID == "Turbine":
+		// Main-steam legs SG->Turbine and Turbine->Condenser
+		// share the secondary steam colour. The SG->Turbine
+		// leg is the saturated steam delivery line; the
+		// exhaust leg is the expanded steam to the condenser.
+		//   "During operation, the four steam generators deliver
+		//    saturated steam through four steam lines to the main
+		//    turbine. [...] The greater portion of the steam is
+		//    fully expanded through the turbine before being
+		//    exhausted to the condenser."
+		//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:20-42
+		return "brown"
 	case fromID == "Condenser" || toID == "Condenser":
 		return "brown"
 	case fromID == "SG" || toID == "SG":
@@ -265,8 +277,8 @@ func ValveKindForEdge(p *core.Plant, e core.GraphEdge) string {
 		return "safety"
 	case e.From == "Pressurizer" && e.To == "RPV":
 		return "modulating"
-	case e.From == "SG" && e.To == "Condenser":
-		return "modulating"
+	case e.From == "SG" && e.To == "Turbine":
+		return "stop"
 	case e.From == "Condenser" && e.To == "CST":
 		return "stop"
 	case e.To == "SG" || e.To == "DieselAFWPump" ||
