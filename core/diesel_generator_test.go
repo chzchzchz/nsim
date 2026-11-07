@@ -91,39 +91,39 @@ func TestESFBusEnergizedByDiesel(t *testing.T) {
 		"want ESFBusA.energized=true after 10 s, got false (voltage=%v)", p.Electrical.ESFBusA.Voltage)
 	assert.GreaterOrEqual(t, p.Electrical.ESFBusA.Voltage, DieselRatedVoltage*0.99,
 		"want ESFBusA.voltage ~= %v, got %v", DieselRatedVoltage, p.Electrical.ESFBusA.Voltage)
-	assert.True(t, p.Outside.MotorAFWPump.DriveReady,
-		"want MotorAFWPump.DriveReady=true after ESFBusA energized, got false")
+	assert.True(t, p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.DriveReady,
+		"want SubsystemA.MotorPump.DriveReady=true after ESFBusA energized, got false")
 }
 
-// With the diesel not running, the operator's intent (Running=true) is
-// preserved on the diesel-driven AFW pump, but DriveReady=false means
-// fluid flow (computed by the consumer) is gated to zero.
+// With the ESF bus de-energized the EFWS motor pump preserves
+// the operator's Running intent but DriveReady=false gates flow to
+// zero until the diesel energizes the bus.
 func TestDieselAFWPumpGatedByDiesel(t *testing.T) {
 	t.Parallel()
 	p := MakePlant()
+	p.ReactorBuilding.PlantElectricalSystems.OffsitePowerAvailable = false
 	p.AuxiliaryBuilding.DieselGenerator = enoughFuel()
-	p.Outside.DieselAFWPump.Running = true // operator request
-	p.Outside.DieselAFWPump.DriveSource = DriveDiesel
+	p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.Running = true
 
 	stepN(&p, 1, DefaultTimeStep)
-	assert.True(t, p.Outside.DieselAFWPump.Running,
-		"want DieselAFWPump.Running preserved (operator intent) when diesel not ready")
-	assert.False(t, p.Outside.DieselAFWPump.DriveReady,
-		"want DieselAFWPump.DriveReady false before diesel start")
+	assert.True(t, p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.Running,
+		"want MotorPump.Running preserved (operator intent) when bus not ready")
+	assert.False(t, p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.DriveReady,
+		"want MotorPump.DriveReady false before diesel start")
 
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartManual
 	stepN(&p, int(10*time.Second/DefaultTimeStep), DefaultTimeStep)
-	assert.True(t, p.Outside.DieselAFWPump.DriveReady,
-		"want DieselAFWPump.DriveReady true after diesel ReadyToLoad")
-	assert.True(t, p.Outside.DieselAFWPump.Running,
-		"want DieselAFWPump.Running preserved once DriveReady")
+	assert.True(t, p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.DriveReady,
+		"want MotorPump.DriveReady true after diesel energizes ESFBusA")
+	assert.True(t, p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.Running,
+		"want MotorPump.Running preserved once DriveReady")
 }
 
-// The turbine-driven AFW pump's DriveReady follows the SG steam
-// header pressure. With SG pressure above the trip threshold the
-// turbine pump is ready; once the SG pressure collapses (e.g.
-// after a reactor trip boils the inventory down) DriveReady goes
-// false.
+// The turbine-driven EFWS pump's DriveReady follows the SG steam
+// header pressure. With SG pressure above the threshold the
+// turbine pump is ready and the admission valve opens; once the
+// SG pressure collapses (e.g. after a reactor trip boils the
+// inventory down) DriveReady goes false and the valve closes.
 //
 // Spec justification:
 //   - "The steam supply line for each turbine driven pump is connected
@@ -132,30 +132,26 @@ func TestDieselAFWPumpGatedByDiesel(t *testing.T) {
 func TestTurbineAFWPumpGatedBySGVesselPressure(t *testing.T) {
 	t.Parallel()
 	p := MakePlant()
-	p.Outside.TurbineAFWPump.Running = true
-	p.Outside.TurbineAFWPump.DriveSource = DriveSteam
+	p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.Running = true
 
-	require.False(t, p.Outside.TurbineAFWPump.DriveReady,
-		"want TurbineAFWPump.DriveReady false before SG builds pressure")
+	require.False(t, p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.DriveReady,
+		"want SubsystemA.TurbinePump.DriveReady false before SG builds pressure")
 
-	// Pin SG pressure above the trip threshold (SteamGeneratorShellPressure/100);
-	// the per-step SteamGenerator.Step only relaxes Pressure when
-	// HeatInput > 0, and we leave the reactor off so the setpoint
-	// sticks for the duration of the first leg of the test.
 	p.ReactorBuilding.SteamGenerator.Pressure = SteamGeneratorShellPressure
 	stepN(&p, int(100*time.Millisecond/DefaultTimeStep), DefaultTimeStep)
 	assert.Greater(t, p.ReactorBuilding.SteamGenerator.Pressure, SteamGeneratorShellPressure/100,
-		"want SG pressure > 0 after SG pressure set")
-	assert.True(t, p.Outside.TurbineAFWPump.DriveReady,
-		"want TurbineAFWPump.DriveReady true while SG has pressure, got false (sg.P=%v)",
+		"want SG pressure > threshold after SG pressure set")
+	assert.True(t, p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.DriveReady,
+		"want SubsystemA.TurbinePump.DriveReady true while SG has pressure, got false (sg.P=%v)",
 		p.ReactorBuilding.SteamGenerator.Pressure)
+	assert.Equal(t, 1.0, p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.SteamAdmissionValve.Open,
+		"want SteamAdmissionValve open while SG has pressure")
 
-	// Drop the SG pressure below the trip threshold (e.g. after the
-	// reactor trips and the SG inventory boils off); DriveReady
-	// must follow on the very next step.
 	p.ReactorBuilding.SteamGenerator.Pressure = 0
 	stepN(&p, 1, DefaultTimeStep)
-	assert.False(t, p.Outside.TurbineAFWPump.DriveReady,
-		"want TurbineAFWPump.DriveReady false after SG pressure collapses, got true (sg.P=%v)",
+	assert.False(t, p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.DriveReady,
+		"want SubsystemA.TurbinePump.DriveReady false after SG pressure collapses, got true (sg.P=%v)",
 		p.ReactorBuilding.SteamGenerator.Pressure)
+	assert.Equal(t, 0.0, p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.SteamAdmissionValve.Open,
+		"want SteamAdmissionValve closed after SG pressure collapses")
 }

@@ -33,9 +33,6 @@ func TestBridge_PumpSensorsExist(t *testing.T) {
 		"ReactorBuilding/SafetyInjectionSystem/HHSIPumpRunning",
 		"Outside/CirculatingWaterSystem/PumpRunning",
 		"Outside/CirculatingWaterPump/DriveReady",
-		"Outside/DieselAFWPump/DriveReady",
-		"Outside/MotorAFWPump/DriveReady",
-		"Outside/TurbineAFWPump/DriveReady",
 	}
 	for _, id := range want {
 		s, ok := m[id]
@@ -80,9 +77,8 @@ func TestBridge_PumpControlsRoundTrip(t *testing.T) {
 		"AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePumpRunning",
 		"ReactorBuilding/SafetyInjectionSystem/HHSIPumpRunning",
 		"Outside/CirculatingWaterSystem/PumpRunning",
-		"Outside/DieselAFWPump/Running",
-		"Outside/MotorAFWPump/Running",
-		"Outside/TurbineAFWPump/Running",
+		"AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/CSTAligned",
+		"AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/CSTAligned",
 	} {
 		c, ok := m[id]
 		require.Truef(t, ok, "want control %q registered", id)

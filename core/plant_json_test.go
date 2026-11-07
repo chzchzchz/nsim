@@ -17,6 +17,8 @@ func TestPlantMarshalUnmarshal(t *testing.T) {
 	p.ReactorBuilding.ReactorCoolantPumps.SetAllRunning(true)
 	p.ReactorBuilding.ReactorCoolantPump.Damage = 0.25
 	p.Outside.CondensateStorageTank.Level.Val = 123456
+	p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.CSTAligned = true
+	p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.CSTAligned = true
 
 	b, err := json.Marshal(p)
 	require.NoError(t, err)
@@ -29,6 +31,10 @@ func TestPlantMarshalUnmarshal(t *testing.T) {
 		"ESF bus energized flag must survive the round trip")
 	assert.Equal(t, p.Electrical.OffsiteSourceA.Voltage, p2.Electrical.OffsiteSourceA.Voltage,
 		"offsite source voltage must survive the round trip")
+	assert.True(t, p2.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.CSTAligned,
+		"CSTAligned for subsystem A must survive the round trip")
+	assert.True(t, p2.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.CSTAligned,
+		"CSTAligned for subsystem B must survive the round trip")
 
 	// nextPlant is internal simulation scratch state: excluded from
 	// JSON by design and rebuilt by Step, so it is not part of the

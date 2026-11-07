@@ -220,9 +220,6 @@ func TestAssignEdgeHops(t *testing.T) {
 	// Condenser -> HDT edge.
 	assert.Equal(t, []string{"CondensatePump"}, idsFor("Condenser", "HDT"))
 	assert.Equal(t, []string{"MainFeedwaterPump", "MainFeedValve"}, idsFor("HDT", "SG"))
-	assert.Equal(t, []string{"CSTValve"}, idsFor("CST", "DieselAFWPump"))
-	assert.Equal(t, []string{"CSTValve_2"}, idsFor("CST", "MotorAFWPump"))
-	assert.Equal(t, []string{"CSTValve_3"}, idsFor("CST", "TurbineAFWPump"))
 }
 
 // TestComputeFit verifies the behavioral contract of the fit

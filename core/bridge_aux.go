@@ -318,6 +318,42 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 	// manually controlled by positioning the flow modulating
 	// valves."
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_102.txt:14-18
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/CSTAligned"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA",
+		Label: "CSTAligned",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.CSTAligned)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.CSTAligned = v
+			return nil
+		},
+	}
+
+	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/CSTAligned"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB",
+		Label: "CSTAligned",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.CSTAligned)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.CSTAligned = v
+			return nil
+		},
+	}
+
 	m["AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPumpRunning"] = &bridge.Control{
 		Part:  "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA",
 		Label: "MotorPumpRunning",

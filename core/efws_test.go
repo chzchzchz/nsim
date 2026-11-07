@@ -152,7 +152,7 @@ func TestEFWS_PrimaryTankDepletesWhilePumpsRunning(t *testing.T) {
 	dt := DefaultTimeStep.Seconds()
 	wantLossA := EFWSMotorPumpFlow.Float() * dt
 	wantLossB := EFWSMotorPumpFlow.Float() * dt
-	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false)
+	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false, nil)
 	assert.InDelta(t, EFWSPrimaryTankCapacity.Float()-wantLossA,
 		e2.SubsystemA.Tank.Level.Float(), 1e-9,
 		"want SubsystemA.Tank.Level=%v after one step, got %v",
@@ -192,7 +192,7 @@ func TestEFWS_TankDrawSumsBothRunningPumps(t *testing.T) {
 	}
 	dt := DefaultTimeStep.Seconds()
 	wantLoss := (EFWSMotorPumpFlow.Float() + EFWSTurbinePumpFlow.Float()) * dt
-	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false)
+	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false, nil)
 	assert.InDelta(t, EFWSPrimaryTankCapacity.Float()-wantLoss,
 		e2.SubsystemA.Tank.Level.Float(), 1e-9,
 		"want SubsystemA.Tank.Level=%v (both pumps deliver), got %v",
@@ -248,6 +248,7 @@ func TestEFWS_SecuredWhenHotLegBelow350FAndRHRSActive(t *testing.T) {
 	e2 := e.Step(DefaultTimeStep,
 		Temperature{Val: EFWSSecureTemp, Unit: u.Fahrenheit},
 		true,
+		nil,
 	)
 	assert.False(t, e2.Active,
 		"want EFWSActive=false after secured condition, got %v",
@@ -305,6 +306,7 @@ func TestEFWS_SecuresManuallyStartedPumpsToo(t *testing.T) {
 	e2 := e.Step(DefaultTimeStep,
 		Temperature{Val: EFWSSecureTemp, Unit: u.Fahrenheit},
 		true,
+		nil,
 	)
 
 	assert.False(t, e2.SubsystemA.MotorPump.Running,
@@ -420,7 +422,7 @@ func TestEFWS_ThrottledValveScalesTankDrawdown(t *testing.T) {
 	}
 	dt := DefaultTimeStep.Seconds()
 	wantLoss := 0.25 * EFWSMotorPumpFlow.Float() * dt
-	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false)
+	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false, nil)
 	assert.InDelta(t, EFWSPrimaryTankCapacity.Float()-wantLoss,
 		e2.SubsystemA.Tank.Level.Float(), 1e-9,
 		"want SubsystemA.Tank.Level=%v after one throttled step, got %v",
@@ -450,7 +452,7 @@ func TestEFWS_NoDrawdownWithoutDriveReady(t *testing.T) {
 			},
 		},
 	}
-	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false)
+	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false, nil)
 	assert.InDelta(t, EFWSPrimaryTankCapacity.Float(),
 		e2.SubsystemA.Tank.Level.Float(), 1e-9,
 		"tank must not drain without a ready drive, got %v",
@@ -481,7 +483,7 @@ func TestEFWS_DryTankStopsDeliveryAtRemainingInventory(t *testing.T) {
 			},
 		},
 	}
-	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false)
+	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false, nil)
 	assert.Zero(t, e2.SubsystemA.Tank.Level.Float(),
 		"the step should have emptied the tank, got %v",
 		e2.SubsystemA.Tank.Level.Float())
@@ -489,7 +491,7 @@ func TestEFWS_DryTankStopsDeliveryAtRemainingInventory(t *testing.T) {
 		"delivery must clamp to the remaining inventory, want %v got %v",
 		remaining/dt, e2.DeliveredFlow.Float())
 
-	e3 := e2.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false)
+	e3 := e2.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false, nil)
 	assert.Zero(t, e3.DeliveredFlow.Float(),
 		"a dry tank delivers nothing, got %v",
 		e3.DeliveredFlow.Float())
@@ -531,4 +533,128 @@ func TestPlant_EFWSReportedFlowMatchesTankDrawdown(t *testing.T) {
 	assert.InDelta(t, drawn, integrated, 1e-6,
 		"reported flow must equal tank drawdown: drawn=%v integrated=%v",
 		drawn, integrated)
+}
+
+// Both subsystems aligned to the shared CST draw from it in a
+// fixed order without double-debiting: the second subsystem reads
+// the first's post-draw level.
+//
+// Spec justification:
+//   - "An alternate emergency feedwater source (condensate storage
+//     tanks) should also be provided."
+//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:74-78
+func TestEFWS_TwoSubsystemsShareCSTWithoutDoubleDebit(t *testing.T) {
+	t.Parallel()
+	e := EFWS{
+		Active: true,
+		SubsystemA: EFWSSubsystem{
+			CSTAligned: true,
+			Tank:       EFWSTank{Level: Volume{Val: 0, Unit: u.Gallon}, Capacity: Volume{Val: 1000, Unit: u.Gallon}},
+			MotorPump: EFWSPump{
+				AFWPump:             AFWPump{Pump: Pump{Running: true}, DriveReady: true},
+				FlowModulatingValve: Valve{Open: 1},
+			},
+		},
+		SubsystemB: EFWSSubsystem{
+			CSTAligned: true,
+			Tank:       EFWSTank{Level: Volume{Val: 0, Unit: u.Gallon}, Capacity: Volume{Val: 1000, Unit: u.Gallon}},
+			MotorPump: EFWSPump{
+				AFWPump:             AFWPump{Pump: Pump{Running: true}, DriveReady: true},
+				FlowModulatingValve: Valve{Open: 1},
+			},
+		},
+	}
+	cst := &Tank{
+		Level:    Volume{Val: 100, Unit: u.Gallon},
+		Capacity: Volume{Val: 450000, Unit: u.Gallon},
+		Part:     Part{Temperature: Temperature{Val: 80, Unit: u.Fahrenheit}},
+	}
+	dtSeconds := DefaultTimeStep.Seconds()
+	wantCSTDraw := 2 * EFWSMotorPumpFlow.Float() * dtSeconds
+	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false, cst)
+	assert.InDelta(t, 100-wantCSTDraw, cst.Level.Float(), 1e-9,
+		"want shared CST debited once per subsystem in order, got %v",
+		cst.Level.Float())
+	assert.GreaterOrEqual(t, cst.Level.Float(), 0.0,
+		"CST level must never go negative, got %v", cst.Level.Float())
+	assert.InDelta(t, 2*EFWSMotorPumpFlow.Float(), e2.DeliveredFlow.Float(), 1e-9,
+		"want DeliveredFlow=%v (primary 0 + CST draws), got %v",
+		2*EFWSMotorPumpFlow.Float(), e2.DeliveredFlow.Float())
+}
+
+// With a nonempty primary tank and CSTAligned=true the CST branch
+// never arms: cst.Level is unchanged across a full cycle of steps.
+func TestEFWS_CSTAlignedDoesNotDrawWhenPrimaryNonempty(t *testing.T) {
+	t.Parallel()
+	e := EFWS{
+		Active: true,
+		SubsystemA: EFWSSubsystem{
+			CSTAligned: true,
+			Tank: EFWSTank{
+				Level:    EFWSPrimaryTankCapacity,
+				Capacity: EFWSPrimaryTankCapacity,
+			},
+			MotorPump: EFWSPump{
+				AFWPump:             AFWPump{Pump: Pump{Running: true}, DriveReady: true},
+				FlowModulatingValve: Valve{Open: 1},
+			},
+		},
+	}
+	cst := &Tank{
+		Level:    Volume{Val: 100, Unit: u.Gallon},
+		Capacity: Volume{Val: 450000, Unit: u.Gallon},
+		Part:     Part{Temperature: Temperature{Val: 80, Unit: u.Fahrenheit}},
+	}
+	e2 := e.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false, cst)
+	assert.Equal(t, 100.0, cst.Level.Float(),
+		"want CST untouched while primary is nonempty, got %v", cst.Level.Float())
+	assert.InDelta(t, EFWSPrimaryTankCapacity.Float()-EFWSMotorPumpFlow.Float()*DefaultTimeStep.Seconds(),
+		e2.SubsystemA.Tank.Level.Float(), 1e-9,
+		"want primary drawn only, got %v", e2.SubsystemA.Tank.Level.Float())
+}
+
+// Above the spec's 120 °F alternate-source maximum the CST is
+// blocked even with an empty primary and CSTAligned=true; at or
+// below it the CST draws up to budget.
+func TestEFWS_CSTTemperatureGuard(t *testing.T) {
+	t.Parallel()
+	wantFlow := EFWSMotorPumpFlow.Float()
+	makeEFWS := func() EFWS {
+		return EFWS{
+			Active: true,
+			SubsystemA: EFWSSubsystem{
+				CSTAligned: true,
+				Tank:       EFWSTank{Level: Volume{Val: 0, Unit: u.Gallon}, Capacity: Volume{Val: 1000, Unit: u.Gallon}},
+				MotorPump: EFWSPump{
+					AFWPump:             AFWPump{Pump: Pump{Running: true}, DriveReady: true},
+					FlowModulatingValve: Valve{Open: 1},
+				},
+			},
+		}
+	}
+	dt := DefaultTimeStep.Seconds()
+
+	hot := &Tank{
+		Level:    Volume{Val: 100, Unit: u.Gallon},
+		Capacity: Volume{Val: 450000, Unit: u.Gallon},
+		Part:     Part{Temperature: Temperature{Val: 121, Unit: u.Fahrenheit}},
+	}
+	efwsHot := makeEFWS()
+	eHot := efwsHot.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false, hot)
+	assert.Equal(t, 100.0, hot.Level.Float(),
+		"want no CST draw at 121°F (above spec maximum), got %v", hot.Level.Float())
+	assert.Zero(t, eHot.DeliveredFlow.Float(),
+		"want zero delivery with blocked CST, got %v", eHot.DeliveredFlow.Float())
+
+	cold := &Tank{
+		Level:    Volume{Val: 100, Unit: u.Gallon},
+		Capacity: Volume{Val: 450000, Unit: u.Gallon},
+		Part:     Part{Temperature: Temperature{Val: 119, Unit: u.Fahrenheit}},
+	}
+	efwsCold := makeEFWS()
+	eCold := efwsCold.Step(DefaultTimeStep, Temperature{Val: EFWSSecureTemp + 10, Unit: u.Fahrenheit}, false, cold)
+	assert.InDelta(t, 100-wantFlow*dt, cold.Level.Float(), 1e-9,
+		"want CST drawn up to budget at 119°F, got %v", cold.Level.Float())
+	assert.InDelta(t, wantFlow, eCold.DeliveredFlow.Float(), 1e-9,
+		"want DeliveredFlow=%v at 119°F, got %v", wantFlow, eCold.DeliveredFlow.Float())
 }

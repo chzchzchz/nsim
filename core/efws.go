@@ -59,6 +59,7 @@ import (
 func (e *EFWS) Step(dt time.Duration,
 	rpvOutlet Temperature,
 	rhrsActive bool,
+	cst *Tank,
 ) EFWS {
 	ret := *e
 
@@ -114,9 +115,9 @@ func (e *EFWS) Step(dt time.Duration,
 	//     in hot standby for 13 hours then allow a 5-hour
 	//     cooldown of the plant to 350°F (176.7°C)."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:52-56
-	drawA, subA := drainEFWSTank(ret.SubsystemA, dt)
+	drawA, subA := drainEFWSTank(ret.SubsystemA, cst, dt)
 	ret.SubsystemA = subA
-	drawB, subB := drainEFWSTank(ret.SubsystemB, dt)
+	drawB, subB := drainEFWSTank(ret.SubsystemB, cst, dt)
 	ret.SubsystemB = subB
 	ret.DeliveredFlow = Volume{
 		Val: (drawA + drawB) / dt.Seconds(), Unit: u.Gallon}
@@ -192,14 +193,31 @@ func (e *EFWS) ApplyModulatingValveLineup(sgLevelPct float64) {
 //     the flowrates are manually [controlled by positioning the
 //     flow modulating valves.]"
 //     specs/the_westinghouse_pressurized_water_react/chapter_5/page_102.txt:14-18
-func drainEFWSTank(sub EFWSSubsystem, dt time.Duration) (float64, EFWSSubsystem) {
-	draw := min(sub.EFWSSubsystemFlow()*dt.Seconds(),
-		sub.Tank.Level.Float())
-	if draw > 0 {
+func drainEFWSTank(sub EFWSSubsystem, cst *Tank, dt time.Duration) (float64, EFWSSubsystem) {
+	budget := sub.EFWSSubsystemFlow() * dt.Seconds()
+	primaryDraw := min(budget, sub.Tank.Level.Float())
+	if primaryDraw > 0 {
 		sub.Tank.Level = Volume{
-			Val: sub.Tank.Level.Float() - draw, Unit: u.Gallon}
+			Val: sub.Tank.Level.Float() - primaryDraw, Unit: u.Gallon}
 	}
-	return draw, sub
+	shortfall := budget - primaryDraw
+	// Alternate-source draw: after the primary tank is empty the
+	// subsystem may draw from the shared CST when aligned to it.
+	// The 120 °F gate blocks the draw above the spec's
+	// alternate-source maximum.
+	// "maximum water temperature in the alternate water supply
+	// should be 120°F"
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:90-93
+	const alternateSourceMaxTempF = 120.0
+	if shortfall > 0 && sub.CSTAligned && cst != nil && cst.Temperature.Float() <= alternateSourceMaxTempF {
+		cstDraw := min(shortfall, cst.Level.Float())
+		if cstDraw > 0 {
+			cst.Level = Volume{
+				Val: cst.Level.Float() - cstDraw, Unit: u.Gallon}
+			return primaryDraw + cstDraw, sub
+		}
+	}
+	return primaryDraw, sub
 }
 
 // EFWSSubsystemFlow returns the SG-side feedwater flow rate

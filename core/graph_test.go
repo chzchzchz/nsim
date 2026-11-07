@@ -46,7 +46,7 @@ func TestGraph_BuildsExpectedNodes(t *testing.T) {
 	p := MakePlant()
 	g := p.BuildGraph()
 
-	for _, id := range []string{"RPV", "Pressurizer", "SG", "RCP", "Turbine", "Condenser", "CST", "DieselAFWPump"} {
+	for _, id := range []string{"RPV", "Pressurizer", "SG", "RCP", "Turbine", "Condenser", "CST", "DieselAFWPump", "EFWSTankA", "EFWSTankB"} {
 		assert.Contains(t, g.Nodes, id, "missing node %q", id)
 	}
 	if _, ok := g.Nodes["RPV"]; ok {
@@ -67,7 +67,8 @@ func TestGraph_BuildsExpectedEdges(t *testing.T) {
 		{"SG", "Condenser"}:      true, // steam dump (SG -> condenser)
 		{"Condenser", "CST"}:     true, // condensate
 		{"HDT", "SG"}:            true, // feedwater
-		{"CST", "DieselAFWPump"}: true, // AFW suction
+		{"EFWSTankA", "SG"}:      true, // EFWS audit topology
+		{"EFWSTankB", "SG"}:      true, // EFWS audit topology
 	}
 	for _, e := range g.Edges {
 		key := [2]string{e.From, e.To}

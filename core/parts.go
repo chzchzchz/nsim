@@ -1711,10 +1711,11 @@ const (
 //
 // Spec justification:
 //   - DriveDiesel — the diesel-driven auxiliary feedwater pump described
-//     alongside the motor-driven and turbine-driven units in the EFWS:
-//     "The use of both motor driven and turbine driven pumps satisfies
-//     the requirement that the pumps be powered by diverse power sources."
-//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:1-5
+//     alongside the steam-driven and motor-driven units in the AFW system:
+//     "one steam-driven and one diesel-engine-driven auxiliary feedwater
+//     pump (each of which is safety related)… There is also a
+//     nonsafety-related motor-driven auxiliary feedwater pump."
+//     specs/westinghouse_tech_manual/chapter_5/page_0527.txt:30-36
 //   - DriveSteam — the turbine-driven AFW pump whose "steam supply line
 //     for each turbine driven pump is connected to the main steam line
 //     from a steam generator."
@@ -3238,6 +3239,15 @@ type EFWSSubsystem struct {
 	// TurbinePump is the turbine-driven emergency feedwater
 	// pump.
 	TurbinePump EFWSPump
+
+	// CSTAligned is the train-level alternate-source suction
+	// alignment: when true and the primary tank is empty, the
+	// subsystem draws from the shared condensate storage tank
+	// as its alternate source.
+	// "An alternate emergency feedwater source (condensate storage
+	// tanks) should also be provided."
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:74-78
+	CSTAligned bool
 }
 
 // EFWS models the complete Emergency Feedwater System: two

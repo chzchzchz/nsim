@@ -211,6 +211,12 @@ func recordGraphFlow(g *PlantGraph, e GraphEdge, dt time.Duration) {
 // simulateFluidFlow advances every edge in g by dt. It mutates the
 // parts pointed at by g.Nodes in place.
 //
+// An optional efwsBlocked predicate, when set, receives the edge's
+// tick-visible state and returns true when a Step-owned EFWS delivery
+// is active; when EFWS is actively crediting SG water in the same
+// tick, the AFW deltaP edges are skipped so the two systems cannot
+// both credit SG.Water in one tick.
+//
 // Per-edge rule:
 //
 //	deltaP = (from.P - to.P)
@@ -232,9 +238,13 @@ func recordGraphFlow(g *PlantGraph, e GraphEdge, dt time.Duration) {
 // hot standby,
 // specs/the_westinghouse_pressurized_water_react/chapter_5/page_094.txt:70,
 // specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:81-82).
-func simulateFluidFlow(g *PlantGraph, dt time.Duration) {
+func simulateFluidFlow(g *PlantGraph, dt time.Duration, efwsBlocked ...bool) {
 	if g == nil {
 		return
+	}
+	efwsActive := false
+	if len(efwsBlocked) > 0 && efwsBlocked[0] {
+		efwsActive = true
 	}
 	dtSec := dt.Seconds()
 	for _, e := range g.Edges {
@@ -253,6 +263,13 @@ func simulateFluidFlow(g *PlantGraph, dt time.Duration) {
 		// tick's volume on the sink instead and skip deltaP.
 		if e.Flow != nil {
 			recordGraphFlow(g, e, dt)
+			continue
+		}
+		// Interlock: when EFWS is actively crediting SG water this
+		// tick, the Outside AFW deltaP edges must not also credit
+		// SG.Water. The tie-break is EFWS-wins; the AFW graph edges
+		// are skipped whenever EFWS delivered flow above zero.
+		if efwsActive && (e.From == "CST" && (e.To == "DieselAFWPump" || e.To == "MotorAFWPump" || e.To == "TurbineAFWPump") || (e.To == "SG" && (e.From == "DieselAFWPump" || e.From == "MotorAFWPump" || e.From == "TurbineAFWPump"))) {
 			continue
 		}
 

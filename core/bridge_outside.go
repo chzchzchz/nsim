@@ -265,10 +265,9 @@ func addOutsideControls(p *Plant, m bridge.ControlMap) {
 
 	// Auxiliary feedwater pumps lift CST inventory into the steam
 	// generators when the main feedwater system cannot hold level.
-	//   - Diverse drives: "The use of both motor driven and turbine
-	//     driven pumps satisfies the requirement that the pumps be
-	//     powered by diverse power sources."
-	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:1-5
+	//   - Diverse drives: "one steam-driven and one diesel-engine-driven
+	//     auxiliary feedwater pump (each of which is safety related)"
+	//     specs/westinghouse_tech_manual/chapter_5/page_0527.txt:30-36
 	//   - Manual operation: "Auxiliary feedwater flow is manually
 	//     increased to maintain a steady value of steam generator
 	//     water level."

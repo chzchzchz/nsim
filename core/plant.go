@@ -550,7 +550,7 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 	rhrsActive := ret.Aux.ResidualHeatRemovalSystem.Running &&
 		ret.Aux.ResidualHeatRemovalSystem.HasTakenOver
 	ret.Aux.EmergencyFeedwaterSystem = ret.Aux.EmergencyFeedwaterSystem.Step(dt,
-		ret.ReactorPressureVessel.Outlet, rhrsActive,
+		ret.ReactorPressureVessel.Outlet, rhrsActive, nil,
 	)
 	ret.EFWSFeedwaterFlow = ret.Aux.EmergencyFeedwaterSystem.EFWSFeedwaterFlow()
 	// Credit the running AFW pumps' delivery against the SG
@@ -1565,12 +1565,19 @@ func (p *Plant) Step(dt time.Duration) {
 	//     valve which is a pneumatically operated valve arranged
 	//     to fail-open on loss of air or electrical power."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:42-47
-	if float64(p.ReactorBuilding.SteamGenerator.Pressure) > 0 {
+	turbineReady := p.ReactorBuilding.SteamGenerator.Pressure > SteamGeneratorShellPressure/100
+	if turbineReady {
 		efws.SubsystemA.TurbinePump.SteamAdmissionValve.Open = 1.0
 		efws.SubsystemB.TurbinePump.SteamAdmissionValve.Open = 1.0
-		efws.SubsystemA.TurbinePump.DriveReady = true
-		efws.SubsystemB.TurbinePump.DriveReady = true
+	} else {
+		// Pressure-threshold latch clears on SG depressurization:
+		// the fail-open direction covers loss of air/power, not
+		// loss of SG pressure (plans/p62_1.txt).
+		efws.SubsystemA.TurbinePump.SteamAdmissionValve.Open = 0
+		efws.SubsystemB.TurbinePump.SteamAdmissionValve.Open = 0
 	}
+	efws.SubsystemA.TurbinePump.DriveReady = turbineReady
+	efws.SubsystemB.TurbinePump.DriveReady = turbineReady
 	// Motor-driven pump DriveReady tracks the ESF bus for
 	// each subsystem. The spec assigns each subsystem's
 	// motor pump to its corresponding ESF train.
@@ -2365,12 +2372,9 @@ func (p *Plant) Step(dt time.Duration) {
 	// latched from its upstream before the graph runs.
 	//
 	// Spec justification:
-	//   - DieselAFWPump: "motor driven and turbine driven pumps are
-	//     located in the emergency feedwater pump building. The use of
-	//     both motor driven and turbine driven pumps satisfies the
-	//     requirement that the pumps be powered by diverse power
-	//     sources."
-	//     (specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:1-5)
+	//   - DieselAFWPump: "one steam-driven and one diesel-engine-driven
+	//     auxiliary feedwater pump (each of which is safety related)"
+	//     specs/westinghouse_tech_manual/chapter_5/page_0527.txt:30-36
 	//   - MotorAFWPump: ESF bus is fed by the diesel after LossOfOffsite
 	//     (specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:23-36);
 	//     until ESF is Energized the motor-driven AFWP cannot deliver flow.
@@ -2464,7 +2468,10 @@ func (p *Plant) Step(dt time.Duration) {
 	// Pressure-driven fluid flow integrates the freshly-stepped parts.
 	// Graph nodes hold pointers into nextPlant; the mutations land in
 	// nextPlant directly so Update() copies them into p.
-	simulateFluidFlow(p.BuildGraphFor(p.nextPlant), dt)
+	// Interlock (plans/p62_1.txt): EFWS and the Outside AFW graph
+	// edges must not both credit SG.Water in the same tick. EFWS
+	// wins; the AFW edges are skipped when EFWS delivered flow.
+	simulateFluidFlow(p.BuildGraphFor(p.nextPlant), dt, p.nextPlant.ReactorBuilding.EFWSFeedwaterFlow.Val > 0)
 }
 
 // closeDieselBreakersInSync applies each standby diesel's automatic

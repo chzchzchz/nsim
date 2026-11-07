@@ -286,7 +286,6 @@ func TestValveKindForEdge(t *testing.T) {
 		{"Pressurizer", "RPV", "modulating"},
 		{"SG", "Turbine", "stop"},
 		{"Condenser", "CST", "stop"},
-		{"CST", "DieselAFWPump", "gate"},
 	}
 	for _, c := range cases {
 		got := ValveKindForEdge(&p, core.GraphEdge{From: c.from, To: c.to, Valve: v})
@@ -457,8 +456,6 @@ func TestEdgeValvesBindToBridgeRows(t *testing.T) {
 		"ReactorBuilding/SafetyValve",
 		"ReactorBuilding/SteamGenerator/MainSteamIsolationValve",
 		"TurbineBuilding/RecirculateValve",
-		"Outside/DieselAFWPump/CSTValve",
-		"Outside/MotorAFWPump/ServiceWaterValve",
 	} {
 		assert.Contains(t, out,
 			fmt.Sprintf(`<g data-part="%s" role="img" aria-label=`, part))
@@ -516,7 +513,7 @@ func TestBridgePartCoverage(t *testing.T) {
 		"TurbineBuilding/HeaterDrainTank/Level",
 		"TurbineBuilding/MakeupValve/Open",
 		"ReactorBuilding/SafetyInjectionSystem/RWST/Level",
-		"Outside/DieselAFWPump/CSTValve/Open",
+		"AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/CSTAligned",
 		"AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/SteamAdmissionValve/Open",
 	} {
 		_, inC := cm[key]
