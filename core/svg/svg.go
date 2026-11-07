@@ -104,7 +104,7 @@ var diagramParts = []diagramPart{
 	{"Transformer", "AuxiliaryBuilding/Transformer", "StationTransformer", "Xformer"},
 	{"ESF_A", "Electrical/ESFBusA", "ESFBus", "ESF Bus A"},
 	{"ESF_B", "Electrical/ESFBusB", "ESFBus", "ESF Bus B"},
-	{"Grid", "Electrical/OffsiteSourceA", "OffsiteGrid", "Grid"},
+	{"Grid", "Electrical/Grid", "OffsiteGrid", "Grid"},
 	{"RCFC_A", "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem", "RCFCUnit", "RCFC A"},
 	{"RCFC_B", "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem", "RCFCUnit", "RCFC B"},
 	{"RCFC_C", "AuxiliaryBuilding/ReactorCoolantFanCoolerSystem", "RCFCUnit", "RCFC C"},
@@ -131,7 +131,7 @@ var diagramParts = []diagramPart{
 	{"EBMD", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/MotorPump", "EmergencyFeedwaterPumpMD", "EFWS B MD"},
 	{"EBTD", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump", "EmergencyFeedwaterPumpTD", "EFWS B TD"},
 	{"CIS", "ReactorBuilding/ContainmentIsolationSystem", "ContainmentIsolation", "CIS"},
-	{"HDS", "ReactorBuilding/HydrogenDetectionSuppression", "HydrogenRecombiner", "HDS"},
+	{"HDS", "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression", "HydrogenRecombiner", "HDS"},
 	{"EXCITER", "TurbineBuilding/Generator/ExcitationSystem", "BrushlessExciter", "Exciter"},
 	{"DieselB", "AuxiliaryBuilding/DieselGeneratorB", "DieselGenerator", "EDG B"},
 	{"FuelTankB", "AuxiliaryBuilding/DieselGeneratorB", "FuelTank", "EDG B Fuel"},
@@ -143,6 +143,22 @@ var diagramParts = []diagramPart{
 	{"BRS", "AuxiliaryBuilding/BoronRecycleSystem", "BoronRecycleSystem", "BRS"},
 	{"SGADV", "ReactorBuilding/SteamGenerator/AtmosphericDumpValve", "relief", "SG ADV"},
 	{"SGSSV", "ReactorBuilding/SteamGenerator/SafetyValve", "safety", "SG SSV"},
+	{"SteamlineVent", "ReactorBuilding/SteamGenerator/SteamlineVent", "relief", "SG Vent"},
+	{"DrainValve", "ReactorBuilding/SteamGenerator/DrainValve", "gate", "SG Drain"},
+	{"WetLayupFillValve", "ReactorBuilding/SteamGenerator/WetLayupFillValve", "gate", "SG Layup"},
+	// Three-element feedwater regulator computing the control
+	// valve demand (see scalarValves for its anchor).
+	//   "Feedwater flow to each steam generator is controlled by a
+	//    feedwater regulator in each feedwater line. The regulator
+	//    is controlled by steam generator level, steam flow and
+	//    feedwater flow."
+	//    specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
+	{"FeedwaterRegulator", "TurbineBuilding/FeedwaterRegulator", "modulating", "FW Regulator"},
+	// Containment filtration train: CSS safeguard removes
+	// airborne fission products (chapter_6/page_114.txt:76-85);
+	// physical train in Figure 6-5 per plans/svg/containment.md.
+	// Shares the HDS part path; run dot keyed per diagram id.
+	{"ContainmentFiltration", "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression", "ContainmentFilter", "Cont. Filters"},
 	{"SOLIDPP", "AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantPressureValve", "modulating", "Solid PP"},
 }
 
@@ -259,6 +275,9 @@ var runAccessors = map[string]func(*core.Plant) bool{
 		return p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.Pump.Running
 	},
 	"HDS": func(p *core.Plant) bool {
+		return p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.RecombinerActive
+	},
+	"ContainmentFiltration": func(p *core.Plant) bool {
 		return p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.RecombinerActive
 	},
 	"EXCITER": func(p *core.Plant) bool {
@@ -540,6 +559,22 @@ var standaloneValves = []struct {
 		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve }},
 	{"SGSSV", "ReactorBuilding/SteamGenerator/SafetyValve", "safety",
 		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.SafetyValve }},
+	{"SteamlineVent", "ReactorBuilding/SteamGenerator/SteamlineVent", "relief",
+		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.SteamlineVent }},
+	{"DrainValve", "ReactorBuilding/SteamGenerator/DrainValve", "gate",
+		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.DrainValve }},
+	{"WetLayupFillValve", "ReactorBuilding/SteamGenerator/WetLayupFillValve", "gate",
+		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.WetLayupFillValve }},
+	// Startup-sequence citations (plans/svg/pidgaps.txt):
+	//   "When the reactor coolant temperature increases to about
+	//    210-220°F (90-105°C), the steamline vents are closed and
+	//    the secondary side of each steam generator is drained to
+	//    the normal operating range."
+	//    specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:118-122
+	//   "When the reactor coolant reaches 200°F (93°C), the steam
+	//    sides of the steam generators are filled to the vents for
+	//    wet layup."
+	//    specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:143-145
 	{"PZRBLK", "ReactorBuilding/BlockValve", "stop",
 		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.BlockValve }},
 	{"PZRPORV", "ReactorBuilding/PORV", "porv",
@@ -757,6 +792,11 @@ var valvePlacements = map[string]valvePlacement{
 	// check valve in each line just outside the containment."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:71-76
 	"SGMSIV": {from: "SG", to: "Condenser", near: "SG", shift: 0.08},
+	// Startup SG valves ride the same SG outlet edge near the
+	// generator; citations are the diagramParts rows above.
+	"SteamlineVent":     {from: "SG", to: "Condenser", near: "SG", shift: 0.05},
+	"DrainValve":        {from: "SG", to: "Condenser", near: "SG", shift: 0.12},
+	"WetLayupFillValve": {from: "SG", to: "Condenser", near: "SG", shift: 0.16},
 	// The overspeed trip closes "the main steam stop and governing
 	// valves" feeding the turbine.
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:40-43
@@ -810,6 +850,12 @@ var scalarValves = []struct {
 	{"MKUPV", "ReactorBuilding/ReactorMakeupControlValve", "modulating",
 		func(p *core.Plant) float64 {
 			return p.ReactorBuilding.ReactorMakeupControlValve.Open
+		}},
+	// Regulator demand wedge at its own anchor; the control valve
+	// itself is the MainFeedValve edge hop.
+	{"FeedwaterRegulator", "TurbineBuilding/FeedwaterRegulator", "modulating",
+		func(p *core.Plant) float64 {
+			return clampRange(p.TurbineBuilding.FeedwaterRegulator.ValveDemand, 0, 1)
 		}},
 }
 
@@ -2074,6 +2120,14 @@ var readouts = []readoutDef{
 		text: func(p *core.Plant) string {
 			return fmt.Sprintf("sump %.0f gal",
 				p.ReactorBuilding.SafetyInjectionSystem.Sump.Float())
+		},
+	},
+	{
+		id: "FeedwaterRegulator",
+		dy: 14,
+		text: func(p *core.Plant) string {
+			return fmt.Sprintf("FW %.0f%%",
+				100*clampRange(p.TurbineBuilding.FeedwaterRegulator.ValveDemand, 0, 1))
 		},
 	},
 }

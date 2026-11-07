@@ -67,6 +67,7 @@ var symbolTable = map[string]symbolSpec{
 	"EmergencyFeedwaterPumpTD":     {60.0 / 96.0, 40.0 / 96.0, "efws-pump-td.svg"},
 	"ContainmentIsolation":         {60.0 / 96.0, 30.0 / 96.0, "cis-isolation.svg"},
 	"HydrogenRecombiner":           {50.0 / 96.0, 50.0 / 96.0, "hds-recombiner.svg"},
+	"ContainmentFilter":            {50.0 / 96.0, 50.0 / 96.0, "containment-filter.svg"},
 	"BrushlessExciter":             {60.0 / 96.0, 50.0 / 96.0, "exciter.svg"},
 	"StatorCoolingPump":            {60.0 / 96.0, 40.0 / 96.0, "pump-horizontal.svg"},
 	"InverterBus":                  {40.0 / 96.0, 30.0 / 96.0, "inverter-bus.svg"},

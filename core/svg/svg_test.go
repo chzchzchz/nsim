@@ -111,6 +111,7 @@ func TestSymbolManifest(t *testing.T) {
 
 	refs := map[string]bool{
 		"containment-dome": true, "css-spray-headers": true, "rcfc-unit": true,
+		"containment-filter": true,
 		"valve-safety": true, "valve-porv": true, "breaker": true,
 	}
 	for _, dp := range diagramParts {
@@ -461,6 +462,30 @@ func TestEdgeValvesBindToBridgeRows(t *testing.T) {
 		assert.Contains(t, out,
 			fmt.Sprintf(`<g data-part="%s" role="img" aria-label=`, part))
 	}
+}
+
+// TestPidgapsPartsRender checks pidgaps.txt acceptance: regulator
+// wedge/readout, SG startup valves on the outlet line, filtration
+// run dot, and Grid binding to Electrical/Grid.
+func TestPidgapsPartsRender(t *testing.T) {
+	p := core.MakePlant()
+	out := renderPlant(t, &p)
+	assert.Contains(t, out, `data-part="TurbineBuilding/FeedwaterRegulator"`)
+	assert.Contains(t, out, `data-part="ReactorBuilding/SteamGenerator/SteamlineVent"`)
+	assert.Contains(t, out, `data-part="ReactorBuilding/SteamGenerator/DrainValve"`)
+	assert.Contains(t, out, `data-part="ReactorBuilding/SteamGenerator/WetLayupFillValve"`)
+	assert.Contains(t, out, `>Cont. Filters<`)
+	assert.Contains(t, out, `data-part="Electrical/Grid"`)
+	assert.NotContains(t, out, `data-part="Electrical/OffsiteSourceA" role="img" aria-label="Grid"`)
+	assert.NotContains(t, out, "anchors missing")
+
+	p.TurbineBuilding.FeedwaterRegulator.ValveDemand = 0.42
+	assert.Contains(t, renderPlant(t, &p), "FW 42%")
+
+	p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.RecombinerActive = true
+	base := strings.Count(out, `fill="green"`)
+	assert.Greater(t, strings.Count(renderPlant(t, &p), `fill="green"`), base,
+		"filtration run dot must follow recombiner state")
 }
 
 // TestSymbolWashesTrackState checks intensity encodings appear and
