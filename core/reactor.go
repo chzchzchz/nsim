@@ -431,22 +431,38 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 	// while the uncovered integral still climbs from it.
 	ret.UncoveryFrac = min(max(r.BreakDischarged.Float()/RCSDrainableInventoryGal, 0), 1)
 	satF := PressurizerSatTemperatureF(float64(ret.Pressure))
+	// DNB fire condition (plans/p73_1.txt): the indicated DNBR
+	// below the physical CHF point means film boiling can no
+	// longer reject locally generated heat from the limiting
+	// rod, so the clad must heat up even while covered. Gated on
+	// the at-power permissive like the flow-stretch above: below
+	// it, ΔT cannot drive DNBR down. Uncovery wins the tie.
+	dnbFire := powerFrac >= RPSAtPowerPermissiveFraction && dnbrMargin(&ret) < DNBRFireLimit
 	dtSeconds := dt.Seconds()
 	if ret.UncoveryFrac > 0 {
+		rateFPerSec := float64(ret.TotalThermalPower()) / CladThermalMassCpJPerDegF * 9.0 / 5.0
+		ret.CladTempF = max(satF, ret.CladTempF+rateFPerSec*min(dtSeconds, 1))
+		// Zr-steam feedback (plans/p65_2.txt Step 1): Baker-Just
+		// oxidation advance plus reaction enthalpy over the same
+		// lumped mass as the decay-heat integrator above. Runs
+		// before stageDamage so damage sees the feedback. Only
+		// the uncovered leg runs this: the 1472°F onset is a
+		// steam reaction and a covered burnout has no steam
+		// blanketing to react with (plans/p73_1.txt).
+		oxidRate := oxidationKinetics(ret.CladTempF, ret.OxidizedFrac)
+		ret.OxidizedFrac = min(ret.OxidizedFrac+oxidRate*dtSeconds, MaxOxidizedFrac)
+		rxnW := oxidRate * ReactionEnthalpyJPerFrac
+		ret.CladTempF += rxnW / CladThermalMassCpJPerDegF * 9.0 / 5.0 * dtSeconds
+	} else if dnbFire {
 		rateFPerSec := float64(ret.TotalThermalPower()) / CladThermalMassCpJPerDegF * 9.0 / 5.0
 		ret.CladTempF = max(satF, ret.CladTempF+rateFPerSec*min(dtSeconds, 1))
 	} else {
 		ret.CladTempF = satF
 	}
-	// Zr-steam feedback (plans/p65_2.txt Step 1): Baker-Just
-	// oxidation advance plus reaction enthalpy over the same
-	// lumped mass as the decay-heat integrator above. Runs
-	// before stageDamage so damage sees the feedback.
-	oxidRate := oxidationKinetics(ret.CladTempF, ret.OxidizedFrac)
-	ret.OxidizedFrac = min(ret.OxidizedFrac+oxidRate*dtSeconds, MaxOxidizedFrac)
-	rxnW := oxidRate * ReactionEnthalpyJPerFrac
-	ret.CladTempF += rxnW / CladThermalMassCpJPerDegF * 9.0 / 5.0 * dtSeconds
-	ret.CoreDamageFrac = stageDamage(ret.CladTempF)
+	// One-way damage ratchet: stageDamage is a temperature
+	// readout (0 below ballooning), so the re-pin to satF on
+	// DNB recovery must not heal burned clad.
+	ret.CoreDamageFrac = max(ret.CoreDamageFrac, stageDamage(ret.CladTempF))
 	ret.Damage = float32(ret.CoreDamageFrac)
 	// Vessel failure latch (plans/p65_3.txt Step 1): uncovered
 	// clad past the zircaloy melting regime. Covered clad is
@@ -771,6 +787,15 @@ func dnbrMargin(r *ReactorPressureVessel) float64 {
 	dI := r.AxialOffset
 	return DNBRRefMargin*(1-DNBRDeltaTSensitivity*(dT-CETDTRefF)/CETDTRefF) -
 		DNBRDeltaISensitivity*math.Abs(dI)
+}
+
+// dnbFireLive is the plan's p72 kind-(a) live condition: true
+// exactly while the indicated DNBR is below the physical CHF
+// threshold above the at-power permissive. It clears on recovery
+// and is not a damage latch.
+func dnbFireLive(r *ReactorPressureVessel) bool {
+	return float64(r.TotalThermalPower())/float64(CoreRatedThermalPower) >= RPSAtPowerPermissiveFraction &&
+		dnbrMargin(r) < DNBRFireLimit
 }
 
 // linearPowerKWft returns the peak linear power in kW/ft (derived):

@@ -211,6 +211,21 @@ const (
 	// steady state (ΔT = CETDTRefF, ΔI = 0). It is not a trip
 	// setpoint — no trip is wired in this slice.
 	DNBRRefMargin = 1.30
+	// DNBRFireLimit is the derived physical DNB threshold: DNBR
+	// = 1.0 by definition (critical heat flux / actual flux), so
+	// an indicated margin below 1.0 is a burnout excursion. The
+	// 1.30 above is the design margin against the 95/95 criterion
+	// (specs/westinghouse_tech_manual/chapter_2/page_0207.txt:36-40),
+	// not the physical boiling-crisis point.
+	// Tier-B derived.
+	DNBRFireLimit = 1.0
+	// FuelCenterlineMeltF is reference data only (no reader until
+	// a centreline plan lands); burnup derating (58°F per 10,000
+	// MWD/MTU) is not tracked, so the un-derated anchor is used.
+	// "The melting temperature of UO2 is assumed to be 5080°F"
+	// specs/westinghouse_tech_manual/chapter_2/page_0208.txt:45-50
+	// Tier-A sourced.
+	FuelCenterlineMeltF = 5080.0
 	// DNBRDeltaTSensitivity and DNBRDeltaISensitivity shape the
 	// derived margin law: a 10% flow-loss ΔT rise moves the
 	// margin ~0.1; 24% ΔI moves it the same amount.

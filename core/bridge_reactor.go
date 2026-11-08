@@ -1773,6 +1773,18 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 			return bridge.FormatSensorValue("signedpercent", dnbrMargin(rpv))
 		},
 	}
+	// DNBFire is a live condition (p72 kind (a)): it is true
+	// exactly while indicated DNBR is below the physical CHF
+	// threshold at power, and it clears on recovery. It is not
+	// a one-way damage latch; damage remains in CoreDamageFrac.
+	m["ReactorBuilding/ReactorPressureVessel/DNBFireLive"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "DNBFireLive",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool", dnbFireLive(rpv))
+		},
+	}
 	m["ReactorBuilding/ReactorPressureVessel/LinearPowerDensity"] = &bridge.Sensor{
 		Part:  "ReactorBuilding/ReactorPressureVessel",
 		Label: "LinearPowerDensity",

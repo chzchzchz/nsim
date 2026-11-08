@@ -186,11 +186,12 @@ func TestExcore_SensorKinds(t *testing.T) {
 		"ReactorBuilding/ReactorPressureVessel/CoreExitTemp",
 		"ReactorBuilding/ReactorPressureVessel/CoreExitDeltaT",
 		"ReactorBuilding/ReactorPressureVessel/DNBRMargin",
+		"ReactorBuilding/ReactorPressureVessel/DNBFireLive",
 		"ReactorBuilding/ReactorPressureVessel/LinearPowerDensity",
 		"ReactorBuilding/ReactorPressureVessel/ReactivityEstimate",
 		"ReactorBuilding/ReactorPressureVessel/XenonWorth",
 	}
-	require.Lenf(t, want, 11, "11 sensors")
+	require.Lenf(t, want, 12, "12 sensors")
 	for _, id := range want {
 		s, ok := m[id]
 		require.Truef(t, ok, "want sensor %q registered", id)
@@ -212,6 +213,13 @@ func TestExcore_SensorKinds(t *testing.T) {
 	v, err := parseFloatForTest(t, out)
 	require.NoError(t, err)
 	assert.Less(t, v, float64(0), "DNBR should be negative in this state")
+
+	// DNBFireLive is live, not latched: true only while the
+	// indicated margin is below the CHF threshold at power.
+	s3 := m["ReactorBuilding/ReactorPressureVessel/DNBFireLive"]
+	out3, err := s3.Get()
+	require.NoError(t, err, "DNBFireLive read must not error")
+	assert.Equal(t, "1", out3, "DNBFireLive is true below DNBRFireLimit at power")
 
 	// LPD: never negative. Normalized form is a pure readout —
 	// at rated power it reads 1.0; with large axial skew it can

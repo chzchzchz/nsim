@@ -2031,6 +2031,12 @@ func (p *Plant) Step(dt time.Duration) {
 		PressurizerSatTemperatureF(float64(pzr.Pressure))
 	if superheatF <= HydrogenSuperheatGateF && inventoryFrac < HydrogenInventoryGateFraction {
 		generationRate = 0.0
+	} else if rpv.UncoveryFrac <= 0 {
+		// Oxidation gate (plans/p73_1.txt): the Baker-Just onset
+		// is a steam reaction; a covered core has no steam
+		// blanketing, so no H2 is derived from a covered DNB
+		// excursion on either leg of this two-site gate.
+		generationRate = 0.0
 	} else {
 		// Oxidation-driven rate (plans/p65_2.txt step 2): the
 		// Baker-Just advance this step mapped onto the G4
