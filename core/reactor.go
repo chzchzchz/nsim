@@ -456,7 +456,124 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 	if ret.UncoveryFrac > 0 && ret.CladTempF >= ZrMeltF {
 		ret.VesselFailed = true
 	}
+
+	// Cladding fatigue from power cycling (plans/p72_2.txt Step).
+	// A fatigue cycle is a power excursion that reverses
+	// direction with amplitude at or above the spec's normal
+	// random-load band (±5% of rated). Each such reversal
+	// consumes damage proportional to amplitude; steady
+	// operation consumes nothing (the failure mode is
+	// *cycling*, not time at power). Trend reversals are
+	// counted, not per-step jitter: a smooth ramp is many
+	// same-sign 1 ms steps and must not count as dozens of
+	// cycles. First Step is suppressed (zero-value memory).
+	//
+	// "as required to regulate electrical network load frequency
+	//  transients (by random load variations of ±5 percent power).
+	//  This minimizes rod movement and wear"
+	//  specs/the_westinghouse_pressurized_water_react/chapter_7/page_133.txt:13-15
+	// The ±5% figure is a rod-control figure repurposed here as
+	// the fatigue dead-band (below = no damage, above =
+	// proportional damage). The spec gives no fatigue
+	// threshold, so the dead-band is an implementation
+	// choice, not a spec limit.
+	if dt > 0 {
+		// The trend direction for reversal detection is measured
+		// over CladTrendWindowSteps. Because the power update
+		// multiplies by (1 + Reactivity/100) every 1 ms step,
+		// a per-step delta near equilibrium is ~355 W — five
+		// orders below the 5%-of-rated band (190 MW) — and
+		// band-scale moves exist only as the *average* over the
+		// trend. Hence the detector compares consecutive
+		// window deltas (window-to-window power change) instead
+		// of per-step deltas, and holds the running peak/trough
+		// of fission power across windows: when the window's
+		// power change reverses direction with band-scale
+		// amplitude on either side AND the peak-to-trough lift
+		// since the last counted reversal reaches the band,
+		// one fatigue cycle is consumed. The extrema make the
+		// count phase-invariant: a peak or trough that
+		// straddles a window boundary is held, not lost.
+		power := float64(ret.FissionPower)
+		// Track the running extrema every step (not only at
+		// window boundaries): a peak/trough that straddles a
+		// window boundary is held by the tracker, so the lift
+		// covers both sides of any boundary the eventual
+		// reversal crosses. The tracker seeds itself from the
+		// first observed power (zero value reads as unseeded).
+		if ret.FatiguePeakW == 0 {
+			ret.FatiguePeakW = power
+		} else {
+			ret.FatiguePeakW = max(ret.FatiguePeakW, power)
+		}
+		if ret.FatigueTroughW == 0 {
+			ret.FatigueTroughW = power
+		} else {
+			ret.FatigueTroughW = min(ret.FatigueTroughW, power)
+		}
+		ret.FatigueTrendSteps++
+		if ret.FatigueTrendSteps >= CladTrendWindowSteps {
+			trend := power - ret.FatigueTrendStartW
+			lift := ret.FatiguePeakW - ret.FatigueTroughW
+			band := CladCycleBandPctOfRated * float64(CoreRatedThermalPower)
+			// A reversal fires when the running peak-to-trough
+			// lift since the last counted reversal reaches the
+			// band AND the current window trend has now
+			// returned to (or crossed past) the extreme at the
+			// opposite end of that lift — i.e. the lift is no
+			// longer growing. The window comparison alone
+			// misses reversals whose peak/trough lands
+			// mid-window (either window straddles the turn);
+			// the extrema cover that case deterministically.
+			// `landed` is the anti-double-count latch: after a
+			// fire, the extrema reset, so `lift >= band` cannot
+			// re-fire against the same peak/trough pair.
+			landed := (trend >= 0 && power >= ret.FatiguePeakW) ||
+				(trend <= 0 && power <= ret.FatigueTroughW)
+			fire := lift >= band && landed
+			if fire {
+				amp := lift / band
+				ret.CladdingFatigueFrac = min(ret.CladdingFatigueFrac+
+					amp*CladdingFatigueRatePerCycle, 1)
+				// Reset the extrema to the current power so
+				// the next reversal is measured from here,
+				// not from a peak/trough already consumed.
+				ret.FatiguePeakW = power
+				ret.FatigueTroughW = power
+			}
+			ret.PrevPowerSlope = trend
+			// Restart the window at the current power so the
+			// next window's delta is a fresh trend, not a
+			// cumulative drift.
+			ret.FatigueTrendStartW = power
+			ret.FatigueTrendSteps = 0
+		}
+		ret.PrevFissionPowerW = ret.FissionPower
+	}
+	// Rod wear proxy: count discrete rod movements. The delta
+	// is read against the previous step's memory captured
+	// before the update, so it is never zeroed by the
+	// assignment itself.
+	prevInsertion := ret.PrevInsertion
+	ret.RodTravelSteps += math.Abs(float64(ret.ControlRods.Insertion-
+		prevInsertion)) * RodStepsPerUnitInsertion
+	ret.PrevInsertion = ret.ControlRods.Insertion
+
+	if ret.CladdingFatigueFrac >= CladdingFatigueAlarmFrac {
+		ret.CladdingFatigueAlarm = true
+	}
 	return ret
+}
+
+// signChanged reports whether the power trend reversed direction
+// this step (both slopes non-zero with opposite signs). Zero
+// slopes never count as reversals, so steady operation and the
+// suppressed first step cannot manufacture a cycle.
+func signChanged(a, b float64) bool {
+	if a == 0 || b == 0 {
+		return false
+	}
+	return (a < 0) != (b < 0)
 }
 
 // TotalThermalPower is the per-step heat flux consumed by the
@@ -962,6 +1079,76 @@ type ReactorPressureVessel struct {
 	// (ZrMeltF). Severe-accident state does not recover, so no
 	// trip, reset, or reflood path clears it. plans/p65_3.txt.
 	VesselFailed bool
+
+	// CladdingFatigueFrac is the cumulative cyclic-fatigue
+	// damage fraction from power-level cycling (fuel-clad
+	// differential expansion). Advances only on power changes;
+	// steady operation consumes nothing. plans/p72_2.txt State.
+	//
+	// Part.Damage interaction: fatigue does NOT contribute to
+	// Part.Damage (which mirrors CoreDamageFrac). Deliberate
+	// separation so operational wear stays distinguishable from
+	// severe-accident damage in generic Part.Damage consumers.
+	CladdingFatigueFrac float64
+
+	// PrevInsertion is last step's rod insertion (rod-step
+	// counting reads |Insertion - PrevInsertion|, not the
+	// demand). Zero-value seeded by MakePlant (plans/p72_1.txt
+	// convention 5); the first Step is suppressed.
+	PrevInsertion float64
+
+	// PrevFissionPowerW is last step's FissionPower; PrevPowerSlope
+	// is the previous *window's* power change (W over
+	// CladTrendWindowSteps), not a per-step delta. The cycle
+	// detector counts *trend reversals* over those windows (a
+	// smooth load ramp is hundreds of same-sign 1 ms steps
+	// and must not count as dozens of cycles), not per-step
+	// jitter. Trend filtering is derived; the spec names
+	// load-follow excursions, not a detection algorithm.
+	// Zero-value seeded; first Step is suppressed.
+	// FatigueTrendStartW is the fission power at the start of
+	// the current trend window; FatigueTrendSteps counts steps
+	// elapsed since. Trend deltas are measured over
+	// CladTrendWindowSteps, not per-step (plans/p72_2.txt Step
+	// function).
+	FatigueTrendStartW float64
+	FatigueTrendSteps  int
+	// FatiguePeakW / FatigueTroughW are the running extrema of
+	// fission power since the last counted reversal: they hold
+	// the peak/trough across window boundaries so a reversal
+	// that straddles two windows is still counted (plans/p72_2.txt
+	// Step function — peak-tracker; it makes the cycle count
+	// phase-invariant).
+	FatiguePeakW   float64
+	FatigueTroughW float64
+	PrevPowerSlope float64
+	// PrevFissionPowerW is last step's FissionPower. It is the
+	// stored previous-step anchor the fatigue detector's
+	// first-step suppression reads (zero power across the
+	// suppression gate would mask the seeded transient); the
+	// detector itself compares window deltas, not this field,
+	// so the field is carried for that gate and for the
+	// startup-rate diagnostic that already uses the same
+	// previous-step idiom (prevW in ReactorPressureVessel.Step).
+	PrevFissionPowerW Watts
+
+	// CladdingFatigueAlarm latches when CladdingFatigueFrac
+	// passes the inspection threshold (derived; the spec
+	// gives no threshold, and names warning/danger
+	// annunciation only for RCP vibration monitoring —
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_062.txt:101-108 —
+	// so this damage alarm is an annunciation convention,
+	// not a spec setpoint).
+	CladdingFatigueAlarm bool
+
+	// RodTravelSteps is the cumulative count of rod steps
+	// (Insertion units / RodStepsPerUnitInsertion) since
+	// refueling. CRDM gripper/coil wear is not separately
+	// modelled; rod travel is the observable proxy for the
+	// mechanism wear the spec names (preset reversible drive
+	// program — specs/the_westinghouse_pressurized_water_react/chapter_7/page_133.txt:1-11).
+	// No spec rate law exists.
+	RodTravelSteps float64
 }
 
 // oxidationKinetics returns the capped d(OxidizedFrac)/dt in 1/s

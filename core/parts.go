@@ -18,6 +18,69 @@ type Part struct {
 	Installation time.Duration
 }
 
+// Cladding-fatigue constants (plans/p72_1.txt, plans/p72_2.txt).
+//
+// Spec states no fatigue rate constant, no fatigue threshold, and
+// no steps-per-travel figure; all three rates below are derived.
+// Cladding strain/temperature limits are the quantitative
+// cladding numbers in the technical manual's cladding section:
+//
+//	"Cladding strain less than 1%."
+//	specs/westinghouse_tech_manual/chapter_2/page_0209.txt:3-4
+//	"...limiting the average cladding temperature to less than 850°F."
+//	specs/westinghouse_tech_manual/chapter_2/page_0209.txt:7-9
+const (
+	// CladdingStrainLimitPct and CladdingMaxAvgTempF are the
+	// quantitative cladding numbers in the technical manual's
+	// cladding section (specs/westinghouse_tech_manual/chapter_2/page_0209.txt:1-10):
+	// strain < 1% and average cladding temperature < 850°F.
+	// They are published as reference data (the fatigue
+	// detector itself uses the ±5%-of-rated power band, not
+	// these thresholds); no production reader consumes them
+	// yet, so the CHECK §5 dead-state rule does not apply.
+	CladdingStrainLimitPct = 1.0
+
+	// CladdingMaxAvgTempF bounds average cladding temperature.
+	CladdingMaxAvgTempF = 850.0
+
+	// CladCycleBandPctOfRated is the fatigue dead-band as a
+	// fraction of rated power: power excursions smaller than
+	// this consume no fatigue. Repurposed from the rod-control
+	// random-load band: "as required to regulate electrical
+	// network load frequency transients (by random load
+	// variations of ±5 percent power). This minimizes rod
+	// movement and wear"
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_133.txt:13-15
+	// The spec gives no fatigue threshold, so this is a
+	// rod-control figure used as a dead-band, not a spec limit.
+	CladCycleBandPctOfRated = 0.05
+
+	// CladdingFatigueRatePerCycle is the fractional cladding
+	// fatigue consumed per full-scale 5%-band power reversal.
+	// Derived: spec states no rate.
+	CladdingFatigueRatePerCycle = 0.002
+
+	// RodStepsPerUnitInsertion counts how many CRDM steps
+	// constitute full Insertion travel (1.0). Derived: spec
+	// states no steps-per-travel figure. Rod movement is the
+	// wear driver the spec names (preset reversible drive
+	// program, specs/the_westinghouse_pressurized_water_react/chapter_7/page_133.txt:1-11).
+	RodStepsPerUnitInsertion = 100.0
+
+	// CladdingFatigueAlarmFrac is the inspection threshold
+	// that latches CladdingFatigueAlarm. Derived: spec states
+	// no threshold.
+	CladdingFatigueAlarmFrac = 0.5
+
+	// CladTrendWindowSteps is how many 1 ms steps the fatigue
+	// trend integrates over (trend delta vs window start).
+	// Derived from the power-update pacing: per-step deltas
+	// near equilibrium are five orders below the 5% band at
+	// 1 ms ticks, so only window-summed trends carry band-scale
+	// magnitudes. 20 s of trend lookback at 1 ms.
+	CladTrendWindowSteps = 20000
+)
+
 // Excore nuclear-instrument constants (plans/p71_1.txt).
 //
 // The Westinghouse PWR document (Chapter 7, Nuclear Measurements)

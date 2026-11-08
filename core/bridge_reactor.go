@@ -2233,6 +2233,39 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Cladding fatigue + control-rod travel (plans/p72_2.txt):
+	// cumulative cyclic-fatigue damage fraction, the alarm
+	// latch, and the rod-step counter. Fractions publish as
+	// percent (x100, following the OxidizedFrac precedent
+	// above); the counter publishes raw.
+	m["ReactorBuilding/ReactorPressureVessel/CladdingFatigue"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "CladdingFatigue",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				100.0*p.ReactorBuilding.ReactorPressureVessel.CladdingFatigueFrac)
+		},
+	}
+	m["ReactorBuilding/ReactorPressureVessel/CladdingFatigueAlarm"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "CladdingFatigueAlarm",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.ReactorPressureVessel.CladdingFatigueAlarm)
+		},
+	}
+	m["ReactorBuilding/ReactorPressureVessel/RodTravelSteps"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "RodTravelSteps",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.ReactorPressureVessel.RodTravelSteps)
+		},
+	}
+
 	// Severe-accident failure latches (plans/p65_3.txt Wiring):
 	// one-way physics outputs, not operator levers (sensors only).
 	m["ReactorBuilding/ReactorPressureVessel/VesselFailed"] = &bridge.Sensor{
