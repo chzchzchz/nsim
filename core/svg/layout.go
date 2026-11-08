@@ -227,12 +227,19 @@ var clusterFor = map[string]string{
 // only truly isolated extras added later would need docking.
 var dockingExtrasForRPV = []string(nil)
 
-// auxConstraintEdges reserved for future invisible constraint
-// edges. Live EFWS/CCWS placement uses cluster membership +
-// layoutRowGroups subsystem ordering: invisible edges between
-// connected nodes create cycles that break dot's rank repair
-// (moving Turbine/Generator by 500px, probed).
-var auxConstraintEdges = [][2]string{}
+// auxConstraintEdges sink hop-only pumps that carry no fluid
+// edge (ChgPump via VCT->InjectionSink, SFPPA/SFPPB via
+// SFP->SFPHX) into the auxiliary/fuel rank rows. Without the
+// invisible edge dot parks them in the first rank, which the
+// Y-flip floats above the plant in the black void (raster
+// audit: three pump glyphs at ~950,260 with no building).
+// Only emitted when both endpoints exist (BuildDot guard), so
+// renaming a node cannot emit a dangling constraint.
+var auxConstraintEdges = [][2]string{
+	{"VCT", "ChgPump"},
+	{"SFP", "SFPPA"},
+	{"SFPPA", "SFPPB"},
+}
 
 // BuildDot generates a DOT description of the plant graph with
 // layout clusters, node sizes, and optional pinned positions.
@@ -386,11 +393,17 @@ func BuildDot(g *core.PlantGraph, p *core.Plant, pos map[string]Anchor) (string,
 			// grid/transformer/inverter alongside rather than
 			// in one row. rankdir is global-TB, so the trains
 			// are parallel invisible chains, not one chain.
+			// Grid/Transformer/Inverter are split into two rows
+			// so the inverter does not land at the viewport right
+			// edge (raster audit: INVERTER at 1178,199, clipped
+			// readout). Transformer stays on the Grid row and
+			// the inverter drops to its own row beneath it.
 			for _, r := range [][]string{
 				{"Diesel", "FuelTank"},
 				{"DieselB", "FuelTankB"},
 				{"ESF_A", "ESF_B"},
-				{"Grid", "Transformer", "INVERTER"},
+				{"Grid", "Transformer"},
+				{"INVERTER"},
 			} {
 				fmt.Fprintf(&b, "    {rank=same; %s}\n", joinStrings(quotedRankRow(r), " "))
 			}
@@ -826,9 +839,21 @@ func valveHopFor(e core.GraphEdge, p *core.Plant) (edgeHopRef, bool) {
 	case e.From == "Condenser" && e.To == "CST":
 		r = edgeHopRef{"RecirculateValve", clusterFor["Condenser"], "stop", "TurbineBuilding/RecirculateValve"}
 	case e.To == "DieselAFWPump" || e.To == "MotorAFWPump" || e.To == "TurbineAFWPump":
-		r = edgeHopRef{"CSTValve", clusterFor["CST"], "gate", "Outside/" + e.To + "/CSTValve"}
+		// Unique hop id per AFW train: sharing one id makes the
+		// renderer draw three glyphs on one anchor (raster audit:
+		// CSTValve/ServiceWaterValve triple-stacked). The edges
+		// are parallel models (three separate Valve fields), so
+		// each train gets its own hop node and route chain.
+		// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:61-69
+		suffix := map[string]string{
+			"DieselAFWPump": "Diesel", "MotorAFWPump": "Motor", "TurbineAFWPump": "Turbine",
+		}[e.To]
+		r = edgeHopRef{"CSTValve_" + suffix, clusterFor["CST"], "gate", "Outside/" + e.To + "/CSTValve"}
 	case e.From == "DieselAFWPump" || e.From == "MotorAFWPump" || e.From == "TurbineAFWPump":
-		r = edgeHopRef{"ServiceWaterValve", clusterFor[e.From], "gate", "Outside/" + e.From + "/ServiceWaterValve"}
+		suffix := map[string]string{
+			"DieselAFWPump": "Diesel", "MotorAFWPump": "Motor", "TurbineAFWPump": "Turbine",
+		}[e.From]
+		r = edgeHopRef{"ServiceWaterValve_" + suffix, clusterFor[e.From], "gate", "Outside/" + e.From + "/ServiceWaterValve"}
 	// EFWS flow-modulating valves sit on the tank->pump suction
 	// legs (p69_1); discriminate by pointer.
 	case e.From == "EFWSTankA" && e.To == "EAMD":

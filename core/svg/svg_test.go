@@ -701,7 +701,12 @@ func TestComputeLayout_RCPBetweenSGAndRPV(t *testing.T) {
 	// to graph nodes; standalone duplicates removed.
 	// Parallel edges keep both valve glyphs; pipe geometry
 	// deduped only.
-	assert.Equal(t, 119, len(symbolCount(t)), "symbol count drift (post-anchors): parallel edges keep both valve glyphs, pipe geometry deduped only")
+	// 118 after AFW hop split (raster audit): the standalone
+	// SGMSIV twin was removed, since the SG->Turbine edge now
+	// renders the MSIV exactly once via its hop; the three
+	// AFW CST/ServiceWater valves each keep their own glyph
+	// (unique hop ids) so no count changes there.
+	assert.Equal(t, 118, len(symbolCount(t)), "symbol count drift (post-anchors): parallel edges keep both valve glyphs, pipe geometry deduped only")
 }
 
 // symbolCount counts top-level <use> outside <defs> in a render.

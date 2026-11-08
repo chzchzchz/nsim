@@ -610,8 +610,15 @@ var standaloneValves = []struct {
 	kind  string
 	valve func(*core.Plant) *core.Valve
 }{
-	{"SGMSIV", "ReactorBuilding/SteamGenerator/MainSteamIsolationValve", "modulating",
-		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve }},
+	// SGMSIV is deliberately absent here: the SG->Turbine edge
+	// carries the same Valve pointer, so valveHopFor seats it
+	// inline at SGMSIV's dot anchor. Listing it again as a
+	// standalone seated by valvePlacements drew a second
+	// MainSteamIsolationValve glyph 15 units away (raster
+	// audit: paired bowties at 585/600,502 on one leg).
+	// Change detection still works: pipe() renders the hop
+	// valve with the edge; valvePlacements["SGMSIV"] is removed
+	// below so no placement twin is ever drawn.
 	// Startup-sequence citations (plans/svg/pidgaps.txt):
 	//   "When the reactor coolant temperature increases to about
 	//    210-220°F (90-105°C), the steamline vents are closed and
@@ -711,15 +718,15 @@ type valvePlacement struct {
 }
 
 var valvePlacements = map[string]valvePlacement{
-	// "The main steam lines are provided with a stop valve and a
-	// check valve in each line just outside the containment."
+	// The swing check rides the same SG->Turbine edge as
+	// SGMSIV (inline hop) and the stop/governing pair, so the
+	// three placed glyphs are spread along the leg: SGCHK sits
+	// nearest the SG, TSTOP/TGOV nearest the turbine with a
+	// 0.18 separation. The old -0.06/-0.02 pair was 3 units
+	// apart (raster audit) and rear-up as one bowtie.
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:71-76
-	"SGMSIV": {from: "SG", to: "Turbine", near: "SG", shift: 0.08},
-	// The overspeed trip closes "the main steam stop and governing
-	// valves" feeding the turbine.
-	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:40-43
-	"TSTOP": {from: "SG", to: "Turbine", near: "Turbine", shift: -0.06},
-	"TGOV":  {from: "SG", to: "Turbine", near: "Turbine", shift: -0.02},
+	"TSTOP": {from: "SG", to: "Turbine", near: "Turbine", shift: -0.18},
+	"TGOV":  {from: "SG", to: "Turbine", near: "Turbine", shift: 0.0},
 	// "dumping the steam to the condenser"; during cooldown "steam
 	// is dumped to the condensers".
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:104-118
@@ -1856,14 +1863,20 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		}
 		if ct, okCT := r.anchor("Condenser"); okCT {
 			// Route under the turbine box: clip the final leg at
-			// the box bottom edge instead of crossing it.
+			// the box bottom edge instead of crossing it. The
+			// terminus is the condenser symbol bottom center,
+			// not ct.X-40: the condenser glyph is 400 units wide
+			// so an offset terminus still lands inside the symbol
+			// and the final leg bites into the box (raster audit).
+			cw, ch := r.size(r.kindOf("Condenser"))
+			end := clipToward(ct, Anchor{X: ct.X, Y: ct.Y + 1}, cw, ch)
 			if tbx, tby, tbw, tbh, okTB := r.clusterBox("cluster_turbine"); okTB {
-				pts = append(pts, Anchor{X: ct.X, Y: tby + tbh + 10})
-				pts = append(pts, Anchor{X: ct.X - 40, Y: ct.Y + 30})
-				_ = tbx
 				_ = tbw
+				pts = append(pts, Anchor{X: end.X, Y: tby + tbh + 10})
+				pts = append(pts, end)
+				_ = tbx
 			} else {
-				pts = append(pts, Anchor{X: ct.X - 40, Y: ct.Y + 30})
+				pts = append(pts, end)
 			}
 		}
 		var pp strings.Builder
