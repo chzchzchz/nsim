@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -486,6 +488,27 @@ func TestScenarioProgressLatches(t *testing.T) {
 	assert.True(t, st.Objective.Active)
 	assert.Equal(t, "rcp-trip", st.Objective.ID)
 	_ = s
+}
+
+func TestLogRequestsMiddleware(t *testing.T) {
+	_, ts := newPausedServer(t, "nsimserve")
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(old) })
+
+	code, _ := doOK(t, "GET", ts.URL+"/livez", "")
+	assert.Equal(t, http.StatusOK, code)
+	assert.Contains(t, buf.String(), "request")
+	assert.Contains(t, buf.String(), "GET")
+	assert.Contains(t, buf.String(), "/livez")
+	assert.Contains(t, buf.String(), "200")
+
+	// OPTIONS preflights are not access-logged.
+	buf.Reset()
+	code, _ = doOK(t, "OPTIONS", ts.URL+"/controls/PlantOperation%2FPowerSetpointTarget", "")
+	assert.Equal(t, http.StatusNoContent, code)
+	assert.NotContains(t, buf.String(), "OPTIONS")
 }
 
 func TestCORSPreflight(t *testing.T) {

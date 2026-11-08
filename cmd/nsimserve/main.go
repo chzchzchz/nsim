@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,6 +20,25 @@ import (
 
 	"github.com/chzchzchz/nsim/core"
 )
+
+// SetLogLevel sets the slog handler level from a flag value.
+func SetLogLevel(level string) {
+	var lvl slog.Level
+	switch strings.ToLower(level) {
+	case "debug":
+		lvl = slog.LevelDebug
+	case "info":
+		lvl = slog.LevelInfo
+	case "warn", "warning":
+		lvl = slog.LevelWarn
+	case "error":
+		lvl = slog.LevelError
+	default:
+		fmt.Fprintf(os.Stderr, "invalid log level %q; want debug|info|warn|error\n", level)
+		os.Exit(1)
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl})))
+}
 
 // saveOnShutdown writes the full core.Plant JSON atomically:
 // a temporary file in the same directory is renamed over the target
@@ -72,13 +91,17 @@ func main() {
 	timestep := flag.Duration("timestep", core.DefaultTimeStep, "per-step simulated duration")
 	paused := flag.Bool("paused", false, "start paused for /step-driven use")
 	savePath := flag.String("saveOnShutdown", "", "optional: write full plant JSON to this file on SIGINT/SIGTERM")
+	logLevel := flag.String("logLevel", "info", "log verbosity: debug|info|warn|error")
 	flag.Parse()
+
+	SetLogLevel(*logLevel)
 
 	// NewServer performs the canonical flag validation (steps-per-
 	// second and timestep bounds); main only surfaces its error.
 	server, err := NewServer(*siteName, *scenarioID, *plantPath, *cmdPath, *paused, *stepsPerSecond, *timestep)
 	if err != nil {
-		log.Fatalf("failed to create server: %v", err)
+		slog.Error("failed to create server", "error", err)
+		os.Exit(1)
 	}
 
 	stop := make(chan struct{})
@@ -106,30 +129,31 @@ func main() {
 	// the loop's exit after a ListenAndServe failure.
 	select {
 	case sigVal := <-sig:
-		log.Printf("received %v, shutting down", sigVal)
+		slog.Info("received signal, shutting down", "signal", sigVal)
 		// Shut HTTP down first so in-flight handlers drain before the
 		// simulated plant is frozen for the state save.
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		shutdownErr := httpServer.Shutdown(ctx)
 		cancel()
 		if shutdownErr != nil {
-			log.Printf("shutdown error: %v", shutdownErr)
+			slog.Error("shutdown error", "error", shutdownErr)
 		}
 		close(stop)
 		<-done
 		if *savePath != "" {
 			if err := saveOnShutdown(server, *savePath); err != nil {
-				fmt.Fprintf(os.Stderr, "failed to save plant: %v\n", err)
+				slog.Error("failed to save plant", "error", err)
 				os.Exit(1)
 			}
-			log.Printf("saved plant state to %s", *savePath)
+			slog.Info("saved plant state", "path", *savePath)
 		}
 		return
 	case err := <-errCh:
 		close(stop)
 		<-done
 		if err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server error: %v", err)
+			slog.Error("server error", "error", err)
+			os.Exit(1)
 		}
 	}
 }

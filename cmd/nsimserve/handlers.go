@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -64,9 +65,37 @@ type errorResponse struct {
 }
 
 func writeError(w http.ResponseWriter, code int, msg string) {
+	slog.Warn("request error", "code", code, "error", msg)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(errorResponse{Error: msg, Code: code})
+}
+
+// statusRecorder captures the response status for access logging.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+// logRequests is an HTTP middleware that logs method, path, and
+// status for every request to stderr via slog. CORS preflights are
+// skipped: they carry no plant operation and a browser may fire one
+// per fetch, so logging them made stderr unreadable.
+func logRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		slog.Info("request", "method", r.Method, "path", r.URL.Path, "status", rec.status)
+	})
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -155,13 +184,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("unknown path %q", r.URL.Path))
 	})
-	return cors(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return logRequests(cors(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !methodAllowed(r) {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		mux.ServeHTTP(w, r)
-	}))
+	})))
 }
 
 func (s *Server) handleLivez(w http.ResponseWriter, _ *http.Request) {
