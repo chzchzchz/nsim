@@ -2048,6 +2048,47 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Steam-generator feed-ring water hammer (plans/p72_3.txt).
+	// Fractions publish as percent (x100) per the index convention;
+	// the raw fraction is the underlying state. The gap is a length
+	// in inches; the alarm is the one-way hammer-damage latch.
+	m["ReactorBuilding/SteamGenerator/FeedRingVoid"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator",
+		Label: "FeedRingVoid",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				100.0*p.ReactorBuilding.SteamGenerator.FeedRingVoidFrac)
+		},
+	}
+	m["ReactorBuilding/SteamGenerator/HammerDamage"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator",
+		Label: "HammerDamage",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				100.0*p.ReactorBuilding.SteamGenerator.HammerDamageFrac)
+		},
+	}
+	m["ReactorBuilding/SteamGenerator/SleeveGap"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator",
+		Label: "SleeveGap",
+		Kind:  "inch",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("inch",
+				p.ReactorBuilding.SteamGenerator.SleeveGapIn)
+		},
+	}
+	m["ReactorBuilding/SteamGenerator/HammerAlarm"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SteamGenerator",
+		Label: "HammerAlarm",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.SteamGenerator.HammerAlarm)
+		},
+	}
+
 	// HHSI hot-leg injection split. Non-zero once the operator
 	// realigns to simultaneous cold- and hot-leg injection.
 	// "a substantial portion of the flow is directed to the RCS

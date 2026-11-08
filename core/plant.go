@@ -2319,10 +2319,12 @@ func (p *Plant) Step(dt time.Duration) {
 	//    hotwell and pump condensate [...]; the water discharge from
 	//    the feedwater pumps flows [...] into the steam generators."
 	//   specs/the_westinghouse_pressurized_water_react/chapter_15/page_220.txt:41-51
+	mainFeedFlowGpm := 0.0
 	if reg.Running && !fwi &&
 		p.nextPlant.TurbineBuilding.MainFeedwaterPump.Running {
 		delivery := reg.ValveDemand *
 			FeedwaterDesignFlow.Float() * dt.Seconds()
+		mainFeedFlowGpm = reg.ValveDemand * FeedwaterDesignFlow.Float() * SecondsPerMinute
 		sgWater := min(sg.Water.Float()+delivery,
 			sg.Volume.Float())
 		p.nextPlant.ReactorBuilding.SteamGenerator.Water =
@@ -2330,6 +2332,23 @@ func (p *Plant) Step(dt time.Duration) {
 		hotwell := max(p.nextPlant.TurbineBuilding.Condenser.HotwellLevel.Float()-delivery, 0)
 		p.nextPlant.TurbineBuilding.Condenser.HotwellLevel =
 			Volume{Val: hotwell, Unit: u.Gallon}
+	}
+
+	// Feed-ring void/hammer update runs after main-feed delivery and
+	// EFWS credit (plant.go:664-668) so both inputs describe this
+	// step's delivered flow. Per-SG thresholds apply to the lumped
+	// single SG directly; the EFWS plant-total delivery is compared
+	// against the per-SG hammer threshold without dividing by loop
+	// count (see plans/p72_3.txt Scale note).
+	{
+		sg := &p.nextPlant.ReactorBuilding.SteamGenerator
+		sgLevelPctNR := 0.0
+		if sg.Volume.Float() > 0 {
+			sgLevelPctNR = 100.0 * sg.Water.Float() / sg.Volume.Float() * 100.0 / SgNarrowRangeSpanPct
+		}
+		efwsFlowGpm := p.nextPlant.ReactorBuilding.EFWSFeedwaterFlow.Float() * SecondsPerMinute
+		totalFeedFlowGpm := mainFeedFlowGpm + efwsFlowGpm
+		sg.stepFeedRing(dt, sgLevelPctNR, totalFeedFlowGpm)
 	}
 
 	// Plant electrical systems step (plans/p27_1.txt). The
@@ -2719,6 +2738,7 @@ func MakePlant() Plant {
 	p.ReactorBuilding.PlantControlRoom.AlarmSet = make(map[AlarmID]Alarm)
 	p.ReactorBuilding.SteamGenerator.Volume = Volume{Val: 100000, Unit: u.Gallon}
 	p.ReactorBuilding.SteamGenerator.Water = Volume{Val: 80000, Unit: u.Gallon}
+	p.ReactorBuilding.SteamGenerator.SleeveGapIn = SgSleeveGapBaselineIn
 	// Initialise the RCS to the design full-load operating point so
 	// the Doppler / moderator feedback loop starts in a sane state.
 	// "Reactor coolant inlet temperature: 621°F (327°C); outlet:

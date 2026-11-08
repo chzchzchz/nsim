@@ -172,11 +172,99 @@ type SteamGenerator struct {
 	// latched Plant.Step closes the MSIV and secures main
 	// feedwater.
 	SteamlineIsolated bool
+
+	// FeedRingVoidFrac is the current steam-void fraction in the feed ring
+	// (persistent, 0..1): it accumulates while voiding conditions hold and
+	// decays when feed sweeps the ring, so the high-flow hammer step reads
+	// the void built up on previous steps (hammer is edge-triggered on
+	// prior void, not on same-step void). Exposed as a sensor, not damage.
+	// Levels are converted shell-volume % to NR % via SgNarrowRangeSpanPct.
+	// "Steam voids form in the SG feed rings only if the SG levels are
+	// below the tops of the feed rings and the total feed flow rate is
+	// less than the leakage out of the system. The maximum leakage rate
+	// was calculated at 30 gpm."
+	// specs/westinghouse_tech_manual/chapter_5/page_0537.txt:36-39
+	FeedRingVoidFrac float64
+
+	// HammerDamageFrac is the cumulative water-hammer damage to the feed
+	// nozzle / sleeve / piping from void collapse at high AFW flow. This is
+	// the damage accumulator for this mechanism; SleeveGapIn below is its
+	// wear-state readout. Both advance in lockstep from the same trigger.
+	// Only HammerDamageFrac feeds Part.Damage. Post-saturation: both cap
+	// after 20 events (1.0 and 0.25 in); further hammer events are
+	// uncounted, and both sensors pin at their caps.
+	HammerDamageFrac float64
+
+	// SleeveGapIn is the nozzle-sleeve gap in inches, growing with hammer
+	// events (0.025 in baseline; Trojan observed 0.25 in by erosion).
+	// Seeded to SgSleeveGapBaselineIn in MakePlant (explicit seeding).
+	// "Leakage through a 0.025-in. gap between the SG nozzle and the sleeve
+	// of the feed ring. This gap may have grown to 0.25 in. due to erosion."
+	// specs/westinghouse_tech_manual/chapter_5/page_0537.txt:34-36
+	SleeveGapIn float64
+
+	// HammerAlarm latches on the first hammer event (AFW > 400 gpm with
+	// voids present). Annunciation convention (derived; the spec gives no
+	// hammer alarm setpoint). One-way latch per p72_1 index convention 2b.
+	// "AFW flow rates in excess of 400 gpm per SG are thought to be
+	// necessary for a sudden collapse of steam voids, vice a gradual
+	// sweeping action which results in no water hammer."
+	// specs/westinghouse_tech_manual/chapter_5/page_0537.txt:39-41
+	HammerAlarm bool
 }
 
 func (s *SteamGenerator) Update() SteamGenerator {
 	ret := *s
 	return ret
+}
+
+// stepFeedRing advances the feed-ring void and water-hammer damage
+// by one tick. Called from Plant.Step after main-feed delivery and
+// EFWS credit update SG Water and the flow inputs (see plant.go
+// ordering note), so both inputs describe this step's delivered
+// flow. The void is persistent: it accumulates while voiding
+// conditions hold and decays when feed sweeps the ring. Hammer is
+// edge-triggered on the prior step's void (above
+// FeedRingVoidHammerMinFrac): a high-flow step with a void already
+// built up collapses it; a high-flow step with no prior void is a
+// gradual sweep (no hammer).
+//
+// "Steam voids form in the SG feed rings only if the SG levels are
+// below the tops of the feed rings and the total feed flow rate is
+// less than the leakage out of the system. The maximum leakage rate
+// was calculated at 30 gpm. AFW flow rates in excess of 400 gpm per
+// SG are thought to be necessary for a sudden collapse of steam
+// voids, vice a gradual sweeping action which results in no water
+// hammer."
+// specs/westinghouse_tech_manual/chapter_5/page_0537.txt:36-41
+// "With feed flow secured, and SG level below the tops of the J tubes
+// on top of the feed ring (20.6% narrow range [NR]), steam voids
+// begin to form in the feed ring. Void formation increases if the SG
+// level drops below the bottom of the feed ring (9% NR)."
+// specs/westinghouse_tech_manual/chapter_5/page_0538.txt:4-9
+func (s *SteamGenerator) stepFeedRing(dt time.Duration, levelPctNR, totalFeedFlowGpm float64) {
+	priorVoid := s.FeedRingVoidFrac
+	if priorVoid > FeedRingVoidHammerMinFrac && totalFeedFlowGpm > AfwHammerFlowGpm {
+		s.HammerAlarm = true // one-way latch (p72_1 index #2b); stays set
+		s.HammerDamageFrac = min(s.HammerDamageFrac+HammerDamagePerEvent, 1)
+		s.SleeveGapIn = min(s.SleeveGapIn+(SgSleeveGapErodedIn-SgSleeveGapBaselineIn)*HammerDamagePerEvent, SgSleeveGapErodedIn)
+		s.Damage = max(s.Damage, float32(s.HammerDamageFrac))
+		s.FeedRingVoidFrac = 0 // void collapsed by the hammer
+		return
+	}
+	alpha := dt.Seconds() / FeedRingVoidTauSec
+	if alpha > 1 {
+		alpha = 1
+	}
+	if levelPctNR < SgFeedRingTopPctNR && totalFeedFlowGpm < SgFeedRingLeakageGpm {
+		target := 1.0
+		if levelPctNR >= SgFeedRingBottomPctNR {
+			target = (SgFeedRingTopPctNR - levelPctNR) / (SgFeedRingTopPctNR - SgFeedRingBottomPctNR)
+		}
+		s.FeedRingVoidFrac = min(s.FeedRingVoidFrac+(target-s.FeedRingVoidFrac)*alpha, 1)
+		return
+	}
+	s.FeedRingVoidFrac = max(s.FeedRingVoidFrac*(1-alpha), 0)
 }
 
 // SteamGenerator shell-side operating pressure and the latent heat of

@@ -3601,6 +3601,118 @@ var EFWSMotorPumpFlow Volume = Volume{Val: 150.0 / 60.0, Unit: u.Gallon}
 // pump because the turbine governor can track steam demand.
 var EFWSTurbinePumpFlow Volume = Volume{Val: 200.0 / 60.0, Unit: u.Gallon}
 
+// SG feed-ring water-hammer constants (plans/p72_3.txt).
+// Trojan HRTD operating-experience thresholds applied as derived
+// thresholds; erosion/damage rates derived (spec states no
+// hammer-damage rate; search scope per plans/p72_1.txt).
+// "The potential for waterhammer in the feedwater system has been
+// greatly diminished by the incorporation of J-tubes on the
+// feedwater distribution ring and a sealed thermal sleeve on the
+// feed nozzle inlet."
+// specs/the_westinghouse_pressurized_water_react/chapter_3/page_067.txt:10-14
+const (
+	// SgFeedRingTopPctNR is the SG level (narrow-range %) below which
+	// steam voids begin to form in the feed ring.
+	// "With feed flow secured, and SG level below the tops of the J tubes
+	// on top of the feed ring (20.6% narrow range [NR]), steam voids
+	// begin to form in the feed ring."
+	// specs/westinghouse_tech_manual/chapter_5/page_0538.txt:4-6
+	SgFeedRingTopPctNR = 20.6
+
+	// SgFeedRingBottomPctNR is the SG level (NR %) below which void
+	// formation worsens (feed ring drains via nozzle-sleeve gap).
+	// "Void formation increases if the SG level drops below the bottom
+	// of the feed ring (9% NR) due to leakage through the nozzle-sleeve gap."
+	// specs/westinghouse_tech_manual/chapter_5/page_0538.txt:7-9
+	SgFeedRingBottomPctNR = 9.0
+
+	// AfwHammerFlowGpm is the total feed flow (per SG, gpm) above which
+	// a voided feed ring collapses suddenly (water hammer) rather than
+	// sweeping gradually (no hammer).
+	// "AFW flow rates in excess of 400 gpm per SG are thought to be
+	// necessary for a sudden collapse of steam voids, vice a gradual
+	// sweeping action which results in no water hammer."
+	// specs/westinghouse_tech_manual/chapter_5/page_0537.txt:39-41
+	// "If subsequent AFW flow rates exceed 400 gpm, then water hammer
+	// may result."
+	// specs/westinghouse_tech_manual/chapter_5/page_0538.txt:17-18
+	AfwHammerFlowGpm = 400.0
+
+	// AfwSafeFlowGpm is the preset throttled AFW flow (per SG, gpm):
+	// below the hammer threshold, sweeps the ring without collapse.
+	// "the auxiliary feedwater control valves are preset to throttled
+	// positions which supply approximately 165 gpm per AFW train per
+	// steam generator."
+	// specs/westinghouse_tech_manual/chapter_5/page_0537.txt:41-43
+	AfwSafeFlowGpm = 165.0
+
+	// SgSleeveGapBaselineIn is the as-built nozzle-sleeve gap (in).
+	// "Leakage through a 0.025-in. gap between the SG nozzle and the
+	// sleeve of the feed ring."
+	// specs/westinghouse_tech_manual/chapter_5/page_0537.txt:34-35
+	SgSleeveGapBaselineIn = 0.025
+
+	// SgSleeveGapErodedIn is the eroded nozzle-sleeve gap (in).
+	// "This gap may have grown to 0.25 in. due to erosion."
+	// specs/westinghouse_tech_manual/chapter_5/page_0537.txt:36
+	SgSleeveGapErodedIn = 0.25
+
+	// SgJTubeVolumeGal is the total J-tube volume (informational: no
+	// step logic consumes it; void fill dynamics are collapsed to a
+	// level+flow gate).
+	// "The volume of all the J tubes is about 1.5 gallons."
+	// specs/westinghouse_tech_manual/chapter_5/page_0538.txt:6-7
+	SgJTubeVolumeGal = 1.5
+
+	// SgFeedRingLeakageGpm is the maximum leakage rate (gpm) below which
+	// total feed is too low to sweep the ring: voiding requires total
+	// feed < leakage.
+	// "Steam voids form in the SG feed rings only if the SG levels are
+	// below the tops of the feed rings and the total feed flow rate is
+	// less than the leakage out of the system. The maximum leakage rate
+	// was calculated at 30 gpm."
+	// specs/westinghouse_tech_manual/chapter_5/page_0537.txt:36-39
+	SgFeedRingLeakageGpm = 30.0
+
+	// FeedRingVoidHammerMinFrac is the minimum void fraction that can
+	// hammer (noise floor). Derived: spec requires "small amounts of
+	// steam (approximately 5 in.3 in volume)" for the hammer event
+	// (specs/westinghouse_tech_manual/chapter_5/page_0537.txt:27-29);
+	// 0.01 is above float accumulation error and below the level-derived
+	// target (0..1). Without it a 1 ms step at tau=60 s yields void ~
+	// target*0.001/60 and strict >0 would hammer on noise.
+	FeedRingVoidHammerMinFrac = 0.01
+
+	// SgNarrowRangeSpanPct is the shell-volume % corresponding to NR
+	// 100%. Derived: the simulator's shell-level % (Water/Volume*100)
+	// is already the transmitter-% convention used for every other
+	// SG-level consumer (FeedwaterLevelSetpoint 50% of "narrow control
+	// range", RPSLowSteamGeneratorLevelTrip 15%,
+	// RPSHighSteamGeneratorLevelTrip 90%, all compared against
+	// Water/Volume % at plant.go:346 and 2263). NR% == shell-% for the
+	// lumped model, so the span is 100.0 shell-% = NR 100% and
+	// levelPctNR = levelPctShell * 100.0 / SgNarrowRangeSpanPct.
+	SgNarrowRangeSpanPct = 100.0
+
+	// HammerDamagePerEvent is the damage increment per hammer event.
+	// Derived (spec states no damage rate; search scope per
+	// plans/p72_1.txt): one event = 5% of feed-hardware life.
+	// Arithmetic: 1.0/0.05 = 20 events to full wear; gap advances
+	// (0.25-0.025)*0.05 = 0.01125 in/event; 0.025+20*0.01125 = 0.25 in.
+	HammerDamagePerEvent = 0.05
+
+	// FeedRingVoidTauSec is the first-order time constant (s) for void
+	// build/decay. Derived (spec states no fill rate; search scope per
+	// plans/p72_1.txt): 60 s so a drained SG voids within a minute-scale
+	// run; retune-able.
+	FeedRingVoidTauSec = 60.0
+
+	// SecondsPerMinute converts gal/s flow (the codebase convention,
+	// e.g. EFWSMotorPumpFlow at parts.go:3596) to gpm for the
+	// feed-ring thresholds above.
+	SecondsPerMinute = 60.0
+)
+
 // CCWS models the Component Cooling Water System — the
 // intermediate cooling loop that removes heat from safeguards
 // equipment and rejects it to the ultimate heat sink via the

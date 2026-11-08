@@ -65,7 +65,7 @@ func ConvertControlValue(kind, raw string) (string, error) {
 			return "", fmt.Errorf("percent %v out of range [0,100]", f)
 		}
 		return fmt.Sprintf("%v", f), nil
-	case "rpm", "psig", "psia", "fahrenheit", "gallon", "watt", "ppm", "volt", "hz", "gpm", "mw", "pctpersec":
+	case "rpm", "psig", "psia", "fahrenheit", "gallon", "watt", "ppm", "volt", "hz", "gpm", "mw", "pctpersec", "inch":
 		f, err := strconv.ParseFloat(raw, 64)
 		if err != nil {
 			return "", err
@@ -96,7 +96,7 @@ func FormatSensorValue(kind string, v any) (string, error) {
 			return "1", nil
 		}
 		return "0", nil
-	case "normalized", "percent", "signedpercent", "rpm", "psig", "psia", "fahrenheit", "gallon", "watt", "mwh", "ppm", "volt", "hz", "gpm", "cps", "dpm", "pctpersec":
+	case "normalized", "percent", "signedpercent", "rpm", "psig", "psia", "fahrenheit", "gallon", "watt", "mwh", "ppm", "volt", "hz", "gpm", "cps", "dpm", "pctpersec", "inch":
 		f, err := toFloat(v)
 		if err != nil {
 			return "", err
