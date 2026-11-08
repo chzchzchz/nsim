@@ -2294,6 +2294,49 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Corium-melt progress sensors (plans/x/corium/README.md):
+	// the lumped clad past the Zr melt regime defines the
+	// stage-6 boundary; CoreDamageFrac is the underlying
+	// fraction behind the Damage mirror; BreakDischarged is
+	// the net uncovery ledger the corium runs track. Sensors
+	// only, like the severe-accident readouts above. Sim
+	// instrumentation only: no specs/ citation names (or
+	// implies) a core-damage indicator as a plant instrument.
+	// The tech manual treats core damage as PRA/analysis output
+	// (chapter_12/0325/0327), while the specs' real
+	// accident instrumentation is core-exit thermocouples and
+	// excore detectors (chapter_7/page_119). The cumulative
+	// BreakDischarged ledgers are likewise model-internal
+	// bookkeeping: the spec records only per-step break flow
+	// (pwr_sim/chapter_4/page_053.txt:64-65), never a total.
+	m["ReactorBuilding/ReactorPressureVessel/CoreDamageFrac"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "CoreDamageFrac",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				100.0*p.ReactorBuilding.ReactorPressureVessel.CoreDamageFrac)
+		},
+	}
+	m["ReactorBuilding/ReactorPressureVessel/BreakDischarged"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "BreakDischarged",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.ReactorBuilding.ReactorPressureVessel.BreakDischarged.Float())
+		},
+	}
+	m["ReactorBuilding/ReactorPressureVessel/BreakDischargedNonCreditable"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "BreakDischargedNonCreditable",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.ReactorBuilding.ReactorPressureVessel.BreakDischargedNonCreditable.Float())
+		},
+	}
+
 	// Cladding fatigue + control-rod travel (plans/p72_2.txt):
 	// cumulative cyclic-fatigue damage fraction, the alarm
 	// latch, and the rod-step counter. Fractions publish as

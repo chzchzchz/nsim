@@ -123,6 +123,9 @@ func TestBridge_SevereSensors(t *testing.T) {
 		"ReactorBuilding/ReactorPressureVessel/Uncovery",
 		"ReactorBuilding/ReactorPressureVessel/Damage",
 		"ReactorBuilding/ReactorPressureVessel/OxidizedFrac",
+		"ReactorBuilding/ReactorPressureVessel/CoreDamageFrac",
+		"ReactorBuilding/ReactorPressureVessel/BreakDischarged",
+		"ReactorBuilding/ReactorPressureVessel/BreakDischargedNonCreditable",
 	} {
 		s, ok := sm[id]
 		require.True(t, ok, "sensor %q must be registered", id)
