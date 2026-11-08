@@ -5762,6 +5762,16 @@ const (
 	// hydrogen in air.
 	HydrogenExplosiveLimit float64 = 4.0
 
+	// HydrogenFullInventoryVolumePercent is the lumped volume percent
+	// represented by full converted inventory. It is deliberately
+	// HydrogenExplosiveLimit (aliased, not a second numeric literal)
+	// so the endpoint tracks the single explosive-threshold source
+	// of truth. At the inventory-scale rate cap the source is
+	// 0.005/s * 3600 * 4.0 = 72 %/h before ramp/taper/removal; over
+	// the full pickup range the pre-taper source (§3) integrates
+	// exactly to this endpoint.
+	HydrogenFullInventoryVolumePercent float64 = HydrogenExplosiveLimit
+
 	// HydrogenNumRecombiners is the number of hydrogen
 	// recombiners installed in the containment. The spec does
 	// not state a count; four is assumed, matching the
@@ -5897,11 +5907,10 @@ const (
 
 	// MaxOxidizedFrac is the 10 CFR 50.46 limit (b) cap, "Clad
 	// oxidation < 17% clad thickness" (specs/westinghouse_tech_
-	// manual/chapter_2/page_0209.txt:25-30), and
-	// MaxH2CladReactionFrac is limit (c), "H2 generation <1%
-	// hypothetical maximum". plans/p65_2.txt.
+	// manual/chapter_2/page_0209.txt:25-30), and its companion
+	// criterion is limit (c), "H2 generation <1% hypothetical
+	// maximum". plans/p65_2.txt.
 	MaxOxidizedFrac = 0.17
-	MaxH2CladReactionFrac = 0.01
 
 	// OxideWeightMaxMgPerCm2 is the oxygen pickup at the 17%
 	// ECR cap that OxidizedFrac normalizes against; Tier-B
@@ -5912,6 +5921,10 @@ const (
 	// derived H2 rate stays at the HydrogenGenerationRate
 	// scale; both Tier-B derived.
 	OxideWeightMaxMgPerCm2 = 100.0
+	// oxideWeightFullInventoryMgPerCm2 is the Tier-B derived pickup
+	// at full inventory exhaustion (OxidizedInventoryFrac == 1.0),
+	// the full-range analog of OxideWeightMaxMgPerCm2.
+	oxideWeightFullInventoryMgPerCm2 = OxideWeightMaxMgPerCm2 / MaxOxidizedFrac // 588.235... mg/cm^2
 	OxideWeightFloorMgPerCm2 = 1.0
 	OxidizedFracRateCapPerSec = 0.005
 

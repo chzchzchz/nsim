@@ -451,13 +451,20 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 		// blanketing to react with (plans/p73_1.txt).
 		oxidRate := oxidationKinetics(ret.CladTempF, ret.OxidizedFrac)
 		ret.OxidizedFrac = min(ret.OxidizedFrac+oxidRate*dtSeconds, MaxOxidizedFrac)
+		ret.OxidePickupRate = oxidePickupRateRaw(
+			ret.CladTempF, ret.OxidizedInventoryFrac, 1.0)
+		ret.OxidizedInventoryFrac = min(ret.OxidizedInventoryFrac+
+			oxidationInventoryKinetics(
+				ret.CladTempF, ret.OxidizedInventoryFrac)*dtSeconds, 1.0)
 		rxnW := oxidRate * ReactionEnthalpyJPerFrac
 		ret.CladTempF += rxnW / CladThermalMassCpJPerDegF * 9.0 / 5.0 * dtSeconds
 	} else if dnbFire {
 		rateFPerSec := float64(ret.TotalThermalPower()) / CladThermalMassCpJPerDegF * 9.0 / 5.0
 		ret.CladTempF = max(satF, ret.CladTempF+rateFPerSec*min(dtSeconds, 1))
+		ret.OxidePickupRate = 0
 	} else {
 		ret.CladTempF = satF
+		ret.OxidePickupRate = 0
 	}
 	// One-way damage ratchet: stageDamage is a temperature
 	// readout (0 below ballooning), so the re-pin to satF on
@@ -1153,6 +1160,22 @@ type ReactorPressureVessel struct {
 	// plans/p65_2.txt State.
 	OxidizedFrac float64
 
+	// OxidizedInventoryFrac is the cumulative fraction of all
+	// zirconium inventory converted to oxide. Unlike
+	// OxidizedFrac, which stops at the 17% core-damage/acceptance
+	// cap, this state advances to 1.0 so that the physical
+	// hydrogen source is bounded by reactant inventory rather than
+	// by a damage acceptance threshold. plans/p65_9.txt.
+	OxidizedInventoryFrac float64
+
+	// OxidePickupRate is the pre-taper, pre-fraction-cap Baker-Just
+	// oxide pickup dw/dt (mg/cm²/s) for the full-inventory range.
+	// It is written only by the uncovered RPV tail leg; the covered
+	// and below-onset legs zero it. It is distinct from the HDS
+	// GenerationActive fallback inside stepHydrogen. Only plant.go
+	// reads it during production, same-tick, after RPV.Step.
+	OxidePickupRate float64
+
 	// VesselFailed is the one-way severe-accident latch: set once
 	// uncovered clad has passed the zircaloy melting regime
 	// (ZrMeltF). Severe-accident state does not recover, so no
@@ -1255,21 +1278,84 @@ type ReactorPressureVessel struct {
 // scaled by remaining unoxidized clad and capped at
 // OxidizedFracRateCapPerSec. plans/p65_2.txt Rev-4 notes.
 //
-// Single consumer pair: the reactor tail integrates it, and the
-// Plant-level H2 derivation re-evaluates it for the same tick —
-// both read the post-step clad temperature, so the recomputed
-// rate matches the integrated advance exactly.
+// Single consumer pair: the reactor tail integrates it (advancing
+// both the damage and full-inventory states); plant.go reads the
+// tail-written OxidePickupRate directly and never re-evaluates the
+// kinetics for the H2 derivation (plans/p65_9.txt §3).
 func oxidationKinetics(cladF float64, oxidizedFrac float64) float64 {
-	if cladF <= CladOnsetF || oxidizedFrac >= MaxOxidizedFrac {
+	return oxidePickupRateForRange(cladF, oxidizedFrac, MaxOxidizedFrac)
+}
+
+// oxidationInventoryKinetics returns the full-inventory-range
+// twin of oxidationKinetics.
+func oxidationInventoryKinetics(cladF, inventoryFrac float64) float64 {
+	return oxidePickupRateForRange(cladF, inventoryFrac, 1.0)
+}
+
+// oxidePickupScaleForRange returns the pickup (mg/cm^2) that
+// corresponds to full exhaustion of the given range. For the
+// damage range it is OxideWeightMaxMgPerCm2 (the pickup at the
+// 17% cap). For the physical inventory range it is
+// oxideWeightFullInventoryMgPerCm2 (the training-construction
+// surrogate for full zirconium inventory).
+func oxidePickupScaleForRange(maxF float64) float64 {
+	if maxF == MaxOxidizedFrac {
+		return OxideWeightMaxMgPerCm2
+	}
+	if maxF == 1.0 {
+		return oxideWeightFullInventoryMgPerCm2
+	}
+	panic("oxidePickupScaleForRange: unknown range (debug-only gate)")
+}
+
+// oxidePickupRateRaw returns the PRE-TAPER oxide pickup rate
+// dw/dt (mg/cm^2/s) for the given range: the shared Baker-Just
+// core gated at or below CladOnsetF, desingularized at
+// OxideWeightFloorMgPerCm2, and capped to
+// OxidizedFracRateCapPerSec*scale, but with NO (1 - fraction/maxF)
+// taper applied. It is the H2 source (pre-taper / pre-fraction-cap).
+// The BakerJustValidityFloorF ramp is applied once inside the
+// FRACTION kernel (oxidePickupRateForRange), NOT here, per
+// plans/p65_9.txt §2 — raw is the true desingularized k/(2w).
+func oxidePickupRateRaw(cladF, fraction, maxF float64) float64 {
+	if cladF <= CladOnsetF || fraction >= maxF {
 		return 0
 	}
-	rate := math.Min(
-		math.Max(bakerJustDwDt(cladF, oxidizedFrac)/OxideWeightMaxMgPerCm2, 0),
-		OxidizedFracRateCapPerSec)
-	if cladF < BakerJustValidityFloorF {
-		rate *= (cladF - CladOnsetF) / (BakerJustValidityFloorF - CladOnsetF)
+	pickupScale := oxidePickupScaleForRange(maxF)
+	w := math.Max(fraction*pickupScale, OxideWeightFloorMgPerCm2)
+	dwDt := bakerJustDwDtForScale(cladF, w)
+	cappedDwDt := min(dwDt, OxidizedFracRateCapPerSec*pickupScale)
+	return max(cappedDwDt, 0)
+}
+
+// oxidePickupRateForRange returns the shared Baker-Just FRACTION
+// rate d(fraction)/dt (fraction/s), gated at or below CladOnsetF,
+// ramped to BakerJustValidityFloorF, capped, and tapered exactly
+// as oxidationKinetics does today. It is the function the reactor
+// tail calls to advance the two fraction states; it is NOT the
+// H2 source (the source is oxidePickupRateRaw above).
+func oxidePickupRateForRange(cladF, fraction, maxF float64) float64 {
+	if cladF <= CladOnsetF || fraction >= maxF {
+		return 0
 	}
-	return rate * (1.0 - oxidizedFrac/MaxOxidizedFrac)
+	raw := oxidePickupRateRaw(cladF, fraction, maxF)
+	pickupScale := oxidePickupScaleForRange(maxF)
+	rate := raw / pickupScale
+	if cladF < BakerJustValidityFloorF {
+		rate *= (cladF - CladOnsetF) /
+			(BakerJustValidityFloorF - CladOnsetF)
+	}
+	return rate * (1.0 - fraction/maxF)
+}
+
+// bakerJustDwDtForScale returns k/(2w) for the given oxide weight w
+// without desingularization. Callers must apply the
+// OxideWeightFloorMgPerCm2 floor themselves before calling.
+func bakerJustDwDtForScale(cladF, w float64) float64 {
+	tempK := (cladF - 32.0) * 5.0 / 9.0 + 273.15
+	k := BakerJustPrefactor * math.Exp(
+		-BakerJustQCalPerMol/(GasConstantCalPerMolK*tempK))
+	return k / (2.0 * w)
 }
 
 // bakerJustDwDt evaluates the Baker-Just dw/dt = k/(2w) with
@@ -1277,10 +1363,9 @@ func oxidationKinetics(cladF float64, oxidizedFrac float64) float64 {
 // oxygen pickup implied by oxidizedFrac, desingularized at
 // OxideWeightFloorMgPerCm2. plans/p65_2.txt Step 1.
 func bakerJustDwDt(cladF float64, oxidizedFrac float64) float64 {
-	tempK := (cladF - 32.0) * 5.0 / 9.0 + 273.15
-	k := BakerJustPrefactor * math.Exp(-BakerJustQCalPerMol/(GasConstantCalPerMolK*tempK))
-	w := math.Max(oxidizedFrac*OxideWeightMaxMgPerCm2, OxideWeightFloorMgPerCm2)
-	return k / (2.0 * w)
+	w := math.Max(oxidizedFrac*OxideWeightMaxMgPerCm2,
+		OxideWeightFloorMgPerCm2)
+	return bakerJustDwDtForScale(cladF, w)
 }
 
 // stageDamage maps clad temperature to lumped damage fraction:

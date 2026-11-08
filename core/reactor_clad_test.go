@@ -115,12 +115,16 @@ func TestCheckCladFieldsRoundTrip(t *testing.T) {
 	r.UncoveryFrac = 0.72
 	r.CoreDamageFrac = 0.41
 	r.Damage = 0.41
+	r.OxidizedInventoryFrac = 0.63
+	r.OxidePickupRate = 2.941
 
 	b, err := json.Marshal(r)
 	require.NoError(t, err)
 	assert.Contains(t, string(b), `"CladTempF"`)
 	assert.Contains(t, string(b), `"UncoveryFrac"`)
 	assert.Contains(t, string(b), `"CoreDamageFrac"`)
+	assert.Contains(t, string(b), `"OxidizedInventoryFrac"`)
+	assert.Contains(t, string(b), `"OxidePickupRate"`)
 
 	var r2 ReactorPressureVessel
 	require.NoError(t, json.Unmarshal(b, &r2))
@@ -128,12 +132,18 @@ func TestCheckCladFieldsRoundTrip(t *testing.T) {
 	assert.Equal(t, 0.72, r2.UncoveryFrac)
 	assert.Equal(t, 0.41, r2.CoreDamageFrac)
 	assert.Equal(t, float32(0.41), r2.Damage)
+	assert.Equal(t, 0.63, r2.OxidizedInventoryFrac)
+	assert.Equal(t, 2.941, r2.OxidePickupRate)
 
 	p := MakePlant()
 	p.ReactorBuilding.ReactorPressureVessel.CladTempF = 1800
 	p.ReactorBuilding.ReactorPressureVessel.UncoveryFrac = 0.72
 	p.ReactorBuilding.ReactorPressureVessel.CoreDamageFrac = 0.41
 	p.ReactorBuilding.ReactorPressureVessel.Damage = 0.41
+	// plans/p65_9.txt §1: no new bridge sensor is required; the
+	// inventory state is internal to the H2 derivation and is not a
+	// published readout. Documented deviation from CHECK_SKILL §5;
+	// OxidizedFrac remains the damage readout.
 	sm := GetSensorMap(&p)
 	for _, id := range []string{
 		"ReactorBuilding/ReactorPressureVessel/CladTemp",

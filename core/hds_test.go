@@ -111,8 +111,9 @@ func TestHDS_RecombinersRemoveHydrogen(t *testing.T) {
 // The plant state is set to the predeclared late-uncovered hot
 // baseline that HydrogenDeflagrationEnergyJ was calibrated against:
 // 33.199 psia, 692.4 K, ESF-dead sinks. The 4% mixture is seeded
-// because the p65_2 source integration saturates at 1% and cannot
-// reach the explosive limit organically.
+// deliberately as a boundary condition; it is no longer evidence
+// the plant can reach 4% organically. Organic reachability is
+// pinned by TestPlant_HydrogenSourceReachesExplosiveLimitWithoutSeeding.
 func TestHDS_DeflagrationLatchOnExplosiveLimit(t *testing.T) {
 	t.Parallel()
 	p := MakePlant()

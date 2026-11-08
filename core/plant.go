@@ -1353,7 +1353,8 @@ func (p *Plant) Step(dt time.Duration) {
 	// Capture the pre-step oxidation before the RPV Step advances
 	// it, so the step-2 HDS derivation can read this step's
 	// Baker-Just advance (plans/p65_2.txt step 2).
-	priorOxidizedFrac := p.ReactorBuilding.ReactorPressureVessel.OxidizedFrac
+	// plans/p65_9.txt: derivation now reads rpv.OxidePickupRate
+	// same-tick after RPV.Step; no priorOxidizedFrac capture.
 	// Step the electrical distribution first so the ESF bus
 	// Energized state for this step is visible to every
 	// downstream consumer (CW pump, SFPC pump, RHRS, CCWS,
@@ -2109,15 +2110,13 @@ func (p *Plant) Step(dt time.Duration) {
 		// excursion on either leg of this two-site gate.
 		generationRate = 0.0
 	} else {
-		// Oxidation-driven rate (plans/p65_2.txt step 2): the
-		// Baker-Just advance this step mapped onto the G4
-		// HydrogenGenerationRate scale, so reaching the 17%
-		// oxidation cap accumulates the 50.46(c) 1% hypothetical
-		// maximum. SecondsPerHour: stepHydrogen consumes %/h,
-		// the rate is per second.
-		generationRate = oxidationKinetics(rpv.CladTempF, priorOxidizedFrac) *
-			SecondsPerHour * (MaxH2CladReactionFrac / MaxOxidizedFrac) *
-			HydrogenGenerationRate
+		// Oxidation-driven rate (plans/p65_9.txt §3): single-writer
+		// read of the pre-taper oxide pickup rate the tail wrote
+		// this same tick (after RPV.Step). plant.go never recomputes
+		// dwDt here. SecondsPerHour: stepHydrogen consumes %/h.
+		generationRate = rpv.OxidePickupRate /
+			oxideWeightFullInventoryMgPerCm2 *
+			SecondsPerHour * HydrogenFullInventoryVolumePercent
 	}
 	// Containment vent isolation (Table 7-1): with either phase
 	// latched, the atmosphere-exchange path through the wall is

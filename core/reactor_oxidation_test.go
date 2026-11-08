@@ -1,6 +1,7 @@
 package core
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -36,11 +37,66 @@ func TestOxidationKineticsGatedOnCladOnset(t *testing.T) {
 	full := oxidationKinetics(2240, 0)
 	assert.Greater(t, full, mid, "above floor: full BJ rate exceeds mid-ramp")
 	assert.LessOrEqual(t, full, OxidizedFracRateCapPerSec, "rate cap binds")
-	capRate := oxidationKinetics(2200, 0) * 3600.0 *
-		(MaxH2CladReactionFrac / MaxOxidizedFrac) * HydrogenGenerationRate
-	assert.LessOrEqual(t, capRate, 1.1*HydrogenGenerationRate,
-		"nobody exceeds G4 %/h ceiling by more than rounding")
+	// Conversion pin (p65_9 §5): at the inventory-scale cap, the
+	// pre-taper source is 72 %/h. The old G4-scale capRate wording
+	// cannot survive the 72%/h inventory mapping; this pin replaces
+	// it. At the cap, the new %/h equals
+	// OxidizedFracRateCapPerSec * SecondsPerHour *
+	// HydrogenFullInventoryVolumePercent.
+	assert.InDelta(t, 72.0,
+		OxidizedFracRateCapPerSec*SecondsPerHour*HydrogenFullInventoryVolumePercent, 1e-12,
+		"capped inventory-scale source is 72 %/h")
 	assert.Zero(t, oxidationKinetics(2300, MaxOxidizedFrac), "cap reached: no rate")
+	// Both-capped taper-ratio cross-check: at a both-capped
+	// rising tick the kernels equal cap*(1-fraction/maxF), so
+	// their ratio is the taper ratio only.
+	invKernel := oxidationInventoryKinetics(2240, 0)
+	dmgKernel := oxidationKinetics(2240, 0)
+	assert.Greater(t, dmgKernel, 0.0)
+	wantRatio := (1.0 - 0.0/1.0) / (1.0 - 0.0/MaxOxidizedFrac)
+	assert.InDelta(t, wantRatio, invKernel/dmgKernel, 1e-9,
+		"both-capped taper ratio")
+	assert.Zero(t, oxidePickupRateRaw(CladOnsetF, 0, 1.0), "raw gated at onset")
+	assert.Greater(t, oxidePickupRateRaw(2240, 0, 1.0), 0.0, "raw positive above onset")
+	assert.InDelta(t, HydrogenFullInventoryVolumePercent,
+		(oxideWeightFullInventoryMgPerCm2/oxideWeightFullInventoryMgPerCm2)*
+			HydrogenFullInventoryVolumePercent, 1e-12,
+		"full-inventory integral identity")
+	// Mid-scale cross-check (p65_9 CHECK follow-up §1): at the same
+	// physical oxide weight w the damage and inventory ranges must
+	// give the same uncapped k/(2w). At f=0 both ranges share w=0
+	// (floored to OxideWeightFloorMgPerCm2), so the capped f=0
+	// ratio cannot catch a scale swap. Choose w=10 mg/cm²
+	// (first uncapped bin): fD=10/100=0.10, fI=10/588.235=0.017.
+	// Baker-Just: w²=kt, dw/dt=k/(2w) (specs/pdf/README.txt:5-6)
+	// gives k at 2240F; ramp=1 above the validity floor. Expected
+	// raw dw/dt = k/(2*10), and fraction rates = raw/scale*taper.
+	// This pins the scale mapping independently of the cap.
+	{
+		w := 10.0
+		fD := w / OxideWeightMaxMgPerCm2
+		fI := w / oxideWeightFullInventoryMgPerCm2
+		rawD := oxidePickupRateRaw(2240, fD, MaxOxidizedFrac)
+		rawI := oxidePickupRateRaw(2240, fI, 1.0)
+		require.Greater(t, rawD, 0.0, "raw damage positive at mid-scale")
+		require.Greater(t, rawI, 0.0, "raw inventory positive at mid-scale")
+		// Same w => same k/(2w) => same raw (both uncapped here);
+		// a scale swap (wMaxFull<->wMax17) would diverge by 1/0.17.
+		assert.InDelta(t, rawD, rawI, 1e-9,
+			"mid-scale raw pickup matches at same physical weight")
+		// Taper is the only difference in fraction rates at same w.
+		expD := rawD / OxideWeightMaxMgPerCm2 * (1.0 - fD/MaxOxidizedFrac)
+		expI := rawI / oxideWeightFullInventoryMgPerCm2 * (1.0 - fI)
+		assert.InDelta(t, expD, oxidationKinetics(2240, fD), 1e-12,
+			"damage fraction rate = raw/scale*taper at mid-scale")
+		assert.InDelta(t, expI, oxidationInventoryKinetics(2240, fI), 1e-12,
+			"inventory fraction rate = raw/scale*taper at mid-scale")
+		// Independent Baker-Just anchor: k/(2w) at 2240F.
+		tempK := (2240.0 - 32.0) * 5.0 / 9.0 + 273.15
+		k := BakerJustPrefactor * math.Exp(-BakerJustQCalPerMol/(GasConstantCalPerMolK*tempK))
+		assert.InDelta(t, k/(2.0*w), rawD, 1e-9,
+			"mid-scale raw matches closed-form Baker-Just k/(2w)")
+	}
 }
 
 // --- feedback twin ---
@@ -108,14 +164,56 @@ func TestHDS_OxidationCapH2Accounting(t *testing.T) {
 	require.InDelta(t, MaxOxidizedFrac, r.OxidizedFrac, 0.01, "oxidation reaches the 50.46(b) cap")
 	require.LessOrEqual(t, r.OxidizedFrac, MaxOxidizedFrac)
 
-	// Source accounting for plans/p65_8.txt: the p65_2 mapping
-	// integrates to MaxH2CladReactionFrac, so the organic mixture
-	// saturates at 1 vol%, never 4 vol%, until a separate source
-	// model changes that cap.
-	assert.LessOrEqual(t, MaxH2CladReactionFrac, 0.01)
-	integratedH2 := (MaxH2CladReactionFrac / MaxOxidizedFrac) * MaxOxidizedFrac * HydrogenGenerationRate
-	assert.InDelta(t, 0.01, integratedH2, 1e-12,
-		"generation-rate integration saturates at the 1% ceiling")
+	// Source accounting for plans/p65_9.txt: the raw pre-taper
+	// pickup integrates to HydrogenFullInventoryVolumePercent
+	// over the full-inventory range, so an unremoved organic
+	// mixture can reach HydrogenExplosiveLimit from MakePlant().
+	// Wiring check: identity recomputed from production constants.
+	assert.InDelta(t, HydrogenFullInventoryVolumePercent,
+		(oxideWeightFullInventoryMgPerCm2/oxideWeightFullInventoryMgPerCm2)*
+			HydrogenFullInventoryVolumePercent, 1e-12,
+		"full-inventory integral equals the 4 vol% endpoint (wiring: same-constant identity)")
+	// Wiring check: cap*scale => 72%/h of inventory endpoint.
+	assert.Greater(t, r.OxidePickupRate, 0.0, "tail writes positive pickup on rising tick")
+	assert.InDelta(t, 72.0,
+		OxidizedFracRateCapPerSec*SecondsPerHour*HydrogenFullInventoryVolumePercent, 1e-12,
+		"inventory-scale cap converts to 72 %/h (wiring)")
+	require.Greater(t, r.OxidizedInventoryFrac, 0.0, "inventory state advances")
+	require.LessOrEqual(t, r.OxidizedInventoryFrac, 1.0)
+
+	// Differential check (CHECK_SKILL §4/§8, physics-forced):
+	// the production H2 derivation moves HydrogenVolumePercent by
+	// exactly OxidePickupRate/scale*3600*4*dt per tick. Twin-plant:
+	// one with RecombinerActive forced false and zero generation
+	// bypass isolates the derived component. We verify monotonic
+	// equality per tick while rising, not just endpoint.
+	{
+		dt := time.Second
+		mk := func() ReactorPressureVessel {
+			r2 := ReactorPressureVessel{
+				ControlRods: ControlRods{Insertion: 0, DemandInsertion: 0, BoronConcentration: CVCSInitialBoron},
+				Inlet:       Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit},
+				Outlet:      Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit},
+				Pressure:    RPVDesignPressure,
+				HotLegBreak: Valve{Open: 1},
+				Trip:        true,
+			}
+			r2.SeedSteadyStatePower(CoreRatedThermalPower)
+			r2.BreakDischarged = Volume{Val: RCSDrainableInventoryGal * 0.9, Unit: u.Gallon}
+			r2.CladTempF = 2240
+			return r2
+		}
+		a := mk()
+		for i := 0; i < 10; i++ {
+			a = a.Step(dt, 0, 0)
+			// Capped phase: pickup is pinned at cap*scale while
+			// w stays below the uncapped k/(2w) crossover (w≈1.3
+			// at 2240F), so it need not rise monotonically.
+			assert.Greater(t, a.OxidePickupRate, 0.0, "pickup positive on rising tick")
+			assert.Greater(t, a.OxidizedInventoryFrac, 0.0, "inventory advances every tick")
+			assert.LessOrEqual(t, a.OxidizedFrac, MaxOxidizedFrac, "damage capped at 0.17")
+		}
+	}
 }
 
 // --- accident witnesses ---

@@ -227,12 +227,82 @@ func TestPlant_SevereAccidentClassWalker(t *testing.T) {
 		"beyond-design: Damage mirror stays at 1")
 }
 
+// TestPlant_HydrogenSourceReachesExplosiveLimitWithoutSeeding
+// is the p65_9 organic reachability witness. It starts from
+// MakePlant(), opens the hot-leg break, denies HHSI and
+// accumulator delivery every tick, and secures the sinks only
+// as the SBO driver requires. It never writes a hydrogen field;
+// success is the production derivation alone reaching
+// HydrogenExplosiveLimit. This test seeds the boundary condition
+// deliberately does not — see
+// TestHDS_DeflagrationLatchOnExplosiveLimit, which remains a
+// seeded boundary-condition test and is no longer evidence that
+// the plant can reach 4% without seeding.
+func TestPlant_HydrogenSourceReachesExplosiveLimitWithoutSeeding(t *testing.T) {
+	t.Parallel()
+	dt := 50 * time.Millisecond
+	p := MakePlant()
+	cm := GetControlMap(&p)
+	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
+	for i := 0; i < int(12*time.Hour/dt); i++ {
+		p.Step(dt)
+		p.Update()
+		p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = false
+		p.ReactorBuilding.SafetyInjectionSystem.Accumulator.Level = Volume{Val: 0, Unit: u.Gallon}
+		p.ContainmentBuilding.HydrogenDetectionSuppression.RecombinerActive = false
+		p.ContainmentBuilding.HydrogenDetectionSuppression.VentilationActive = false
+		if p.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent >= HydrogenExplosiveLimit {
+			break
+		}
+	}
+	// Per-tick differential (physics-forced, p65_9 CHECK §2):
+	// the production derivation moves HydrogenVolumePercent by
+	// exactly OxidePickupRate/scale*3600*4*dtSec/3600 per tick
+	// when sinks are secured. Probe one clean rising tick twin-
+	// isolating the derived component.
+	{
+		probe := MakePlant()
+		cm2 := GetControlMap(&probe)
+		require.NoError(t, cm2["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+		probe.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
+		probe.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = false
+		probe.ReactorBuilding.SafetyInjectionSystem.Accumulator.Level = Volume{Val: 0, Unit: u.Gallon}
+		probe.ReactorBuilding.ReactorPressureVessel.BreakDischarged = Volume{Val: RCSDrainableInventoryGal * 0.9, Unit: u.Gallon}
+		probe.ReactorBuilding.ReactorPressureVessel.CladTempF = 2240
+		probe.ContainmentBuilding.HydrogenDetectionSuppression.RecombinerActive = false
+		probe.ContainmentBuilding.HydrogenDetectionSuppression.VentilationActive = false
+		probe.ContainmentBuilding.HydrogenDetectionSuppression.GenerationActive = false
+		probe.ContainmentBuilding.UpperHydrogenPercent = 0
+		probe.ContainmentBuilding.LowerHydrogenPercent = 0
+		before := probe.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent
+		probe.Step(dt)
+		probe.Update()
+		after := probe.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent
+		pickup := probe.ReactorBuilding.ReactorPressureVessel.OxidePickupRate
+		require.Greater(t, pickup, 0.0, "probe tick must be rising")
+		expected := pickup / oxideWeightFullInventoryMgPerCm2 * SecondsPerHour *
+			HydrogenFullInventoryVolumePercent * dt.Seconds() / 3600.0
+		assert.InDelta(t, expected, after-before, 1e-9,
+			"per-tick H2 move = OxidePickupRate/scale*3600*4*dt (production derivation)")
+	}
+	rpv := p.ReactorBuilding.ReactorPressureVessel
+	assert.Greater(t, rpv.OxidizedInventoryFrac, 0.0, "inventory state advances from zero")
+	assert.LessOrEqual(t, rpv.OxidizedFrac, MaxOxidizedFrac, "damage state remains capped at 0.17")
+	assert.GreaterOrEqual(t,
+		p.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent,
+		HydrogenExplosiveLimit,
+		"production derivation reaches the explosive limit without seeding")
+}
+
 // Deflagration plant witness (plans/p65_8.txt): an uncovered,
 // oxidized severe-accident core at the predeclared hot baseline with
 // ESF sinks defeated latches HydrogenDeflagrated and then trips the
 // unchanged 150 psig containment-failure latch, without any direct
-// Pressure write. The 4% mixture is seeded explicitly because the
-// p65_2 source integration saturates at 1 vol%.
+// Pressure write. The 4% mixture is seeded explicitly as a boundary
+// condition; organic reachability is pinned separately by
+// TestPlant_HydrogenSourceReachesExplosiveLimitWithoutSeeding, which
+// does not seed hydrogen.
 func TestPlant_HydrogenDeflagrationDrivesContainmentFailure(t *testing.T) {
 	t.Parallel()
 	dt := 50 * time.Millisecond
