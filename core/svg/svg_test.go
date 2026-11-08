@@ -489,7 +489,11 @@ func TestPidgapsPartsRender(t *testing.T) {
 // unboundOK allow-lists rendered data-part values that intentionally
 // have no bridge key under them. Anchors plan: the test fails if a
 // new unbound part appears without an entry here.
-var unboundOK = map[string]bool{}
+var unboundOK = map[string]bool{
+	// Atmosphere sink (p69_1): the SG blowdown destination is
+	// outside the plant boundary; no bridge field carries it.
+	"Outside/Atmosphere": true,
+}
 
 // TestBridgePartCoverage enforces the anchors-plan acceptance
 // criterion: every rendered data-part group prefix-matches a
@@ -631,7 +635,7 @@ func TestSnapAngle_CanonicalMultiples(t *testing.T) {
 func TestBuildDot_DockingExtras(t *testing.T) {
 	p := core.MakePlant()
 	g := p.BuildGraph()
-	dot, err := BuildDot(g, nil)
+	dot, err := BuildDot(g, &p, nil)
 	require.NoError(t, err)
 	require.Contains(t, dot, `"RPV"`)
 	for _, id := range dockingExtrasForRPV {
@@ -689,10 +693,15 @@ func TestComputeLayout_RCPBetweenSGAndRPV(t *testing.T) {
 	// Pressurizer above the hot leg (smaller Y is higher after
 	// the Y flip).
 	assert.Less(t, pzr.Y, rpv.Y)
-	// 120 after dedup: 6 standalone valves (SGADV/SGSSV/SteamlineVent/
-	// DrainValve/WetLayupFillValve + FeedwaterRegulator + SOLIDPP)
-	// were double-drawn as diagramParts and standalone; now drawn once.
-	assert.Equal(t, 120, len(symbolCount(t)), "symbol count drift (post-anchors): parallel edges keep both valve glyphs, pipe geometry deduped only")
+	// 119 after p69_1: standalone valves promoted to edge hops
+	// (SGADV/SGSSV/SteamlineVent/DrainValve/WetLayupFillValve,
+	// RAS1/RAS2/RBS1/RBS2, RABYP/RBBYP, SOLIDPP, EAMFV/EBMFV)
+	// plus new graph-node symbols (EAMD/EATD/EBMD/EBTD,
+	// Outside) and Intake/SWSHeader promoted from extraNodes
+	// to graph nodes; standalone duplicates removed.
+	// Parallel edges keep both valve glyphs; pipe geometry
+	// deduped only.
+	assert.Equal(t, 119, len(symbolCount(t)), "symbol count drift (post-anchors): parallel edges keep both valve glyphs, pipe geometry deduped only")
 }
 
 // symbolCount counts top-level <use> outside <defs> in a render.

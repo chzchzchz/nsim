@@ -89,7 +89,7 @@ func main() {
 	}
 	if *svgDotPath != "" {
 		g := p.BuildGraphFor(&p)
-		dot, err := svg.BuildDot(g, nil)
+		dot, err := svg.BuildDot(g, &p, nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to build svg-dot: %v\n", err)
 			os.Exit(1)

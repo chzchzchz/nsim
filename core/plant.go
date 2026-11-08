@@ -1210,7 +1210,7 @@ type Plant struct {
 	nextPlant      *Plant
 	cachedGraph    *PlantGraph
 	cachedTarget   *Plant
-	cachedPumps    [7]*Pump
+	cachedPumps    [8]*Pump
 }
 
 func (p *Plant) Step(dt time.Duration) {
@@ -3606,6 +3606,20 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	add("SATTank", "SprayAdditiveTank", &satNode{vol: &css.SATLevel})
 	add("EFWSTankA", "EmergencyFeedwaterSystem", &efwsTankNode{tank: &efws.SubsystemA.Tank})
 	add("EFWSTankB", "EmergencyFeedwaterSystem", &efwsTankNode{tank: &efws.SubsystemB.Tank})
+	// EFWS pumps as graph nodes so dot positions them on the pipe
+	// instead of in the disconnected rank rows (extraNodes shrinks).
+	add("EAMD", "EmergencyFeedwaterPumpMD", &passThroughNode{})
+	add("EATD", "EmergencyFeedwaterPumpTD", &passThroughNode{})
+	add("EBMD", "EmergencyFeedwaterPumpMD", &passThroughNode{})
+	add("EBTD", "EmergencyFeedwaterPumpTD", &passThroughNode{})
+	// Atmosphere sink for SG blowdowns (ADV + safety valve).
+	// Zero inventory, records the tick's dumped volume; never feeds
+	// back into a Step (cisSink pattern, nodes.go).
+	add("Outside", "Atmosphere", &atmosphereSink{})
+	// Service-water supply chain nodes (passThroughNode; the
+	// model holds no water inventory in the header itself).
+	add("Intake", "RiverIntake", &passThroughNode{})
+	add("SWSHeader", "ServiceWaterHeader", &passThroughNode{})
 	add("SISAccumulators", "SafetyInjectionSystem", &accNode{vol: &sis.Accumulator.Level, capVol: &sis.Accumulator.Capacity})
 	add("PRT", "PressurizerReliefTank", &target.ReactorBuilding.PressurizedReliefTank)
 	add("CIS", "ContainmentIsolationSystem", &cisSink{})
@@ -3625,28 +3639,63 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	// suction from the primary tanks, not CST). Teaches the
 	// renderer the real topology; Step ledger already debits
 	// the tanks (efws.go:117-208).
-	flowEdge("EFWSTankA", "SG", &efws.SubsystemA.MotorPump.FlowModulatingValve,
+	// Both legs of each split carry the same closure
+	// (rated*Open, gated on IsRunning()) so the audit is
+	// conserving (CHECK_SKILL §2); the Pump field on the
+	// discharge leg carries the latch for classifyPipe.
+	// The FlowModulatingValve sits on the suction leg
+	// (tank->pump) where it physically throttles.
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:19-34
+	flowEdge("EFWSTankA", "EAMD", &efws.SubsystemA.MotorPump.FlowModulatingValve,
 		&efws.SubsystemA.MotorPump.Pump, func(time.Duration) float64 {
 			if efws.SubsystemA.MotorPump.Pump.IsRunning() {
 				return EFWSMotorPumpFlow.Float() * efws.SubsystemA.MotorPump.FlowModulatingValve.Open
 			}
 			return 0
 		})
-	flowEdge("EFWSTankA", "SG", &efws.SubsystemA.TurbinePump.FlowModulatingValve,
+	flowEdge("EAMD", "SG", nil,
+		&efws.SubsystemA.MotorPump.Pump, func(time.Duration) float64 {
+			if efws.SubsystemA.MotorPump.Pump.IsRunning() {
+				return EFWSMotorPumpFlow.Float() * efws.SubsystemA.MotorPump.FlowModulatingValve.Open
+			}
+			return 0
+		})
+	flowEdge("EFWSTankA", "EATD", &efws.SubsystemA.TurbinePump.FlowModulatingValve,
 		&efws.SubsystemA.TurbinePump.Pump, func(time.Duration) float64 {
 			if efws.SubsystemA.TurbinePump.Pump.IsRunning() {
 				return EFWSTurbinePumpFlow.Float() * efws.SubsystemA.TurbinePump.FlowModulatingValve.Open
 			}
 			return 0
 		})
-	flowEdge("EFWSTankB", "SG", &efws.SubsystemB.MotorPump.FlowModulatingValve,
+	flowEdge("EATD", "SG", nil,
+		&efws.SubsystemA.TurbinePump.Pump, func(time.Duration) float64 {
+			if efws.SubsystemA.TurbinePump.Pump.IsRunning() {
+				return EFWSTurbinePumpFlow.Float() * efws.SubsystemA.TurbinePump.FlowModulatingValve.Open
+			}
+			return 0
+		})
+	flowEdge("EFWSTankB", "EBMD", &efws.SubsystemB.MotorPump.FlowModulatingValve,
 		&efws.SubsystemB.MotorPump.Pump, func(time.Duration) float64 {
 			if efws.SubsystemB.MotorPump.Pump.IsRunning() {
 				return EFWSMotorPumpFlow.Float() * efws.SubsystemB.MotorPump.FlowModulatingValve.Open
 			}
 			return 0
 		})
-	flowEdge("EFWSTankB", "SG", &efws.SubsystemB.TurbinePump.FlowModulatingValve,
+	flowEdge("EBMD", "SG", nil,
+		&efws.SubsystemB.MotorPump.Pump, func(time.Duration) float64 {
+			if efws.SubsystemB.MotorPump.Pump.IsRunning() {
+				return EFWSMotorPumpFlow.Float() * efws.SubsystemB.MotorPump.FlowModulatingValve.Open
+			}
+			return 0
+		})
+	flowEdge("EFWSTankB", "EBTD", &efws.SubsystemB.TurbinePump.FlowModulatingValve,
+		&efws.SubsystemB.TurbinePump.Pump, func(time.Duration) float64 {
+			if efws.SubsystemB.TurbinePump.Pump.IsRunning() {
+				return EFWSTurbinePumpFlow.Float() * efws.SubsystemB.TurbinePump.FlowModulatingValve.Open
+			}
+			return 0
+		})
+	flowEdge("EBTD", "SG", nil,
 		&efws.SubsystemB.TurbinePump.Pump, func(time.Duration) float64 {
 			if efws.SubsystemB.TurbinePump.Pump.IsRunning() {
 				return EFWSTurbinePumpFlow.Float() * efws.SubsystemB.TurbinePump.FlowModulatingValve.Open
@@ -3688,6 +3737,8 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	// GeneratorCoolingSystem has no DriveReady field; the pump
 	// is ready iff commanded on, so drive mirrors the latch.
 	sccwPump := getPump(6, genCooling.SCCWPumpRunning, true)
+	swsPump := getPump(7, target.Outside.ServiceWaterSystem.PumpRunning,
+		target.Outside.ServiceWaterSystem.DriveReady)
 
 	// HHSI RWST / Sump phase edges share one guard shape; they
 	// differ only in the suction source being aligned.
@@ -3712,7 +3763,7 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	// by dt.Seconds() yields gal/s so recordGraphFlow's
 	// * dt.Seconds() lands the per-step amount exactly once
 	// (CHECK_SKILL.md §2: one scale per sum).
-	flowEdge("RHRS_A", "InjectionSink", nil, &rhrs.TrainA.Pump, func(dt time.Duration) float64 {
+	flowEdge("RHRS_A", "InjectionSink", &rhrs.TrainA.BypassValve, &rhrs.TrainA.Pump, func(dt time.Duration) float64 {
 		if rhrs.TrainA.SuctionValves[0].Open == 1 && rhrs.TrainA.SuctionValves[1].Open == 1 {
 			// ReturnFlow is per-step gallons (rhrs.go:76-78
 			// accumulates * dt.Seconds()); convert to gal/s so
@@ -3723,7 +3774,7 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 		}
 		return 0
 	})
-	flowEdge("RHRS_B", "InjectionSink", nil, &rhrs.TrainB.Pump, func(dt time.Duration) float64 {
+	flowEdge("RHRS_B", "InjectionSink", &rhrs.TrainB.BypassValve, &rhrs.TrainB.Pump, func(dt time.Duration) float64 {
 		if rhrs.TrainB.SuctionValves[0].Open == 1 && rhrs.TrainB.SuctionValves[1].Open == 1 {
 			// Per-step gallons -> gal/s (see TrainA above).
 			return rhrs.TrainB.ReturnFlow.Float() / dt.Seconds()
@@ -3871,6 +3922,110 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 		return 0
 	})
 	edge("SCCWPump", "Generator", nil, nil)
+
+	// --- p69_1: no-flow survivors (EFWS split above, RHRS suction,
+	// SG blowdowns, solid plant, service water). All audit-only:
+	// Steps already moved the volumes (CHECK_SKILL §5).
+
+	// RHRS suction: two series isolation valves per suction
+	// line. Only the first edge carries flow; the second is a
+	// zero-flow audit edge so SuctionValve2 has a pipe to sit
+	// on (same guard shape as the return edge below).
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_084.txt:16-20
+	flowEdge("RPV", "RHRS_A", &rhrs.TrainA.SuctionValves[0], nil,
+		func(dt time.Duration) float64 {
+			if rhrs.TrainA.SuctionValves[0].Open == 1 && rhrs.TrainA.SuctionValves[1].Open == 1 {
+				return rhrs.TrainA.ReturnFlow.Float() / dt.Seconds()
+			}
+			return 0
+		})
+	flowEdge("RPV", "RHRS_A", &rhrs.TrainA.SuctionValves[1], nil,
+		func(time.Duration) float64 { return 0 })
+	flowEdge("RPV", "RHRS_B", &rhrs.TrainB.SuctionValves[0], nil,
+		func(dt time.Duration) float64 {
+			if rhrs.TrainB.SuctionValves[0].Open == 1 && rhrs.TrainB.SuctionValves[1].Open == 1 {
+				return rhrs.TrainB.ReturnFlow.Float() / dt.Seconds()
+			}
+			return 0
+		})
+	flowEdge("RPV", "RHRS_B", &rhrs.TrainB.SuctionValves[1], nil,
+		func(time.Duration) float64 { return 0 })
+
+	sg := &target.ReactorBuilding.SteamGenerator
+	// Atmospheric dump + safety valve: SG -> atmosphere. Step
+	// already debited the shell; one edge per valve so each
+	// glyph binds its own part.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:85-91
+	flowEdge("SG", "Outside", &sg.AtmosphericDumpValve, nil,
+		func(dt time.Duration) float64 {
+			if sg.AtmosphericDumpValve.Open <= 0 {
+				return 0
+			}
+			return sg.AdvFlow.Float() / dt.Seconds()
+		})
+	flowEdge("SG", "Outside", &sg.SafetyValve, nil,
+		func(dt time.Duration) float64 {
+			if sg.SafetyValve.Open <= 0 {
+				return 0
+			}
+			return sg.SafetyFlow.Float() / dt.Seconds()
+		})
+	// Vent/drain to condenser hotwell (Plant.Step already
+	// credits both there; audit only).
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:118-122
+	flowEdge("SG", "Condenser", &sg.SteamlineVent, nil,
+		func(dt time.Duration) float64 {
+			if sg.SteamlineVent.Open <= 0 {
+				return 0
+			}
+			return sg.VentFlow.Float() / dt.Seconds()
+		})
+	flowEdge("SG", "Condenser", &sg.DrainValve, nil,
+		func(dt time.Duration) float64 {
+			if sg.DrainValve.Open <= 0 {
+				return 0
+			}
+			return sg.DrainFlow.Float() / dt.Seconds()
+		})
+	// Wet-layup fill: assumed condensate source; gated on the
+	// Step's own pressure gate so the pipe cannot animate
+	// while the Step refuses to fill.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:141-147
+	flowEdge("Condenser", "SG", &sg.WetLayupFillValve, nil,
+		func(time.Duration) float64 {
+			if sg.WetLayupFillValve.Open <= 0 || float64(sg.Pressure) > SGWetLayupMaxHeaderPsia {
+				return 0
+			}
+			return sg.WetLayupFillValve.Open * SGWetLayupFillGalPerSec
+		})
+
+	// Solid-plant bleed: RHR -> CVC letdown path (VCT). vctNode
+	// does not implement recordFlow, so no phantom credit.
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:115-122
+	flowEdge("RHRS_A", "VCT", &rhrs.SolidPlantPressureValve, nil,
+		func(dt time.Duration) float64 {
+			if rhrs.SolidPlantPressureValve.Open <= 0 || !rhrs.Running {
+				return 0
+			}
+			return rhrs.SolidPlantReliefFlow.Float() / dt.Seconds()
+		})
+
+	// Service-water supply chain: intake -> common header ->
+	// component-cooling HX. Flow is gpm; convert to gal/s.
+	// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:44-54
+	flowEdge("Intake", "SWSHeader", nil, swsPump, func(time.Duration) float64 {
+		if swsPump.IsRunning() {
+			return target.Outside.ServiceWaterSystem.Flow / 60.0
+		}
+		return 0
+	})
+	flowEdge("SWSHeader", "CCWSHX", nil, swsPump, func(time.Duration) float64 {
+		if swsPump.IsRunning() {
+			return target.Outside.ServiceWaterSystem.Flow / 60.0
+		}
+		return 0
+	})
 
 	// Cache for the hot Step loop: the graph structure (nodes,
 	// edges, closures, adapter pointers) is only a function of

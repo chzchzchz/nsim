@@ -84,6 +84,7 @@ var symbolTable = map[string]symbolSpec{
 	"CCWSSurgeTank":                {60.0 / 96.0, 80.0 / 96.0, "tank-vertical.svg"},
 	"ContainmentIsolationSystem":   {60.0 / 96.0, 30.0 / 96.0, "cis-isolation.svg"},
 	"InjectionSink":                {0.5, 0.5, "valve-gate.svg"},
+	"Atmosphere":                  {40.0 / 96.0, 40.0 / 96.0, "valve-gate.svg"},
 	"safety":                       {20.0 / 96.0, 20.0 / 96.0, "valve-safety.svg"},
 	"relief":                       {20.0 / 96.0, 20.0 / 96.0, "valve-relief.svg"},
 	"porv":                         {24.0 / 96.0, 20.0 / 96.0, "valve-porv.svg"},

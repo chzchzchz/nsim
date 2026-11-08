@@ -131,6 +131,7 @@ var diagramParts = []diagramPart{
 	{"EATD", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump", "EmergencyFeedwaterPumpTD", "EFWS A TD"},
 	{"EBMD", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/MotorPump", "EmergencyFeedwaterPumpMD", "EFWS B MD"},
 	{"EBTD", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump", "EmergencyFeedwaterPumpTD", "EFWS B TD"},
+	{"Outside", "Outside/Atmosphere", "Atmosphere", "ATM"},
 	{"CIS", "ReactorBuilding/ContainmentIsolationSystem", "ContainmentIsolation", "CIS"},
 	{"HDS", "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression", "HydrogenRecombiner", "HDS"},
 	{"Sump", "ReactorBuilding/SafetyInjectionSystem", "ContainmentSump", "SUMP"},
@@ -144,10 +145,9 @@ var diagramParts = []diagramPart{
 	{"BTRSPUMP", "AuxiliaryBuilding/ChemicalVolumeControlSystem", "BTRSPump", "BTRS Pump"},
 	{"BRS", "AuxiliaryBuilding/BoronRecycleSystem", "BoronRecycleSystem", "BRS"},
 	// SG startup valves (SGADV/SGSSV/SteamlineVent/DrainValve/
-	// WetLayupFillValve) are drawn once as standalone valves
-	// seated on the SG->Turbine line via valvePlacements; a
-	// diagramParts row here would double-draw them at their
-	// isolated dot anchors.
+	// WetLayupFillValve) ride their pipes as edge hops
+	// (SG->Outside, SG->Condenser, Condenser->SG); a
+	// diagramParts row here would double-draw them.
 	// Three-element feedwater regulator computing the control
 	// valve demand (see scalarValves for its anchor).
 	//   "Feedwater flow to each steam generator is controlled by a
@@ -162,8 +162,8 @@ var diagramParts = []diagramPart{
 	// physical train in Figure 6-5 per plans/svg/containment.md.
 	// Shares the HDS part path; run dot keyed per diagram id.
 	{"ContainmentFiltration", "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression", "ContainmentFilter", "Cont. Filters"},
-	// SOLIDPP is drawn once as a standalone valve at its own
-	// anchor; a diagramParts row here would double-draw it.
+	// SOLIDPP rides the RHRS_A->VCT edge as an edge hop; a
+	// diagramParts row here would double-draw it.
 }
 
 // buildingLabels captions the cluster outlines drawn behind symbols.
@@ -598,9 +598,12 @@ func tintsByPart(alarms []core.Alarm) map[string]haloTint {
 }
 
 // standaloneValves binds live Valve objects that carry no fluid
-// edge to diagram positions of their own: dot places each id via
-// extraNodes, and the render pass draws the symbol plus the same
-// wedge/tooltip encoding the edge valves use.
+// edge (MSIV, feedwater regulator, steam-admission/recirculation
+// valves) to diagram positions of their own: dot places each id
+// via extraNodes, and the render pass draws the symbol plus the
+// same wedge/tooltip encoding the edge valves use. Valves that
+// ride hops (SGADV/SGSSV/vent/drain/layup, EFWS modulating,
+// RABYP/RBBYP, RAS/RBS, SOLIDPP) must not reappear here.
 var standaloneValves = []struct {
 	id    string
 	part  string
@@ -609,16 +612,6 @@ var standaloneValves = []struct {
 }{
 	{"SGMSIV", "ReactorBuilding/SteamGenerator/MainSteamIsolationValve", "modulating",
 		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.MainSteamIsolationValve }},
-	{"SGADV", "ReactorBuilding/SteamGenerator/AtmosphericDumpValve", "relief",
-		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve }},
-	{"SGSSV", "ReactorBuilding/SteamGenerator/SafetyValve", "safety",
-		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.SafetyValve }},
-	{"SteamlineVent", "ReactorBuilding/SteamGenerator/SteamlineVent", "relief",
-		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.SteamlineVent }},
-	{"DrainValve", "ReactorBuilding/SteamGenerator/DrainValve", "gate",
-		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.DrainValve }},
-	{"WetLayupFillValve", "ReactorBuilding/SteamGenerator/WetLayupFillValve", "gate",
-		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.SteamGenerator.WetLayupFillValve }},
 	// Startup-sequence citations (plans/svg/pidgaps.txt):
 	//   "When the reactor coolant temperature increases to about
 	//    210-220°F (90-105°C), the steamline vents are closed and
@@ -645,10 +638,6 @@ var standaloneValves = []struct {
 		func(p *core.Plant) *core.Valve { return &p.TurbineBuilding.LowPressureHeater.DrainValve }},
 	{"HPDV", "TurbineBuilding/HighPressureHeater/DrainValve", "gate",
 		func(p *core.Plant) *core.Valve { return &p.TurbineBuilding.HighPressureHeater.DrainValve }},
-	{"EAMFV", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPump/FlowModulatingValve", "modulating",
-		func(p *core.Plant) *core.Valve {
-			return &p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.MotorPump.FlowModulatingValve
-		}},
 	{"EATSA", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/SteamAdmissionValve", "stop",
 		func(p *core.Plant) *core.Valve {
 			return &p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.SteamAdmissionValve
@@ -656,10 +645,6 @@ var standaloneValves = []struct {
 	{"EAREC", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/RecirculationValve", "gate",
 		func(p *core.Plant) *core.Valve {
 			return &p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.TurbinePump.RecirculationValve
-		}},
-	{"EBMFV", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/MotorPump/FlowModulatingValve", "modulating",
-		func(p *core.Plant) *core.Valve {
-			return &p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.MotorPump.FlowModulatingValve
 		}},
 	{"EBTSA", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump/SteamAdmissionValve", "stop",
 		func(p *core.Plant) *core.Valve {
@@ -669,36 +654,8 @@ var standaloneValves = []struct {
 		func(p *core.Plant) *core.Valve {
 			return &p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.TurbinePump.RecirculationValve
 		}},
-	{"RABYP", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/BypassValve", "modulating",
-		func(p *core.Plant) *core.Valve {
-			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.BypassValve
-		}},
-	{"RBBYP", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/BypassValve", "modulating",
-		func(p *core.Plant) *core.Valve {
-			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.BypassValve
-		}},
 	// SuctionValve1/2 match bridge_aux.go numbering: index 0 is
 	// exposed as SuctionValve1 (see bridge_aux.go:112-113).
-	{"RAS1", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve1", "gate",
-		func(p *core.Plant) *core.Valve {
-			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.SuctionValves[0]
-		}},
-	{"RAS2", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve2", "gate",
-		func(p *core.Plant) *core.Valve {
-			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.SuctionValves[1]
-		}},
-	{"RBS1", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve1", "gate",
-		func(p *core.Plant) *core.Valve {
-			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.SuctionValves[0]
-		}},
-	{"RBS2", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve2", "gate",
-		func(p *core.Plant) *core.Valve {
-			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.SuctionValves[1]
-		}},
-	{"SOLIDPP", "AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantPressureValve", "modulating",
-		func(p *core.Plant) *core.Valve {
-			return &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.SolidPlantPressureValve
-		}},
 	{"PRTSPRAY", "ReactorBuilding/PRTSprayValve", "modulating",
 		func(p *core.Plant) *core.Valve { return &p.ReactorBuilding.PRTSprayValve }},
 }
@@ -758,11 +715,6 @@ var valvePlacements = map[string]valvePlacement{
 	// check valve in each line just outside the containment."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_214.txt:71-76
 	"SGMSIV": {from: "SG", to: "Turbine", near: "SG", shift: 0.08},
-	// Startup SG valves ride the same SG outlet edge near the
-	// generator; citations are the diagramParts rows above.
-	"SteamlineVent":     {from: "SG", to: "Turbine", near: "SG", shift: 0.05},
-	"DrainValve":        {from: "SG", to: "Turbine", near: "SG", shift: 0.12},
-	"WetLayupFillValve": {from: "SG", to: "Turbine", near: "SG", shift: 0.16},
 	// The overspeed trip closes "the main steam stop and governing
 	// valves" feeding the turbine.
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:40-43
@@ -1197,9 +1149,9 @@ func (r *renderer) routeFor(e core.GraphEdge) ([]Anchor, bool) {
 // per-hop-chain stitched geometry (parallel edges keep distinct
 // pipes), falling back to routeFor when the chain route is
 // absent (e.g. layouts without RoutesByChain).
-func (r *renderer) pipeRoute(e core.GraphEdge, idx int, g *core.PlantGraph) ([]Anchor, bool) {
+func (r *renderer) pipeRoute(p *core.Plant, e core.GraphEdge, idx int, g *core.PlantGraph) ([]Anchor, bool) {
 	if idx >= 0 && idx < len(g.Edges) && g.Edges[idx].From == e.From && g.Edges[idx].To == e.To {
-		hops := assignEdgeHops(g)
+		hops := assignEdgeHops(g, p)
 		chain := append([]string{e.From}, hopIDs(hops[idx])...)
 		chain = append(chain, e.To)
 		if route, ok := r.l.RoutesByChain[strings.Join(chain, ">")]; ok && len(route) >= 2 {
@@ -1342,7 +1294,7 @@ func (r *renderer) valveOnly(p *core.Plant, g *core.PlantGraph, e core.GraphEdge
 	if e.Valve == nil {
 		return ""
 	}
-	ref, ok := valveHopFor(e)
+	ref, ok := valveHopFor(e, p)
 	if !ok {
 		return ""
 	}
@@ -1369,7 +1321,7 @@ func (r *renderer) valveOnly(p *core.Plant, g *core.PlantGraph, e core.GraphEdge
 // safety net only: identical geometry from different edges
 // draws its valve glyph only.
 func (r *renderer) pipe(p *core.Plant, g *core.PlantGraph, e core.GraphEdge, seen map[string]bool, idx int) string {
-	pts, ok := r.pipeRoute(e, idx, g)
+	pts, ok := r.pipeRoute(p, e, idx, g)
 	if !ok {
 		return ""
 	}
@@ -1417,7 +1369,7 @@ func (r *renderer) pipe(p *core.Plant, g *core.PlantGraph, e core.GraphEdge, see
 	if e.Valve == nil {
 		return pathFrag
 	}
-	ref, okHop := valveHopFor(e)
+	ref, okHop := valveHopFor(e, p)
 	if !okHop {
 		return pathFrag
 	}

@@ -146,11 +146,6 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	// Live valves that carry no fluid edge; positions come from
 	// standaloneValves rendering.
 	{"SGMSIV", "cluster_containment", "modulating"},
-	{"SGADV", "cluster_containment", "relief"},
-	{"SGSSV", "cluster_containment", "safety"},
-	{"SteamlineVent", "cluster_containment", "relief"},
-	{"DrainValve", "cluster_containment", "gate"},
-	{"WetLayupFillValve", "cluster_containment", "gate"},
 	{"FeedwaterRegulator", "cluster_turbine", "modulating"},
 	{"ContainmentFiltration", "cluster_containment", "ContainmentFilter"},
 	{"PZRBLK", "cluster_containment", "stop"},
@@ -161,19 +156,10 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	{"CREJ", "cluster_turbine", "gate"},
 	{"LPDV", "cluster_turbine", "gate"},
 	{"HPDV", "cluster_turbine", "gate"},
-	{"EAMFV", "cluster_auxiliary", "modulating"},
 	{"EATSA", "cluster_auxiliary", "stop"},
 	{"EAREC", "cluster_auxiliary", "gate"},
-	{"EBMFV", "cluster_auxiliary", "modulating"},
 	{"EBTSA", "cluster_auxiliary", "stop"},
 	{"EBREC", "cluster_auxiliary", "gate"},
-	{"RABYP", "cluster_auxiliary", "modulating"},
-	{"RBBYP", "cluster_auxiliary", "modulating"},
-	{"RAS1", "cluster_auxiliary", "gate"},
-	{"RAS2", "cluster_auxiliary", "gate"},
-	{"RBS1", "cluster_auxiliary", "gate"},
-	{"RBS2", "cluster_auxiliary", "gate"},
-	{"SOLIDPP", "cluster_auxiliary", "modulating"},
 }
 
 // clusterFor groups PlantGraph node IDs into DOT subgraphs that
@@ -202,6 +188,11 @@ var clusterFor = map[string]string{
 	"EFWSTank":    "cluster_auxiliary",
 	"EFWSTankA":   "cluster_auxiliary",
 	"EFWSTankB":   "cluster_auxiliary",
+	"EAMD":        "cluster_auxiliary",
+	"EATD":        "cluster_auxiliary",
+	"EBMD":        "cluster_auxiliary",
+	"EBTD":        "cluster_auxiliary",
+	"Outside":     "cluster_turbine",
 	"CCWSHX":      "cluster_auxiliary",
 	"RHRS_A":      "cluster_auxiliary",
 	"RHRS_B":      "cluster_auxiliary",
@@ -247,7 +238,7 @@ var auxConstraintEdges = [][2]string{}
 // layout clusters, node sizes, and optional pinned positions.
 // When pos is non-nil, each known node gets pos="X,Y" and pin=true
 // so graphviz respects the supplied coordinates.
-func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
+func BuildDot(g *core.PlantGraph, p *core.Plant, pos map[string]Anchor) (string, error) {
 	var b strings.Builder
 	b.WriteString("digraph plant {\n")
 	// Spacing tunes how tightly dot packs the row-chunked
@@ -311,7 +302,7 @@ func BuildDot(g *core.PlantGraph, pos map[string]Anchor) (string, error) {
 	// isolated row detached from the components they serve. An id
 	// matching an existing plant-graph node (RCP) reuses that node.
 	// The same assignment drives ComputeLayout's route stitching.
-	hops := assignEdgeHops(g)
+	hops := assignEdgeHops(g, p)
 	for i := range hops {
 		for _, h := range hops[i] {
 			if !mainNodes[h.id] {
@@ -797,7 +788,7 @@ func pumpHopFor(e core.GraphEdge) (edgeHopRef, bool) {
 // valveHopFor maps a valved edge to its inline valve device. Part
 // paths mirror the model field owning each valve so rendered groups
 // bind to the same rows the bridge registers (or will register).
-func valveHopFor(e core.GraphEdge) (edgeHopRef, bool) {
+func valveHopFor(e core.GraphEdge, p *core.Plant) (edgeHopRef, bool) {
 	var r edgeHopRef
 	switch {
 	case e.From == "RPV" && e.To == "Pressurizer":
@@ -807,11 +798,29 @@ func valveHopFor(e core.GraphEdge) (edgeHopRef, bool) {
 	case e.From == "SG" && e.To == "Turbine":
 		r = edgeHopRef{"SGMSIV", clusterFor["SG"], "stop", "ReactorBuilding/SteamGenerator/MainSteamIsolationValve"}
 	case e.From == "SG" && e.To == "Condenser":
-		// Dump leg: no hop here — TDUMP seats on this route
-		// via valvePlacements. A MakeupValve hop here drew a
-		// valve glyph that implied the makeup valve gates the
-		// dump; it does not.
-		return edgeHopRef{}, false
+		// Dump leg has no hop (TDUMP seats via valvePlacements);
+		// vent/drain edges ride their
+		// own hops. The dump leg itself carries no Valve pointer,
+		// so valveHopFor is never reached for it.
+		if e.Valve == &p.ReactorBuilding.SteamGenerator.SteamlineVent {
+			r = edgeHopRef{"SteamlineVent", clusterFor["SG"], "relief", "ReactorBuilding/SteamGenerator/SteamlineVent"}
+		} else if e.Valve == &p.ReactorBuilding.SteamGenerator.DrainValve {
+			r = edgeHopRef{"DrainValve", clusterFor["SG"], "gate", "ReactorBuilding/SteamGenerator/DrainValve"}
+		} else {
+			return edgeHopRef{}, false
+		}
+	case e.From == "SG" && e.To == "Outside":
+		// One edge per valve; discriminate by pointer so each
+		// glyph gets its own hop id.
+		if e.Valve == &p.ReactorBuilding.SteamGenerator.AtmosphericDumpValve {
+			r = edgeHopRef{"SGADV", clusterFor["SG"], "relief", "ReactorBuilding/SteamGenerator/AtmosphericDumpValve"}
+		} else if e.Valve == &p.ReactorBuilding.SteamGenerator.SafetyValve {
+			r = edgeHopRef{"SGSSV", clusterFor["SG"], "safety", "ReactorBuilding/SteamGenerator/SafetyValve"}
+		} else {
+			r = edgeHopRef{"SGADV", clusterFor["SG"], "relief", "ReactorBuilding/SteamGenerator/AtmosphericDumpValve"}
+		}
+	case e.From == "Condenser" && e.To == "SG":
+		r = edgeHopRef{"WetLayupFillValve", clusterFor["Condenser"], "gate", "ReactorBuilding/SteamGenerator/WetLayupFillValve"}
 	case e.From == "HDT" && e.To == "SG":
 		r = edgeHopRef{"MainFeedValve", clusterFor["HDT"], "modulating", "TurbineBuilding/MainFeedwaterControlValve"}
 	case e.From == "Condenser" && e.To == "CST":
@@ -820,6 +829,38 @@ func valveHopFor(e core.GraphEdge) (edgeHopRef, bool) {
 		r = edgeHopRef{"CSTValve", clusterFor["CST"], "gate", "Outside/" + e.To + "/CSTValve"}
 	case e.From == "DieselAFWPump" || e.From == "MotorAFWPump" || e.From == "TurbineAFWPump":
 		r = edgeHopRef{"ServiceWaterValve", clusterFor[e.From], "gate", "Outside/" + e.From + "/ServiceWaterValve"}
+	// EFWS flow-modulating valves sit on the tank->pump suction
+	// legs (p69_1); discriminate by pointer.
+	case e.From == "EFWSTankA" && e.To == "EAMD":
+		r = edgeHopRef{"EAMFV", clusterFor["EFWSTankA"], "modulating", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/MotorPump/FlowModulatingValve"}
+	case e.From == "EFWSTankA" && e.To == "EATD":
+		r = edgeHopRef{"EATFV", clusterFor["EFWSTankA"], "modulating", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/FlowModulatingValve"}
+	case e.From == "EFWSTankB" && e.To == "EBMD":
+		r = edgeHopRef{"EBMFV", clusterFor["EFWSTankB"], "modulating", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/MotorPump/FlowModulatingValve"}
+	case e.From == "EFWSTankB" && e.To == "EBTD":
+		r = edgeHopRef{"EBTFV", clusterFor["EFWSTankB"], "modulating", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump/FlowModulatingValve"}
+	// RHRS bypass valves ride the return edges.
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_084.txt:48-57
+	case e.From == "RHRS_A" && e.To == "InjectionSink":
+		r = edgeHopRef{"RABYP", clusterFor["RHRS_A"], "modulating", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/BypassValve"}
+	case e.From == "RHRS_B" && e.To == "InjectionSink":
+		r = edgeHopRef{"RBBYP", clusterFor["RHRS_B"], "modulating", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/BypassValve"}
+	// RHRS suction valves: two parallel edges differ only by
+	// the Valve pointer; discriminate by pointer comparison.
+	case e.From == "RPV" && e.To == "RHRS_A":
+		if e.Valve == &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainA.SuctionValves[1] {
+			r = edgeHopRef{"RAS2", clusterFor["RPV"], "gate", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve2"}
+		} else {
+			r = edgeHopRef{"RAS1", clusterFor["RPV"], "gate", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve1"}
+		}
+	case e.From == "RPV" && e.To == "RHRS_B":
+		if e.Valve == &p.AuxiliaryBuilding.ResidualHeatRemovalSystem.TrainB.SuctionValves[1] {
+			r = edgeHopRef{"RBS2", clusterFor["RPV"], "gate", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve2"}
+		} else {
+			r = edgeHopRef{"RBS1", clusterFor["RPV"], "gate", "AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainB/SuctionValve1"}
+		}
+	case e.From == "RHRS_A" && e.To == "VCT":
+		r = edgeHopRef{"SOLIDPP", clusterFor["RHRS_A"], "modulating", "AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantPressureValve"}
 	default:
 		r = edgeHopRef{"Valve", clusterFor[e.From], "gate", ""}
 	}
@@ -831,7 +872,7 @@ func valveHopFor(e core.GraphEdge) (edgeHopRef, bool) {
 // DOT routing passes through. Ids colliding with earlier hops get a
 // numeric suffix; an id matching an existing plant-graph node (RCP)
 // is reused verbatim so the standalone node becomes connected.
-func assignEdgeHops(g *core.PlantGraph) [][]edgeHopRef {
+func assignEdgeHops(g *core.PlantGraph, p *core.Plant) [][]edgeHopRef {
 	mainNodes := make(map[string]bool, len(g.Nodes))
 	for id := range g.Nodes {
 		mainNodes[id] = true
@@ -860,7 +901,7 @@ func assignEdgeHops(g *core.PlantGraph) [][]edgeHopRef {
 			}
 		}
 		if e.Valve != nil {
-			if h, ok := valveHopFor(e); ok {
+			if h, ok := valveHopFor(e, p); ok {
 				add(h)
 			}
 		}
@@ -1046,7 +1087,7 @@ const buildingPad = 20.0
 // to EmptyLayout when dot is unavailable.
 func ComputeLayout(p *core.Plant) (*Layout, error) {
 	g := p.BuildGraphFor(p)
-	dot, err := BuildDot(g, nil)
+	dot, err := BuildDot(g, p, nil)
 	if err != nil {
 		return EmptyLayout(), err
 	}
@@ -1082,7 +1123,7 @@ func ComputeLayout(p *core.Plant) (*Layout, error) {
 		}
 		transformed[key] = out
 	}
-	hops := assignEdgeHops(g)
+	hops := assignEdgeHops(g, p)
 	// Route vertices are clamped to the same margin box as node
 	// centers so a spline cannot leave the viewBox (e.g. the
 	// -10.7,528.7 RWST→InjectionSink vertex found by the raster

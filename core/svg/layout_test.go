@@ -199,7 +199,7 @@ stop
 func TestAssignEdgeHops(t *testing.T) {
 	p := core.MakePlant()
 	g := p.BuildGraphFor(&p)
-	hops := assignEdgeHops(g)
+	hops := assignEdgeHops(g, &p)
 
 	idsFor := func(from, to string) []string {
 		for i, e := range g.Edges {

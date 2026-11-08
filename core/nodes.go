@@ -101,6 +101,23 @@ func (s *cisSink) recordFlow(gal float64) {
 }
 func (s *cisSink) resetFlow() { s.DeliveredFlow = 0 }
 
+// atmosphereSink is the zero-inventory flowRecorder for SG
+// atmospheric dumps (ADV + safety valve). Same shape as cisSink
+// (zero level/capacity, records the tick's dumped volume
+// adapter-locally for tests); it never feeds back into a Step,
+// so the audit edge documents flow the Step already debited
+// from the shell.
+type atmosphereSink struct{ DeliveredFlow float64 }
+
+func (s *atmosphereSink) pressure() Pressure { return AtmosphericPressure }
+func (s *atmosphereSink) level() Volume      { return zeroVolume }
+func (s *atmosphereSink) setLevel(Volume)    {}
+func (s *atmosphereSink) capacity() Volume   { return zeroVolume }
+func (s *atmosphereSink) recordFlow(gal float64) {
+	s.DeliveredFlow += gal
+}
+func (s *atmosphereSink) resetFlow() { s.DeliveredFlow = 0 }
+
 // accNode adapts SIS.Accumulator.Level (bank of 4 tanks, one
 // combined level). Discharge rate and isolation are read by the
 // edge Flow closure from AccumulatorInjectionFlow.

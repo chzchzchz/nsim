@@ -67,8 +67,21 @@ func TestGraph_BuildsExpectedEdges(t *testing.T) {
 		{"SG", "Condenser"}:      true, // steam dump (SG -> condenser)
 		{"Condenser", "CST"}:     true, // condensate
 		{"HDT", "SG"}:            true, // feedwater
-		{"EFWSTankA", "SG"}:      true, // EFWS audit topology
-		{"EFWSTankB", "SG"}:      true, // EFWS audit topology
+		{"EFWSTankA", "EAMD"}:    true, // EFWS audit topology (tank->pump)
+		{"EAMD", "SG"}:           true, // pump->SG
+		{"EFWSTankA", "EATD"}:    true, // EFWS audit topology (tank->pump)
+		{"EATD", "SG"}:           true, // pump->SG
+		{"EFWSTankB", "EBMD"}:    true, // EFWS audit topology (tank->pump)
+		{"EBMD", "SG"}:           true, // pump->SG
+		{"EFWSTankB", "EBTD"}:    true, // EFWS audit topology (tank->pump)
+		{"EBTD", "SG"}:           true, // pump->SG
+		{"RPV", "RHRS_A"}:        true, // RHRS suction (p69_1)
+		{"RPV", "RHRS_B"}:        true, // RHRS suction (p69_1)
+		{"SG", "Outside"}:        true, // SG blowdown to atmosphere (p69_1)
+		{"Condenser", "SG"}:      true, // wet-layup fill (p69_1)
+		{"RHRS_A", "VCT"}:        true, // solid-plant bleed (p69_1)
+		{"Intake", "SWSHeader"}:  true, // SWS supply chain (p69_1)
+		{"SWSHeader", "CCWSHX"}:  true, // SWS supply chain (p69_1)
 	}
 	for _, e := range g.Edges {
 		key := [2]string{e.From, e.To}
@@ -278,7 +291,9 @@ func TestLedger_DumpShutScalesWithHeader(t *testing.T) {
 	g := p.BuildGraph()
 	var dumpFlow float64
 	for _, e := range g.Edges {
-		if e.From == "SG" && e.To == "Condenser" {
+		// The valveless SG->Condenser edge is the turbine dump
+		// leg; vent/drain audit legs carry their valves.
+		if e.From == "SG" && e.To == "Condenser" && e.Valve == nil {
 			dumpFlow = e.Flow(DefaultTimeStep)
 		}
 	}

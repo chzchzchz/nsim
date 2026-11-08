@@ -111,6 +111,24 @@ type SteamGenerator struct {
 	VentFlow  Volume
 	DrainFlow Volume
 
+	// AdvFlow is the per-step volume dumped through
+	// AtmosphericDumpValve during the most recent Step (gallons
+	// per step, same convention as VentFlow). Plant.Step has no
+	// condenser-credit for it (atmosphere), so the field is
+	// exported purely for the graph audit edge; the shell debit
+	// already happens inline.
+	AdvFlow Volume
+
+	// SafetyFlow is the per-step volume dumped through the
+	// spring-loaded SafetyValve (setpoint-driven) during the most
+	// recent Step (gallons per step, same convention as
+	// VentFlow). Magnitude is derived from the existing in-line
+	// svFraction computation, not from a spec value; exported
+	// purely for the SG -> Outside audit edge alongside AdvFlow,
+	// so both valves on the same pipe are billed.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
+	SafetyFlow Volume
+
 	// BreakFlow is the per-step volume discharged through
 	// MainSteamLineBreak during the most recent Step (gallons per
 	// step, same convention as VentFlow). Unlike the vent draw it
@@ -400,6 +418,11 @@ func (s *SteamGenerator) Step(dt time.Duration, steamOutflowFraction float64,
 			min(ret.Water.Float()+add, ret.Volume.Float()))
 	}
 
+	// AdvFlow is the attempted (uncapped) dump: the shell floor
+	// applies downstream, so AdvFlow is dump even when the shell
+	// is near-dry (a future min(dump, Water) normalization would
+	// be a one-line change here).
+	ret.AdvFlow = Volume{Val: 0, Unit: u.Gallon}
 	advFraction := 0.0
 	if ret.AtmosphericDumpValve.Open > 0 && ret.Pressure > 0 {
 		advFraction = ret.AtmosphericDumpValve.Open * AtmosphericDumpFraction
@@ -407,6 +430,7 @@ func (s *SteamGenerator) Step(dt time.Duration, steamOutflowFraction float64,
 		dump := advFraction *
 			SteamGeneratorFullLoadSteamFlow.Float() / SecondsPerHour *
 			dt.Seconds()
+		ret.AdvFlow = Volume{Val: dump, Unit: u.Gallon}
 		newWater := max(ret.Water.Float()-dump, 0)
 		ret.Water = vol(ret.Water, newWater)
 	}
@@ -500,10 +524,13 @@ func (s *SteamGenerator) Step(dt time.Duration, steamOutflowFraction float64,
 		ret.SafetyValve.Open = 0
 	}
 	svFraction := ret.SafetyValve.Open * SteamGeneratorSafetyValveReliefFraction
+	ret.SafetyFlow = Volume{Val: 0, Unit: u.Gallon}
 	if svFraction > 0 {
 		dump := svFraction *
 			SteamGeneratorFullLoadSteamFlow.Float() / SecondsPerHour *
 			dt.Seconds()
+		// Same attempted (uncapped) convention as AdvFlow.
+		ret.SafetyFlow = Volume{Val: dump, Unit: u.Gallon}
 		ret.Water = Volume{Val: max(ret.Water.Float()-dump, 0), Unit: u.Gallon}
 	}
 
