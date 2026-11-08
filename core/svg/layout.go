@@ -57,8 +57,11 @@ var extraNodes = []struct{ id, cluster, kind string }{
 	{"RCFC_C", "cluster_containment", "RCFCUnit"},
 	{"RCFC_D", "cluster_containment", "RCFCUnit"},
 
-	// Pumps outside the fluid graph.
-	{"CWP", "", "CirculatingWaterPump"},
+	// Pumps outside the fluid graph. CWP is clustered with the
+	// turbine hall so the circulating-water pump sits inside its
+	// outline; unclustered left it floating in the void between
+	// dome and turbine (raster audit: pump glyphs at ~620,316).
+	{"CWP", "cluster_turbine", "CirculatingWaterPump"},
 	{"CCWSPump", "cluster_auxiliary", "ComponentCoolingWaterPump"},
 	// Spent-fuel pool train lives in the fuel building adjacent
 	// to containment (Figure 1-5), not inside the primary loop.
@@ -211,6 +214,14 @@ var clusterFor = map[string]string{
 	"SFPHX":     "cluster_fuel",
 	"SCCWPump":  "cluster_turbine",
 	"CCWSSurge": "cluster_auxiliary",
+
+	// AFW subsystem pumps sit between CST (turbine) and SG
+	// (containment) on the feedwater path (Figure 5.2-1);
+	// unclustered they floated in the void between buildings
+	// (raster audit: pumps at ~666/832/916,311 with no box).
+	"DieselAFWPump":  "cluster_turbine",
+	"MotorAFWPump":   "cluster_turbine",
+	"TurbineAFWPump": "cluster_turbine",
 }
 
 // dockingExtrasForRPV are disconnected nodes (graph nodes with no
@@ -386,6 +397,15 @@ func BuildDot(g *core.PlantGraph, p *core.Plant, pos map[string]Anchor) (string,
 			// Pressurizer->VCT / RWST->VCT / VCT->InjectionSink
 			// edges rather than scattered among EFWS/RHR rows.
 			fmt.Fprintf(&b, "    {rank=same; %q %q %q}\n", "LTDVN", "VCT", "ChgPump")
+		}
+		if name == "cluster_turbine" {
+			// Feedwater regulator shares the turbine rank
+			// via a single rank=same node pair (rank=same
+			// with the connected Turbine/Generator pair
+			// triggers "trouble in init_rank" in dot;
+			// probed). Docking to EXCITER keeps its FW
+			// readout off the crowded Condenser row.
+			fmt.Fprintf(&b, "    {rank=same; %q %q}\n", "EXCITER", "FeedwaterRegulator")
 		}
 		if name == "cluster_electrical" {
 			// ESF trains read as two columns (Figures 11-1/11-2):
@@ -699,6 +719,7 @@ func layoutRankEdges(rows map[string][][]string) [][2]string {
 	edges = append(edges,
 		[2]string{"Turbine", "MSR"},
 		[2]string{"MSR", "Condenser"},
+		[2]string{"EXCITER", "FeedwaterRegulator"},
 	)
 	return edges
 }
