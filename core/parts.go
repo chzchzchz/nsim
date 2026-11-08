@@ -17,6 +17,97 @@ type Part struct {
 	Installation time.Duration
 }
 
+// Excore nuclear-instrument constants (plans/p71_1.txt).
+//
+// The Westinghouse PWR document (Chapter 7, Nuclear Measurements)
+// requires continuous power indication from shutdown to 120 % FP
+// ("The nuclear instrumentation monitors the reactor power from the
+// Source Range and Intermediate Range where heat production is
+// negligible through the Power Range for up to 120 percent of
+// full power output",
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_119.txt:74-80),
+// axial/radial distribution information for the DNBR/kW-ft
+// protection calculation ("The four-section detector current
+// signals from each detector provide axial power distribution
+// information, which is displayed on the main control board
+// and used as an input to the low Departure from Nuclear
+// Boiling Ratio (DNBR) and high kw/ft protection trips",
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_120.txt:147-153),
+// fuel-assembly outlet temperatures ("The thermocouples are
+// positioned at preselected locations to measure fuel assembly
+// coolant outlet temperature for use in monitoring the core
+// radial power sharing and coolant enthalpy distribution",
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_124.txt:8-12),
+// and N-16 thermal-power/flow monitoring ("The level of N-16
+// present in the primary coolant is directly proportional to the
+// fission rate in the core",
+// specs/the_westinghouse_pressurized_water_react/chapter_7/page_126.txt:71-81).
+// Detector placement is prescribed: source range at one-quarter
+// core height (specs/the_westinghouse_pressurized_water_react/chapter_7/page_120.txt:104-107),
+// intermediate range at one-half core height (specs/.../page_120.txt:121-126),
+// power-range four-section chambers at the four corners
+// (specs/.../page_120.txt:126-129) — i.e. 4 quadrants. Range
+// overlaps come from the conventional decade split; the spec's
+// Figure 7-1 overlap diagram is not reproduced in text. Absolute
+// calibration is derived from the existing
+// CoreSourceRangeCountsPerWatt anchor (core/reactor.go:1123):
+// detector current is linear in leakage flux, leakage flux is
+// proportional to fission power, so `%FP` is `p×100` inside each
+// window with no full-scale rescaling.
+const (
+	// ExcoreSourceMaxFrac is the source-range valid ceiling (~1%
+	// FP); below the next window's floor the detector reads 0 and
+	// the source range covers the observation.
+	ExcoreSourceMaxFrac = 0.01
+	// ExcoreIntermediateMaxFrac is the intermediate-range valid
+	// ceiling (~25% FP); above it the detector saturates at its
+	// top and the Power Range takes over.
+	ExcoreIntermediateMaxFrac = 0.25
+	// ExcorePowerRangeMaxFrac is the power-range valid ceiling
+	// (120% FP, "up to 120 percent of full power output",
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_119.txt:74-78).
+	ExcorePowerRangeMaxFrac = 1.20
+	// Nitrogen16HalfLifeS is the N-16 half-life. The Westinghouse
+	// PWR document states proportionality to fission rate
+	// (specs/the_westinghouse_pressurized_water_react/chapter_7/page_126.txt:71-81)
+	// but no half-life; 7.13 s is the standard external value.
+	Nitrogen16HalfLifeS = 7.13
+
+	// CETDTRefF is the reference core ΔT (°F): CoreReferenceOutletF
+	// − CoreReferenceInletF = 621 − 558 = 63°F at full load.
+	CETDTRefF = 63.0
+	// CETPeakingFrac is the derived hottest-assembly peaking over
+	// the bulk mean: hottest of ~193 assemblies ≈ mean × (1+0.10).
+	CETPeakingFrac = 0.10
+
+	// DNBRRefMargin is the derived display anchor for the
+	// indicated DNBR margin: the margin reads 1.30 at reference
+	// steady state (ΔT = CETDTRefF, ΔI = 0). It is not a trip
+	// setpoint — no trip is wired in this slice.
+	DNBRRefMargin = 1.30
+	// DNBRDeltaTSensitivity and DNBRDeltaISensitivity shape the
+	// derived margin law: a 10% flow-loss ΔT rise moves the
+	// margin ~0.1; 24% ΔI moves it the same amount.
+	DNBRDeltaTSensitivity  = 0.20
+	DNBRDeltaISensitivity  = 0.005
+
+	// Fuel geometry for the derived average linear power:
+	// 193 assemblies (four-loop first core,
+	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_029.txt:148-154),
+	// 12 ft active length (core length between fuel ends,
+	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_029.txt:123-130),
+	// 264 rods per 17×17 OFA assembly (17×17 = 289, minus the
+	// 25 guide tubes Java); the subtraction is derived arithmetic.
+	FuelAssemblies      = 193
+	FuelRodsPerAssembly = 264
+	ActiveLengthFt      = 12.0
+	// LinearPowerPeakingFac is the derived peak-to-average factor:
+	// "power distribution in a reactor core is not uniform. Peak
+	// power can more than double the average power"
+	// (specs/the_westinghouse_pressurized_water_react/chapter_7/page_132.txt:58-61).
+	LinearPowerPeakingFac = 2.5
+)
+
 type Fluid struct {
 	Temperature
 	Volume

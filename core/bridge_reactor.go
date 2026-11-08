@@ -1630,6 +1630,160 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Excore nuclear instrumentation (plans/p71_1.txt): the
+	// Intermediate Range, Power Range, axial flux difference, N-16/
+	// TTFM, core-exit thermocouples, and indicated DNBR/kW-ft
+	// margins. Each is a pure projection of state the vessel
+	// already carries; no new dynamics, no trip wiring.
+	rpv := &p.ReactorBuilding.ReactorPressureVessel
+
+	// Excore Intermediate Range: compensated-ion-chamber current,
+	// %FP. Reads %FP of rated inside its window [0.01, 0.25]; 0
+	// below (source range covers it), 25 above (saturated; the
+	// Power Range has taken over). The handover is continuous
+	// because the law is p×100, not a full-scale rescaling.
+	m["ReactorBuilding/ReactorPressureVessel/ExcoreIntermediateRange"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "ExcoreIntermediateRange",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent", intermediateRangePct(rpv))
+		},
+	}
+
+	// Excore Power Range: four-section chamber sum, %FP. Reads 0
+	// below 25% FP, then p×100 up to 120 at p=1.20. Same %FP
+	// convention as the Intermediate Range so the handover at
+	// p=0.25 is continuous (both read 25).
+	m["ReactorBuilding/ReactorPressureVessel/ExcorePowerRange"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "ExcorePowerRange",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent", powerRangePct(rpv))
+		},
+	}
+
+	// Axial Flux Difference (ΔI), signed %: upper−lower over
+	// total flux. The model AxialOffset IS the upper−lower half
+	// difference in percent, so the detector projection is the
+	// identity. Kind is signedpercent because ΔI is measured
+	// around zero and goes negative for bottom-heavy cores.
+	m["ReactorBuilding/ReactorPressureVessel/AxialFluxDifference"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "AxialFluxDifference",
+		Kind:  "signedpercent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("signedpercent", rpv.AxialOffset)
+		},
+	}
+
+	// N-16 activity: hot-leg ion-chamber gamma response, % ≡
+	// fission fraction ×100 at equilibrium.
+	m["ReactorBuilding/ReactorPressureVessel/Nitrogen16Activity"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "Nitrogen16Activity",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent", rpv.Nitrogen16*100)
+		},
+	}
+
+	// TTFM flow %, from the N-16 transit-time law: flow is the
+	// reference rated flow scaled by total loop flow. The sensor
+	// reads the simulator's own flow fraction — the error budget
+	// is the model's, not the conversion's. pumpedFrac is NOT
+	// RPV state — it is computed in Step from the rcpSpeed
+	// argument (core/reactor.go:106) — so the bridge reads it
+	// back from the pump fleet, exactly as the existing speed
+	// sensor does (bridge_reactor.go, ReactorCoolantPumps speed).
+	m["ReactorBuilding/ReactorPressureVessel/TTFMFlowPercent"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "TTFMFlowPercent",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			pumped := min(max(float64(p.ReactorBuilding.ReactorCoolantPumps.Velocity())/
+				float64(RCPRatedSpeed), 0), 1)
+			total := min(pumped+rpv.NaturalCircFlowFrac, 1.0)
+			return bridge.FormatSensorValue("percent", total*100)
+		},
+	}
+
+	// Core-exit thermocouple aggregates (CET): the mean is the
+	// bulk mixed-mean temperature the simulator carries as Outlet;
+	// the hottest-assembly ΔT adds the derived axial peaking.
+	m["ReactorBuilding/ReactorPressureVessel/CoreExitTemp"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "CoreExitTemp",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit", rpv.Outlet.Float())
+		},
+	}
+	m["ReactorBuilding/ReactorPressureVessel/CoreExitDeltaT"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "CoreExitDeltaT",
+		Kind:  "fahrenheit",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("fahrenheit",
+				(rpv.Outlet.Float()-rpv.Inlet.Float())*(1+CETPeakingFrac))
+		},
+	}
+
+	// Indicated protection margins (monitor only — no trip wired
+	// in this slice). DNBRMargin is signedpercent: FormatSensorValue
+	// (bridge/convert.go) rejects negative values for every kind
+	// except fahrenheit, signedpercent, and dpm, and DNBRMargin
+	// goes negative in exactly the scenarios it exists for. LPD
+	// is normalized because it cannot go negative (power fraction
+	// clamps at 0, factors positive).
+	m["ReactorBuilding/ReactorPressureVessel/DNBRMargin"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "DNBRMargin",
+		Kind:  "signedpercent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("signedpercent", dnbrMargin(rpv))
+		},
+	}
+	m["ReactorBuilding/ReactorPressureVessel/LinearPowerDensity"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "LinearPowerDensity",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			// Normalized to the derived maximum (avg × peaking
+			// factor): 1.0 = the derived peak at reference.
+			return bridge.FormatSensorValue("normalized",
+				linearPowerKWft(rpv)/maxKWft())
+		},
+	}
+
+	// Core reactivity estimate: the simulator's own reactivity
+	// total (reactor.go:309 Reactivity = rod+doppler+moderator+
+	// boron+xenon %Δk). Xenon worth: the same term Step computes
+	// (reactor.go:307-308) against the same
+	// CoreXenonEquilibriumWorthPct constant — no second source
+	// of truth. This is how operators infer xenon poisoning —
+	// the spec has no xenon detector (glossary, xenon entry).
+	m["ReactorBuilding/ReactorPressureVessel/ReactivityEstimate"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "ReactivityEstimate",
+		Kind:  "signedpercent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("signedpercent", float64(rpv.Reactivity))
+		},
+	}
+	m["ReactorBuilding/ReactorPressureVessel/XenonWorth"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "XenonWorth",
+		Kind:  "signedpercent",
+		Get: func() (string, error) {
+			axialFrac := rpv.AxialOffset / 100
+			return bridge.FormatSensorValue("signedpercent",
+				CoreXenonEquilibriumWorthPct*(xenonNormalized(
+					rpv.Xenon135+axialFrac*rpv.Xenon135AxialDeviation/2) - 1))
+		},
+	}
+
 	// Tavg rod-control program output (chapter 16):
 	// "programmed function of turbine load"
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:24-27

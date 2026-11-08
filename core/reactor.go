@@ -408,6 +408,7 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 	ret.DecayHeatSlow += Watts((slowTarget - float64(ret.DecayHeatSlow)) * dtS / CoreDecayHeatTimeConstant.Seconds())
 	ret.advanceXenon(dt)
 	ret.advanceAxialOffset(dt)
+	ret.advanceNitrogen16(dt)
 	// RCP shaft-loss heat enters the primary coolant (chapter
 	// 16 temperature balance). The rated cap and the pump
 	// contribution are applied in TotalThermalPower, the number
@@ -479,6 +480,7 @@ func (r *ReactorPressureVessel) SeedSteadyStatePower(p Watts) {
 	pFraction := min(float64(p)/float64(CoreRatedThermalPower), 1.0)
 	r.Iodine135 = pFraction
 	r.Xenon135 = xenonEquilibriumPhysical(pFraction)
+	r.Nitrogen16 = pFraction
 	// Covered core: clad tracks saturation at design pressure.
 	// plans/p65_1.txt State (CladTempF seeding).
 	r.CladTempF = PressurizerSatTemperatureF(float64(RPVDesignPressure))
@@ -594,6 +596,87 @@ func xenonNormalized(x float64) float64 {
 	return x * CoreXenonIodineToXenonEquilibriumRatio
 }
 
+// advanceNitrogen16 evolves the N-16 inventory over dt using the exact
+// first-order solution so it stays stable for any step size (the plant
+// step is 1 ms << tau, but exact integration keeps the status quo if
+// the timestep instrument is ever coarsened). Production is proportional
+// to fission rate, removal is radioactive decay:
+//   "The level of N-16 present in the primary coolant is directly
+//    proportional to the fission rate in the core."
+//    specs/the_westinghouse_pressurized_water_react/chapter_7/page_126.txt:119-130
+// The Westinghouse document gives no N-16 half-life; the 7.13 s
+// Nitrogen16HalfLifeS is the standard external value. Equilibrium
+// N = p (1.0 at rated), the same normalization as xenonNormalized.
+func (r *ReactorPressureVessel) advanceNitrogen16(dt time.Duration) {
+	h := dt.Seconds()
+	if h <= 0 {
+		return
+	}
+	p := min(max(float64(r.FissionPower)/float64(CoreFissionPowerAtRated), 0), 1.2)
+	lambda := math.Ln2 / Nitrogen16HalfLifeS
+	// dN/dt = lambda*(p - N)  =>  N(h) = p + (N0 - p)*exp(-lambda*h)
+	r.Nitrogen16 = p + (r.Nitrogen16-p)*math.Exp(-lambda*h)
+}
+
+// intermediateRangePct / powerRangePct: the excore window laws
+// (plans/p71_1.txt). Both read %FP (p×100) inside their window, 0
+// below, window-top above. The laws are detector projections —
+func intermediateRangePct(r *ReactorPressureVessel) float64 {
+	p := min(max(float64(r.FissionPower)/float64(CoreFissionPowerAtRated), 0), 1.2)
+	if p < ExcoreSourceMaxFrac {
+		return 0
+	}
+	if p > ExcoreIntermediateMaxFrac {
+		return ExcoreIntermediateMaxFrac * 100
+	}
+	return p * 100
+}
+
+func powerRangePct(r *ReactorPressureVessel) float64 {
+	p := min(max(float64(r.FissionPower)/float64(CoreFissionPowerAtRated), 0), 1.2)
+	if p < ExcoreIntermediateMaxFrac {
+		return 0
+	}
+	return min(p, ExcorePowerRangeMaxFrac) * 100
+}
+
+// dnbrMargin returns the indicated DNBR margin (derived shape; the
+// spec requires direct calculation but states no correlation):
+//   "Departure from Nucleate Boiling Ratio and kw/ft are calculated
+//    continuously and directly instead of using conservative but
+//    simplified proxies for them."
+//    specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:95-98
+// DNBRRefMargin is a derived display anchor: the margin reads its
+// alarm-point value at reference steady state (ΔT = CETDTRefF,
+// ΔI = 0). No trip is wired — this is monitor only.
+func dnbrMargin(r *ReactorPressureVessel) float64 {
+	dT := r.Outlet.Float() - r.Inlet.Float()
+	dI := r.AxialOffset
+	return DNBRRefMargin*(1-DNBRDeltaTSensitivity*(dT-CETDTRefF)/CETDTRefF) -
+		DNBRDeltaISensitivity*math.Abs(dI)
+}
+
+// linearPowerKWft returns the peak linear power in kW/ft (derived):
+// rated thermal power over the fuel geometry (193 assemblies ×
+// 264 rods × 12 ft active length, specs/the_westinghouse_pressurized_water_react/chapter_2/page_029.txt),
+// times the peaking factor derived from:
+//   "power distribution in a reactor core is not uniform. Peak
+//    power can more than double the average power"
+//    specs/the_westinghouse_pressurized_water_react/chapter_7/page_132.txt:58-61
+func linearPowerKWft(r *ReactorPressureVessel) float64 {
+	p := min(max(float64(r.FissionPower)/float64(CoreFissionPowerAtRated), 0), 1.2)
+	avgKWft := (float64(CoreRatedThermalPower) / 1000) /
+		(FuelAssemblies * FuelRodsPerAssembly * ActiveLengthFt) // ≈ 6.2 kW/ft, derived
+	return p * avgKWft * LinearPowerPeakingFac * (1 + 0.005*math.Abs(r.AxialOffset))
+}
+
+// maxKWft: the derived peak for the sensor's normalized form.
+func maxKWft() float64 {
+	avgKWft := (float64(CoreRatedThermalPower) / 1000) /
+		(FuelAssemblies * FuelRodsPerAssembly * ActiveLengthFt)
+	return LinearPowerPeakingFac * avgKWft
+}
+
 // netTempCoef returns the moderator temperature coefficient
 // (pcm/°F) at the given RCS boron concentration. The fuel-side
 // Doppler base is carried separately by CoreDopplerBasePcmPerDegF.
@@ -700,6 +783,26 @@ type ReactorPressureVessel struct {
 	//    specs/the_westinghouse_pressurized_water_react/chapter_16/page_226.txt:164-165
 	Iodine135 float64
 	Xenon135  float64
+
+	// Nitrogen16 is the N-16 inventory (arbitrary activity units),
+	// the neutron-activation-of-oxygen product that makes the hot-leg
+	// ion chambers read proportional to fission rate:
+	//   "This instrumentation monitors the thermal power of the NSSS
+	//    by detecting the level of N-16 present in the coolant
+	//    system. (N-16 is an isotope of nitrogen generated by neutron
+	//    activation of oxygen contained in the water.) The level of
+	//    N-16 present in the primary coolant is directly
+	//    proportional to the fission rate in the core."
+	//    specs/the_westinghouse_pressurized_water_react/chapter_7/page_126.txt:119-130
+	// The same hardware doubles as the Transit Time Flowmeter:
+	//   "The TTFM accurately measures the reactor's coolant's flow
+	//    rate for the primary loop by sensing the radioactive
+	//    signature of the N-16 isotope with gamma detectors...
+	//    accomplishing ... an accuracy of +/- 1.5 percent"
+	//    specs/the_westinghouse_pressurized_water_react/chapter_7/page_126.txt:88-102
+	// Normalized to its rated-power equilibrium (equilibrium N = p),
+	// the same convention as Iodine135 (1.0 at rated).
+	Nitrogen16 float64
 
 	// Trip is the operator-controlled trip flag. Set true to drop
 	// the rods into the fully inserted scram position; fission
