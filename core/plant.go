@@ -101,6 +101,13 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 	ret.Pressurizer, reliefDischarge = ret.Pressurizer.Step(dt,
 		ret.ReactorPressureVessel.Outlet, &ret.PORV, &ret.SafetyValve, &ret.BlockValve,
 		sprayDrive, ret.Aux.ChemicalVolumeControlSystem.AuxSprayDrive)
+	// Seed the shared drainable-inventory budget before any
+	// inventory writer runs this step: the hot-leg break, the
+	// relief ledger, and the SG tube rupture (which lives in
+	// SteamGenerator.Step) all cap against it, so execution
+	// order no longer starves the later writer.
+	ret.ReactorPressureVessel.breakRemaining = max(
+		RCSDrainableInventoryGal-ret.ReactorPressureVessel.BreakDischarged.Float(), 0)
 	// Hot-leg LOCA discharge: the break debits primary inventory
 	// after the pressurizer's own balance so the blowdown lands on
 	// top of this step's heater/spray/relief state.
@@ -130,9 +137,8 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:30-35
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:16-17
 	if reliefDischarge.Val > 0 {
-		remaining := RCSDrainableInventoryGal - ret.ReactorPressureVessel.BreakDischarged.Float()
-		if remaining > 0 {
-			gal := min(reliefDischarge.Float(), remaining)
+		gal := ret.ReactorPressureVessel.debit(reliefDischarge.Float())
+		if gal > 0 {
 			ret.ReactorPressureVessel.BreakDischarged = vol(
 				ret.ReactorPressureVessel.BreakDischarged,
 				ret.ReactorPressureVessel.BreakDischarged.Float()+gal)

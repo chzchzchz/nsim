@@ -625,9 +625,9 @@ func (s *SteamGenerator) applyTubeRupture(dt time.Duration, rcsPressure Pressure
 	if s.SGTubeRupture.Open <= 0 {
 		return
 	}
-	remaining := RCSDrainableInventoryGal - rpv.BreakDischarged.Float()
-	if remaining <= 0 {
-		return // primary inventory exhausted; an empty primary cannot feed the leak
+	// primary inventory exhausted; an empty primary cannot feed the leak
+	if rpv.breakRemaining <= 0 {
+		return
 	}
 	dP := float64(rcsPressure) - float64(s.Pressure)
 	if dP <= 0 {
@@ -635,7 +635,7 @@ func (s *SteamGenerator) applyTubeRupture(dt time.Duration, rcsPressure Pressure
 	}
 	designDP := float64(PressurizerHeaterTarget) - float64(SteamGeneratorShellPressure)
 	rate := s.SGTubeRupture.Open * SGTubeRuptureGalPerSec * min(dP/designDP, 1)
-	gal := min(rate*dt.Seconds(), remaining)
+	gal := rpv.debit(rate * dt.Seconds())
 	s.SGTubeRuptureFlow = Volume{Val: gal, Unit: u.Gallon}
 	// Mass stays in the secondary: it becomes shell water (the source
 	// of the rising shell level the operator sees on SG-level

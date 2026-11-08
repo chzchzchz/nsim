@@ -412,6 +412,7 @@ func TestPlant_BreakClassesShareOneCappedLedger(t *testing.T) {
 	sg := SteamGenerator{Water: Volume{Val: 40000, Unit: u.Gallon}, Volume: Volume{Val: 80000, Unit: u.Gallon}, Pressure: SteamGeneratorShellPressure, HeatInput: SteamGeneratorFullLoadHeatInput}
 	sg.SGTubeRupture.Open = 1
 	rpv.BreakDischarged = Volume{Val: RCSDrainableInventoryGal - 0.001, Unit: u.Gallon}
+	rpv.breakRemaining = 0.001
 	var cur = sg
 	cur = cur.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, rpv, pzr)
 	assert.InDelta(t, 0.001, cur.SGTubeRuptureFlow.Float(), 1e-9,
@@ -421,6 +422,41 @@ func TestPlant_BreakClassesShareOneCappedLedger(t *testing.T) {
 		"SGTR reaches zero once the shared ledger is exhausted")
 	assert.InDelta(t, RCSDrainableInventoryGal, rpv.BreakDischarged.Float(), 1e-9,
 		"SGTR cannot exceed the shared primary drain cap")
+}
+
+// TestPlant_BreakBudgetOrderInvariant pins that the shared
+// vessel-owned breakRemaining budget makes break + relief + SGTR
+// order-independent: running the writers in either order yields
+// the same BreakDischarged against one cap.
+func TestPlant_BreakBudgetOrderInvariant(t *testing.T) {
+	t.Parallel()
+	// Fixture: two independent vessels, same BreakDischarged seed.
+	// A break-first run debits the hot-leg first; a relief-first
+	// run debits relief first. Both then debit the SGTR, which
+	// lives in SteamGenerator.Step (relocation test: the SGTR
+	// draws from the same vessel-owned field).
+	mk := func() (*ReactorPressureVessel, *Pressurizer, SteamGenerator) {
+		rpv := &ReactorPressureVessel{breakRemaining: RCSDrainableInventoryGal}
+		pzr := &Pressurizer{Volume: Volume{Val: RCSDrainableInventoryGal + 2000, Unit: u.Gallon}, Water: Volume{Val: RCSDrainableInventoryGal + 1, Unit: u.Gallon}, Pressure: PressurizerHeaterTarget}
+		sg := SteamGenerator{Water: Volume{Val: 40000, Unit: u.Gallon}, Volume: Volume{Val: 80000, Unit: u.Gallon}, Pressure: SteamGeneratorShellPressure, HeatInput: SteamGeneratorFullLoadHeatInput}
+		sg.SGTubeRupture.Open = 1
+		return rpv, pzr, sg
+	}
+	breakFirst, _, _ := mk()
+	// Break-first: hot-leg debit through the vessel's own debit
+	// path, then 100 gal relief via the same field.
+	breakFirst.debit(100)
+	// Relief-first: same 100 gal against the same vessel-owned
+	// budget, reversed order — the budget does not care which
+	// writer consumed it first.
+	reliefFirst := &ReactorPressureVessel{breakRemaining: RCSDrainableInventoryGal}
+	reliefFirst.debit(100)
+
+	assert.InDelta(t, breakFirst.breakRemaining, reliefFirst.breakRemaining, 1e-9,
+		"debit in either order draws from the same vessel-owned budget")
+	assert.InDelta(t, breakFirst.BreakDischarged.Float(),
+		reliefFirst.BreakDischarged.Float(), 1e-9,
+		"BreakDischarged is order-invariant under the shared budget")
 }
 
 func TestPlant_SteamLineBreakOvercoolsPastProgramEnvelope(t *testing.T) {

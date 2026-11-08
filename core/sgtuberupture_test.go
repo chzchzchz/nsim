@@ -25,7 +25,7 @@ func sgtrFixture() (SteamGenerator, *ReactorPressureVessel, *Pressurizer) {
 		Pressure: SteamGeneratorShellPressure,
 		HeatInput: SteamGeneratorFullLoadHeatInput,
 	}
-	rpv := &ReactorPressureVessel{}
+	rpv := &ReactorPressureVessel{breakRemaining: RCSDrainableInventoryGal}
 	pzr := &Pressurizer{
 		Water:       Volume{Val: 1000, Unit: u.Gallon},
 		Volume:      Volume{Val: 1500, Unit: u.Gallon},
@@ -243,6 +243,7 @@ func TestSteamGenerator_TubeRuptureExhaustsInventory(t *testing.T) {
 	sg2, rpv2, pzr2 := sgtrFixture()
 	sg2.SGTubeRupture.Open = 1
 	rpv2.BreakDischarged = Volume{Val: RCSDrainableInventoryGal - 0.001, Unit: u.Gallon}
+	rpv2.breakRemaining = 0.001
 	cur2 := sg2.Step(DefaultTimeStep, 0, PressurizerHeaterTarget, rpv2, pzr2)
 	assert.InDelta(t, 0.001, cur2.SGTubeRuptureFlow.Float(), 1e-9,
 		"final step must be capped at the remaining inventory")

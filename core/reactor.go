@@ -919,6 +919,16 @@ type ReactorPressureVessel struct {
 	// plans/p65_4.txt, plans/p65_7.txt.
 	BreakDischargedNonCreditable Volume
 
+	// breakRemaining is the step-scoped drainable-inventory
+	// budget shared by the three eastbound writers: hot-leg
+	// break, pressurizer relief, and SG tube rupture all cap
+	// against it instead of each other. It is re-seeded in
+	// Plant.Step after the pressurizer step, so the three
+	// eastbound writes agree on a single budget and
+	// creditSafetyInjection's floor applies to the same
+	// remainder in any execution order.
+	breakRemaining float64
+
 	// CladTempF is the lumped hot-rod clad temperature (°F).
 	// Covered: clad tracks coolant saturation at RCS pressure.
 	// Uncovered: integrates decay heat over the lumped thermal
@@ -1029,6 +1039,22 @@ var RCSDrainableInventoryGal = RCSMassKg / KilogramsPerGallon
 // LOCA transient.
 const ECCSInjectionTempF = 100.0
 
+// debit caps an eastbound inventory debit against the step-scoped
+// breakRemaining budget when the caller has seeded it (non-zero),
+// no-ops when the budget is exhausted, and returns the gallonage
+// actually debited. It is the single debit path for the three
+// writers; creditSafetyInjection's floor applies to the closed
+// budget so the relief/creditable split no longer depends on
+// which writer ran first.
+func (r *ReactorPressureVessel) debit(proposed float64) float64 {
+	if r.breakRemaining <= 0 {
+		return 0
+	}
+	gal := min(proposed, r.breakRemaining)
+	r.breakRemaining -= gal
+	return gal
+}
+
 // applyHotLegBreak discharges the hot-leg break against the
 // pressurizer inventory ledger: each liquid-equivalent gallon lost
 // drops RCS pressure by PressurizerBubbleStiffness toward floor
@@ -1048,12 +1074,11 @@ func (r *ReactorPressureVessel) applyHotLegBreak(dt time.Duration, pzr *Pressuri
 	if r.HotLegBreak.Open <= 0 {
 		return
 	}
-	remaining := RCSDrainableInventoryGal - r.BreakDischarged.Float()
-	if remaining <= 0 {
+	rate := r.HotLegBreak.Open * RCSHotLegBreakGalPerSec
+	gal := r.debit(rate * dt.Seconds())
+	if gal <= 0 {
 		return
 	}
-	rate := r.HotLegBreak.Open * RCSHotLegBreakGalPerSec
-	gal := min(rate*dt.Seconds(), remaining)
 	// The liquid-equivalent draw comes out of the loop inventory the
 	// surge line exposes as pressurizer water; level falls first and
 	// the free space grows behind it.
