@@ -1,6 +1,7 @@
 package core
 
 import (
+	"math"
 	"time"
 
 	u "github.com/bcicen/go-units"
@@ -5084,6 +5085,23 @@ const (
 	// specs/the_westinghouse_pressurized_water_react/chapter_13/page_178.txt:109-111
 	RefuelingWeightSafetyFactor float64 = 1.10
 )
+
+// RefuelingCavityDepthGallonsPerFoot is the gallons-per-foot-of-depth
+// for the refueling-cavity pool above the reactor (gallons per foot,
+// plans/p65_7.txt). Derived, not stated in the spec: the cavity pool
+// above the head scales to the 4-loop core footprint, whose diameter
+// (17x17 OFA) the spec tables as 11.06 ft. The pool is modeled as a
+// cylinder on the largest core swept by the cavity above the flange:
+// pi * (11.06/2)^2 cu ft per foot of depth = 96.09 ft^3/ft, at
+// 7.48052 gal/ft^3 gives 718.85 gal/ft. The ledger debit uses the
+// rate per minute (RefuelingCavityDrainRate) times this figure.
+// "Equivalent core diameter, ft (cm)" 11.06 (338), 17x17 OFA:
+// specs/the_westinghouse_pressurized_water_react/chapter_2/page_029.txt:115-136
+// "it forms a pool above the reactor. The cavity is filled to a depth
+// of approximately 24 feet (731 cm) of water when a fuel assembly is
+// being transferred between the reactor and the fuel transfer system."
+// specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:43-46
+var RefuelingCavityDepthGallonsPerFoot = math.Pi * (11.06 / 2.0) * (11.06 / 2.0) * 7.48052
 
 // Refueling phase design constants (plans/p24_1.txt).
 //

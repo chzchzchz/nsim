@@ -141,6 +141,44 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 				ret.ReactorPressureVessel.BreakDischargedNonCreditable.Float()+gal)
 		}
 	}
+	// Refueling-cavity drain (plans/p65_7.txt): the cavity pool
+	// above the head is primary-side water held for fuel transfer.
+	// Draining it removes that inventory, so debit the ledger
+	// (non-creditable: water already outside the closed RCS loop).
+	// The state machine (Plant.Step, after this call) owns the
+	// depth state; the debit is what that physical step will lose
+	// THIS tick: min(rate*dt, depth) * gallons-per-foot. Never
+	// invent gallons the pool does not hold, so a held-open drain
+	// cannot manufacture mass after the pool is empty. Gate on the
+	// reassembly phase, the only phase the state machine drains in.
+	// Liquid drained from the cavity does not flash to containment,
+	// so BreakFlow is untouched, same as the relief debit above.
+	// "Spent fuel is handled underwater from the time it leaves
+	// the reactor vessel until it is placed in a cask for shipment
+	// from the site. [...]
+	// it forms a pool above the reactor. The cavity is filled to a
+	// depth of approximately 24 feet (731 cm) of water when a fuel
+	// assembly is being transferred between the reactor and the fuel
+	// transfer system."
+	// specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:14-18
+	// specs/the_westinghouse_pressurized_water_react/chapter_13/page_172.txt:43-46
+	if ret.RefuelingOperations.CavityDraining &&
+		ret.RefuelingOperations.Phase == RefuelingPhaseReassembly &&
+		ret.RefuelingOperations.CavityFloodDepth > 0 {
+		dropF := min(RefuelingCavityDrainRate*dt.Seconds()/60.0,
+			ret.RefuelingOperations.CavityFloodDepth)
+		remaining := RCSDrainableInventoryGal -
+			ret.ReactorPressureVessel.BreakDischarged.Float()
+		if remaining > 0 {
+			gal := min(dropF*RefuelingCavityDepthGallonsPerFoot, remaining)
+			ret.ReactorPressureVessel.BreakDischarged = vol(
+				ret.ReactorPressureVessel.BreakDischarged,
+				ret.ReactorPressureVessel.BreakDischarged.Float()+gal)
+			ret.ReactorPressureVessel.BreakDischargedNonCreditable = vol(
+				ret.ReactorPressureVessel.BreakDischargedNonCreditable,
+				ret.ReactorPressureVessel.BreakDischargedNonCreditable.Float()+gal)
+		}
+	}
 	// Route the relieved steam-equivalent volume into the PRT
 	// until it fills; a full tank latches the rupture-disc burst
 	// and further relief vents to containment instead.
@@ -257,6 +295,35 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 	pzWater := ret.Pressurizer.Water.Float() + netCVCS
 	pzWater = min(max(pzWater, 0), ret.Pressurizer.Volume.Float())
 	ret.Pressurizer.Water = vol(ret.Pressurizer.Water, pzWater)
+	// Letdown-without-charging (plans/p65_7.txt): a net-negative
+	// CVCS balance drains the RCS to the VCT. Debit the ledger
+	// (non-creditable floor) so a letdown-only lineup uncovers the
+	// core. The issue is one balance, not two: the pressurizer
+	// above already takes this exact volume from the same inventory
+	// (already clamped to pre-step pressurizer water), so the ledger
+	// mirrors the clamped transfer; uncapped repeats would drain a
+	// dry pressurizer forever. Same split as p65_4's relief debit
+	// (1500-gal pressure-state ledger vs 419392-gal primary); both
+	// capped at RCSDrainableInventoryGal.
+	// "pressurizer level represents a balance of injection water
+	// flow into the RCS and water letdown flow into the Chemical
+	// and Volume Control System."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65
+	if netCVCS < 0 {
+		usable := ret.Pressurizer.Water.Float() + netCVCS
+		gal := max(0, min(-netCVCS, usable))
+		remaining := RCSDrainableInventoryGal -
+			ret.ReactorPressureVessel.BreakDischarged.Float()
+		if gal > 0 && remaining > 0 {
+			gal = min(gal, remaining)
+			ret.ReactorPressureVessel.BreakDischarged = vol(
+				ret.ReactorPressureVessel.BreakDischarged,
+				ret.ReactorPressureVessel.BreakDischarged.Float()+gal)
+			ret.ReactorPressureVessel.BreakDischargedNonCreditable = vol(
+				ret.ReactorPressureVessel.BreakDischargedNonCreditable,
+				ret.ReactorPressureVessel.BreakDischargedNonCreditable.Float()+gal)
+		}
+	}
 
 	// Reactor Protection System step. Runs before the
 	// ReactorPressureVessel step so the ReactorTripped latch

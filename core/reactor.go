@@ -891,27 +891,32 @@ type ReactorPressureVessel struct {
 
 	// BreakDischarged is the cumulative liquid-equivalent volume
 	// lost from the primary since time zero (gal): hot-leg break
-	// (applyHotLegBreak), SG tube rupture, and pressurizer relief
-	// to the PRT all debit it, and creditSafetyInjection retires
-	// ECCS refill from it. Discharge ends when it reaches
+	// (applyHotLegBreak), SG tube rupture, pressurizer relief
+	// to the PRT, refueling-cavity drain, and CVCS letdown
+	// without charging all debit it, and creditSafetyInjection
+	// retires ECCS refill from it. Discharge ends when it reaches
 	// RCSDrainableInventoryGal, so a voided primary cannot keep
-	// feeding any break; relief and tube-rupture gallonage to
-	// their own sinks counts toward the same cap but, because it
-	// never returns to the RCS, is not retired by injection credit
-	// the way break refill is — see BreakDischargedNonCreditable.
+	// feeding any break; relief, tube-rupture, cavity-drain and
+	// letdown gallonage to their own sinks counts toward the same
+	// cap but, because it never returns to the RCS, is not retired
+	// by injection credit the way break refill is — see
+	// BreakDischargedNonCreditable.
+	// plans/p65_7.txt.
 	BreakDischarged Volume
 
 	// BreakDischargedNonCreditable is the sub-total of
 	// BreakDischarged that left the primary for a sink outside
 	// the RCS and was never refilled from it: relief steam
-	// condensed in the PRT (PressurizerReliefTank) and primary
-	// leaked into the SG shell. creditSafetyInjection retires
-	// only the creditable remainder, flooring at
+	// condensed in the PRT (PressurizerReliefTank), primary
+	// leaked into the SG shell, cavity water drained above the
+	// head, letdown water sent to the VCT. creditSafetyInjection
+	// retires only the creditable remainder, flooring at
 	// BreakDischargedNonCreditable so ECCS refill cannot erase
-	// relief or tube-rupture loss — a relief drain with SI intact
-	// still uncovers the core, pressuring UncoveryFrac toward 1
-	// at the cap instead of netting back to zero.
-	// plans/p65_4.txt.
+	// relief, tube-rupture, cavity-drain or letdown loss — such a
+	// drain with SI intact still uncovers the core, pressuring
+	// UncoveryFrac toward 1 at the cap instead of netting back to
+	// zero.
+	// plans/p65_4.txt, plans/p65_7.txt.
 	BreakDischargedNonCreditable Volume
 
 	// CladTempF is the lumped hot-rod clad temperature (°F).
@@ -925,9 +930,10 @@ type ReactorPressureVessel struct {
 	// UncoveryFrac is the net uncovered core fraction (0..1):
 	// BreakDischarged / RCSDrainableInventoryGal, already netted
 	// against injection credit by creditSafetyInjection above
-	// the BreakDischargedNonCreditable floor (relief and
-	// tube-rupture losses to their own sinks are not retired).
-	// plans/p65_1.txt.
+	// the BreakDischargedNonCreditable floor (relief, tube-rupture,
+	// cavity-drain and letdown losses to their own sinks are not
+	// retired).
+	// plans/p65_1.txt, plans/p65_7.txt.
 	UncoveryFrac float64
 
 	// CoreDamageFrac is the damage progression 0→1: 0 at or below
@@ -1067,8 +1073,9 @@ func (r *ReactorPressureVessel) applyHotLegBreak(dt time.Duration, pzr *Pressuri
 // SIS step refills pressurizer water. Refill retires only the
 // creditable (hot-leg break) share of the cumulative draw, so
 // RCSDrainableInventoryGal bounds the primary's NET break loss
-// while relief and tube-rupture losses to their own sinks —
-// BreakDischargedNonCreditable — are floored and never erased:
+// while relief, tube-rupture, cavity-drain and letdown losses
+// to their own sinks — BreakDischargedNonCreditable — are
+// floored and never erased:
 // ECCS water cannot un-void inventory that left the RCS for the
 // PRT. RWST suction was already debited in SIS.Step; sump suction
 // draws the implicit sump. The delivered gallonage also joins the

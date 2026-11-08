@@ -488,6 +488,12 @@ Checks:
   as stability evidence while nothing was simulated (a control write
   then looks inert because it never reached a stepped tick). Use the
   package's stepN helper or pair every Step with Update.
+- **A ledger debit that reads pre-step state, not the physical change
+  the same tick will perform, lags one tick behind its source.** Peak
+  readers (`min(rate*dt, lastTickDepth)`) over-debit after the source
+  empties or the phase changes by one tick. Prefer the exact
+  observed-state change (`depthBefore-depthAfter`) as the debit, and
+  assert per tick that the ledger gain equals it.
 - **When parking an unstable equilibrium, close the loop on a
   directly-measured state variable, not a target computed from model
   identities.** Formula-driven demands (insertion from temperature
@@ -662,8 +668,6 @@ Change classification and conflicts:
   the process variable downstream keeps drifting. Sample the actuator
   position against its commanded target over time, not only the
   process variable.
-- An edit batch reported "applied" without a follow-up grep. (already
-  listed above; see also §9 verify-edits-landed.)
 - A recorded "cannot fix locally" justification accepted without
   re-measuring the actual violation it names: waivers encode hypotheses
   about cost, and measurement can retire them.
