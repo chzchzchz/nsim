@@ -95,7 +95,8 @@ var diagramParts = []diagramPart{
 	{"DieselAFWPump", "Outside/DieselAFWPump", "DieselAFWPump", "AFW Diesel"},
 	{"MotorAFWPump", "Outside/MotorAFWPump", "MotorAFWPump", "AFW MD"},
 	{"TurbineAFWPump", "Outside/TurbineAFWPump", "TurbineAFWPump", "AFW TD"},
-	{"EFWSTank", "AuxiliaryBuilding/EmergencyFeedwaterSystem", "EmergencyFeedwaterSystem", "EFWS"},
+	{"EFWSTankA", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA", "EmergencyFeedwaterSystem", "EFWS A"},
+	{"EFWSTankB", "AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB", "EmergencyFeedwaterSystem", "EFWS B"},
 	{"CCWSHX", "AuxiliaryBuilding/ComponentCoolingWaterSystem", "ComponentCoolingWaterSystem", "CCWS HX"},
 	{"RHRS_A", "AuxiliaryBuilding/ResidualHeatRemovalSystem", "ResidualHeatRemovalSystem", "RHRS A"},
 	{"RHRS_B", "AuxiliaryBuilding/ResidualHeatRemovalSystem", "ResidualHeatRemovalSystem", "RHRS B"},
@@ -142,11 +143,11 @@ var diagramParts = []diagramPart{
 	{"BTRS", "AuxiliaryBuilding/ChemicalVolumeControlSystem/BTRS", "BTRSDemineralizer", "BTRS"},
 	{"BTRSPUMP", "AuxiliaryBuilding/ChemicalVolumeControlSystem", "BTRSPump", "BTRS Pump"},
 	{"BRS", "AuxiliaryBuilding/BoronRecycleSystem", "BoronRecycleSystem", "BRS"},
-	{"SGADV", "ReactorBuilding/SteamGenerator/AtmosphericDumpValve", "relief", "SG ADV"},
-	{"SGSSV", "ReactorBuilding/SteamGenerator/SafetyValve", "safety", "SG SSV"},
-	{"SteamlineVent", "ReactorBuilding/SteamGenerator/SteamlineVent", "relief", "SG Vent"},
-	{"DrainValve", "ReactorBuilding/SteamGenerator/DrainValve", "gate", "SG Drain"},
-	{"WetLayupFillValve", "ReactorBuilding/SteamGenerator/WetLayupFillValve", "gate", "SG Layup"},
+	// SG startup valves (SGADV/SGSSV/SteamlineVent/DrainValve/
+	// WetLayupFillValve) are drawn once as standalone valves
+	// seated on the SG->Turbine line via valvePlacements; a
+	// diagramParts row here would double-draw them at their
+	// isolated dot anchors.
 	// Three-element feedwater regulator computing the control
 	// valve demand (see scalarValves for its anchor).
 	//   "Feedwater flow to each steam generator is controlled by a
@@ -154,13 +155,15 @@ var diagramParts = []diagramPart{
 	//    is controlled by steam generator level, steam flow and
 	//    feedwater flow."
 	//    specs/the_westinghouse_pressurized_water_react/chapter_15/page_219.txt:69-73
-	{"FeedwaterRegulator", "TurbineBuilding/FeedwaterRegulator", "modulating", "FW Regulator"},
+	// FeedwaterRegulator is drawn once as a scalar valve at its
+	// own anchor; a diagramParts row here would double-draw it.
 	// Containment filtration train: CSS safeguard removes
 	// airborne fission products (chapter_6/page_114.txt:76-85);
 	// physical train in Figure 6-5 per plans/svg/containment.md.
 	// Shares the HDS part path; run dot keyed per diagram id.
 	{"ContainmentFiltration", "ReactorBuilding/ContainmentBuilding/HydrogenDetectionSuppression", "ContainmentFilter", "Cont. Filters"},
-	{"SOLIDPP", "AuxiliaryBuilding/ResidualHeatRemovalSystem/SolidPlantPressureValve", "modulating", "Solid PP"},
+	// SOLIDPP is drawn once as a standalone valve at its own
+	// anchor; a diagramParts row here would double-draw it.
 }
 
 // buildingLabels captions the cluster outlines drawn behind symbols.
@@ -315,8 +318,12 @@ var levelAccessors = map[string]func(*core.Plant) (core.Volume, core.Volume){
 		t := p.ReactorBuilding.PressurizedReliefTank
 		return t.Level, t.Capacity
 	},
-	"EFWSTank": func(p *core.Plant) (core.Volume, core.Volume) {
+	"EFWSTankA": func(p *core.Plant) (core.Volume, core.Volume) {
 		t := p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemA.Tank
+		return t.Level, t.Capacity
+	},
+	"EFWSTankB": func(p *core.Plant) (core.Volume, core.Volume) {
+		t := p.AuxiliaryBuilding.EmergencyFeedwaterSystem.SubsystemB.Tank
 		return t.Level, t.Capacity
 	},
 	"FuelTank": func(p *core.Plant) (core.Volume, core.Volume) {
@@ -975,6 +982,12 @@ func (r *renderer) kindOf(id string) string {
 var containmentDomeMembers = map[string]bool{
 	"RPV": true, "SG": true, "RCP": true, "Pressurizer": true,
 	"PRT": true, "SISAccumulators": true, "RWST": true, "HHSI": true,
+	// Bottom-floor equipment: sump, spray tanks, CIS, HDS,
+	// filtration, RCFC and injection sink sit inside containment
+	// (Figures 5-1/6-4/6-5) and must be inside the dome outline.
+	"Sump": true, "CIS": true, "CSSTank": true, "SATTank": true,
+	"HDS": true, "ContainmentFiltration": true, "InjectionSink": true,
+	"RCFC_A": true, "RCFC_B": true, "RCFC_C": true, "RCFC_D": true,
 }
 
 // clusterBox returns the bounding rectangle in document space of
@@ -1015,8 +1028,26 @@ func (r *renderer) clusterBox(name string) (x, y, w, h float64, ok bool) {
 			h = maxY - y
 		}
 	}
+	// Buildings must not visually swallow each other: fuel and
+	// electrical clusters are placed adjacent by dot and their
+	// padded boxes overlap (fuel SFP/HX vs electrical Diesel/Grid).
+	// The later cluster in draw order (electrical) yields: shrink
+	// its left edge to just clear the earlier building so both
+	// outlines stay visible. Containment dome is exempt.
 	return x, y, w, h, !first
 }
+
+// buildingBoxOrder is draw order for building outlines; later
+// buildings yield left overlap to earlier ones.
+var buildingBoxOrder = []string{
+	"cluster_containment", "cluster_fuel", "cluster_turbine",
+	"cluster_auxiliary", "cluster_electrical",
+}
+
+// yieldMin is the minimum width a building box may be shrunk to
+// when yielding left overlap to an earlier building (keeps at
+// least this much of the building visible).
+const yieldMin = 40.0
 
 func (r *renderer) containmentTop() (Anchor, bool) {
 	cx, cy, cw, _, ok := r.clusterBox("cluster_containment")
@@ -1748,10 +1779,9 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// Building outlines derive from cluster membership so they
 	// always enclose the symbols graphviz grouped together. The
 	// containment outline is the dome asset rather than a rect.
-	for _, name := range []string{
-		"cluster_containment", "cluster_fuel", "cluster_turbine",
-		"cluster_auxiliary", "cluster_electrical",
-	} {
+	type bRect struct{ x, y, w, h float64 }
+	drawnBoxes := map[string]bRect{}
+	for _, name := range buildingBoxOrder {
 		bx, by, bw, bh, ok := r.clusterBox(name)
 		if !ok {
 			continue
@@ -1761,6 +1791,27 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		bx, by = math.Max(bx, 0), math.Max(by, 0)
 		bw = math.Min(bw, DocumentWidth-bx)
 		bh = math.Min(bh, DocumentHeight-by)
+		// Later buildings yield left/top overlap to earlier ones
+		// so fuel/electrical outlines both stay visible.
+		if name != "cluster_containment" {
+			for _, prev := range buildingBoxOrder {
+				if prev == name {
+					break
+				}
+				pb, okP := drawnBoxes[prev]
+				if !okP || prev == "cluster_containment" {
+					continue
+				}
+				if bx < pb.x+pb.w && pb.x < bx+bw && by < pb.y+pb.h && pb.y < by+bh {
+					// overlap: push bx right to just clear prev
+					if nb := pb.x + pb.w + 2; nb > bx && nb < bx+bw-yieldMin {
+						bw -= nb - bx
+						bx = nb
+					}
+				}
+			}
+		}
+		drawnBoxes[name] = bRect{bx, by, bw, bh}
 		// Building captions sit inside the outline just above the
 		// first row's symbols, not on the outline edge: captions
 		// on the edge collided with the first row's part captions

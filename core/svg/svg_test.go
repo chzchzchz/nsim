@@ -689,7 +689,10 @@ func TestComputeLayout_RCPBetweenSGAndRPV(t *testing.T) {
 	// Pressurizer above the hot leg (smaller Y is higher after
 	// the Y flip).
 	assert.Less(t, pzr.Y, rpv.Y)
-	assert.Equal(t, 126, len(symbolCount(t)), "symbol count drift (post-anchors): parallel edges keep both valve glyphs, pipe geometry deduped only")
+	// 120 after dedup: 6 standalone valves (SGADV/SGSSV/SteamlineVent/
+	// DrainValve/WetLayupFillValve + FeedwaterRegulator + SOLIDPP)
+	// were double-drawn as diagramParts and standalone; now drawn once.
+	assert.Equal(t, 120, len(symbolCount(t)), "symbol count drift (post-anchors): parallel edges keep both valve glyphs, pipe geometry deduped only")
 }
 
 // symbolCount counts top-level <use> outside <defs> in a render.
