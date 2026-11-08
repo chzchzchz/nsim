@@ -477,6 +477,26 @@ func (c *CVCS) applyAutoBoronControl(
 			}
 		}
 		c.AutoBoronDrive = drive
+	case powerErrorFrac < -CVCSAutoBoronPowerErrBandFrac &&
+		demandFraction <= CVCSAutoBoronParkMaxLoadFrac &&
+		rodInsertion < CVCSAutoBoronLowInsertionFrac:
+		// Deep-band pit preempt (p68): travel-limit relief owns the
+		// BTRS while the bank sits below the low-insertion threshold
+		// and the standing error would borate. The spec compensates
+		// the xenon level "whenever control rod operation is
+		// restricted for any reason"
+		// (specs/the_westinghouse_pressurized_water_react/
+		// chapter_7/page_135.txt:79-82), and at the park the rods
+		// have no travel: dilution is the only positive credit.
+		// Moving Mode to dilution keeps the beds conditioned cold
+		// (core/cvcs.go per-step switch) and the exchange eligible;
+		// above the 0.20 band this branch is dead (p58 mid-band
+		// contract). The diluting leg is not preempted: dilution
+		// there is already the same action.
+		c.Mode = CVCSDilution
+		c.BTRSRecirculationPumpRunning = true
+		c.AutoBoronDrive = pacedPositionDrive(
+			CVCSAutoBoronLowInsertionFrac - rodInsertion)
 	case powerErrorFrac < -CVCSAutoBoronPowerErrBandFrac:
 		c.Mode = CVCSBoration
 		c.BTRSRecirculationPumpRunning = true

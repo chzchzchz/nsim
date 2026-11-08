@@ -280,6 +280,62 @@ func TestAutoBoron_PositionTiersPaceWithDepthPastThreshold(t *testing.T) {
 		"past the position span the drive clamps at the cap")
 }
 
+// TestCVCSAutoBoronPitPreemptsPowerErrorBoration is the p68
+// travel-limit-priority fix for gaps.md item 18: inside the deep band the
+// pit (rods out of travel) owns the BTRS while the excess-power error
+// would borate. Spec: boron "compensates for changes in the xenon level
+// during load maneuvers and compensates for the Tc error whenever control
+// rod operation is restricted for any reason"
+// (specs/the_westinghouse_pressurized_water_react/chapter_7/page_135.txt:79-82).
+// Above the 0.20 band the shipped mid-band contract holds (p58 lesson).
+func TestCVCSAutoBoronPitPreemptsPowerErrorBoration(t *testing.T) {
+	t.Parallel()
+
+	// Deep-band excess power at full withdrawal: the preempt selects
+	// dilution with the pump latched and a cap-paced drive
+	// (pacedPositionDrive(0.035) = cap 0.3).
+	parkPit := CVCS{AutoBoronControl: true}
+	parkPit.applyAutoBoronControl(0, 0, -CVCSAutoBoronPowerErrSpanFrac*4, 0.05)
+	assert.Equal(t, CVCSDilution, parkPit.Mode,
+		"in the deep band the pit preempts power-error boration")
+	assert.True(t, parkPit.BTRSRecirculationPumpRunning,
+		"dilution keeps the BTRS pump latched")
+	assert.InDelta(t, CVCSAutoBoronPositionDriveCapFrac,
+		parkPit.AutoBoronDrive, 1e-9,
+		"the pit window dilutes at the position-tier cap")
+
+	// Mid-window pit: still dilution, depth-paced below the cap.
+	midPit := CVCS{AutoBoronControl: true}
+	midPit.applyAutoBoronControl(0.006, 0, -CVCSAutoBoronPowerErrSpanFrac*4, 0.05)
+	assert.Equal(t, CVCSDilution, midPit.Mode,
+		"below the low threshold any excess still dilutes")
+
+	// At the low threshold the preempt releases: the shipped side
+	// asserts boration owns the mode at 0.035/0.055 ≈ 0.636 × paced
+	// (the preempt step, pinned not continuous).
+	atThreshold := CVCS{AutoBoronControl: true}
+	atThreshold.applyAutoBoronControl(
+		CVCSAutoBoronLowInsertionFrac, 0, -CVCSAutoBoronPowerErrSpanFrac*4, 0.05)
+	assert.Equal(t, CVCSBoration, atThreshold.Mode,
+		"at the threshold the shipped boration leg owns the mode")
+	assert.InDelta(t, 0.035/0.055, atThreshold.AutoBoronDrive, 1e-9,
+		"the shipped side runs at error-tier rod authority")
+
+	// Mid-band twin: demand 1.0 keeps the shipped boration contract.
+	aboveBand := CVCS{AutoBoronControl: true}
+	aboveBand.applyAutoBoronControl(0, 0, -CVCSAutoBoronPowerErrSpanFrac*4, 1.0)
+	assert.Equal(t, CVCSBoration, aboveBand.Mode,
+		"outside the deep band the preempt is dead")
+	assert.InDelta(t, 1.0, aboveBand.AutoBoronDrive, 1e-9)
+
+	// AFD seniority: an axial-offset excursion outranks the pit.
+	skew := CVCS{AutoBoronControl: true}
+	skew.applyAutoBoronControl(0, -CoreAFDTargetBandPct-1,
+		-CVCSAutoBoronPowerErrSpanFrac*4, 0.05)
+	assert.Equal(t, CVCSBoration, skew.Mode,
+		"the AFD tiers keep full drive above the pit")
+}
+
 // Zero-value coherence: with the trim disengaged, a diluted-mode lineup
 // exchanges at the full design rate even though AutoBoronDrive sits at
 // its zero value - operator chemistry never inherits the automatic
@@ -315,17 +371,20 @@ func TestCVCSDilutionRateFullWithoutAutoTrim(t *testing.T) {
 func TestCVCSAutoBoronDeepBandScalesWithRodAuthority(t *testing.T) {
 	t.Parallel()
 
-	// Borating an overpowered park at full withdrawal: drive 0, but the
-	// tier selects the mode and latches the BTRS pump so beds
-	// pre-position for the eventual flip.
+	// Borating an overpowered park at full withdrawal (p68 preempt):
+	// the low-insertion dilution tier owns the BTRS instead of the
+	// shipped boration leg. The p61 zero-drive boration assertion is
+	// superseded below the low threshold — the shipped leg remains
+	// reachable with drive 0 only in the preempt's drive-step window.
 	parkBorate := CVCS{AutoBoronControl: true}
 	parkBorate.applyAutoBoronControl(0, 0, -CVCSAutoBoronPowerErrSpanFrac*4, 0.05)
-	assert.Equal(t, CVCSBoration, parkBorate.Mode,
-		"deep-band borating error still selects the boration mode")
+	assert.Equal(t, CVCSDilution, parkBorate.Mode,
+		"p68: deep-band borating error at full withdrawal dilutes (pit owns the BTRS)")
 	assert.True(t, parkBorate.BTRSRecirculationPumpRunning,
-		"zero-drive pre-positioning keeps the BTRS pump latched")
-	assert.InDelta(t, 0.0, parkBorate.AutoBoronDrive, 1e-9,
-		"at full withdrawal the borating drive is zero (zero ppm/s exchange)")
+		"preempt keeps the BTRS pump latched")
+	assert.InDelta(t, CVCSAutoBoronPositionDriveCapFrac,
+		parkBorate.AutoBoronDrive, 1e-9,
+		"the pit window dilutes at the position-tier cap")
 
 	// Diluting a deficit park at full withdrawal: full paced drive,
 	// because dilution *is* withdrawal and the pit after a down-maneuver
