@@ -142,6 +142,101 @@ const (
 	// CladTrendWindowSteps (20 s at 1 ms).
 	ContainmentCycleWindowSteps = 20000
 )
+// Environmental-contamination constants (plans/p74_1.txt).
+//
+// The Westinghouse PWR document describes the waste-processing
+// structure (Chapter 14) and the contamination barriers
+// (Chapter 6) but states no absolute activity in Bq. The
+// structure (source -> holdup -> gate -> release) is therefore
+// spec-derived while the absolute scale is explicitly derived
+// from standard PWR coolant-activity literature and labeled
+// as such below.
+const (
+	// PrimaryActivityFracAtRated is the rated-equilibrium
+	// activity normalization: 1.0 = equilibrium at rated power.
+	PrimaryActivityFracAtRated = 1.0
+
+	// PrimaryActivityFullPowerActivityScaleBqPerGal converts
+	// normalized inventory to Bq/gal. Derived: an equilibrium
+	// RCS activity of order 1e12 Bq at 3800 MWt (typical PWR
+	// coolant-activity literature, order-of-magnitude only),
+	// divided by RCSDrainableInventoryGal (419,438 gal), is
+	// ~2.4e6 Bq/gal; this constant sits one order below that
+	// so normal release stays orders of magnitude below the
+	// derived limit scale (DerivedLimitScaleBq) while a
+	// full-inventory release is still visible.
+	PrimaryActivityFullPowerActivityScaleBqPerGal = 1.0e3
+
+	// Xe133HalfLifeDays / Kr85HalfLifeYears are external
+	// standard values; the spec states only the charcoal
+	// delays (see CharcoalDelayXe133Days).
+	// plans/p74_1.txt Constants.
+	Xe133HalfLifeDays   = 5.25
+	Kr85HalfLifeYears   = 10.76
+	TritiumHalfLifeDays = 12.3 * 365.25
+
+	// CharcoalDelayXe133Days / CharcoalDelayKr85Days are the
+	// spec-stated charcoal-bed delays.
+	// "Xenon-133 is delayed for a period of 60 days ...
+	//  The system is designed to also delay krypton-85 for 3 days."
+	// specs/the_westinghouse_pressurized_water_react/chapter_14/page_190.txt:101-108
+	CharcoalDelayXe133Days = 60.0
+	CharcoalDelayKr85Days  = 3.0
+
+	// WasteGasDryerEfficiency is the refrigerated-dryer water
+	// removal fraction. Derived: residual moisture degrades
+	// the effective charcoal delay linearly
+	// (effectiveDelay = CharcoalDelay * efficiency), so "dry
+	// enough" is a nominal 0.95. At 0 the delay collapses.
+	// "The hydrogen carrier gas ... first enters the
+	// refrigerated waste gas dryer which cools the hydrogen
+	// purge stream and condenses and removes the water vapor."
+	// specs/the_westinghouse_pressurized_water_react/chapter_14/page_190.txt:74-83
+	WasteGasDryerEfficiency = 0.95
+
+	// EngineeredLeakageFracPerDay / OpenPenetrationLeakageFracPerDay
+	// are the containment leakage fractions for the CIS-isolated
+	// and open-penetration states. Derived: 1%/day is a
+	// conservative upper bound for design-basis containment
+	// leakage; 50%/day (50x) models one open penetration for a
+	// clean acceptance-test contrast. No spec number.
+	EngineeredLeakageFracPerDay      = 0.01
+	OpenPenetrationLeakageFracPerDay = 0.50
+
+	// CSSIodineScrubRatePerSec is the iodine entrainment rate
+	// at full spray (CSSDesignFlow). Derived: 1/e per ~17 min,
+	// consistent with the ~30-min spray additive duration
+	// (CSSSprayAdditiveDuration, chapter_6/page_115.txt:16-18).
+	// Scales linearly with SprayFlow/CSSDesignFlow.
+	CSSIodineScrubRatePerSec = 1.0e-3
+
+	// FuelReleaseFracPerDamageFrac is the fraction of fuel
+	// activity made available to the coolant at full clad
+	// failure. Derived from gap-release fractions of this
+	// order in the literature; the spec gives none.
+	FuelReleaseFracPerDamageFrac = 0.10
+
+	// VentMonitorTripBq / LiquidMonitorTripBq are the
+	// derived operator-alert thresholds (plans/p74_1.txt
+	// Constants). Normal charcoal-delayed venting stays
+	// below trip; an un-delayed Path A/C release crosses it.
+	VentMonitorTripBq    = 1.0e6
+	LiquidMonitorTripBq  = 1.0e5
+	DerivedLimitScaleBq  = 1.0e9
+
+	// CharcoalDelayTestDays is the test-only scaled charcoal
+	// delay (see plans/p74_1.txt Step 3). Tests override this
+	// variable; the production constant CharcoalDelayXe133Days
+	// is never touched by tests.
+	CharcoalDelayTestDays = 0.01
+)
+
+// testOverrideCharcoalDelayDays, when positive, replaces the
+// production charcoal delay in Outside.applyWasteChain. It is
+// a test-only override (plans/p74_1.txt Step 3): tests set it
+// to CharcoalDelayTestDays so a 60-day delay is exercisable
+// in a fast test. Production never sets it (zero value).
+var testOverrideCharcoalDelayDays float64
 
 // Excore nuclear-instrument constants (plans/p71_1.txt).
 //
@@ -4551,6 +4646,20 @@ type ContainmentBuilding struct {
 	// for first-step suppression and diagnostics; the windowed
 	// detector compares window deltas, not this field. plans/p72_5.txt.
 	PrevTemperature Temperature
+	// ContainmentAirActivity is the airborne activity in the
+	// containment atmosphere (normalized units, same scale as
+	// PrimaryActivityFrac). It receives Path B inflow (relief /
+	// hot-leg break past the PRT rupture disc), drains by CSS
+	// scrub to the sump, by engineered leakage past the CIS,
+	// and — only on ContainmentFailed — by Path C release.
+	// plans/p74_1.txt State.
+	ContainmentAirActivity float64
+
+	// ContainmentSumpActivity is the activity accumulated in
+	// the sump water by CSS entrainment. It returns to the RCS
+	// by sump recirculation (the SIS cold-leg recirculation
+	// phase). plans/p74_1.txt State.
+	ContainmentSumpActivity float64
 
 	// FreeVolume is the lumped free volume of the containment
 	// atmosphere (ft³). Stated in the spec as 2,000,000 ft³

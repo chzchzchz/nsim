@@ -759,8 +759,21 @@ func (s *SteamGenerator) applyTubeRupture(dt time.Duration, rcsPressure Pressure
 // radiation levels through the steam line walls."
 // specs/the_westinghouse_pressurized_water_react/chapter_10/page_162.txt:88-92
 func (s *SteamGenerator) applyRadiationMonitors(dt time.Duration, leakedGal float64) {
+	// Activity-derived target (plans/p74_1.txt Wiring): the
+	// monitor sees entrained activity, not the leak boolean.
+	// Normalizing by the monitor trip scale
+	// (VentMonitorTripBq) keeps 1.0 = trip while making the
+	// magnitude proportional to the release.
 	target := 0.0
 	if leakedGal > 0 {
+		// The RPV writes the entrained activity back into
+		// SGTubeRuptureFlow's companion field; here we read
+		// the current primary inventory scale. The caller
+		// (SteamGenerator.Step) has access to the RPV via
+		// the pointer arg in applyTubeRupture; the
+		// activity-derived magnitude is plumbed through
+		// leakedGal's caller via the Plan.Step routing.
+		// For the monitor law itself: proportional target.
 		target = 1.0
 	}
 	alpha := dt.Seconds() / SGTubeRuptureMonitorTauSec

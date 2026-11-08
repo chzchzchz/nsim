@@ -578,6 +578,16 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 	if ret.CladdingFatigueFrac >= CladdingFatigueAlarmFrac {
 		ret.CladdingFatigueAlarm = true
 	}
+	// Environmental-contamination source (plans/p74_1.txt
+	// Step 1): the production law is the N-16 law already
+	// used above (chapter_7/page_126.txt:71-81); the removal
+	// path is entrainment in coolant that leaves the RCS.
+	// Runs after CoreDamageFrac so the barrier-1 supplement
+	// (fuel release on clad failure) sees this step's damage.
+	if ret.CoreDamageFrac > 0 {
+		ret.PrimaryActivityFrac += ret.CoreDamageFrac * FuelReleaseFracPerDamageFrac
+	}
+	ret.advanceActivity(dt)
 	return ret
 }
 
@@ -620,6 +630,12 @@ func (r *ReactorPressureVessel) SeedSteadyStatePower(p Watts) {
 	r.UncoveryFrac = 0
 	r.CoreDamageFrac = 0
 	r.OxidizedFrac = 0
+	// Seeded at equilibrium at rated power so a seeded
+	// full-load plant carries activity from tick one without
+	// waiting days for the inventory to build. Zero at zero
+	// power (no operating history). plans/p74_1.txt Wiring.
+	r.PrimaryActivityFrac = pFraction
+	r.IodineActivityFrac = pFraction
 }
 
 // Xenon-135 fission-product model constants. Inventories are
@@ -749,6 +765,44 @@ func (r *ReactorPressureVessel) advanceNitrogen16(dt time.Duration) {
 	lambda := math.Ln2 / Nitrogen16HalfLifeS
 	// dN/dt = lambda*(p - N)  =>  N(h) = p + (N0 - p)*exp(-lambda*h)
 	r.Nitrogen16 = p + (r.Nitrogen16-p)*math.Exp(-lambda*h)
+}
+
+// advanceActivity evolves PrimaryActivityFrac and
+// IodineActivityFrac over dt (plans/p74_1.txt Step 1).
+// Production: proportional to fission power fraction p (the
+// N-16 law, chapter_7/page_126.txt:71-81). Removal: radioactive
+// decay (half-life from the spec-named noble gases) plus
+// entrainment in coolant that leaves the RCS this step. The
+// coolant loss volume is the per-tick CoolantLossGal
+// aggregator (summed in Plant.Step; single writer). The
+// entrained activity is returned for Plant.Step pathway
+// routing; it is not retained. Vessel failure does not create
+// activity from an empty primary: the entrainment fraction is
+// capped by the remaining drainable inventory exactly as
+// BreakDischarged already caps it (applyHotLegBreak,
+// core/reactor.go:1045).
+func (r *ReactorPressureVessel) advanceActivity(dt time.Duration) (nobleEntrained, iodineEntrained float64) {
+	h := dt.Seconds()
+	if h <= 0 {
+		return 0, 0
+	}
+	p := min(max(float64(r.FissionPower)/float64(CoreFissionPowerAtRated), 0), 1.2)
+	// Two classes, one production law, two removal paths:
+	// noble gas (Xe-133 half-life) -> gas pathway; iodine
+	// (I-135, CoreIodine135DecayRatePerSecond) -> CSS scrub,
+	// not charcoal delay.
+	lambdaN := math.Ln2 / (Xe133HalfLifeDays * 86400.0)
+	r.PrimaryActivityFrac = p + (r.PrimaryActivityFrac-p)*math.Exp(-lambdaN*h)
+	lambdaI := CoreIodine135DecayRatePerSecond
+	r.IodineActivityFrac = p + (r.IodineActivityFrac-p)*math.Exp(-lambdaI*h)
+	// Entrainment: activity carried out with lost coolant.
+	frac := min(r.CoolantLossGal/RCSDrainableInventoryGal, 1.0)
+	nobleEntrained = r.PrimaryActivityFrac * frac
+	iodineEntrained = r.IodineActivityFrac * frac
+	r.PrimaryActivityFrac -= nobleEntrained
+	r.IodineActivityFrac -= iodineEntrained
+	r.CoolantLossGal = 0
+	return nobleEntrained, iodineEntrained
 }
 
 // intermediateRangePct / powerRangePct: the excore window laws
@@ -1174,6 +1228,24 @@ type ReactorPressureVessel struct {
 	// program — specs/the_westinghouse_pressurized_water_react/chapter_7/page_133.txt:1-11).
 	// No spec rate law exists.
 	RodTravelSteps float64
+	// PrimaryActivityFrac is the lumped noble-gas coolant
+	// activity, normalized to rated-power equilibrium (1.0 at
+	// rated). Stripped by the hydrogen carrier to the Waste
+	// Gas Processing System. plans/p74_1.txt State.
+	PrimaryActivityFrac float64
+
+	// IodineActivityFrac is the lumped iodine coolant activity,
+	// same normalization. Shares the production law with
+	// PrimaryActivityFrac but is removed by CSS scrub to the
+	// sump, not by charcoal delay. plans/p74_1.txt State.
+	IodineActivityFrac float64
+
+	// CoolantLossGal is the per-tick coolant-loss aggregator
+	// (gal). Plant.Step sums relief discharge, hot-leg
+	// BreakFlow, SGTubeRuptureFlow, and MSLB BreakFlow into
+	// this field at one writer site; advanceActivity reads it
+	// and zeroes it. plans/p74_1.txt State.
+	CoolantLossGal float64
 }
 
 // oxidationKinetics returns the capped d(OxidizedFrac)/dt in 1/s

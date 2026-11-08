@@ -650,4 +650,66 @@ func addOutsideSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Environmental contamination sensors (plans/p74_1.txt
+	// Wiring): instantaneous monitor readings and cumulative
+	// released activity. Physics output, not operator levers.
+	// The on-line gas monitor at the plant vent
+	// (chapter_10/page_162.txt:65-67) and the liquid monitor
+	// (chapter_10/page_162.txt:76-82) feed the operator alert
+	// (page_0003.txt:8).
+	m["Outside/PlantVentActivity"] = &bridge.Sensor{
+		Part:  "Outside",
+		Label: "PlantVentActivity",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.Outside.PlantVentActivityBq)
+		},
+	}
+	m["Outside/LiquidMonitor"] = &bridge.Sensor{
+		Part:  "Outside",
+		Label: "LiquidMonitor",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.Outside.LiquidMonitorBq)
+		},
+	}
+	m["Outside/GasReleasedCumulative"] = &bridge.Sensor{
+		Part:  "Outside",
+		Label: "GasReleasedCumulative",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.Outside.GasReleasedBq)
+		},
+	}
+	m["Outside/LiquidReleasedCumulative"] = &bridge.Sensor{
+		Part:  "Outside",
+		Label: "LiquidReleasedCumulative",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.Outside.LiquidReleasedBq)
+		},
+	}
+	m["Outside/GasHoldup"] = &bridge.Sensor{
+		Part:  "Outside",
+		Label: "GasHoldup",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.Outside.GasHoldupActivity)
+		},
+	}
+	m["Outside/LiquidHoldup"] = &bridge.Sensor{
+		Part:  "Outside",
+		Label: "LiquidHoldup",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.Outside.LiquidHoldupActivity)
+		},
+	}
+
 }

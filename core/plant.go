@@ -1389,8 +1389,16 @@ func (p *Plant) Step(dt time.Duration) {
 	// The tower's hot inlet is the condenser CW outlet stepped
 	// in the previous tick's TurbineBuilding pass (a 1 ms lag,
 	// same as the tower's flow input).
+	// Environmental-contamination pending inputs
+	// (plans/p74_1.txt Wiring): pathway routing runs after
+	// ReactorBuilding.Step and writes these next-tick inputs;
+	// Outside.Step consumes them one tick later, following the
+	// one-tick telemetry lag the rest of the model uses.
+	gasInNorm := p.Outside.pendingGasInNorm
+	liquidInNorm := p.Outside.pendingLiquidInNorm
 	p.nextPlant.Outside = p.Outside.Step(dt,
-		plantDriveReady, p.TurbineBuilding.Condenser.CWOut)
+		plantDriveReady, p.TurbineBuilding.Condenser.CWOut,
+		gasInNorm, liquidInNorm)
 	// Latch the CW pump DriveReady (naming-convention
 	// counterpart to ServiceWaterSystem.DriveReady) so the
 	// bridge can publish it as a sensor. The pump motors ride
@@ -1515,6 +1523,45 @@ func (p *Plant) Step(dt time.Duration) {
 		p.TurbineBuilding.Turbine.State == TurbineRunning,
 		p.TurbineBuilding.Turbine.State == TurbineTripped,
 	)
+	// Environmental-contamination routing (plans/p74_1.txt
+	// Step 2): after ReactorBuilding.Step, sum the coolant
+	// losses that ReactorBuilding.Step has already accounted
+	// (relief discharge into the PRT ledger, hot-leg break
+	// BreakFlow, tube-rupture SGTubeRuptureFlow, MSLB
+	// BreakFlow) into CoolantLossGal, advance the activity
+	// source, then route entrained activity per Paths A/B/C.
+	// The Outside.Step call at the top of Plant.Step consumed
+	// last tick's pending inputs; this writes next tick's.
+	nobleEntrained, iodineEntrained := 0.0, 0.0
+	{
+		rpv := &p.nextPlant.ReactorBuilding.ReactorPressureVessel
+		sg := &p.nextPlant.ReactorBuilding.SteamGenerator
+		// CoolantLossGal aggregator: one writer site.
+		// Relief discharge is already capped into
+		// BreakDischarged at core/plant.go:132-142 (the
+		// ledger, not the flow); the per-tick loss volume is
+		// recovered from the BreakFlow ledgers so the
+		// aggregator reads post-step state, not pre-step.
+		rpv.CoolantLossGal = 0
+		rpv.CoolantLossGal += rpv.BreakFlow.Float()
+		rpv.CoolantLossGal += sg.SGTubeRuptureFlow.Float()
+		// MSLB BreakFlow is secondary-side (chapter_15/
+		// page_216.txt:33-37); it carries activity only if
+		// primary has leaked into the header (tube rupture).
+		// The SG tube-rupture term above already covers that.
+		nobleEntrained, iodineEntrained = rpv.advanceActivity(dt)
+	}
+	// Route per Paths A/B/C (plans/p74_1.txt Step 2).
+	// routeContamination is defined in outside.go and is
+	// invoked here with the fresh ReactorBuilding state.
+	// Not a method on Outside: Outside.Step is pure on its
+	// input and only writes to nextPlant.Outside.
+	gasNextNorm, liquidNextNorm := routeContamination(
+		&p.nextPlant.ReactorBuilding,
+		&p.nextPlant.AuxiliaryBuilding.ContainmentSpraySystem,
+		nobleEntrained, iodineEntrained)
+	p.nextPlant.Outside.pendingGasInNorm = gasNextNorm
+	p.nextPlant.Outside.pendingLiquidInNorm = liquidNextNorm
 	// Debit the holdup tanks for what the reclaim train drew this
 	// step. The CVCS stepped after the BRS and added its own letdown
 	// contribution, so the subtraction lands on top of it without a

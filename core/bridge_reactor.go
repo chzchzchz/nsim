@@ -2380,5 +2380,43 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.AuxiliaryBuilding.ContainmentSpraySystem.ChlorideSCCRisk)
 		},
 	}
+	// Environmental-contamination inventories
+	// (plans/p74_1.txt Wiring): physics output, sensors only.
+	m["ReactorBuilding/ReactorPressureVessel/PrimaryActivity"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "PrimaryActivity",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.ReactorPressureVessel.PrimaryActivityFrac)
+		},
+	}
+	m["ReactorBuilding/ReactorPressureVessel/IodineActivity"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "IodineActivity",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.ReactorPressureVessel.IodineActivityFrac)
+		},
+	}
+	m["ReactorBuilding/ContainmentBuilding/ContainmentAirActivity"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentBuilding",
+		Label: "ContainmentAirActivity",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.ContainmentBuilding.ContainmentAirActivity)
+		},
+	}
+	m["ReactorBuilding/ContainmentBuilding/ContainmentSumpActivity"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentBuilding",
+		Label: "ContainmentSumpActivity",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.ContainmentBuilding.ContainmentSumpActivity)
+		},
+	}
 
 }
