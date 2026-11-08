@@ -787,10 +787,29 @@ type ReactorPressureVessel struct {
 	BreakFlow Volume
 
 	// BreakDischarged is the cumulative liquid-equivalent volume
-	// lost through HotLegBreak since time zero (gal). The blowdown
-	// ends when it reaches RCSDrainableInventoryGal, so a voided
-	// primary cannot keep feeding the break.
+	// lost from the primary since time zero (gal): hot-leg break
+	// (applyHotLegBreak), SG tube rupture, and pressurizer relief
+	// to the PRT all debit it, and creditSafetyInjection retires
+	// ECCS refill from it. Discharge ends when it reaches
+	// RCSDrainableInventoryGal, so a voided primary cannot keep
+	// feeding any break; relief and tube-rupture gallonage to
+	// their own sinks counts toward the same cap but, because it
+	// never returns to the RCS, is not retired by injection credit
+	// the way break refill is — see BreakDischargedNonCreditable.
 	BreakDischarged Volume
+
+	// BreakDischargedNonCreditable is the sub-total of
+	// BreakDischarged that left the primary for a sink outside
+	// the RCS and was never refilled from it: relief steam
+	// condensed in the PRT (PressurizerReliefTank) and primary
+	// leaked into the SG shell. creditSafetyInjection retires
+	// only the creditable remainder, flooring at
+	// BreakDischargedNonCreditable so ECCS refill cannot erase
+	// relief or tube-rupture loss — a relief drain with SI intact
+	// still uncovers the core, pressuring UncoveryFrac toward 1
+	// at the cap instead of netting back to zero.
+	// plans/p65_4.txt.
+	BreakDischargedNonCreditable Volume
 
 	// CladTempF is the lumped hot-rod clad temperature (°F).
 	// Covered: clad tracks coolant saturation at RCS pressure.
@@ -802,7 +821,10 @@ type ReactorPressureVessel struct {
 
 	// UncoveryFrac is the net uncovered core fraction (0..1):
 	// BreakDischarged / RCSDrainableInventoryGal, already netted
-	// against injection credit by creditSafetyInjection. plans/p65_1.txt.
+	// against injection credit by creditSafetyInjection above
+	// the BreakDischargedNonCreditable floor (relief and
+	// tube-rupture losses to their own sinks are not retired).
+	// plans/p65_1.txt.
 	UncoveryFrac float64
 
 	// CoreDamageFrac is the damage progression 0→1: 0 at or below
@@ -939,14 +961,17 @@ func (r *ReactorPressureVessel) applyHotLegBreak(dt time.Duration, pzr *Pressuri
 
 // creditSafetyInjection returns this tick's ECCS delivery to the
 // primary inventory ledger: HHSI and accumulator flow reported by the
-// SIS step refills pressurizer water, and the same volume comes back
-// off the cumulative break draw so RCSDrainableInventoryGal bounds the
-// primary's NET loss rather than its gross spill. RWST suction was
-// already debited in SIS.Step; sump suction draws the implicit sump.
-// The delivered gallonage also joins the lumped loop inventory at
-// storage temperature (plans/p36_1.txt), so continued safety-injection
-// flow drives coolant temperature toward storage instead of leaving it
-// parked at its blowdown value.
+// SIS step refills pressurizer water. Refill retires only the
+// creditable (hot-leg break) share of the cumulative draw, so
+// RCSDrainableInventoryGal bounds the primary's NET break loss
+// while relief and tube-rupture losses to their own sinks —
+// BreakDischargedNonCreditable — are floored and never erased:
+// ECCS water cannot un-void inventory that left the RCS for the
+// PRT. RWST suction was already debited in SIS.Step; sump suction
+// draws the implicit sump. The delivered gallonage also joins the
+// lumped loop inventory at storage temperature (plans/p36_1.txt),
+// so continued safety-injection flow drives coolant temperature
+// toward storage instead of leaving it parked at its blowdown value.
 //
 // Spec justification:
 //   - "All pumps will continue to operate and will deliver water to
@@ -963,7 +988,7 @@ func (r *ReactorPressureVessel) creditSafetyInjection(pzr *Pressurizer, gal floa
 	pzr.SteamBubble = vol(pzr.SteamBubble,
 		pzr.Volume.Float()-pzr.Water.Float())
 	r.BreakDischarged = vol(r.BreakDischarged,
-		max(r.BreakDischarged.Float()-refilled, 0))
+		max(r.BreakDischarged.Float()-refilled, r.BreakDischargedNonCreditable.Float()))
 	outletF := r.Outlet.Float()
 	mixed := outletF + gal/RCSDrainableInventoryGal*
 		(ECCSInjectionTempF-outletF)

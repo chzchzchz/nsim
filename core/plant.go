@@ -109,6 +109,38 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:16-17
 	ret.ReactorPressureVessel.applyHotLegBreak(dt, &ret.Pressurizer,
 		ret.ContainmentBuilding.Pressure)
+	// Relief-path LOCA: PORV/safety venting voids the primary
+	// inventory like the hot-leg break, so debit the same
+	// cumulative ledger (capped at RCSDrainableInventoryGal) to
+	// feed UncoveryFrac. The pressurizer step already dropped
+	// pressure for this gallonage, so no second depressurization
+	// here. The gallonage also raises
+	// BreakDischargedNonCreditable: it condensed in the PRT,
+	// outside the RCS, so creditSafetyInjection must not re-credit
+	// it — a relief drain with SI intact still uncovers the core.
+	// The ledger cap truncates only the inventory accounting;
+	// the PRT routing below still receives the full relief
+	// discharge (the ledger is a counter, not the flow itself).
+	// "If system pressure continues to rise, self-actuating
+	// ASME-code safety valves will open. Steam from the safety
+	// and/or relief valves is piped to the pressurizer relief
+	// tank which contains sufficient water to condense the
+	// steam. [...] For large pipe ruptures, the RCS would be
+	// rapidly depressurized and voided of coolant."
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:30-35
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:16-17
+	if reliefDischarge.Val > 0 {
+		remaining := RCSDrainableInventoryGal - ret.ReactorPressureVessel.BreakDischarged.Float()
+		if remaining > 0 {
+			gal := min(reliefDischarge.Float(), remaining)
+			ret.ReactorPressureVessel.BreakDischarged = vol(
+				ret.ReactorPressureVessel.BreakDischarged,
+				ret.ReactorPressureVessel.BreakDischarged.Float()+gal)
+			ret.ReactorPressureVessel.BreakDischargedNonCreditable = vol(
+				ret.ReactorPressureVessel.BreakDischargedNonCreditable,
+				ret.ReactorPressureVessel.BreakDischargedNonCreditable.Float()+gal)
+		}
+	}
 	// Route the relieved steam-equivalent volume into the PRT
 	// until it fills; a full tank latches the rupture-disc burst
 	// and further relief vents to containment instead.

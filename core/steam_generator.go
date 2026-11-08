@@ -643,9 +643,15 @@ func (s *SteamGenerator) applyTubeRupture(dt time.Duration, rcsPressure Pressure
 	s.Water = vol(s.Water, min(s.Water.Float()+gal, s.Volume.Float()))
 	// Debit the primary lumped inventory the LOCA tracks, so
 	// RCSDrainableInventoryGal bounds net loss across both break
-	// classes on one currency.
+	// classes on one currency. The tonne went into the SG shell,
+	// not the containment sump, so it is outside-RCS loss: also
+	// count it toward the non-creditable floor
+	// (BreakDischargedNonCreditable) so ECCS refill cannot retire
+	// it the way hot-leg break refill is.
 	rpv.BreakDischarged = vol(rpv.BreakDischarged,
 		rpv.BreakDischarged.Float()+gal)
+	rpv.BreakDischargedNonCreditable = vol(rpv.BreakDischargedNonCreditable,
+		rpv.BreakDischargedNonCreditable.Float()+gal)
 	// The volume drop *is* the pressurizer level signal (pzr.Water
 	// -= gal), same as the hot-leg break (reactor.go applyHotLegBreak).
 	// Do not also debit pzr.Pressure: the SGTR holds RCS pressure up
