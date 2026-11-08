@@ -21,7 +21,7 @@ These are sources of truth and where to look for answers when asking questions. 
 * Alwayus cache wikipedia articles in specs/wiki/<ARTICLE_NAME>.txt
 * Access wikpedia articles via (non-agentic) ordinary web fetch tool of url https://en.wikipedia.org/wiki/<ARTICLE_NAME>
 * Article "Category:Nuclear_technology" is a good place to start.
-* Note that the Westinghouse PWR document is the primary source of truth.
+* Cache downloaded PDFs in specs/pdf/<DOCUMENT_NAME>.pdf; prefer Wikipedia citation link URLs when they resolve to a PDF (e.g., NUREG reports, primary literature), otherwise fetch via DuckDuckGo HTML search (https://html.duckduckgo.com/html/) and download the result URL that is a direct PDF.
 
 # Tools
 
