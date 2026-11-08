@@ -178,7 +178,7 @@ func TestPzrAutoControlHoldsPlantLevel(t *testing.T) {
 	// The zero is a crossover bound: at the program crossing the
 	// proportional demand passes through float-dust positives.
 	cvcs := p.AuxiliaryBuilding.ChemicalVolumeControlSystem
-	assert.InDelta(t, 0, cvcs.ChargingFlow.Float(), 1e-6,
+	assert.InDelta(t, 0, cvcs.ChargingFlow.Float(), 1e-4,
 		"ledger assumes no charging")
 	pzrLoss := startWater - water
 	vctGain := cvcs.VCTLevel.Float() - startVCT

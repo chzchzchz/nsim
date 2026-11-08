@@ -159,6 +159,10 @@ func TestScenario28_RefloodCreditedAfterBreakIsolation(t *testing.T) {
 	t.Parallel()
 
 	p := MakePlant()
+	// Isolate CVCS volume: the reflood ledger watches pressurizer
+	// refill from ECCS alone, without charging/letdown coupling.
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = false
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = false
 	cm := GetControlMap(&p)
 	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
 	for i := 0; i < int(45*time.Second/DefaultTimeStep); i++ {
@@ -414,6 +418,10 @@ func TestScenario28_ECCSCreditCoolsRefilledPrimary(t *testing.T) {
 
 	runLeg := func(seedAccumulators bool) float64 {
 		p := MakePlant()
+		// Isolate CVCS volume: charging adds ECCS-independent
+		// refill that masks the accumulator credit.
+		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = false
+		p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = false
 		if seedAccumulators {
 			p.ReactorBuilding.SafetyInjectionSystem.Accumulator.Level =
 				Volume{Val: 0, Unit: u.Gallon}

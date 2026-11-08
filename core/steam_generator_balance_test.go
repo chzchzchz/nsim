@@ -83,6 +83,10 @@ func lossOfFeedPlant() Plant {
 	// secured explicitly rather than inherited from a construction
 	// default.
 	p.TurbineBuilding.MainFeedwaterPump.Running = false
+	// Isolate CVCS volume: manual charging adds refill that masks
+	// the SG drain.
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = false
+	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = false
 	p.ReactorBuilding.SteamGenerator.Water =
 		Volume{Val: 20000, Unit: u.Gallon}
 	return p

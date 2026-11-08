@@ -3024,20 +3024,17 @@ func MakePlant() Plant {
 		VariableMW: HouseLoadFixed * HouseLoadVariableFraction,
 	}
 
-	// CVCS defaults (plans/p14_1.txt). At construction the
-	// charging pump is secured and the letdown valve is shut so
-	// a fresh plant neither drains nor fills the pressurizer
-	// while idle; an open letdown path with the design flows
-	// unbalances the inventory and empties the pressurizer
-	// within minutes. The operator lines both up manually to
-	// obtain the desired pressurizer water level during
-	// startup.
+	// CVCS defaults (plans/p14_1.txt). MakePlant seeds the
+	// full-power operating point (RCPs spinning at rated speed), so
+	// the charging pump runs to supply RCP seal injection; the
+	// pressurizer controller balances it in AutoLevelControl.
 	//   "The charging pump flow and low-pressure letdown valve
 	//    are controlled manually to obtain the desired
 	//    pressurizer water level."
 	//   specs/the_westinghouse_pressurized_water_react/chapter_4/page_075.txt:115-116
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem = CVCS{
 		Mode:               CVCSVolumeControl,
+		ChargingPumpRunning: true,
 		VCTLevel:           Volume{Val: VCTDesignLevel, Unit: u.Gallon},
 		BoronConcentration: CoreRatedCriticalBoronPpm,
 	}
