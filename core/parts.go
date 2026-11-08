@@ -4043,6 +4043,13 @@ type ContainmentBuilding struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_110.txt:27-30
 	DesignPressure Pressure
 
+	// ContainmentFailed is the one-way severe-accident latch:
+	// set once containment gauge pressure has passed
+	// ContainmentFailurePressure. Severe-accident state does not
+	// recover, so no reset or spray path clears it. Also drives
+	// Part.Damage to 1. plans/p65_3.txt State.
+	ContainmentFailed bool
+
 	// FreeVolume is the lumped free volume of the containment
 	// atmosphere (ft³). Stated in the spec as 2,000,000 ft³
 	// for a four-loop prestressed-concrete containment.
@@ -5258,6 +5265,24 @@ const (
 	// stage-4 criterion) without explosive clad dT/dt against
 	// CladThermalMassCpJPerDegF. plans/p65_2.txt Rev-4 notes.
 	ReactionEnthalpyJPerFrac = 1e10
+
+	// ZrMeltF is the zircaloy melting regime: 2,150 K (3,410 °F).
+	// Tier-A sourced from the Kuan/Haskin six-stage description
+	// of core melt progression (specs/wiki/Nuclear_meltdown.txt);
+	// the vessel-failure latch anchor (plans/p65_3.txt). Clad
+	// at this temperature has lost structural integrity.
+	ZrMeltF = 3410.0
+
+	// ContainmentFailurePressure is the containment failure
+	// threshold (psig gauge): ContainmentDesignPressure (60 psig,
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/
+	// page_110.txt:27-30) times the 2.5 fragility factor
+	// (NUREG-1150 Surry steel-lined PWR median ultimate ≈ 2.5× design).
+	// Tier-B derived: no sourced failure pressure exists in the
+	// cited texts (the AP600 design point 0.316 MPa / 137.8 °C,
+	// specs/pwr_sim/appendix_1/page_090.txt:41-43, is a design
+	// point, not a failure point). plans/p65_3.txt.
+	ContainmentFailurePressure = ContainmentDesignPressure * 2.5
 )
 
 // ReactorProtectionSystem models the Reactor Protection System

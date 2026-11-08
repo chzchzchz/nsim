@@ -1784,6 +1784,18 @@ func (p *Plant) Step(dt time.Duration) {
 			}
 		}
 	}
+	// Containment failure latch (plans/p65_3.txt Step 2): after
+	// the step, PRT burst, and CSS drag, latch when gauge
+	// pressure passes the failure threshold. ContainmentBuilding.
+	// Pressure is absolute (psia); the threshold is psig gauge,
+	// hence the AtmosphericPressure subtraction. One-way.
+	{
+		cb := &p.nextPlant.ReactorBuilding.ContainmentBuilding
+		if float64(cb.Pressure)-float64(AtmosphericPressure) > float64(ContainmentFailurePressure) {
+			cb.ContainmentFailed = true
+			cb.Damage = 1
+		}
+	}
 	p.nextPlant.ReactorBuilding.ContainmentPressure =
 		p.nextPlant.ReactorBuilding.ContainmentBuilding.Pressure
 	// CSS auto-start runs after the containment step in

@@ -431,6 +431,14 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 	ret.CladTempF += rxnW / CladThermalMassCpJPerDegF * 9.0 / 5.0 * dtSeconds
 	ret.CoreDamageFrac = stageDamage(ret.CladTempF)
 	ret.Damage = float32(ret.CoreDamageFrac)
+	// Vessel failure latch (plans/p65_3.txt Step 1): uncovered
+	// clad past the zircaloy melting regime. Covered clad is
+	// pinned at saturation above, so only an uncovered core can
+	// reach ZrMeltF; the UncoveryFrac conjunct states that
+	// explicitly. One-way: never cleared.
+	if ret.UncoveryFrac > 0 && ret.CladTempF >= ZrMeltF {
+		ret.VesselFailed = true
+	}
 	return ret
 }
 
@@ -791,6 +799,12 @@ type ReactorPressureVessel struct {
 	// (MaxOxidizedFrac), advancing only above CladOnsetF.
 	// plans/p65_2.txt State.
 	OxidizedFrac float64
+
+	// VesselFailed is the one-way severe-accident latch: set once
+	// uncovered clad has passed the zircaloy melting regime
+	// (ZrMeltF). Severe-accident state does not recover, so no
+	// trip, reset, or reflood path clears it. plans/p65_3.txt.
+	VesselFailed bool
 }
 
 // oxidationKinetics returns the capped d(OxidizedFrac)/dt in 1/s

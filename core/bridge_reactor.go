@@ -2038,4 +2038,25 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Severe-accident failure latches (plans/p65_3.txt Wiring):
+	// one-way physics outputs, not operator levers (sensors only).
+	m["ReactorBuilding/ReactorPressureVessel/VesselFailed"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel",
+		Label: "VesselFailed",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.ReactorPressureVessel.VesselFailed)
+		},
+	}
+	m["ReactorBuilding/ContainmentBuilding/ContainmentFailed"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentBuilding",
+		Label: "ContainmentFailed",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.ContainmentBuilding.ContainmentFailed)
+		},
+	}
+
 }
