@@ -2347,6 +2347,15 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 				p.ReactorBuilding.ContainmentBuilding.ContainmentFailed)
 		},
 	}
+	m["ReactorBuilding/ContainmentBuilding/HydrogenDeflagrated"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentBuilding",
+		Label: "HydrogenDeflagrated",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.ContainmentBuilding.HydrogenDeflagrated)
+		},
+	}
 
 	// Liner thermal-cycle fatigue (plans/p72_5.txt): startup/
 	// shutdown cycle counter (raw) and normalized fatigue

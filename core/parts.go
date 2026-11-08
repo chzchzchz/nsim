@@ -4609,6 +4609,13 @@ type ContainmentBuilding struct {
 	// Part.Damage to 1. plans/p65_3.txt State.
 	ContainmentFailed bool
 
+	// HydrogenDeflagrated is the one-way diagnostics latch for a
+	// hydrogen deflagration event (plans/p65_8.txt). It records
+	// that the volume-weighted mixture reached the explosive
+	// limit and the calibrated deflagration heat was applied.
+	// Sensor-only; no operator control writes it.
+	HydrogenDeflagrated bool
+
 	// ThermalCycleCount counts completed startup/shutdown thermal
 	// cycles against the spec's fatigue-load accounting. The spec
 	// counts three loads (40 outdoor + 500 startup/shutdown + 1
@@ -5820,6 +5827,32 @@ const (
 	// activate; below (setpoint + hysteresis) they stay
 	// active to prevent cycling near the setpoint.
 	HydrogenRecombinerHysteresis float64 = 0.5
+
+	// HydrogenDeflagrationCombustionEnergyJ is the literal
+	// combustion energy of 4 vol% H2 in the lumped containment
+	// air: about 9.8e4 mol H2 times 242 kJ/mol. It produces only
+	// about 15 to 16 psi from the probed SBO baselines and is
+	// therefore not sufficient, by itself, to trip the
+	// containment failure latch. Tier-B derived; plans/p65_8.txt.
+	HydrogenDeflagrationCombustionEnergyJ float64 = 2.37e10
+
+	// HydrogenDeflagrationEnergyJ is the calibrated one-tick
+	// heat integral for a deflagration of a 4 vol% mixture at
+	// the predeclared late-uncovered hot baseline (33.199 psia,
+	// 692.4 K). From that state it is expected to raise
+	// pressure by about 135 psi before sink and spray losses.
+	// The literal combustion component above is much smaller;
+	// the balance handles the structural and steam thermal
+	// surge already represented by the lumped baseline. It is
+	// not universal for cold baselines. Tier-B calibrated from
+	// nsimrun probes; plans/p65_8.txt.
+	HydrogenDeflagrationEnergyJ float64 = 2.0e11
+
+	// HydrogenDeflagrationDelTPsi is the expected pressure rise
+	// for HydrogenDeflagrationEnergyJ from the predeclared
+	// calibrated baseline. It is documentation/assertion only
+	// and is never injected as a pressure.
+	HydrogenDeflagrationDelTPsi float64 = 135.0
 
 	// BallooningF is the lumped fuel-ballooning onset: the
 	// "first stage of core damage" at ~1,100 K (1,520 °F).

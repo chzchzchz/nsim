@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -100,6 +101,63 @@ func TestHDS_RecombinersRemoveHydrogen(t *testing.T) {
 	h.stepHydrogen(c, DefaultTimeStep, 0)
 	assert.Less(t, h.HydrogenVolumePercent, 3.0,
 		"want H2%% to fall with recombiners active, got %v", h.HydrogenVolumePercent)
+}
+
+// A deflagration is latched when the volume-weighted mixture reaches
+// the explosive limit, and the calibrated heat drives containment
+// failure through the existing pressure latch in the same tick.
+// plans/p65_8.txt Acceptance criteria.
+//
+// The plant state is set to the predeclared late-uncovered hot
+// baseline that HydrogenDeflagrationEnergyJ was calibrated against:
+// 33.199 psia, 692.4 K, ESF-dead sinks. The 4% mixture is seeded
+// because the p65_2 source integration saturates at 1% and cannot
+// reach the explosive limit organically.
+func TestHDS_DeflagrationLatchOnExplosiveLimit(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	cb := &p.ReactorBuilding.ContainmentBuilding
+	cb.Pressure = 33.199
+	cb.UpperTemperature = Temperature{Val: 786.6, Unit: u.Fahrenheit}
+	cb.LowerTemperature = Temperature{Val: 786.6, Unit: u.Fahrenheit}
+	cb.Temperature = cb.UpperTemperature
+	cb.UpperHydrogenPercent = HydrogenExplosiveLimit
+	cb.LowerHydrogenPercent = HydrogenExplosiveLimit
+	cb.HydrogenDetectionSuppression.HydrogenVolumePercent = HydrogenExplosiveLimit
+	beforePressure := float64(cb.Pressure)
+	p.Step(time.Second)
+	cb = &p.ReactorBuilding.ContainmentBuilding
+	p.Update()
+	assert.True(t, cb.HydrogenDeflagrated,
+		"explosive mixture must latch HydrogenDeflagrated")
+	assert.True(t, cb.ContainmentFailed,
+		"deflagration heat must trip the unchanged 150 psig pressure latch")
+	assert.Greater(t, float64(cb.Pressure), beforePressure,
+		"pressure must rise from the heat input")
+}
+
+// Below the explosive limit, hydrogen recombiners remove inventory;
+// no deflagration, no containment failure.
+func TestHDS_BelowExplosiveLimitNoDeflagration(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	cb := &p.ReactorBuilding.ContainmentBuilding
+	cb.Pressure = 33.199
+	cb.UpperTemperature = Temperature{Val: 786.6, Unit: u.Fahrenheit}
+	cb.LowerTemperature = Temperature{Val: 786.6, Unit: u.Fahrenheit}
+	cb.Temperature = cb.UpperTemperature
+	cb.UpperHydrogenPercent = 3.5
+	cb.LowerHydrogenPercent = 3.5
+	cb.HydrogenDetectionSuppression.HydrogenVolumePercent = 3.5
+	cb.HydrogenDetectionSuppression.RecombinerActive = true
+	cb.HydrogenDetectionSuppression.VentilationActive = true
+	p.Step(time.Second)
+	cb = &p.ReactorBuilding.ContainmentBuilding
+	p.Update()
+	assert.False(t, cb.HydrogenDeflagrated,
+		"3.5% must not latch deflagration")
+	assert.False(t, cb.ContainmentFailed,
+		"3.5% with recombination must not fail containment")
 }
 
 // The volume percent is clamped to zero (no negative values).

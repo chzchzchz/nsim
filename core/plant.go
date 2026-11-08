@@ -1933,9 +1933,33 @@ func (p *Plant) Step(dt time.Duration) {
 	locaGalPerStep := p.nextPlant.ReactorBuilding.ReactorPressureVessel.BreakFlow.Float()
 	locaHeatIn := Watts(locaGalPerStep / dt.Seconds() *
 		KilogramsPerGallon * float64(LatentHeatOfSteamization))
+
+	// Hydrogen deflagration (plans/p65_8.txt): when the lumped
+	// volume-weighted mixture reaches the explosive limit,
+	// transfer the calibrated one-tick heat integral through
+	// ContainmentBuilding.Step instead of writing Pressure. The
+	// structure sink, RCFC, and CSS drag shape the trajectory; the
+	// existing CF latch then reads the changed pressure. No direct
+	// Pressure write.
+	//   "Under accident conditions, coolant radioactivity and the
+	//     Zirconium water reaction can result in the release of
+	//     hydrogen gas to the containment atmosphere."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_117.txt:30-34
+	//   "controlling hydrogen to avoid an explosive mixture."
+	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_107.txt:54-56
+	var deflagHeatIn Watts
+	if p.nextPlant.ReactorBuilding.ContainmentBuilding.
+		HydrogenDetectionSuppression.HydrogenVolumePercent >= HydrogenExplosiveLimit {
+		// One-shot: only the first crossing latches the event;
+		// sustained >4% is the recombiner-burning regime.
+		if !p.nextPlant.ReactorBuilding.ContainmentBuilding.HydrogenDeflagrated {
+			deflagHeatIn = Watts(HydrogenDeflagrationEnergyJ / dt.Seconds())
+			p.nextPlant.ReactorBuilding.ContainmentBuilding.HydrogenDeflagrated = true
+		}
+	}
 	p.nextPlant.ReactorBuilding.ContainmentBuilding =
 		p.nextPlant.ReactorBuilding.ContainmentBuilding.Step(dt,
-			steamBreakHeatIn+locaHeatIn-cssHeatOut, rcfcHeatOut,
+			steamBreakHeatIn+locaHeatIn+deflagHeatIn-cssHeatOut, rcfcHeatOut,
 		)
 	if p.nextPlant.ReactorBuilding.PRTRuptureDiscBurst {
 		p.nextPlant.ReactorBuilding.ContainmentBuilding.Pressure +=

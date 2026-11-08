@@ -226,3 +226,119 @@ func TestPlant_SevereAccidentClassWalker(t *testing.T) {
 	assert.Equal(t, float32(1), beyond.ReactorBuilding.ContainmentBuilding.Damage,
 		"beyond-design: Damage mirror stays at 1")
 }
+
+// Deflagration plant witness (plans/p65_8.txt): an uncovered,
+// oxidized severe-accident core at the predeclared hot baseline with
+// ESF sinks defeated latches HydrogenDeflagrated and then trips the
+// unchanged 150 psig containment-failure latch, without any direct
+// Pressure write. The 4% mixture is seeded explicitly because the
+// p65_2 source integration saturates at 1 vol%.
+func TestPlant_HydrogenDeflagrationDrivesContainmentFailure(t *testing.T) {
+	t.Parallel()
+	dt := 50 * time.Millisecond
+	p := MakePlant()
+	cm := GetControlMap(&p)
+	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
+	p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = false
+	p.ReactorBuilding.SafetyInjectionSystem.Accumulator.Level = Volume{Val: 0, Unit: u.Gallon}
+	// ESF-dead sinks (p65_8 Rev 5 probes): kill the CSS/RCFC heat
+	// rejection so the calibrated deflagration integral drives
+	// containment failure through the unchanged pressure latch.
+	p.AuxiliaryBuilding.ContainmentSpraySystem.DriveReady = false
+	p.AuxiliaryBuilding.ContainmentSpraySystem.Running = false
+	p.AuxiliaryBuilding.ContainmentSpraySystem.SprayHeaderOpen = false
+	p.AuxiliaryBuilding.ContainmentSpraySystem.SprayFlow = 0
+	for i := 0; i < RCFCUnitCount; i++ {
+		p.AuxiliaryBuilding.RCFCUnits[i].Running = false
+		p.AuxiliaryBuilding.RCFCUnits[i].HeatTransferRate = 0
+	}
+	p.Outside.ServiceWaterSystem.Flow = 0
+
+	// Plant-level preconditioning: run the uncovered trajectory
+	// until the inventory gate is open and oxidation is advancing.
+	// Keep the CSS drive dead every tick: the auto-start can
+	// re-enable it once containment pressure crosses the spray
+	// setpoint, and the drag must not strip the deflagration spike.
+	p.ReactorBuilding.ReactorPressureVessel.BreakDischarged = Volume{Val: RCSDrainableInventoryGal * 0.9, Unit: u.Gallon}
+	p.ReactorBuilding.ReactorPressureVessel.CladTempF = CladOnsetF + 200
+	for i := 0; i < int(10*time.Minute/dt); i++ {
+		p.Step(dt)
+		p.Update()
+		p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = false
+		p.ReactorBuilding.SafetyInjectionSystem.Accumulator.Level = Volume{Val: 0, Unit: u.Gallon}
+		p.AuxiliaryBuilding.ContainmentSpraySystem.DriveReady = false
+		p.AuxiliaryBuilding.ContainmentSpraySystem.Running = false
+		p.AuxiliaryBuilding.ContainmentSpraySystem.SprayHeaderOpen = false
+		p.AuxiliaryBuilding.ContainmentSpraySystem.SprayFlow = 0
+		for j := 0; j < RCFCUnitCount; j++ {
+			p.AuxiliaryBuilding.RCFCUnits[j].Running = false
+			p.AuxiliaryBuilding.RCFCUnits[j].HeatTransferRate = 0
+		}
+		p.Outside.ServiceWaterSystem.Flow = 0
+	}
+	rpv := p.ReactorBuilding.ReactorPressureVessel
+	assert.Equal(t, 1.0, rpv.UncoveryFrac, "precondition: core uncovered")
+	assert.Greater(t, rpv.OxidizedFrac, 0.0, "precondition: oxidation advancing")
+
+	// Boundary condition: seed the explosive mixture at the calibrated
+	// late-uncovered hot baseline.
+	cb := &p.ReactorBuilding.ContainmentBuilding
+	cb.Pressure = 33.199
+	cb.UpperTemperature = Temperature{Val: 786.6, Unit: u.Fahrenheit}
+	cb.LowerTemperature = Temperature{Val: 786.6, Unit: u.Fahrenheit}
+	cb.Temperature = cb.UpperTemperature
+	cb.UpperHydrogenPercent = HydrogenExplosiveLimit
+	cb.LowerHydrogenPercent = HydrogenExplosiveLimit
+	cb.HydrogenDetectionSuppression.HydrogenVolumePercent = HydrogenExplosiveLimit
+	// Recombiner/ventilation are secured for the SBO driver.
+	cb.HydrogenDetectionSuppression.RecombinerActive = false
+	cb.HydrogenDetectionSuppression.VentilationActive = false
+	css := &p.AuxiliaryBuilding.ContainmentSpraySystem
+	css.DriveReady = false
+	css.Running = false
+	css.SprayHeaderOpen = false
+	css.SprayFlow = 0
+	for i := 0; i < RCFCUnitCount; i++ {
+		p.AuxiliaryBuilding.RCFCUnits[i].Running = false
+		p.AuxiliaryBuilding.RCFCUnits[i].HeatTransferRate = 0
+	}
+	p.Outside.ServiceWaterSystem.Flow = 0
+
+	p.Step(dt)
+	cb = &p.ReactorBuilding.ContainmentBuilding
+	p.Update()
+	assert.GreaterOrEqual(t, cb.HydrogenDetectionSuppression.HydrogenVolumePercent, HydrogenExplosiveLimit,
+		"deflagration plant witness: mixture reaches explosive limit")
+	assert.True(t, cb.HydrogenDeflagrated,
+		"deflagration plant witness: HydrogenDeflagrated latches")
+	assert.True(t, cb.ContainmentFailed,
+		"deflagration plant witness: unchanged 150 psig latch trips")
+}
+
+// CSS-on negative control (plans/p65_8.txt): the same near-latch
+// baseline with CSS spray enabled keeps containment below the latch.
+func TestHDS_DeflagrationCSSOnSuppressesFailure(t *testing.T) {
+	t.Parallel()
+	p := MakePlant()
+	cb := &p.ReactorBuilding.ContainmentBuilding
+	cb.Pressure = 33.199
+	cb.UpperTemperature = Temperature{Val: 786.6, Unit: u.Fahrenheit}
+	cb.LowerTemperature = Temperature{Val: 786.6, Unit: u.Fahrenheit}
+	cb.Temperature = cb.UpperTemperature
+	cb.UpperHydrogenPercent = HydrogenExplosiveLimit
+	cb.LowerHydrogenPercent = HydrogenExplosiveLimit
+	cb.HydrogenDetectionSuppression.HydrogenVolumePercent = HydrogenExplosiveLimit
+	css := &p.AuxiliaryBuilding.ContainmentSpraySystem
+	css.Running = true
+	css.DriveReady = true
+	css.SprayHeaderOpen = true
+	css.SprayFlow = CSSDesignFlow
+	p.Step(time.Second)
+	cb = &p.ReactorBuilding.ContainmentBuilding
+	p.Update()
+	assert.True(t, cb.HydrogenDeflagrated,
+		"CSS-on control: deflagration still latches")
+	assert.False(t, cb.ContainmentFailed,
+		"CSS-on control: spray drag keeps pressure below the 150 psig latch")
+}

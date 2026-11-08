@@ -107,6 +107,15 @@ func TestHDS_OxidationCapH2Accounting(t *testing.T) {
 	}
 	require.InDelta(t, MaxOxidizedFrac, r.OxidizedFrac, 0.01, "oxidation reaches the 50.46(b) cap")
 	require.LessOrEqual(t, r.OxidizedFrac, MaxOxidizedFrac)
+
+	// Source accounting for plans/p65_8.txt: the p65_2 mapping
+	// integrates to MaxH2CladReactionFrac, so the organic mixture
+	// saturates at 1 vol%, never 4 vol%, until a separate source
+	// model changes that cap.
+	assert.LessOrEqual(t, MaxH2CladReactionFrac, 0.01)
+	integratedH2 := (MaxH2CladReactionFrac / MaxOxidizedFrac) * MaxOxidizedFrac * HydrogenGenerationRate
+	assert.InDelta(t, 0.01, integratedH2, 1e-12,
+		"generation-rate integration saturates at the 1% ceiling")
 }
 
 // --- accident witnesses ---
