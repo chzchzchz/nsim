@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -219,15 +220,19 @@ type objectiveView struct {
 }
 
 type statusView struct {
-	SiteName       string        `json:"siteName"`
-	RunID          int64         `json:"runId"`
-	SimTimeMs      int64         `json:"simTimeMs"`
-	TimestepMs     float64       `json:"timestepMs"`
-	StepsPerSecond int           `json:"stepsPerSecond"`
-	Running        bool          `json:"running"`
-	Paused         bool          `json:"paused"`
-	Rev            int64         `json:"rev"`
-	Objective      objectiveView `json:"objective"`
+	SiteName       string  `json:"siteName"`
+	RunID          int64   `json:"runId"`
+	SimTimeMs      int64   `json:"simTimeMs"`
+	TimestepMs     float64 `json:"timestepMs"`
+	StepsPerSecond int     `json:"stepsPerSecond"`
+	Running        bool    `json:"running"`
+	Paused         bool    `json:"paused"`
+	Rev            int64   `json:"rev"`
+	// LatestSeq is the seq of the most recent /logs entry,
+	// or -1 when the log is empty. Agents compare it against
+	// their last-seen seq to detect other users' work.
+	LatestSeq int64         `json:"latestSeq"`
+	Objective objectiveView `json:"objective"`
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
@@ -257,6 +262,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 		Running:        !s.paused,
 		Paused:         s.paused,
 		Rev:            s.rev,
+		LatestSeq:      s.log.LatestSeq(),
 		Objective:      obj,
 	})
 }
@@ -580,6 +586,23 @@ func (s *Server) handlePostCommands(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, commandsResponse{Scheduled: out})
 }
 
+// parseSeqQuery reads an optional integer query parameter by name.
+func parseSeqQuery(r *http.Request, name string) (int64, bool, error) {
+	values := r.URL.Query()
+	raw := values.Get(name)
+	if raw == "" {
+		return 0, false, nil
+	}
+	seq, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, true, fmt.Errorf("invalid %s seq %q", name, raw)
+	}
+	if seq < 0 {
+		return 0, true, fmt.Errorf("%s seq must not be negative: %d", name, seq)
+	}
+	return seq, true, nil
+}
+
 // logView is the wire shape of one log entry.
 type logView struct {
 	Seq     int64           `json:"seq"`
@@ -596,10 +619,34 @@ type logView struct {
 // bare comment, ordered by simulated timestamp. Unlike the
 // journal, the log never deduplicates, so re-submitting the
 // same command appends a second entry.
-func (s *Server) handleLogs(w http.ResponseWriter, _ *http.Request) {
+//
+// The optional query parameters lo and hi select a half-open
+// sequence range [lo, hi): entries satisfy seq >= lo and
+// seq < hi. Missing lo means no lower bound; missing hi means no
+// upper bound. Supplying neither returns the full log. Invalid
+// values produce a 400 with the uniform envelope.
+func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+	lo, hasLo, err := parseSeqQuery(r, "lo")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	hi, hasHi, err := parseSeqQuery(r, "hi")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	entries := s.log.Entries()
+	loVal := int64(-1)
+	if hasLo {
+		loVal = lo
+	}
+	hiVal := int64(-1)
+	if hasHi {
+		hiVal = hi
+	}
+	entries := s.log.EntriesWithSeqRange(loVal, hiVal)
 	out := make([]logView, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, logView{

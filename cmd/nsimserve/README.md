@@ -202,29 +202,31 @@ This is a **shared system**: while you are analyzing the
 situation, other operators, agents, or scripts may submit
 operations and comments. Track the highest log `seq` you have
 seen (`lastSeq`). Before deciding and before every control write,
-read `/logs` again and compare the highest returned `seq`
-against `lastSeq`. Any `seq > lastSeq` means another user
-changed the plant or posted new information during your
-analysis; read those new entries and account for them in your
-decision. If `/logs` returns no entries above `lastSeq`, your
-observed state is unchanged. Then re-read the controls and
-sensors you depend on, because another user's queued or immediate
-write may have changed them. Update `lastSeq` to the highest
-`seq` you processed after reviewing the new entries. Use the
-returned seq to cite the entry in follow-up messages.
+read `/status` first and compare `latestSeq` against `lastSeq`,
+then read the entries with `seq > lastSeq` from `/logs`. Any
+`latestSeq > lastSeq` means another user changed the plant or
+posted new information during your analysis; read those new
+entries and account for them in your decision. If
+`latestSeq == lastSeq`, your observed state is unchanged. Then
+re-read the controls and sensors you depend on, because another
+user's queued or immediate write may have changed them. Update
+`lastSeq` to the highest `seq` you processed after reviewing the
+new entries. Use the returned seq to cite the entry in
+follow-up messages.
 
 **The log is a comms channel.** Staff and agents use plain comments
 (no control) to coordinate: `POST /logs {"comment":"..."}` sends an
-announcement or observation at the current sim time. To avoid
-re-reading the full log on every poll, use a last-seen `seq`
-inclusive baseline with `lo=<lastSeq+1>` and an exclusive upper
-bound `hi=<lastSeq+2>` (so it returns only the next entry if one
-exists), or use `lo=<lastSeq+1>` alone to return all newer
-entries. Agents should check `/logs` periodically — after
-stepping, before issuing a control action, and whenever a
-sensor value changes unexpectedly — and post short status
-notes of their own so the log shows a conversation, not just a
-record.
+announcement or observation at the current sim time. `GET /logs`
+accepts an optional half-open sequence range `lo`/`hi`: an entry
+matches when `seq >= lo` and `seq < hi`. For example,
+`GET /logs?hi=123&lo=10` returns entries with seq 10 through 122.
+If `lo` is absent, there is no lower bound; if `hi` is absent,
+there is no upper bound. To avoid re-reading the full log on every
+poll, use `lo=<lastSeq+1>` to return all newer entries. Agents
+should check `/logs` periodically — after stepping, before issuing
+a control action, and whenever a sensor value changes
+unexpectedly — and post short status notes of their own so the log
+shows a conversation, not just a record.
 
 ```bash
 # Schedule two operations with rationale; the comments ride along.
@@ -337,7 +339,7 @@ answers preflight `204` with CORS headers.
 |---|---|
 | `GET /livez` | `{"ok":true}` — process is up. |
 | `GET /readyz` | `{"ready":true}` while stepping. |
-| `GET /status` | Identity + clock: `{siteName, runId, simTimeMs, timestepMs, stepsPerSecond, running, paused, rev, objective:{active,id,title,done,metMs,detail}}`. |
+| `GET /status` | Identity + clock: `{siteName, runId, simTimeMs, timestepMs, stepsPerSecond, running, paused, rev, latestSeq, objective:{active,id,title,done,metMs,detail}}`. `latestSeq` is the seq of the most recent `/logs` entry (`-1` when the log is empty). |
 | `GET /metrics` | Prometheus text: `nsim_server_info{site="..."}`, one gauge per numeric sensor, `nsim_sim_time_seconds`, `nsim_alarms_active`, `nsim_steps_total`. Enum sensors are omitted (Prometheus has no string value type); read them via `/sensors/{key}`. |
 | `GET /sensors` | Bulk sensor catalog with live values (one poll per frame for a remote UI). |
 | `GET /sensors/{key}` | One sensor. Keys are `%`-encoded (`%2F`) when they contain `/`. |
@@ -347,7 +349,7 @@ answers preflight `204` with CORS headers.
 | `POST /commands` | Accept a control-operations list: JSON envelope `{"scenario":"...","commands":[{"offsetMs":...,"atMs":...,"control":"...","value":"...","comment":"..."}]}` **or** `text/plain` lines `TimeOffset Part.Label Value` with `#` comments. `offsetMs` is relative to submission; `atMs` is absolute and wins. **Comment every command**; comments are logged with the operation. Scheduling is all-or-nothing; returns `{"scheduled":[{"seq","dueMs","logSeq"}]}` where `logSeq` is the entry's id in `/logs`. Re-POSTing an already-journaled `(control, value, dueMs)` identity returns `{"deduped":true,"seq":<journal seq>}`. |
 | `GET /commands` | Journal + queue view: `{rev, entries:[{seq, text, control, value, offsetMs, dueMs, status, err}]}`. `dueMs` is the absolute sim time the command fires. |
 | `GET /commands/export` | Journaled operations as the `nsimrun -cmd *.json` envelope. Round-trip: export and replay it through `nsimrun`. |
-| `GET /logs`, `POST /logs` | Append-only timestamped log of cmdfile operations (with their attached comments) plus bare comments. `GET` returns `[{seq, kind, atMs, control, value, comment, source}]` in timestamp order; `POST {"comment":"..."}` appends a comment at the current sim time and returns `{"seq", "comment", "atMs"}`. Never deduplicated: re-submitting an identical command appends a second entry, with its own `seq`. |
+| `GET /logs`, `POST /logs` | Append-only timestamped log of cmdfile operations (with their attached comments) plus bare comments. `GET` returns `[{seq, kind, atMs, control, value, comment, source}]` in timestamp order. Optional half-open range `?lo=<seq>&hi=<seq>`: `seq >= lo` and `seq < hi`; absent bounds are unbounded. `POST {"comment":"..."}` appends a comment at the current sim time and returns `{"seq", "comment", "atMs"}`. Never deduplicated: re-submitting an identical command appends a second entry, with its own `seq`. |
 | `GET /alarms` | `Plant.Alarms()` (same shape as the extra `Alarms` key of `nsimrun` stdout). |
 | `GET /state` | Full plant JSON — byte-compatible with `nsimrun` stdout and `nsimrun -plant` input. The single state endpoint; there is no `/snapshot` and no `POST /state`. |
 | `POST /shutdown` | Request clean process shutdown; `{"shuttingDown":true}`. On shutdown, `-resume` and `-saveOnShutdown` files are written. |

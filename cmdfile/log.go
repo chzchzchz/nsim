@@ -100,6 +100,34 @@ func (l *Log) Entries() []LogEntry {
 	return out
 }
 
+// LatestSeq returns the seq of the most recent log entry,
+// or -1 when the log is empty. Agents use it to detect other
+// users' submissions while analyzing.
+func (l *Log) LatestSeq() int64 {
+	if len(l.entries) == 0 {
+		return -1
+	}
+	return l.entries[len(l.entries)-1].Seq
+}
+
+// EntriesWithSeqRange filters entries to the half-open seq range
+// [lo, hi). Both bounds are optional in the sense that a negative
+// value means no bound on that side: -1 for lo means all entries
+// pass the lower bound, and -1 for hi means no upper bound applies.
+func (l *Log) EntriesWithSeqRange(lo, hi int64) []LogEntry {
+	out := make([]LogEntry, 0, len(l.entries))
+	for _, e := range l.entries {
+		if lo >= 0 && e.Seq < lo {
+			continue
+		}
+		if hi >= 0 && e.Seq >= hi {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
 // logJSON is the explicit shape for Log serialization.
 type logJSON struct {
 	Entries []LogEntry `json:"entries"`

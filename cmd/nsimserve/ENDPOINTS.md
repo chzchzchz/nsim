@@ -29,9 +29,12 @@ Base: `http://127.0.0.1:8080` (or `-addr`).
 - `-timestep 1ms` at `-stepsPerSecond 1000` is real-time; smaller
   timesteps with high speed move the plant faster than wall clock.
 - `/status` reports the live `simTimeMs`, `timestepMs`,
-  `stepsPerSecond`, `running`/`paused`, `rev`, and `runId` (bumps on
-  `/reset`). `GET /readyz` is `{"ready":true}` while stepping and 503
-  with `{}` while `/reset` rebuilds.
+  `stepsPerSecond`, `running`/`paused`, `rev`, `latestSeq`, and `runId`
+  (bumps on `/reset`). `GET /readyz` is `{"ready":true}` while
+  stepping and 503 with `{}` while `/reset` rebuilds.
 - `POST /commands` offsets are relative to the submission sim time,
   so log timestamps (`atMs`) are `submission + offset`; scheduled
   status (`pending`/`done`/`failed`) is in `GET /commands`.
+- `GET /logs` accepts an optional half-open sequence range `lo`/`hi`:
+  entries satisfy `seq >= lo` and `seq < hi`; absent bounds are
+  unbounded.

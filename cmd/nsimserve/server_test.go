@@ -64,6 +64,14 @@ func TestLivezReadyzAndStatus(t *testing.T) {
 	assert.True(t, st.Paused)
 	assert.False(t, st.Running)
 	assert.False(t, st.Objective.Active)
+	assert.Equal(t, int64(-1), st.LatestSeq)
+
+	code, _ = doOK(t, "POST", ts.URL+"/logs", `{"comment":"status seq check"}`)
+	require.Equal(t, http.StatusOK, code)
+	code, body = doOK(t, "GET", ts.URL+"/status", "")
+	require.Equal(t, http.StatusOK, code)
+	require.NoError(t, json.Unmarshal(body, &st))
+	assert.Equal(t, int64(0), st.LatestSeq)
 }
 
 func TestLoopAdvancesSimTime(t *testing.T) {
@@ -360,6 +368,44 @@ func TestLogsEndpoint(t *testing.T) {
 		assert.Greater(t, entries[i].Seq, entries[i-1].Seq)
 		assert.GreaterOrEqual(t, entries[i].AtMs, entries[i-1].AtMs)
 	}
+}
+
+func TestLogsSequenceRange(t *testing.T) {
+	_, ts := newPausedServer(t, "nsimserve")
+	code, _ := doOK(t, "POST", ts.URL+"/logs", `{"comment":"one"}`)
+	require.Equal(t, http.StatusOK, code)
+	code, _ = doOK(t, "POST", ts.URL+"/logs", `{"comment":"two"}`)
+	require.Equal(t, http.StatusOK, code)
+	code, _ = doOK(t, "POST", ts.URL+"/logs", `{"comment":"three"}`)
+	require.Equal(t, http.StatusOK, code)
+
+	cases := []struct {
+		query string
+		seqs  []int64
+	}{
+		{"", []int64{0, 1, 2}},
+		{"?lo=1", []int64{1, 2}},
+		{"?hi=2", []int64{0, 1}},
+		{"?lo=1&hi=2", []int64{1}},
+		{"?lo=2&hi=2", []int64{}},
+	}
+	for _, tc := range cases {
+		code, body := doOK(t, "GET", ts.URL+"/logs"+tc.query, "")
+		require.Equal(t, http.StatusOK, code)
+		var entries []logView
+		require.NoError(t, json.Unmarshal(body, &entries))
+		require.Len(t, entries, len(tc.seqs), tc.query)
+		for i, seq := range tc.seqs {
+			assert.Equal(t, seq, entries[i].Seq)
+		}
+	}
+
+	code, body := doOK(t, "GET", ts.URL+"/logs?lo=next", "")
+	assert.Equal(t, http.StatusBadRequest, code)
+	assert.Contains(t, string(body), `"code":400`)
+
+	code, _ = doOK(t, "GET", ts.URL+"/logs?hi=-1", "")
+	assert.Equal(t, http.StatusBadRequest, code)
 }
 
 func TestLogsAbsoluteVsRelative(t *testing.T) {
