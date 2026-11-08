@@ -157,8 +157,24 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 		relax *= powerFrac
 	}
 	outletStep := (targetOutlet - outletF) * relax
-	maxStep := OpHeatupRateLimit * dt.Seconds()
-	outletStep = min(max(outletStep, -maxStep), maxStep)
+	// Directed envelope (p67): heatup stays at the spec cap
+	// (page_224.txt:140-141); planned cooldown follows its own
+	// derived envelope so the Tavg program can be tracked.
+	// The fast envelope applies only at power, above the at-power
+	// permissive: a rod-inserted shutdown/dead-core cooldown
+	// keeps the operational program rate, while load-following
+	// cooling tracks its program. Rods-in and trip cases are
+	// deliberately outside the fast envelope. Absolute
+	// PrimaryCooldownRateLimitFPerSec is the load-following cap
+	// in °F/s: 400/3600 = 0.111°F/s.
+	coolRate := OpHeatupRateLimit
+	if powerFrac >= RPSAtPowerPermissiveFraction && !ret.Trip &&
+		ret.ControlRods.Insertion < RPSAtPowerPermissiveFraction {
+		coolRate = PrimaryCooldownRateLimitFPerSec
+	}
+	heatStep := OpHeatupRateLimit * dt.Seconds()
+	coolStep := coolRate * dt.Seconds()
+	outletStep = min(max(outletStep, -coolStep), heatStep)
 	outletF += outletStep
 
 	// Active-sink energy balance (secondary excess draw): primary
@@ -181,7 +197,7 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 		}
 		deltaTF := -share * accepted /
 			(RCSMassKg * SpecificHeatWater) * dt.Seconds() * 9.0 / 5.0
-		deltaTF = min(max(deltaTF, -maxStep), maxStep)
+		deltaTF = min(max(deltaTF, -coolStep), heatStep)
 		outletF += deltaTF
 	}
 	outletF = max(outletF, 0)
@@ -1222,6 +1238,23 @@ const (
 	// the 1 ms plant step. Not derived from a spec number; the spec
 	// describes the steady-state temperatures only.
 	PrimaryThermalTimeConstant float64 = 90
+
+	// PrimaryCooldownRateLimitFPerSec is the cooldown envelope
+	// for the primary outlet during planned load following (°F/s).
+	// Derived from probe, NOT spec: the spec states a heatup
+	// limit ("Primary plant heatup rate is limited to 50°F (28°C)
+	// per hour", specs/the_westinghouse_pressurized_water_react/
+	// chapter_16/page_224.txt:140-141) and a dump cooldown
+	// initiation ("Steam dumps are adjusted to start a 50°F/hr
+	// (28°C/hr) cooldown rate",
+	// specs/the_westinghouse_pressurized_water_react/chapter_16/
+	// page_226.txt:153-154), but no load-follow cooldown rate.
+	// The Tavg program drops 30.9°F (0.95x32.5) over 19.0 min at
+	// the spec-paced 5%/min walk (page_225.txt:148-150), i.e. a
+	// mean Tavg rate of ~97.5°F/hr (probe-derived floor; the
+	// frozen value is recorded in plans/p67_1.txt Outcome from
+	// the sweep against hold residual <5°F by t+450s).
+	PrimaryCooldownRateLimitFPerSec float64 = 400.0 / 3600.0
 
 	// PrimaryInletTimeConstant is slower than the outlet because
 	// the cold leg traverses the entire primary loop before

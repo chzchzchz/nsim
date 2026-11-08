@@ -353,9 +353,10 @@ func TestReactor_ZeroPowerHoldsTemperature(t *testing.T) {
 		"the inlet must hold as well with no flow-driven blend")
 }
 
-// The Tavg program is rate-limited to the operational heatup/cooldown
-// limits: a power collapse drops the program target instantly, but the
-// outlet chases it at 50 F/hr instead of jumping.
+// The Tavg program is rate-limited to the operational limits:
+// heatup stays at the spec's 50 F/hr cap, while planned cooldown
+// at power follows p67's derived envelope instead of the heatup
+// number.
 //
 // Spec: "Primary plant heatup rate is limited to 50°F per hour."
 // specs/the_westinghouse_pressurized_water_react/chapter_16/page_224.txt:140-141
@@ -364,27 +365,39 @@ func TestReactor_OutletProgramRateLimited(t *testing.T) {
 	hot := ReactorPressureVessel{}
 	hot.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
 	hot.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
-	// Subcritical: with the rods out the source population would
-	// regrow to rated and the program target would stay at 621.
-	hot.Insertion = 1
-	hot.DemandInsertion = 1
+	// Subcritical in the original fixture: with the rods fully
+	// inserted, the source population would regrow toward rated
+	// and the program target would stay at 621.
+	// The cooldown fixture keeps the rods withdrawn in the
+	// load-following lineup while the seeded outlet offset holds
+	// the clamp saturated for the whole measurement window.
+	// Seed half power with a touch of rod insertion: the
+	// seeded outlet 50 F above the Doppler reference holds the
+	// cooling clamp saturated for the whole measurement window.
+	hot.SeedSteadyStatePower(CoreRatedThermalPower / 2)
+	hot.ControlRods.BoronConcentration = CVCSInitialBoron
+	hot.ControlRods.Insertion = CVCSAutoBoronLowInsertionFrac
+	hot.ControlRods.DemandInsertion = CVCSAutoBoronLowInsertionFrac
+	hot.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 
 	const window = 10 * time.Second
 	start := hot.Outlet.Float()
 	for i := 0; i < int(window/DefaultTimeStep); i++ {
-		hot = hot.Step(DefaultTimeStep, 0, 0)
+		hot = hot.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	}
 	drop := start - hot.Outlet.Float()
-	want := OpHeatupRateLimit * window.Seconds()
-	// Every step saturates the clamp this far from the target, so
-	// the drop equals the limit exactly (float-rounding tolerance).
-	assert.InDelta(t, want, drop, want*1e-6,
-		"want cooldown paced at exactly the 50 F/hr program rate, got %v F in %v",
+	wantHeat := OpHeatupRateLimit * window.Seconds()
+	wantCool := PrimaryCooldownRateLimitFPerSec * window.Seconds()
+	// Every step saturates the directed clamp this far from the
+	// target: heatup at OpHeatupRateLimit and cooldown at p67's
+	// derived PrimaryCooldownRateLimitFPerSec.
+	assert.InDelta(t, wantCool, drop, wantCool*1e-6,
+		"want cooldown paced at exactly the derived cooldown rate, got %v F in %v",
 		drop, window)
 	assert.Greater(t, start, hot.Outlet.Float(), "want the outlet cooling")
 
 	// Heatup direction: a cold vessel under full power climbs at the
-	// same bounded rate.
+	// bounded heatup rate.
 	cold := ReactorPressureVessel{}
 	cold.Inlet = Temperature{Val: 200, Unit: u.Fahrenheit}
 	cold.Outlet = Temperature{Val: 200, Unit: u.Fahrenheit}
@@ -394,9 +407,51 @@ func TestReactor_OutletProgramRateLimited(t *testing.T) {
 		cold = cold.Step(DefaultTimeStep, RCPRatedSpeed, 0)
 	}
 	rise := cold.Outlet.Float() - start
-	assert.InDelta(t, want, rise, want*1e-6,
+	assert.InDelta(t, wantHeat, rise, wantHeat*1e-6,
 		"want heatup paced at exactly the 50 F/hr program rate, got %v F in %v",
 		rise, window)
+}
+
+// Planned heatup and cooldown are deliberately asymmetric in p67:
+// the spec caps heatup at 50 F/hr, while the derived cooldown
+// envelope lets the primary follow the descending Tavg program.
+// Both directions were probed in this same 10 s saturated-clamp
+// window, within the 1e-6 tolerance of the existing rate witness.
+func TestReactor_OutletCooldownRateAsymmetry(t *testing.T) {
+	t.Parallel()
+
+	const window = 10 * time.Second
+	hot := ReactorPressureVessel{}
+	hot.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
+	hot.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
+	hot.Insertion = CVCSAutoBoronLowInsertionFrac
+	hot.DemandInsertion = CVCSAutoBoronLowInsertionFrac
+	hot.SeedSteadyStatePower(CoreRatedThermalPower / 2)
+	hot.ControlRods.BoronConcentration = CVCSInitialBoron
+	hot.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
+	start := hot.Outlet.Float()
+	for i := 0; i < int(window/DefaultTimeStep); i++ {
+		hot = hot.Step(DefaultTimeStep, RCPRatedSpeed, 0)
+	}
+	drop := start - hot.Outlet.Float()
+	wantCool := PrimaryCooldownRateLimitFPerSec * window.Seconds()
+	assert.InDelta(t, wantCool, drop, wantCool*1e-6,
+		"want cooldown paced at the derived rate, got %v F in %v", drop, window)
+
+	cold := ReactorPressureVessel{}
+	cold.Inlet = Temperature{Val: 200, Unit: u.Fahrenheit}
+	cold.Outlet = Temperature{Val: 200, Unit: u.Fahrenheit}
+	cold.SeedSteadyStatePower(CoreRatedThermalPower)
+	start = cold.Outlet.Float()
+	for i := 0; i < int(window/DefaultTimeStep); i++ {
+		cold = cold.Step(DefaultTimeStep, RCPRatedSpeed, 0)
+	}
+	rise := cold.Outlet.Float() - start
+	wantHeat := OpHeatupRateLimit * window.Seconds()
+	assert.InDelta(t, wantHeat, rise, wantHeat*1e-6,
+		"want heatup paced at the 50 F/hr cap, got %v F in %v", rise, window)
+	assert.NotEqual(t, wantCool, wantHeat,
+		"planned cooldown must use its own envelope, not the heatup cap")
 }
 
 // A fault-regime secondary draw (main steam line break) cools the
