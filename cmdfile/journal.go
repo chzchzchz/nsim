@@ -1,6 +1,7 @@
 package cmdfile
 
 import (
+	"encoding/json"
 	"sort"
 	"time"
 )
@@ -8,8 +9,8 @@ import (
 // JournalEntry records a submitted command and the simulated
 // time at which it takes effect.
 type JournalEntry struct {
-	AtNs int64
-	Cmd  Command
+	AtNs int64   `json:"atNs"` // Absolute simulated effect time in nanoseconds
+	Cmd  Command `json:"cmd"`  // Journaled control action
 }
 
 // Journal accumulates control commands issued during one
@@ -67,4 +68,15 @@ func (j *Journal) CommandsFrom(baseNs int64) []Command {
 		return cmds[a].TimeOffsetMs < cmds[b].TimeOffsetMs
 	})
 	return cmds
+}
+
+// MarshalJSON serializes every journaled entry in insertion
+// order so command dedup and history survive a server restart.
+func (j Journal) MarshalJSON() ([]byte, error) {
+	return json.Marshal(j.entries)
+}
+
+// UnmarshalJSON restores a journal serialized by MarshalJSON.
+func (j *Journal) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, &j.entries)
 }

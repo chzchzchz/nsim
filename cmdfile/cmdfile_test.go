@@ -22,10 +22,10 @@ func (e *errorReader) Read(p []byte) (n int, err error) {
 func TestParse(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		cmds, err := Parse(strings.NewReader(
-			"0 ReactorBuilding.ReactorCoolantPump.Running 1\n"+
-				"500 AuxiliaryBuilding.DieselGenerator.Start Manual\n"+
-				"\n"+
-				"# comment\n"+
+			"0 ReactorBuilding.ReactorCoolantPump.Running 1\n" +
+				"500 AuxiliaryBuilding.DieselGenerator.Start Manual\n" +
+				"\n" +
+				"# comment\n" +
 				"1000\tReactorBuilding/ReactorPressureVessel/ControlRods/Insertion\t0.5\n",
 		))
 		require.NoError(t, err)
@@ -74,15 +74,15 @@ func TestParse(t *testing.T) {
 // first command.
 func TestParse_AttachesComments(t *testing.T) {
 	cmds, err := Parse(strings.NewReader(
-		"# file header, not attached\n"+
-			"\n"+
-			"# trip the pump\n"+
-			"# because pressure is rising\n"+
-			"0 Part.A 1  # stop the pump\n"+
-			"\n"+
-			"# detached header\n"+
-			"\n"+
-			"1000 Part.B 2\n"+
+		"# file header, not attached\n" +
+			"\n" +
+			"# trip the pump\n" +
+			"# because pressure is rising\n" +
+			"0 Part.A 1  # stop the pump\n" +
+			"\n" +
+			"# detached header\n" +
+			"\n" +
+			"1000 Part.B 2\n" +
 			"2000 Part.C 3\n"))
 	require.NoError(t, err)
 	require.Len(t, cmds, 3)
@@ -106,7 +106,7 @@ func TestDueNs(t *testing.T) {
 
 func TestResolveKey(t *testing.T) {
 	m := bridge.ControlMap{
-		"ReactorBuilding/ReactorCoolantPump/Running":     {},
+		"ReactorBuilding/ReactorCoolantPump/Running": {},
 		"ReactorBuilding/ReactorPressureVessel/Trip": {},
 	}
 	assert.Equal(t, "ReactorBuilding/ReactorCoolantPump/Running", ResolveKey(m, "ReactorBuilding/ReactorCoolantPump/Running"))
@@ -159,9 +159,9 @@ func TestApply(t *testing.T) {
 // keep file order.
 func TestParse_SortsByOffsetKeepingEqualOrder(t *testing.T) {
 	cmds, err := Parse(strings.NewReader(
-		"2000 ReactorBuilding.ReactorCoolantPump.Running 1\n"+
-			"1000 AuxiliaryBuilding.DieselGenerator.Start Manual\n"+
-			"2000 TurbineBuilding.Turbine.Reset Reset\n"+
+		"2000 ReactorBuilding.ReactorCoolantPump.Running 1\n" +
+			"1000 AuxiliaryBuilding.DieselGenerator.Start Manual\n" +
+			"2000 TurbineBuilding.Turbine.Reset Reset\n" +
 			"500 ReactorBuilding.ReactorCoolantPump.Running 0\n",
 	))
 	require.NoError(t, err)

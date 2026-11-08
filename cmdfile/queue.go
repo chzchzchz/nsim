@@ -1,6 +1,7 @@
 package cmdfile
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
 
@@ -31,12 +32,12 @@ func (s Status) String() string {
 
 // Entry is a queued command plus its scheduling state.
 type Entry struct {
-	Seq    int64 // submission order, stable sort key
-	Text   string
-	Cmd    Command
-	DueNs  int64 // absolute sim time (submit time + offset)
-	Status Status
-	Err    string
+	Seq    int64   `json:"seq"`           // submission order, stable sort key
+	Text   string  `json:"text"`          // Source text echoed for display
+	Cmd    Command `json:"cmd"`           // Scheduled control action
+	DueNs  int64   `json:"dueNs"`         // absolute sim time (submit time + offset)
+	Status Status  `json:"status"`        // Outcome recorded when the command fires
+	Err    string  `json:"err,omitempty"` // Fire failure detail, when any
 }
 
 // Queue holds commands scheduled against a simulation clock.
@@ -150,4 +151,30 @@ func (q *Queue) Entries() []Entry {
 // to skip redundant re-renders.
 func (q *Queue) Rev() int64 {
 	return q.rev
+}
+
+// queueJSON is the explicit shape for Queue serialization.
+type queueJSON struct {
+	Entries []Entry `json:"entries"`
+	NextSeq int64   `json:"nextSeq"`
+	Rev     int64   `json:"rev"`
+}
+
+// MarshalJSON serializes the full queue, including pending
+// entries and the sequence / revision counters needed for an
+// exact later restore.
+func (q Queue) MarshalJSON() ([]byte, error) {
+	return json.Marshal(queueJSON{Entries: q.entries, NextSeq: q.nextSeq, Rev: q.rev})
+}
+
+// UnmarshalJSON restores a queue serialized by MarshalJSON.
+func (q *Queue) UnmarshalJSON(data []byte) error {
+	var raw queueJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	q.entries = raw.Entries
+	q.nextSeq = raw.NextSeq
+	q.rev = raw.Rev
+	return nil
 }

@@ -1,6 +1,9 @@
 package cmdfile
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // LogKind distinguishes operation records from bare operator
 // comments in the log.
@@ -24,13 +27,13 @@ const (
 // can tell a scenario-scripted action from one they issued
 // themselves; it is empty for comments and ad-hoc writes.
 type LogEntry struct {
-	Seq     int64        `json:"seq"`
-	Kind    LogKind  `json:"kind"`
-	AtMs    int64        `json:"atMs"`
-	Control string       `json:"control,omitempty"`
-	Value   string       `json:"value,omitempty"`
-	Comment string       `json:"comment,omitempty"`
-	Source  string       `json:"source,omitempty"`
+	Seq     int64   `json:"seq"`
+	Kind    LogKind `json:"kind"`
+	AtMs    int64   `json:"atMs"`
+	Control string  `json:"control,omitempty"`
+	Value   string  `json:"value,omitempty"`
+	Comment string  `json:"comment,omitempty"`
+	Source  string  `json:"source,omitempty"`
 }
 
 // Log is an append-only, timestamped record of command-file
@@ -50,10 +53,13 @@ type Log struct {
 // atNs, tagged with the given source (for example "script"
 // for scenario opening commands, or "" for client requests).
 // The command's Comment, when present, is recorded with it
-// so rationale and operation stay together in one entry.
-func (l *Log) AddOperation(c Command, atNs int64, source string) {
+// so rationale and operation stay together in one entry. The
+// returned seq is the log entry's stable identifier, matching
+// the Seq field in GET /logs.
+func (l *Log) AddOperation(c Command, atNs int64, source string) int64 {
+	seq := l.nextSeq
 	l.entries = append(l.entries, LogEntry{
-		Seq:     l.nextSeq,
+		Seq:     seq,
 		Kind:    LogKindOperation,
 		AtMs:    atNs / int64(time.Millisecond),
 		Control: c.ControlKey,
@@ -62,17 +68,21 @@ func (l *Log) AddOperation(c Command, atNs int64, source string) {
 		Source:  source,
 	})
 	l.nextSeq++
+	return seq
 }
 
-// AddComment appends a bare comment at atNs.
-func (l *Log) AddComment(text string, atNs int64) {
+// AddComment appends a bare comment at atNs and returns the
+// entry's seq, matching the Seq field in GET /logs.
+func (l *Log) AddComment(text string, atNs int64) int64 {
+	seq := l.nextSeq
 	l.entries = append(l.entries, LogEntry{
-		Seq:     l.nextSeq,
+		Seq:     seq,
 		Kind:    LogKindComment,
 		AtMs:    atNs / int64(time.Millisecond),
 		Comment: text,
 	})
 	l.nextSeq++
+	return seq
 }
 
 // Clear drops all log entries.
@@ -88,4 +98,28 @@ func (l *Log) Entries() []LogEntry {
 	out := make([]LogEntry, len(l.entries))
 	copy(out, l.entries)
 	return out
+}
+
+// logJSON is the explicit shape for Log serialization.
+type logJSON struct {
+	Entries []LogEntry `json:"entries"`
+	NextSeq int64      `json:"nextSeq"`
+}
+
+// MarshalJSON serializes the full audit log and the next
+// sequence value so /logs history and future IDs survive a
+// server restart without collision.
+func (l Log) MarshalJSON() ([]byte, error) {
+	return json.Marshal(logJSON{Entries: l.entries, NextSeq: l.nextSeq})
+}
+
+// UnmarshalJSON restores a log serialized by MarshalJSON.
+func (l *Log) UnmarshalJSON(data []byte) error {
+	var raw logJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	l.entries = raw.Entries
+	l.nextSeq = raw.NextSeq
+	return nil
 }

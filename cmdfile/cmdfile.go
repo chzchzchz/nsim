@@ -25,7 +25,7 @@ type Command struct {
 	// TimeOffsetMs is relative to submission: this command fires
 	// at simTime + offset. Negative offsets clamp to now. For
 	// files that intend absolute times, use AtMs instead.
-	TimeOffsetMs int64  `json:"offsetMs"`
+	TimeOffsetMs int64 `json:"offsetMs"`
 	// AtMs, when present (>0), is the absolute simulated time at
 	// which the command fires. AtMs wins over TimeOffsetMs when
 	// both are set; times before now clamp to now.

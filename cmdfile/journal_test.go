@@ -2,6 +2,7 @@ package cmdfile
 
 import (
 	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,6 +52,35 @@ func TestWriteJSONRoundTrip(t *testing.T) {
 	got, err := ParseJSON(&buf)
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
+}
+
+func TestServerHistorySerializationRoundTrips(t *testing.T) {
+	var queue Queue
+	queue.SubmitAll([]Command{{ControlKey: "Part/Label", Value: "1"}}, []string{"0 Part.Label 1"}, 0)
+	data, err := json.Marshal(queue)
+	require.NoError(t, err)
+	var queueCopy Queue
+	require.NoError(t, json.Unmarshal(data, &queueCopy))
+	assert.Equal(t, queue.Entries(), queueCopy.Entries())
+	assert.Equal(t, queue.Rev(), queueCopy.Rev())
+
+	var journal Journal
+	journal.Add(Command{ControlKey: "Part/Label", Value: "1", Comment: "why"}, 1_000_000)
+	data, err = json.Marshal(journal)
+	require.NoError(t, err)
+	var journalCopy Journal
+	require.NoError(t, json.Unmarshal(data, &journalCopy))
+	assert.Equal(t, journal.Entries(), journalCopy.Entries())
+
+	var log Log
+	log.AddOperation(Command{ControlKey: "Part/Label", Value: "1"}, 1_000_000, "script")
+	log.AddComment("watching", 2_000_000)
+	data, err = json.Marshal(log)
+	require.NoError(t, err)
+	var logCopy Log
+	require.NoError(t, json.Unmarshal(data, &logCopy))
+	assert.Equal(t, log.Entries(), logCopy.Entries())
+	assert.Equal(t, int64(2), logCopy.AddComment("after restore", 3_000_000))
 }
 
 func TestJournal(t *testing.T) {

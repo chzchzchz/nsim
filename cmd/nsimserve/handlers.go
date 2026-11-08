@@ -37,6 +37,7 @@ func methodAllowed(r *http.Request) bool {
 		"/commands":        {http.MethodGet, http.MethodPost},
 		"/pause":           {http.MethodPost},
 		"/resume":          {http.MethodPost},
+		"/shutdown":        {http.MethodPost},
 		"/step":            {http.MethodPost},
 		"/reset":           {http.MethodPost},
 		"/timestep":        {http.MethodPost},
@@ -173,6 +174,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /logs", s.handlePostLog)
 	mux.HandleFunc("POST /pause", s.handlePause)
 	mux.HandleFunc("POST /resume", s.handleResume)
+	mux.HandleFunc("POST /shutdown", s.handleShutdown)
 	mux.HandleFunc("POST /step", s.handleStep)
 	mux.HandleFunc("POST /reset", s.handleReset)
 	mux.HandleFunc("POST /timestep", s.handleTimestep)
@@ -392,18 +394,24 @@ func (s *Server) handlePutControl(w http.ResponseWriter, r *http.Request) {
 	// every PUT. Dedup only governs batch re-submission.
 	logged := cmdfile.Command{ControlKey: resolved, Value: body.Value, Comment: body.Comment}
 	s.journal.Add(logged, s.simTimeNs)
-	s.log.AddOperation(logged, s.simTimeNs, "")
+	seq := s.log.AddOperation(logged, s.simTimeNs, "")
 	s.rev++
-	writeJSON(w, http.StatusOK, controlEntry{
+	out := controlEntry{
 		Key: resolved, Part: s.controls[resolved].Part, Label: s.controls[resolved].Label,
 		Kind: s.controls[resolved].Kind, Enum: s.controls[resolved].Enum,
 		Value: controlValue(s.controls[resolved]),
-	})
+	}
+	writeJSON(w, http.StatusOK, struct {
+		controlEntry
+		Seq int64 `json:"seq"`
+	}{out, seq})
 }
 
 type scheduledEntry struct {
 	Seq   int64 `json:"seq"`
 	DueMs int64 `json:"dueMs"`
+	// LogSeq is the seq of the operation's entry in GET /logs.
+	LogSeq int64 `json:"logSeq"`
 }
 
 type commandsResponse struct {
@@ -558,8 +566,8 @@ func (s *Server) handlePostCommands(w http.ResponseWriter, r *http.Request) {
 		// replay list.
 		logCmd := e.Cmd
 		logCmd.ControlKey = resolved[i]
-		s.log.AddOperation(logCmd, e.DueNs, "")
-		out = append(out, scheduledEntry{Seq: e.Seq, DueMs: dueMs})
+		logSeq := s.log.AddOperation(logCmd, e.DueNs, "")
+		out = append(out, scheduledEntry{Seq: e.Seq, DueMs: dueMs, LogSeq: logSeq})
 	}
 	if len(entries) > 0 && allTrue(deduped) {
 		dueNs := cmds[0].DueNs(s.simTimeNs)
@@ -574,13 +582,13 @@ func (s *Server) handlePostCommands(w http.ResponseWriter, r *http.Request) {
 
 // logView is the wire shape of one log entry.
 type logView struct {
-	Seq     int64         `json:"seq"`
+	Seq     int64           `json:"seq"`
 	Kind    cmdfile.LogKind `json:"kind"`
-	AtMs    int64         `json:"atMs"`
-	Control string        `json:"control,omitempty"`
-	Value   string        `json:"value,omitempty"`
-	Comment string        `json:"comment,omitempty"`
-	Source  string        `json:"source,omitempty"`
+	AtMs    int64           `json:"atMs"`
+	Control string          `json:"control,omitempty"`
+	Value   string          `json:"value,omitempty"`
+	Comment string          `json:"comment,omitempty"`
+	Source  string          `json:"source,omitempty"`
 }
 
 // handleLogs returns the append-only operation log: every
@@ -605,7 +613,9 @@ func (s *Server) handleLogs(w http.ResponseWriter, _ *http.Request) {
 
 // handlePostLog appends a bare operator comment at the current
 // simulated time. Comments are encouraged alongside operations
-// so the log reads as an annotated record of the run.
+// so the log reads as an annotated record of the run. The
+// response carries the new entry's seq so the caller can
+// reference the comment unambiguously in GET /logs.
 func (s *Server) handlePostLog(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Comment string `json:"comment"`
@@ -619,11 +629,11 @@ func (s *Server) handlePostLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Lock()
-	s.log.AddComment(body.Comment, s.simTimeNs)
+	seq := s.log.AddComment(body.Comment, s.simTimeNs)
 	s.rev++
 	atMs := s.simTimeNs / int64(time.Millisecond)
 	s.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]any{"comment": body.Comment, "atMs": atMs})
+	writeJSON(w, http.StatusOK, map[string]any{"seq": seq, "comment": body.Comment, "atMs": atMs})
 }
 
 func allTrue(flags []bool) bool {
@@ -641,6 +651,18 @@ func (s *Server) handlePause(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handleResume(w http.ResponseWriter, _ *http.Request) {
 	s.setPaused(w, false)
+}
+
+// handleShutdown requests a clean process shutdown. It closes
+// the server shutdown channel once so main can tear down the
+// HTTP server and simulation loop, then persist state when
+// -resume or -saveOnShutdown is configured. The response is
+// written before the signal so the caller observes the request.
+func (s *Server) handleShutdown(w http.ResponseWriter, _ *http.Request) {
+	writeSimpleBool(w, "shuttingDown", true)
+	if s.shutdown != nil {
+		s.shutdownOnce.Do(func() { close(s.shutdown) })
+	}
 }
 
 func (s *Server) setPaused(w http.ResponseWriter, paused bool) {

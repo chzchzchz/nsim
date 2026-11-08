@@ -59,6 +59,12 @@ type Server struct {
 
 	// ready drives /readyz transitions during /reset rebuilds.
 	ready atomic.Bool
+
+	// shutdown is closed by POST /shutdown; main owns process
+	// teardown and observes this signal.
+	shutdown chan struct{}
+	// shutdownOnce makes concurrent POST /shutdown requests safe.
+	shutdownOnce sync.Once
 }
 
 // NewServer builds a server around an initial plant. script and
@@ -116,6 +122,7 @@ func NewServer(siteName, scenarioID, plantPath, cmdPath string, paused bool, ste
 		queue:          &cmdfile.Queue{},
 		journal:        &cmdfile.Journal{},
 		log:            &cmdfile.Log{},
+		shutdown:       make(chan struct{}),
 	}
 	s.refreshMapsLocked()
 	if sc != nil {

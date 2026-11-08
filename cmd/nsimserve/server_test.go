@@ -293,25 +293,42 @@ func TestLogsEndpoint(t *testing.T) {
 
 	// POST /commands with comments: operations land in the log
 	// with their attached comment at their due timestamp.
-	code, _ := doOK(t, "POST", ts.URL+"/commands",
+	code, body := doOK(t, "POST", ts.URL+"/commands",
 		`{"commands":[{"offsetMs":0,"control":"PlantOperation/PowerSetpointTarget","value":"80","comment":"raise setpoint"}]}`)
 	require.Equal(t, http.StatusOK, code)
+	var sched commandsResponse
+	require.NoError(t, json.Unmarshal(body, &sched))
+	require.Len(t, sched.Scheduled, 1)
+	firstLogSeq := sched.Scheduled[0].LogSeq
+	assert.Equal(t, int64(0), firstLogSeq)
 
 	// Re-POST of the identical batch dedupes the journal but must
 	// still append a second log entry (no dedup in /logs).
-	code, body := doOK(t, "POST", ts.URL+"/commands",
+	code, body = doOK(t, "POST", ts.URL+"/commands",
 		`{"commands":[{"offsetMs":0,"control":"PlantOperation/PowerSetpointTarget","value":"80","comment":"raise setpoint"}]}`)
 	require.Equal(t, http.StatusOK, code)
 	assert.Contains(t, string(body), `"deduped"`)
 
 	// PUT with a comment also logs.
-	code, _ = doOK(t, "PUT", ts.URL+"/controls/PlantOperation%2FPowerSetpointTarget",
+	code, body = doOK(t, "PUT", ts.URL+"/controls/PlantOperation%2FPowerSetpointTarget",
 		`{"value":"85","comment":"trim setpoint"}`)
 	require.Equal(t, http.StatusOK, code)
+	var putOut struct {
+		Seq int64 `json:"seq"`
+	}
+	require.NoError(t, json.Unmarshal(body, &putOut))
+	assert.Equal(t, int64(2), putOut.Seq)
 
 	// Bare comment via POST /logs.
-	code, _ = doOK(t, "POST", ts.URL+"/logs", `{"comment":"watching pressure"}`)
+	code, body = doOK(t, "POST", ts.URL+"/logs", `{"comment":"watching pressure"}`)
 	require.Equal(t, http.StatusOK, code)
+	var commentOut struct {
+		Seq     int64  `json:"seq"`
+		Comment string `json:"comment"`
+	}
+	require.NoError(t, json.Unmarshal(body, &commentOut))
+	assert.Equal(t, int64(3), commentOut.Seq)
+	assert.Equal(t, "watching pressure", commentOut.Comment)
 
 	// Empty comment is rejected.
 	code, _ = doOK(t, "POST", ts.URL+"/logs", `{"comment":"  "}`)
@@ -333,6 +350,7 @@ func TestLogsEndpoint(t *testing.T) {
 	}
 	assert.Equal(t, 3, ops, "two /commands submissions plus one PUT")
 	assert.Equal(t, 1, comments)
+	assert.Equal(t, firstLogSeq, entries[0].Seq)
 	assert.Equal(t, "raise setpoint", entries[0].Comment)
 	assert.Equal(t, "raise setpoint", entries[1].Comment, "deduped re-POST is still logged")
 	assert.Equal(t, "trim setpoint", entries[2].Comment)

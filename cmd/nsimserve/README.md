@@ -51,6 +51,15 @@ Flags:
   JSON to `<file>` on `SIGINT`/`SIGTERM`. The write is atomic
   (temporary file in the same directory, renamed over the target);
   a failed write is logged to stderr and exits 1.
+- `-resume <file>` — Optional: persist and restore the complete
+  server state. If `<file>` exists, the server loads it and installs
+  the saved plant, simulated clock, paused state, pacing, queued and
+  journaled commands, operation log, remaining scenario script, and
+  run identifiers. If it does not exist, the server starts fresh
+  and creates it on shutdown. On `SIGINT`/`SIGTERM`, a clean
+  `POST /shutdown`, or an HTTP server exit, it atomically overwrites
+  `<file>`. The saved scenario, plant, and command paths are metadata
+  only; the restored plant and histories come from the file itself.
 
 ## Operating rules for agents/clients
 
@@ -177,13 +186,43 @@ comments posted with `POST /logs {"comment":"..."}` interleave with
 operations in the same timestamp order, so the log reads as a logbook.
 The log never deduplicates: re-submitting an identical command is
 journaled once for replay but logged every time it is submitted.
+Every write that appends a log entry returns its id:
+`POST /commands` returns it per scheduled operation as `logSeq`
+(the same value as `seq` in `GET /logs`; the top-level `seq` in
+the `{"deduped":true}` response is the **journal** seq and differs),
+`POST /logs` returns it as `seq` alongside `comment`/`atMs`, and
+`PUT /controls/{key}` returns it as `seq` alongside the control
+entry. The shared log has a single server-owned sequence counter,
+and `seq` is unique per run (it resets after `/reset` or a restart
+unless `-resume` preserves it). The `scheduled[].seq` value in a
+`/commands` response is the queue seq, not the log seq; use
+`scheduled[].logSeq` to reference the operation in `/logs`.
+
+This is a **shared system**: while you are analyzing the
+situation, other operators, agents, or scripts may submit
+operations and comments. Track the highest log `seq` you have
+seen (`lastSeq`). Before deciding and before every control write,
+read `/logs` again and compare the highest returned `seq`
+against `lastSeq`. Any `seq > lastSeq` means another user
+changed the plant or posted new information during your
+analysis; read those new entries and account for them in your
+decision. If `/logs` returns no entries above `lastSeq`, your
+observed state is unchanged. Then re-read the controls and
+sensors you depend on, because another user's queued or immediate
+write may have changed them. Update `lastSeq` to the highest
+`seq` you processed after reviewing the new entries. Use the
+returned seq to cite the entry in follow-up messages.
 
 **The log is a comms channel.** Staff and agents use plain comments
 (no control) to coordinate: `POST /logs {"comment":"..."}` sends an
-announcement or observation at the current sim time, and `GET /logs`
-is where recipients read it. Agents should check `/logs`
-periodically — after stepping, before issuing a control action, and
-whenever a sensor value changes unexpectedly — and post short status
+announcement or observation at the current sim time. To avoid
+re-reading the full log on every poll, use a last-seen `seq`
+inclusive baseline with `lo=<lastSeq+1>` and an exclusive upper
+bound `hi=<lastSeq+2>` (so it returns only the next entry if one
+exists), or use `lo=<lastSeq+1>` alone to return all newer
+entries. Agents should check `/logs` periodically — after
+stepping, before issuing a control action, and whenever a
+sensor value changes unexpectedly — and post short status
 notes of their own so the log shows a conversation, not just a
 record.
 
@@ -191,17 +230,24 @@ record.
 # Schedule two operations with rationale; the comments ride along.
 # The first command's comment is the '#' line above it plus its
 # trailing '# stop the pump'; both are joined into the log entry.
+# Each scheduled entry reports its log id as logSeq (here 0 and 1,
+# matching the seq values in the GET /logs output below).
 curl -XPOST localhost:8080/commands -H 'Content-Type: text/plain' -d \
 '# RCP trip drill: stop the pump, raise setpoint 10 s later.
 0 ReactorBuilding.ReactorCoolantPump.Running 0  # stop the pump
-10000 PlantOperation.PowerSetpointTarget 90  # raise setpoint 10 s after submission'
+10000 PlantOperation.PowerSetpointTarget 90  # raise setpoint 10 s after submission' \
+| jq
+# {"scheduled":[{"seq":0,"dueMs":0,"logSeq":0},
+#                {"seq":1,"dueMs":10000,"logSeq":1}]}
 
 # Annotate the current sim time with a bare comment. This is
 # NOT a cmdfile line: there is no TimeOffset, control, or value.
 # It is just a comment posted to the log endpoint.
 curl -XPOST localhost:8080/logs \
   -H 'Content-Type: application/json' \
-  -d '{"comment":"pump stopped, watching pressure"}'
+  -d '{"comment":"pump stopped, watching pressure"}' \
+| jq
+# {"seq":2,"comment":"pump stopped, watching pressure","atMs":0}
 
 # Read the log back in timestamp order. Offsets are from
 # submission, so atMs = submission sim time + offsetMs; here
@@ -250,12 +296,36 @@ restart; see [ENDPOINTS.md](ENDPOINTS.md).)
    `GET /sensors`) and the specs; every write carries a comment.
 3. **Act** — immediate `PUT /controls/{key}`, or scheduled
    `POST /commands` (relative `offsetMs` or absolute `atMs`).
+   Record the returned `seq`/`logSeq` and update `lastSeq` after
+   you have reviewed your own entry.
 4. **Verify** — re-read the sensor/control and `/commands` `status`;
    a failed write surfaces as `status:"failed"` with `err` in
    `GET /commands`, not as a plant change.
 5. **Announce** — post a short `POST /logs` note when you act,
    and check `/logs` before your next action so the log stays a
    conversation.
+
+## Resume / shutdown
+
+`-resume <file>` makes `nsimserve` restartable. A state file contains the
+plant, simulated time, `paused`, wall pacing, queue/journal/log history,
+and remaining scenario script. Starting with the same file restores that
+state instead of building a fresh plant; a missing file starts fresh.
+Startup `-cmd` work is not
+rescheduled because it is already represented in the saved queue,
+journal, and log. Ctrl-C (`SIGINT`/`SIGTERM`) and `POST /shutdown` both
+share the clean process-shutdown path: HTTP drains, stepping stops, then
+the resume file is atomically replaced. `-saveOnShutdown` remains
+available for a plant-only export.
+
+```bash
+# First run: state.json does not exist yet, so starts fresh.
+go run ./cmd/nsimserve/ -resume state.json
+# Later run: resumes from state.json written on shutdown.
+go run ./cmd/nsimserve/ -resume state.json
+# Or request shutdown over HTTP.
+curl -XPOST localhost:8080/shutdown
+```
 
 ## Endpoints
 
@@ -273,13 +343,14 @@ answers preflight `204` with CORS headers.
 | `GET /sensors/{key}` | One sensor. Keys are `%`-encoded (`%2F`) when they contain `/`. |
 | `GET /controls` | Control-operations catalog: sorted array of `{key, part, label, kind, enum, value}` — every control the server accepts, with live value. This is the "what operations exist?" endpoint. |
 | `GET /controls/{key}` | One control; 404 if unknown. |
-| `PUT /controls/{key}` `{"value":"...", "comment":"..."}` | Apply one control immediately and journal it at the current sim time. `comment` is optional but **encouraged for every write**; it is recorded in `/logs`. 404 unknown key, 400 bad value. |
-| `POST /commands` | Accept a control-operations list: JSON envelope `{"scenario":"...","commands":[{"offsetMs":...,"atMs":...,"control":"...","value":"...","comment":"..."}]}` **or** `text/plain` lines `TimeOffset Part.Label Value` with `#` comments. `offsetMs` is relative to submission; `atMs` is absolute and wins. **Comment every command**; comments are logged with the operation. Scheduling is all-or-nothing; re-POSTing an already-journaled `(control, value, dueMs)` identity returns `{"deduped":true}`. |
+| `PUT /controls/{key}` `{"value":"...", "comment":"..."}` | Apply one control immediately and journal it at the current sim time. `comment` is optional but **encouraged for every write**; it is recorded in `/logs`. The response is the control entry plus `seq`, its `/logs` id. 404 unknown key, 400 bad value. |
+| `POST /commands` | Accept a control-operations list: JSON envelope `{"scenario":"...","commands":[{"offsetMs":...,"atMs":...,"control":"...","value":"...","comment":"..."}]}` **or** `text/plain` lines `TimeOffset Part.Label Value` with `#` comments. `offsetMs` is relative to submission; `atMs` is absolute and wins. **Comment every command**; comments are logged with the operation. Scheduling is all-or-nothing; returns `{"scheduled":[{"seq","dueMs","logSeq"}]}` where `logSeq` is the entry's id in `/logs`. Re-POSTing an already-journaled `(control, value, dueMs)` identity returns `{"deduped":true,"seq":<journal seq>}`. |
 | `GET /commands` | Journal + queue view: `{rev, entries:[{seq, text, control, value, offsetMs, dueMs, status, err}]}`. `dueMs` is the absolute sim time the command fires. |
 | `GET /commands/export` | Journaled operations as the `nsimrun -cmd *.json` envelope. Round-trip: export and replay it through `nsimrun`. |
-| `GET /logs`, `POST /logs` | Append-only timestamped log of cmdfile operations (with their attached comments) plus bare comments. `GET` returns `[{seq, kind, atMs, control, value, comment, source}]` in timestamp order; `POST {"comment":"..."}` appends a comment at the current sim time. Never deduplicated: re-submitting an identical command appends a second entry. |
+| `GET /logs`, `POST /logs` | Append-only timestamped log of cmdfile operations (with their attached comments) plus bare comments. `GET` returns `[{seq, kind, atMs, control, value, comment, source}]` in timestamp order; `POST {"comment":"..."}` appends a comment at the current sim time and returns `{"seq", "comment", "atMs"}`. Never deduplicated: re-submitting an identical command appends a second entry, with its own `seq`. |
 | `GET /alarms` | `Plant.Alarms()` (same shape as the extra `Alarms` key of `nsimrun` stdout). |
 | `GET /state` | Full plant JSON — byte-compatible with `nsimrun` stdout and `nsimrun -plant` input. The single state endpoint; there is no `/snapshot` and no `POST /state`. |
+| `POST /shutdown` | Request clean process shutdown; `{"shuttingDown":true}`. On shutdown, `-resume` and `-saveOnShutdown` files are written. |
 | `GET /scenarios` | `core.Scenarios` catalog list. |
 | `GET /` (with `-webdir`) | Static files from the web build; API routes take precedence. |
 
