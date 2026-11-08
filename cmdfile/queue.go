@@ -3,7 +3,6 @@ package cmdfile
 import (
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/chzchzchz/nsim/bridge"
 )
@@ -48,7 +47,8 @@ type Queue struct {
 }
 
 // Submit parses text (same grammar as Parse), schedules each
-// command at nowNs + offset (negative offsets clamp to nowNs),
+// command by its timing field (absolute AtMs when present,
+// otherwise nowNs + offset; times before now clamp to nowNs),
 // and returns a parse error rejecting the whole batch if any
 // line is malformed.
 func (q *Queue) Submit(text string, nowNs int64) error {
@@ -64,9 +64,10 @@ func (q *Queue) Submit(text string, nowNs int64) error {
 	return nil
 }
 
-// SubmitAll schedules already-parsed commands at nowNs + offset
-// (negative offsets clamp to nowNs) and returns the new entries.
-// The caller supplies the display text for each command.
+// SubmitAll schedules already-parsed commands by their timing
+// (absolute AtMs when present, otherwise nowNs + offset; both
+// clamp to nowNs) and returns the new entries. The caller
+// supplies the display text for each command.
 func (q *Queue) SubmitAll(cmds []Command, texts []string, nowNs int64) []Entry {
 	entries := q.scheduleAll(cmds, texts, nowNs)
 	q.entries = append(q.entries, entries...)
@@ -83,8 +84,7 @@ func (q *Queue) schedule(cmds []Command, lines []string, nowNs int64) []Entry {
 func (q *Queue) scheduleAll(cmds []Command, texts []string, nowNs int64) []Entry {
 	out := make([]Entry, 0, len(cmds))
 	for i, c := range cmds {
-		offsetNs := c.TimeOffsetMs * int64(time.Millisecond)
-		due := max(nowNs, nowNs+offsetNs)
+		due := c.DueNs(nowNs)
 		text := ""
 		if i < len(texts) {
 			text = texts[i]

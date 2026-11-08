@@ -44,7 +44,7 @@ func TestParseJSON(t *testing.T) {
 func TestWriteJSONRoundTrip(t *testing.T) {
 	want := []Command{
 		{TimeOffsetMs: 0, ControlKey: "Part/Label", Value: "1"},
-		{TimeOffsetMs: 2500, ControlKey: "Part.Label", Value: "0.5"},
+		{TimeOffsetMs: 2500, ControlKey: "Part.Label", Value: "0.5", Comment: "why this op"},
 	}
 	var buf bytes.Buffer
 	require.NoError(t, WriteJSON(&buf, want))

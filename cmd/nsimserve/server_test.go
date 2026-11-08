@@ -286,6 +286,120 @@ func TestCommandsExportRoutePattern(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &export))
 }
 
+func TestLogsEndpoint(t *testing.T) {
+	_, ts := newPausedServer(t, "nsimserve")
+
+	// POST /commands with comments: operations land in the log
+	// with their attached comment at their due timestamp.
+	code, _ := doOK(t, "POST", ts.URL+"/commands",
+		`{"commands":[{"offsetMs":0,"control":"PlantOperation/PowerSetpointTarget","value":"80","comment":"raise setpoint"}]}`)
+	require.Equal(t, http.StatusOK, code)
+
+	// Re-POST of the identical batch dedupes the journal but must
+	// still append a second log entry (no dedup in /logs).
+	code, body := doOK(t, "POST", ts.URL+"/commands",
+		`{"commands":[{"offsetMs":0,"control":"PlantOperation/PowerSetpointTarget","value":"80","comment":"raise setpoint"}]}`)
+	require.Equal(t, http.StatusOK, code)
+	assert.Contains(t, string(body), `"deduped"`)
+
+	// PUT with a comment also logs.
+	code, _ = doOK(t, "PUT", ts.URL+"/controls/PlantOperation%2FPowerSetpointTarget",
+		`{"value":"85","comment":"trim setpoint"}`)
+	require.Equal(t, http.StatusOK, code)
+
+	// Bare comment via POST /logs.
+	code, _ = doOK(t, "POST", ts.URL+"/logs", `{"comment":"watching pressure"}`)
+	require.Equal(t, http.StatusOK, code)
+
+	// Empty comment is rejected.
+	code, _ = doOK(t, "POST", ts.URL+"/logs", `{"comment":"  "}`)
+	assert.Equal(t, http.StatusBadRequest, code)
+
+	code, body = doOK(t, "GET", ts.URL+"/logs", "")
+	require.Equal(t, http.StatusOK, code)
+	var entries []logView
+	require.NoError(t, json.Unmarshal(body, &entries))
+	ops := 0
+	comments := 0
+	for _, e := range entries {
+		switch e.Kind {
+		case "operation":
+			ops++
+		case "comment":
+			comments++
+		}
+	}
+	assert.Equal(t, 3, ops, "two /commands submissions plus one PUT")
+	assert.Equal(t, 1, comments)
+	assert.Equal(t, "raise setpoint", entries[0].Comment)
+	assert.Equal(t, "raise setpoint", entries[1].Comment, "deduped re-POST is still logged")
+	assert.Equal(t, "trim setpoint", entries[2].Comment)
+	assert.Equal(t, "watching pressure", entries[3].Comment)
+	// seq is monotonically increasing and timestamps never regress.
+	for i := 1; i < len(entries); i++ {
+		assert.Greater(t, entries[i].Seq, entries[i-1].Seq)
+		assert.GreaterOrEqual(t, entries[i].AtMs, entries[i-1].AtMs)
+	}
+}
+
+func TestLogsAbsoluteVsRelative(t *testing.T) {
+	_, ts := newPausedServer(t, "nsimserve")
+	// Advance the sim clock to 5000 ms, then post one relative
+	// and one absolute command. Both must appear in /logs at
+	// their resolved fire times.
+	code, _ := doOK(t, "POST", ts.URL+"/step", `{"ms":5000}`)
+	require.Equal(t, http.StatusOK, code)
+
+	code, _ = doOK(t, "POST", ts.URL+"/commands",
+		`{"commands":[{"atMs":20000,"control":"PlantOperation/PowerSetpointTarget","value":"80","comment":"absolute fire at 20000"}]}`)
+	require.Equal(t, http.StatusOK, code)
+	code, _ = doOK(t, "POST", ts.URL+"/commands",
+		`{"commands":[{"offsetMs":10000,"control":"PlantOperation/PowerSetpointTarget","value":"70","comment":"relative fire at 15000"}]}`)
+	require.Equal(t, http.StatusOK, code)
+
+	code, body := doOK(t, "GET", ts.URL+"/logs", "")
+	require.Equal(t, http.StatusOK, code)
+	var entries []logView
+	require.NoError(t, json.Unmarshal(body, &entries))
+	require.Len(t, entries, 2)
+	assert.Equal(t, int64(20000), entries[0].AtMs)
+	assert.Equal(t, "absolute fire at 20000", entries[0].Comment)
+	assert.Equal(t, int64(15000), entries[1].AtMs)
+	assert.Equal(t, "relative fire at 15000", entries[1].Comment)
+}
+
+func TestPostCommandsAbsoluteAtMs(t *testing.T) {
+	_, ts := newPausedServer(t, "nsimserve")
+	// Advance the sim clock to 5000 ms.
+	code, _ := doOK(t, "POST", ts.URL+"/step", `{"ms":5000}`)
+	require.Equal(t, http.StatusOK, code)
+
+	// Absolute: atMs 20000 fires at 20000, not at 5000 + offset.
+	code, _ = doOK(t, "POST", ts.URL+"/commands",
+		`{"commands":[{"atMs":20000,"offsetMs":1,"control":"PlantOperation/PowerSetpointTarget","value":"80","comment":"absolute"}]}`)
+	require.Equal(t, http.StatusOK, code)
+
+	// Relative posts from the same base prove the distinction.
+	code, body := doOK(t, "GET", ts.URL+"/commands", "")
+	require.Equal(t, http.StatusOK, code)
+	assert.Contains(t, string(body), `"dueMs": 20000`, "absolute command must fire at atMs")
+
+	code, _ = doOK(t, "POST", ts.URL+"/commands",
+		`{"commands":[{"offsetMs":10000,"control":"PlantOperation/PowerSetpointTarget","value":"70","comment":"relative"}]}`)
+	require.Equal(t, http.StatusOK, code)
+	code, body = doOK(t, "GET", ts.URL+"/commands", "")
+	require.Equal(t, http.StatusOK, code)
+	assert.Contains(t, string(body), `"dueMs": 15000`, "relative command fires at submission(5000)+offset(10000)")
+
+	// Step to just past both and verify the log carries the
+	// absolute fire times.
+	code, _ = doOK(t, "POST", ts.URL+"/step", `{"ms":16000}`)
+	require.Equal(t, http.StatusOK, code)
+	code, body = doOK(t, "GET", ts.URL+"/commands", "")
+	require.Equal(t, http.StatusOK, code)
+	assert.Contains(t, string(body), `"status": "done"`)
+}
+
 func TestResetBumpsRunID(t *testing.T) {
 	_, ts := newPausedServer(t, "nsimserve")
 	code, body := doOK(t, "POST", ts.URL+"/reset", `{"scenario":""}`)

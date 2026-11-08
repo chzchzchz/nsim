@@ -152,7 +152,7 @@ func webdirHandler(dir string, api http.Handler) http.Handler {
 func isAPIPath(clean string) bool {
 	for _, prefix := range []string{
 		"/livez", "/readyz", "/status", "/scenarios", "/sensors",
-		"/controls", "/commands", "/pause", "/resume", "/step",
+		"/controls", "/commands", "/logs", "/pause", "/resume", "/step",
 		"/reset", "/timestep", "/speed", "/alarms", "/state", "/metrics",
 	} {
 		if clean == prefix || strings.HasPrefix(clean, prefix+"/") {

@@ -1,0 +1,35 @@
+# nsimserve endpoints
+
+Server-side reference for `cmd/nsimserve` lifecycle controls that
+live outside the plant-facing surface (`README.md` covers reading
+controls/sensors, scheduling `POST /commands` with comments, and the
+`/logs` audit trail).
+
+Every non-2xx response returns the uniform envelope
+`{"error":"<message>","code":<http status>}`. `OPTIONS` on any route
+answers preflight `204` with CORS headers.
+
+Base: `http://127.0.0.1:8080` (or `-addr`).
+
+## Lifecycle
+
+| Method & path | Body / response |
+|---|---|
+| `POST /pause`, `POST /resume` | Stop/start the loop; `{"paused":bool}`. |
+| `POST /step` | Paused-mode only (409 while running). Bodies are mutually exclusive: `{"ms":N}` advances N ms quantized to `-timestep`; `{"steps":N}` advances N steps (≤1e6); `{}` advances one step. Returns `{"steps":N}`. |
+| `POST /reset` `{"scenario":"...","plant":"..."}` | Rebuild the plant via `internal/plantinit`; empty fields reuse the startup lineup (`-scenario`/`-plant` IDs, not file contents). Clears clock, queue, journal (dedup), and log; reschedules startup `-cmd` commands; bumps `runId`. `GET /readyz` is 503 during the rebuild. |
+| `POST /timestep {"dtMs":10}` | Hot-change step duration; returns `{"timestepMs":10}`. |
+| `POST /speed {"stepsPerSecond":100}` | Hot-change wall pacing (≤1e6); returns `{"stepsPerSecond":100}`. |
+| `-paused` (flag) | Start paused; `POST /step` only advances while paused (409 otherwise). |
+
+## Clock and pacing
+
+- `-timestep 1ms` at `-stepsPerSecond 1000` is real-time; smaller
+  timesteps with high speed move the plant faster than wall clock.
+- `/status` reports the live `simTimeMs`, `timestepMs`,
+  `stepsPerSecond`, `running`/`paused`, `rev`, and `runId` (bumps on
+  `/reset`). `GET /readyz` is `{"ready":true}` while stepping and 503
+  with `{}` while `/reset` rebuilds.
+- `POST /commands` offsets are relative to the submission sim time,
+  so log timestamps (`atMs`) are `submission + offset`; scheduled
+  status (`pending`/`done`/`failed`) is in `GET /commands`.

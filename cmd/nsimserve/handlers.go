@@ -28,6 +28,7 @@ func methodAllowed(r *http.Request) bool {
 		"/scenarios":       {http.MethodGet},
 		"/sensors":         {http.MethodGet},
 		"/commands/export": {http.MethodGet},
+		"/logs":            {http.MethodGet, http.MethodPost},
 		"/alarms":          {http.MethodGet},
 		"/state":           {http.MethodGet},
 		"/metrics":         {http.MethodGet},
@@ -139,6 +140,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /commands", s.handleCommands)
 	mux.HandleFunc("POST /commands", s.handlePostCommands)
 	mux.HandleFunc("GET /commands/export", s.handleCommandsExport)
+	mux.HandleFunc("GET /logs", s.handleLogs)
+	mux.HandleFunc("POST /logs", s.handlePostLog)
 	mux.HandleFunc("POST /pause", s.handlePause)
 	mux.HandleFunc("POST /resume", s.handleResume)
 	mux.HandleFunc("POST /step", s.handleStep)
@@ -336,7 +339,8 @@ func (s *Server) handlePutControl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Value string `json:"value"`
+		Value   string `json:"value"`
+		Comment string `json:"comment,omitempty"`
 	}
 	if err := decodeJSONBody(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid control value: %v", err))
@@ -357,7 +361,9 @@ func (s *Server) handlePutControl(w http.ResponseWriter, r *http.Request) {
 	resolved := cmdfile.ResolveKey(s.controls, key)
 	// Journal unconditionally: momentary enum controls must fire on
 	// every PUT. Dedup only governs batch re-submission.
-	s.journal.Add(cmdfile.Command{ControlKey: resolved, Value: body.Value}, s.simTimeNs)
+	logged := cmdfile.Command{ControlKey: resolved, Value: body.Value, Comment: body.Comment}
+	s.journal.Add(logged, s.simTimeNs)
+	s.log.AddOperation(logged, s.simTimeNs, "")
 	s.rev++
 	writeJSON(w, http.StatusOK, controlEntry{
 		Key: resolved, Part: s.controls[resolved].Part, Label: s.controls[resolved].Label,
@@ -496,12 +502,16 @@ func (s *Server) handlePostCommands(w http.ResponseWriter, r *http.Request) {
 	// the journal (the queue entry is still recorded for UI polling).
 	deduped := make([]bool, len(cmds))
 	for i, c := range cmds {
-		dueNs := s.simTimeNs + max(int64(0), c.TimeOffsetMs*int64(time.Millisecond))
+		dueNs := c.DueNs(s.simTimeNs)
 		deduped[i] = s.journal.Has(resolved[i], c.Value, dueNs)
 	}
 	texts := make([]string, 0, len(cmds))
 	for _, c := range cmds {
-		texts = append(texts, fmt.Sprintf("%d %s %s", c.TimeOffsetMs, c.ControlKey, c.Value))
+		if c.AtMs != nil {
+			texts = append(texts, fmt.Sprintf("@%d %s %s", *c.AtMs, c.ControlKey, c.Value))
+		} else {
+			texts = append(texts, fmt.Sprintf("%d %s %s", c.TimeOffsetMs, c.ControlKey, c.Value))
+		}
 	}
 	entries := s.queue.SubmitAll(cmds, texts, s.simTimeNs)
 	out := make([]scheduledEntry, 0, len(entries))
@@ -514,10 +524,16 @@ func (s *Server) handlePostCommands(w http.ResponseWriter, r *http.Request) {
 			journalCmd.ControlKey = resolved[i]
 			s.journal.Add(journalCmd, e.DueNs)
 		}
+		// The log records every submission, including ones the
+		// journal dedupes: it is the audit trail, not the
+		// replay list.
+		logCmd := e.Cmd
+		logCmd.ControlKey = resolved[i]
+		s.log.AddOperation(logCmd, e.DueNs, "")
 		out = append(out, scheduledEntry{Seq: e.Seq, DueMs: dueMs})
 	}
 	if len(entries) > 0 && allTrue(deduped) {
-		dueNs := s.simTimeNs + max(int64(0), cmds[0].TimeOffsetMs*int64(time.Millisecond))
+		dueNs := cmds[0].DueNs(s.simTimeNs)
 		origSeq := s.journal.SeqOf(resolved[0], cmds[0].Value, dueNs)
 		s.mu.Unlock()
 		writeJSON(w, http.StatusOK, map[string]any{"deduped": true, "seq": origSeq})
@@ -525,6 +541,60 @@ func (s *Server) handlePostCommands(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, commandsResponse{Scheduled: out})
+}
+
+// logView is the wire shape of one log entry.
+type logView struct {
+	Seq     int64         `json:"seq"`
+	Kind    cmdfile.LogKind `json:"kind"`
+	AtMs    int64         `json:"atMs"`
+	Control string        `json:"control,omitempty"`
+	Value   string        `json:"value,omitempty"`
+	Comment string        `json:"comment,omitempty"`
+	Source  string        `json:"source,omitempty"`
+}
+
+// handleLogs returns the append-only operation log: every
+// command-file operation (with its attached comment) and every
+// bare comment, ordered by simulated timestamp. Unlike the
+// journal, the log never deduplicates, so re-submitting the
+// same command appends a second entry.
+func (s *Server) handleLogs(w http.ResponseWriter, _ *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entries := s.log.Entries()
+	out := make([]logView, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, logView{
+			Seq: e.Seq, Kind: e.Kind, AtMs: e.AtMs,
+			Control: e.Control, Value: e.Value,
+			Comment: e.Comment, Source: e.Source,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handlePostLog appends a bare operator comment at the current
+// simulated time. Comments are encouraged alongside operations
+// so the log reads as an annotated record of the run.
+func (s *Server) handlePostLog(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Comment string `json:"comment"`
+	}
+	if err := decodeJSONBody(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid log comment: %v", err))
+		return
+	}
+	if strings.TrimSpace(body.Comment) == "" {
+		writeError(w, http.StatusBadRequest, "comment must not be empty")
+		return
+	}
+	s.mu.Lock()
+	s.log.AddComment(body.Comment, s.simTimeNs)
+	s.rev++
+	atMs := s.simTimeNs / int64(time.Millisecond)
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"comment": body.Comment, "atMs": atMs})
 }
 
 func allTrue(flags []bool) bool {
@@ -632,6 +702,7 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 		s.queue.SubmitAll(reloadCmds, texts, 0)
 		for _, e := range s.queue.Entries() {
 			s.journal.Add(e.Cmd, e.DueNs)
+			s.log.AddOperation(e.Cmd, e.DueNs, "")
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]int64{"runId": s.runId})

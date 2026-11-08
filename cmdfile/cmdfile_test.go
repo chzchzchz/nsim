@@ -56,6 +56,52 @@ func TestParse(t *testing.T) {
 		_, err := Parse(strings.NewReader("abc Part.Label 1\n"))
 		require.Error(t, err)
 	})
+
+	t.Run("absolute atMs preserved through JSON", func(t *testing.T) {
+		cmds, err := ParseJSON(strings.NewReader(
+			`{"commands":[{"atMs":15000,"control":"Part/Label","value":"1","comment":"later"}]}`))
+		require.NoError(t, err)
+		require.Len(t, cmds, 1)
+		require.NotNil(t, cmds[0].AtMs)
+		assert.Equal(t, int64(15000), *cmds[0].AtMs)
+		assert.Equal(t, "later", cmds[0].Comment)
+	})
+}
+
+// Comment attachment: a '#' block directly above a command is
+// its rationale and is recorded with the operation. A blank line
+// detaches the block so a header comment never leaks onto the
+// first command.
+func TestParse_AttachesComments(t *testing.T) {
+	cmds, err := Parse(strings.NewReader(
+		"# file header, not attached\n"+
+			"\n"+
+			"# trip the pump\n"+
+			"# because pressure is rising\n"+
+			"0 Part.A 1  # stop the pump\n"+
+			"\n"+
+			"# detached header\n"+
+			"\n"+
+			"1000 Part.B 2\n"+
+			"2000 Part.C 3\n"))
+	require.NoError(t, err)
+	require.Len(t, cmds, 3)
+	assert.Equal(t, "trip the pump because pressure is rising stop the pump", cmds[0].Comment)
+	assert.Empty(t, cmds[1].Comment, "header separated by a blank line must not attach")
+	assert.Empty(t, cmds[2].Comment)
+}
+
+func TestDueNs(t *testing.T) {
+	now := int64(5000 * 1_000_000)
+	// Relative: fires at submission + offset.
+	assert.Equal(t, int64(15000*1_000_000), Command{TimeOffsetMs: 10000}.DueNs(now))
+	// Absolute: fires at atMs regardless of submission time.
+	at := int64(20000)
+	assert.Equal(t, int64(20000*1_000_000), Command{AtMs: &at, TimeOffsetMs: 1}.DueNs(now))
+	// Past times clamp to now.
+	at = int64(1000)
+	assert.Equal(t, now, Command{AtMs: &at}.DueNs(now))
+	assert.Equal(t, now, Command{TimeOffsetMs: -100}.DueNs(now))
 }
 
 func TestResolveKey(t *testing.T) {

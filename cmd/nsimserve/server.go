@@ -39,6 +39,7 @@ type Server struct {
 	sensors  bridge.SensorMap
 	queue    *cmdfile.Queue
 	journal  *cmdfile.Journal
+	log      *cmdfile.Log
 	script   []core.ScriptCommand
 	scenario *core.Scenario
 	progress *core.RunProgress
@@ -114,6 +115,7 @@ func NewServer(siteName, scenarioID, plantPath, cmdPath string, paused bool, ste
 		dt:             dt,
 		queue:          &cmdfile.Queue{},
 		journal:        &cmdfile.Journal{},
+		log:            &cmdfile.Log{},
 	}
 	s.refreshMapsLocked()
 	if sc != nil {
@@ -132,6 +134,7 @@ func NewServer(siteName, scenarioID, plantPath, cmdPath string, paused bool, ste
 		s.queue.SubmitAll(cmds, texts, 0)
 		for _, e := range s.queue.Entries() {
 			s.journal.Add(e.Cmd, e.DueNs)
+			s.log.AddOperation(e.Cmd, e.DueNs, "")
 		}
 	}
 	s.ready.Store(true)
@@ -178,10 +181,12 @@ func (s *Server) fireDueScriptLocked(nowNs int64) {
 	copy(fired, s.script[:due])
 	core.ApplyScript(&s.script, nowNs, s.controls)
 	for _, cmd := range fired {
-		s.journal.Add(cmdfile.Command{
+		logged := cmdfile.Command{
 			ControlKey: cmd.ControlKey,
 			Value:      cmd.Value,
-		}, nowNs)
+		}
+		s.journal.Add(logged, nowNs)
+		s.log.AddOperation(logged, nowNs, "script")
 	}
 }
 
@@ -263,6 +268,7 @@ func (s *Server) resetLocked(scenarioID, plantPath string) error {
 	s.refreshMapsLocked()
 	s.queue.Clear()
 	s.journal.Clear()
+	s.log.Clear()
 	s.simTimeNs = 0
 	s.stepsTotal = 0
 	s.rev = 0

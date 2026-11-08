@@ -30,6 +30,14 @@ func TestQueueSubmit(t *testing.T) {
 		assert.Equal(t, int64(7_000_000), q.Entries()[0].DueNs)
 	})
 
+	t.Run("absolute atMs wins over offset", func(t *testing.T) {
+		var q Queue
+		at := int64(20000)
+		entries := q.SubmitAll([]Command{{AtMs: &at, TimeOffsetMs: 5, ControlKey: "K/V", Value: "1"}}, nil, 3_000_000)
+		require.Len(t, entries, 1)
+		assert.Equal(t, int64(20_000_000_000), entries[0].DueNs)
+	})
+
 	t.Run("malformed batch rejects atomically", func(t *testing.T) {
 		var q Queue
 		err := q.Submit("100 K V\nbadline\n", 0)
