@@ -19,7 +19,7 @@ func TestResumeStateRoundTripRestoresRun(t *testing.T) {
 	require.Equal(t, 200, code)
 	code, _ = doOK(t, "POST", ts.URL+"/logs", `{"comment":"before restart"}`)
 	require.Equal(t, 200, code)
-	code, _ = doOK(t, "POST", ts.URL+"/step", `{"ms":5}`)
+	code, _ = doOK(t, "POST", ts.URL+"/sim/step", `{"ms":5}`)
 	require.Equal(t, 200, code)
 
 	resumePath := t.TempDir() + "/resume.json"
@@ -89,7 +89,7 @@ func TestReadResumeStateReportsInvalidFields(t *testing.T) {
 
 func TestShutdownEndpointSignalsServer(t *testing.T) {
 	s, ts := newPausedServer(t, "nsimserve")
-	code, body := doOK(t, "POST", ts.URL+"/shutdown", "")
+	code, body := doOK(t, "POST", ts.URL+"/sim/shutdown", "")
 	require.Equal(t, 200, code)
 	assert.Contains(t, string(body), `"shuttingDown"`)
 	select {
@@ -105,7 +105,7 @@ func TestShutdownEndpointIsIdempotentConcurrently(t *testing.T) {
 	for range 8 {
 		go func() {
 			w := httptest.NewRecorder()
-			s.handleShutdown(w, httptest.NewRequest("POST", "/shutdown", nil))
+			s.handleShutdown(w, httptest.NewRequest("POST", "/sim/shutdown", nil))
 			assert.Equal(t, 200, w.Code)
 			done <- struct{}{}
 		}()

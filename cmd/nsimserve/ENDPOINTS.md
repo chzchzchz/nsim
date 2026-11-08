@@ -15,13 +15,14 @@ Base: `http://127.0.0.1:8080` (or `-addr`).
 
 | Method & path | Body / response |
 |---|---|
-| `POST /pause`, `POST /resume` | Stop/start the loop; `{"paused":bool}`. |
-| `POST /shutdown` | Request clean process shutdown; `{"shuttingDown":true}`. Shares the signal-shutdown path and writes `-resume`/`-saveOnShutdown` files when configured. |
-| `POST /step` | Paused-mode only (409 while running). Bodies are mutually exclusive: `{"ms":N}` advances N ms quantized to `-timestep`; `{"steps":N}` advances N steps (≤1e6); `{}` advances one step. Returns `{"steps":N}`. |
-| `POST /reset` `{"scenario":"...","plant":"..."}` | Rebuild the plant via `internal/plantinit`; empty fields reuse the startup lineup (`-scenario`/`-plant` IDs, not file contents). Clears clock, queue, journal (dedup), and log; reschedules startup `-cmd` commands; bumps `runId`. `GET /readyz` is 503 during the rebuild. |
-| `POST /timestep {"dtMs":10}` | Hot-change step duration; returns `{"timestepMs":10}`. |
-| `POST /speed {"stepsPerSecond":100}` | Hot-change wall pacing (≤1e6); returns `{"stepsPerSecond":100}`. |
-| `-paused` (flag) | Start paused; `POST /step` only advances while paused (409 otherwise). |
+| `GET /sim/scenarios` | `core.Scenarios` catalog list. |
+| `POST /sim/pause`, `POST /sim/resume` | Stop/start the loop; `{"paused":bool}`. |
+| `POST /sim/shutdown` | Request clean process shutdown; `{"shuttingDown":true}`. Shares the signal-shutdown path and writes `-resume`/`-saveOnShutdown` files when configured. |
+| `POST /sim/step` | Paused-mode only (409 while running). Bodies are mutually exclusive: `{"ms":N}` advances N ms quantized to `-timestep`; `{"steps":N}` advances N steps (≤1e6); `{}` advances one step. Returns `{"steps":N}`. |
+| `POST /sim/reset` `{"scenario":"...","plant":"..."}` | Rebuild the plant via `internal/plantinit`; empty fields reuse the startup lineup (`-scenario`/`-plant` IDs, not file contents). Clears clock, queue, journal (dedup), and log; reschedules startup `-cmd` commands; bumps `runId`. `GET /readyz` is 503 during the rebuild. |
+| `POST /sim/timestep {"dtMs":10}` | Hot-change step duration; returns `{"timestepMs":10}`. |
+| `POST /sim/speed {"stepsPerSecond":100}` | Hot-change wall pacing (≤1e6); returns `{"stepsPerSecond":100}`. |
+| `-paused` (flag) | Start paused; `POST /sim/step` only advances while paused (409 otherwise). |
 | `-resume <file>` (flag) | Load complete server state at startup and atomically rewrite it on clean shutdown; startup `-cmd` work is not rescheduled because the saved queue/journal/log carry it. |
 
 ## Clock and pacing
@@ -30,8 +31,8 @@ Base: `http://127.0.0.1:8080` (or `-addr`).
   timesteps with high speed move the plant faster than wall clock.
 - `/status` reports the live `simTimeMs`, `timestepMs`,
   `stepsPerSecond`, `running`/`paused`, `rev`, `latestSeq`, and `runId`
-  (bumps on `/reset`). `GET /readyz` is `{"ready":true}` while
-  stepping and 503 with `{}` while `/reset` rebuilds.
+  (bumps on `/sim/reset`). `GET /readyz` is `{"ready":true}` while
+  stepping and 503 with `{}` while `/sim/reset` rebuilds.
 - `POST /commands` offsets are relative to the submission sim time,
   so log timestamps (`atMs`) are `submission + offset`; scheduled
   status (`pending`/`done`/`failed`) is in `GET /commands`.

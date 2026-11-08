@@ -19,11 +19,11 @@ import (
 // Request bounds shared by flags and HTTP handlers so the two entry
 // points cannot disagree about what is allowed.
 const (
-	// maxStepsPerSecond caps wall pacing (flags and POST /speed alike).
+	// maxStepsPerSecond caps wall pacing (flags and POST /sim/speed alike).
 	maxStepsPerSecond = 1_000_000
-	// maxTimestepMs caps a single simulated step from POST /timestep.
+	// maxTimestepMs caps a single simulated step from POST /sim/timestep.
 	maxTimestepMs = 60_000
-	// maxStepRequest caps the steps one POST /step may advance.
+	// maxStepRequest caps the steps one POST /sim/step may advance.
 	maxStepRequest = 1_000_000
 	// maxRequestBody caps control-command and control-value bodies.
 	maxRequestBody = 1 << 20
@@ -57,14 +57,18 @@ type Server struct {
 	rev            int64
 	stepsTotal     int64
 
-	// ready drives /readyz transitions during /reset rebuilds.
+	// ready drives /readyz transitions during /sim/reset rebuilds.
 	ready atomic.Bool
 
-	// shutdown is closed by POST /shutdown; main owns process
+	// shutdown is closed by POST /sim/shutdown; main owns process
 	// teardown and observes this signal.
 	shutdown chan struct{}
-	// shutdownOnce makes concurrent POST /shutdown requests safe.
+	// shutdownOnce makes concurrent POST /sim/shutdown requests safe.
 	shutdownOnce sync.Once
+
+	// routes is built once in NewServer; methodAllowed and isAPIPath
+	// read it on every request without re-allocating the table.
+	routes []route
 }
 
 // NewServer builds a server around an initial plant. script and
@@ -124,6 +128,7 @@ func NewServer(siteName, scenarioID, plantPath, cmdPath string, paused bool, ste
 		log:            &cmdfile.Log{},
 		shutdown:       make(chan struct{}),
 	}
+	s.routes = s.buildRoutes()
 	s.refreshMapsLocked()
 	if sc != nil {
 		// Progress is created inline in /status; a scenario's
@@ -199,7 +204,7 @@ func (s *Server) fireDueScriptLocked(nowNs int64) {
 
 // loop runs the stepping ticker until stop is closed. Pacing a
 // fresh timer each iteration (rather than a fixed ticker) lets the
-// cadence pick up POST /speed changes immediately.
+// cadence pick up POST /sim/speed changes immediately.
 func (s *Server) loop(stop <-chan struct{}, done chan<- struct{}) {
 	defer close(done)
 	for {
@@ -246,9 +251,7 @@ func (s *Server) stepMsLocked(ms int64) int {
 		return 0
 	}
 	n := int((ms * int64(time.Millisecond)) / int64(s.dt))
-	if n > maxStepRequest {
-		n = maxStepRequest
-	}
+	n = min(n, maxStepRequest)
 	if n <= 0 {
 		n = 1
 	}

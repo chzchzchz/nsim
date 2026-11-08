@@ -57,7 +57,7 @@ Flags:
   journaled commands, operation log, remaining scenario script, and
   run identifiers. If it does not exist, the server starts fresh
   and creates it on shutdown. On `SIGINT`/`SIGTERM`, a clean
-  `POST /shutdown`, or an HTTP server exit, it atomically overwrites
+  sim shutdown request, or an HTTP server exit, it atomically overwrites
   `<file>`. The saved scenario, plant, and command paths are metadata
   only; the restored plant and histories come from the file itself.
 
@@ -193,7 +193,7 @@ the `{"deduped":true}` response is the **journal** seq and differs),
 `POST /logs` returns it as `seq` alongside `comment`/`atMs`, and
 `PUT /controls/{key}` returns it as `seq` alongside the control
 entry. The shared log has a single server-owned sequence counter,
-and `seq` is unique per run (it resets after `/reset` or a restart
+and `seq` is unique per run (it resets after a sim reset or a restart
 unless `-resume` preserves it). The `scheduled[].seq` value in a
 `/commands` response is the queue seq, not the log seq; use
 `scheduled[].logSeq` to reference the operation in `/logs`.
@@ -315,7 +315,7 @@ and remaining scenario script. Starting with the same file restores that
 state instead of building a fresh plant; a missing file starts fresh.
 Startup `-cmd` work is not
 rescheduled because it is already represented in the saved queue,
-journal, and log. Ctrl-C (`SIGINT`/`SIGTERM`) and `POST /shutdown` both
+journal, and log. Ctrl-C (`SIGINT`/`SIGTERM`) and a sim shutdown request both
 share the clean process-shutdown path: HTTP drains, stepping stops, then
 the resume file is atomically replaced. `-saveOnShutdown` remains
 available for a plant-only export.
@@ -325,8 +325,6 @@ available for a plant-only export.
 go run ./cmd/nsimserve/ -resume state.json
 # Later run: resumes from state.json written on shutdown.
 go run ./cmd/nsimserve/ -resume state.json
-# Or request shutdown over HTTP.
-curl -XPOST localhost:8080/shutdown
 ```
 
 ## Endpoints
@@ -352,8 +350,6 @@ answers preflight `204` with CORS headers.
 | `GET /logs`, `POST /logs` | Append-only timestamped log of cmdfile operations (with their attached comments) plus bare comments. `GET` returns `[{seq, kind, atMs, control, value, comment, source}]` in timestamp order. Optional half-open range `?lo=<seq>&hi=<seq>`: `seq >= lo` and `seq < hi`; absent bounds are unbounded. `POST {"comment":"..."}` appends a comment at the current sim time and returns `{"seq", "comment", "atMs"}`. Never deduplicated: re-submitting an identical command appends a second entry, with its own `seq`. |
 | `GET /alarms` | `Plant.Alarms()` (same shape as the extra `Alarms` key of `nsimrun` stdout). |
 | `GET /state` | Full plant JSON — byte-compatible with `nsimrun` stdout and `nsimrun -plant` input. The single state endpoint; there is no `/snapshot` and no `POST /state`. |
-| `POST /shutdown` | Request clean process shutdown; `{"shuttingDown":true}`. On shutdown, `-resume` and `-saveOnShutdown` files are written. |
-| `GET /scenarios` | `core.Scenarios` catalog list. |
 | `GET /` (with `-webdir`) | Static files from the web build; API routes take precedence. |
 
 Clock and pacing knobs are in

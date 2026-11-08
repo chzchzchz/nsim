@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -19,45 +18,69 @@ import (
 	"github.com/chzchzchz/nsim/internal/plantinit"
 )
 
+// route is a single ServeMux registration: method + pattern + handler.
+// The table below is the sole source of truth for routing, method
+// allowance, and API-path detection (webdir precedence). The method
+// check in Handler is derived from this table instead of a second
+// hand-maintained map, so a new route cannot drift between the two.
+type route struct {
+	method  string
+	pattern string
+	handler http.HandlerFunc
+}
+
+// buildRoutes lists every API endpoint. Patterns use the same Go
+// 1.27 ServeMux syntax as the registrations; entries with {key...}
+// are wildcard routes. It runs once in NewServer; the resulting
+// slice is stored on the Server so request handlers do not
+// re-allocate the table.
+func (s *Server) buildRoutes() []route {
+	return []route{
+		{http.MethodGet, "/livez", s.handleLivez},
+		{http.MethodGet, "/readyz", s.handleReadyz},
+		{http.MethodGet, "/status", s.handleStatus},
+		{http.MethodGet, "/sim/scenarios", s.handleScenarios},
+		{http.MethodGet, "/sensors", s.handleSensors},
+		{http.MethodGet, "/sensors/{key...}", s.handleSensor},
+		{http.MethodGet, "/controls", s.handleControls},
+		{http.MethodGet, "/controls/{key...}", s.handleControl},
+		{http.MethodPut, "/controls/{key...}", s.handlePutControl},
+		{http.MethodGet, "/commands", s.handleCommands},
+		{http.MethodPost, "/commands", s.handlePostCommands},
+		{http.MethodGet, "/commands/export", s.handleCommandsExport},
+		{http.MethodGet, "/logs", s.handleLogs},
+		{http.MethodPost, "/logs", s.handlePostLog},
+		{http.MethodPost, "/sim/pause", s.handlePause},
+		{http.MethodPost, "/sim/resume", s.handleResume},
+		{http.MethodPost, "/sim/shutdown", s.handleShutdown},
+		{http.MethodPost, "/sim/step", s.handleStep},
+		{http.MethodPost, "/sim/reset", s.handleReset},
+		{http.MethodPost, "/sim/timestep", s.handleTimestep},
+		{http.MethodPost, "/sim/speed", s.handleSpeed},
+		{http.MethodGet, "/alarms", s.handleAlarms},
+		{http.MethodGet, "/state", s.handleState},
+		{http.MethodGet, "/metrics", s.handleMetrics},
+	}
+}
+
 // methodAllowed reports whether method is valid for an exact path.
 // It is consulted before the mux so wrong-method requests get the
-// uniform 405 envelope instead of Go's plain-text default.
-func methodAllowed(r *http.Request) bool {
-	exact := map[string][]string{
-		"/livez":           {http.MethodGet},
-		"/readyz":          {http.MethodGet},
-		"/status":          {http.MethodGet},
-		"/scenarios":       {http.MethodGet},
-		"/sensors":         {http.MethodGet},
-		"/commands/export": {http.MethodGet},
-		"/logs":            {http.MethodGet, http.MethodPost},
-		"/alarms":          {http.MethodGet},
-		"/state":           {http.MethodGet},
-		"/metrics":         {http.MethodGet},
-		"/controls":        {http.MethodGet},
-		"/commands":        {http.MethodGet, http.MethodPost},
-		"/pause":           {http.MethodPost},
-		"/resume":          {http.MethodPost},
-		"/shutdown":        {http.MethodPost},
-		"/step":            {http.MethodPost},
-		"/reset":           {http.MethodPost},
-		"/timestep":        {http.MethodPost},
-		"/speed":           {http.MethodPost},
-	}
-	if methods, ok := exact[r.URL.Path]; ok {
-		return slices.Contains(methods, r.Method)
-	}
-	// Wildcard routes: /sensors/{key} (GET) and /controls/{key}
-	// (GET, PUT). The key never appears without its prefix slash,
-	// so a simple HasPrefix plus length check is exact.
-	switch {
-	case strings.HasPrefix(r.URL.Path, "/sensors/") && len(r.URL.Path) > len("/sensors/"):
-		return r.Method == http.MethodGet
-	case strings.HasPrefix(r.URL.Path, "/controls/") && len(r.URL.Path) > len("/controls/"):
-		return r.Method == http.MethodGet || r.Method == http.MethodPut
+// uniform 405 envelope instead of Go's plain-text default. Wildcard
+// routes (/sensors/{key}, /controls/{key}) and unknown paths are
+// allowed through to the mux / 404 handling.
+func (s *Server) methodAllowed(r *http.Request) bool {
+	allowed := false
+	for _, rt := range s.routes {
+		if !isAPIPattern(rt.pattern, r.URL.Path) {
+			continue
+		}
+		allowed = true
+		if rt.method == r.Method {
+			return true
+		}
 	}
 	// Unknown paths keep the fallthrough 404 handling.
-	return true
+	return !allowed
 }
 
 // errorResponse is the uniform envelope for every non-2xx response.
@@ -119,7 +142,7 @@ func writeSimpleBool(w http.ResponseWriter, key string, value bool) {
 // decodeJSONBody reads and JSON-decodes a request body with the
 // shared size cap. Empty and whitespace-only bodies decode to the
 // zero value of v, so callers that accept an empty default (POST
-// /step, POST /reset) do not need a ContentLength check that
+// /sim/step, POST /sim/reset) do not need a ContentLength check that
 // misbehaves on chunked requests (ContentLength == -1).
 func decodeJSONBody(r *http.Request, v any) error {
 	raw, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBody+1))
@@ -159,36 +182,16 @@ func cors(next http.Handler) http.Handler {
 // percent-encoded %2F slashes stay intact in the path.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /livez", s.handleLivez)
-	mux.HandleFunc("GET /readyz", s.handleReadyz)
-	mux.HandleFunc("GET /status", s.handleStatus)
-	mux.HandleFunc("GET /scenarios", s.handleScenarios)
-	mux.HandleFunc("GET /sensors", s.handleSensors)
-	mux.HandleFunc("GET /sensors/{key...}", s.handleSensor)
-	mux.HandleFunc("GET /controls", s.handleControls)
-	mux.HandleFunc("GET /controls/{key...}", s.handleControl)
-	mux.HandleFunc("PUT /controls/{key...}", s.handlePutControl)
-	mux.HandleFunc("GET /commands", s.handleCommands)
-	mux.HandleFunc("POST /commands", s.handlePostCommands)
-	mux.HandleFunc("GET /commands/export", s.handleCommandsExport)
-	mux.HandleFunc("GET /logs", s.handleLogs)
-	mux.HandleFunc("POST /logs", s.handlePostLog)
-	mux.HandleFunc("POST /pause", s.handlePause)
-	mux.HandleFunc("POST /resume", s.handleResume)
-	mux.HandleFunc("POST /shutdown", s.handleShutdown)
-	mux.HandleFunc("POST /step", s.handleStep)
-	mux.HandleFunc("POST /reset", s.handleReset)
-	mux.HandleFunc("POST /timestep", s.handleTimestep)
-	mux.HandleFunc("POST /speed", s.handleSpeed)
-	mux.HandleFunc("GET /alarms", s.handleAlarms)
-	mux.HandleFunc("GET /state", s.handleState)
-	mux.HandleFunc("GET /metrics", s.handleMetrics)
+	for _, rt := range s.routes {
+		pattern := rt.method + " " + rt.pattern
+		mux.HandleFunc(pattern, rt.handler)
+	}
 	// Unknown paths share the uniform envelope.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("unknown path %q", r.URL.Path))
 	})
 	return logRequests(cors(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !methodAllowed(r) {
+		if !s.methodAllowed(r) {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
@@ -734,7 +737,7 @@ func (s *Server) handleStep(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	if !s.paused {
 		s.mu.Unlock()
-		writeError(w, http.StatusConflict, "POST /step is only available while paused")
+		writeError(w, http.StatusConflict, "POST /sim/step is only available while paused")
 		return
 	}
 	var steps int

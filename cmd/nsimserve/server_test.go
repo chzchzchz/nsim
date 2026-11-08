@@ -17,7 +17,7 @@ import (
 )
 
 // newPausedServer returns a ready server that does not tick on a
-// loop; tests drive time explicitly via POST /step.
+// loop; tests drive time explicitly via POST /sim/step.
 func newPausedServer(t *testing.T, site string) (*Server, *httptest.Server) {
 	t.Helper()
 	s, err := NewServer(site, "", "", "", true, 1000, time.Millisecond)
@@ -197,15 +197,15 @@ func TestSensorsAndState(t *testing.T) {
 func TestStepPauseResumeAndConflict(t *testing.T) {
 	s, ts := newPausedServer(t, "nsimserve")
 	// Resume then attempt a step: 409 while running.
-	code, _ := doOK(t, "POST", ts.URL+"/resume", "")
+	code, _ := doOK(t, "POST", ts.URL+"/sim/resume", "")
 	assert.Equal(t, http.StatusOK, code)
-	code, body := doOK(t, "POST", ts.URL+"/step", `{"ms":10}`)
+	code, body := doOK(t, "POST", ts.URL+"/sim/step", `{"ms":10}`)
 	assert.Equal(t, http.StatusConflict, code)
 	assert.Contains(t, string(body), `"code":409`)
 
-	code, _ = doOK(t, "POST", ts.URL+"/pause", "")
+	code, _ = doOK(t, "POST", ts.URL+"/sim/pause", "")
 	assert.Equal(t, http.StatusOK, code)
-	code, body = doOK(t, "POST", ts.URL+"/step", `{"ms":10}`)
+	code, body = doOK(t, "POST", ts.URL+"/sim/step", `{"ms":10}`)
 	require.Equal(t, http.StatusOK, code)
 	assert.Contains(t, string(body), `"steps"`)
 	s.mu.RLock()
@@ -215,7 +215,7 @@ func TestStepPauseResumeAndConflict(t *testing.T) {
 
 func TestTimestepAndSpeedHotChange(t *testing.T) {
 	_, ts := newPausedServer(t, "nsimserve")
-	code, body := doOK(t, "POST", ts.URL+"/timestep", `{"dtMs":10}`)
+	code, body := doOK(t, "POST", ts.URL+"/sim/timestep", `{"dtMs":10}`)
 	require.Equal(t, http.StatusOK, code)
 	var tsOut struct {
 		TimestepMs float64 `json:"timestepMs"`
@@ -223,7 +223,7 @@ func TestTimestepAndSpeedHotChange(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &tsOut))
 	assert.Equal(t, float64(10), tsOut.TimestepMs)
 
-	code, body = doOK(t, "POST", ts.URL+"/speed", `{"stepsPerSecond":100}`)
+	code, body = doOK(t, "POST", ts.URL+"/sim/speed", `{"stepsPerSecond":100}`)
 	require.Equal(t, http.StatusOK, code)
 	var spOut struct {
 		StepsPerSecond int `json:"stepsPerSecond"`
@@ -238,7 +238,7 @@ func TestTimestepAndSpeedHotChange(t *testing.T) {
 	assert.Equal(t, float64(10), st.TimestepMs)
 	assert.Equal(t, 100, st.StepsPerSecond)
 
-	code, _ = doOK(t, "POST", ts.URL+"/timestep", `{"dtMs":-1}`)
+	code, _ = doOK(t, "POST", ts.URL+"/sim/timestep", `{"dtMs":-1}`)
 	assert.Equal(t, http.StatusBadRequest, code)
 }
 
@@ -413,7 +413,7 @@ func TestLogsAbsoluteVsRelative(t *testing.T) {
 	// Advance the sim clock to 5000 ms, then post one relative
 	// and one absolute command. Both must appear in /logs at
 	// their resolved fire times.
-	code, _ := doOK(t, "POST", ts.URL+"/step", `{"ms":5000}`)
+	code, _ := doOK(t, "POST", ts.URL+"/sim/step", `{"ms":5000}`)
 	require.Equal(t, http.StatusOK, code)
 
 	code, _ = doOK(t, "POST", ts.URL+"/commands",
@@ -437,7 +437,7 @@ func TestLogsAbsoluteVsRelative(t *testing.T) {
 func TestPostCommandsAbsoluteAtMs(t *testing.T) {
 	_, ts := newPausedServer(t, "nsimserve")
 	// Advance the sim clock to 5000 ms.
-	code, _ := doOK(t, "POST", ts.URL+"/step", `{"ms":5000}`)
+	code, _ := doOK(t, "POST", ts.URL+"/sim/step", `{"ms":5000}`)
 	require.Equal(t, http.StatusOK, code)
 
 	// Absolute: atMs 20000 fires at 20000, not at 5000 + offset.
@@ -459,7 +459,7 @@ func TestPostCommandsAbsoluteAtMs(t *testing.T) {
 
 	// Step to just past both and verify the log carries the
 	// absolute fire times.
-	code, _ = doOK(t, "POST", ts.URL+"/step", `{"ms":16000}`)
+	code, _ = doOK(t, "POST", ts.URL+"/sim/step", `{"ms":16000}`)
 	require.Equal(t, http.StatusOK, code)
 	code, body = doOK(t, "GET", ts.URL+"/commands", "")
 	require.Equal(t, http.StatusOK, code)
@@ -468,7 +468,7 @@ func TestPostCommandsAbsoluteAtMs(t *testing.T) {
 
 func TestResetBumpsRunID(t *testing.T) {
 	_, ts := newPausedServer(t, "nsimserve")
-	code, body := doOK(t, "POST", ts.URL+"/reset", `{"scenario":""}`)
+	code, body := doOK(t, "POST", ts.URL+"/sim/reset", `{"scenario":""}`)
 	require.Equal(t, http.StatusOK, code)
 	var out struct {
 		RunID int64 `json:"runId"`
@@ -485,7 +485,7 @@ func TestResetBumpsRunID(t *testing.T) {
 }
 
 func TestResetReloadsStartupCommands(t *testing.T) {
-	// /reset must re-arm the -cmd file so a reset run replays the
+	// /sim/reset must re-arm the -cmd file so a reset run replays the
 	// same scheduled commands as a fresh launch.
 	cmdFile := t.TempDir() + "/cmds.txt"
 	require.NoError(t, os.WriteFile(cmdFile,
@@ -496,10 +496,10 @@ func TestResetReloadsStartupCommands(t *testing.T) {
 	defer ts.Close()
 
 	// Fire the initial schedule and observe the value.
-	code, _ := doOK(t, "POST", ts.URL+"/step", `{"ms":1}`)
+	code, _ := doOK(t, "POST", ts.URL+"/sim/step", `{"ms":1}`)
 	require.Equal(t, http.StatusOK, code)
 
-	code, _ = doOK(t, "POST", ts.URL+"/reset", `{}`)
+	code, _ = doOK(t, "POST", ts.URL+"/sim/reset", `{}`)
 	require.Equal(t, http.StatusOK, code)
 
 	// After reset the queue is re-armed with the startup commands.
