@@ -189,5 +189,19 @@ func (s *SIS) Step(dt time.Duration, rcsPressure float64) SIS {
 		}
 	}
 
+	// Dead-head overheat (plans/p72_4.txt). Miniflow isolation valves
+	// close automatically at recirculation switchover
+	// (specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:61-63),
+	// so SwitchoverComplete is the miniflow-isolated state. Normal
+	// miniflow-only operation above the shutoff head is NOT
+	// dead-heading: miniflow is still flowing (SwitchoverComplete
+	// remains false).
+	hhsiDeadHead := ret.HHSIPumpRunning && ret.HHSIDriveReady && ret.SwitchoverComplete
+	ret.PumpOverheatAlarm = hhsiDeadHead
+	if hhsiDeadHead {
+		ret.PumpHeatDamageFrac = min(ret.PumpHeatDamageFrac+DeadHeadHeatRatePerSec*dt.Seconds(), 1)
+		ret.Damage = max(ret.Damage, float32(ret.PumpHeatDamageFrac))
+	}
+
 	return ret
 }

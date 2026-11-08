@@ -1578,6 +1578,45 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// EFWS pump dead-head overheat (plans/p72_4.txt). Fractions
+	// publish as percent (x100); alarms are live condition booleans.
+	for _, sub := range []string{"A", "B"} {
+		efws := &p.AuxiliaryBuilding.EmergencyFeedwaterSystem
+		for _, pk := range []string{"MotorPump", "TurbinePump"} {
+			pumpOf := func() *EFWSPump {
+				if sub == "A" {
+					if pk == "MotorPump" {
+						return &efws.SubsystemA.MotorPump
+					}
+					return &efws.SubsystemA.TurbinePump
+				}
+				if pk == "MotorPump" {
+					return &efws.SubsystemB.MotorPump
+				}
+				return &efws.SubsystemB.TurbinePump
+			}
+			base := "AuxiliaryBuilding/EmergencyFeedwaterSystem/Subsystem" + sub + "/" + pk
+			m[base+"/PumpHeatDamage"] = &bridge.Sensor{
+				Part:  base,
+				Label: pk + "/PumpHeatDamage",
+				Kind:  "percent",
+				Get: func() (string, error) {
+					return bridge.FormatSensorValue("percent",
+						100.0*pumpOf().PumpHeatDamageFrac)
+				},
+			}
+			m[base+"/PumpOverheatAlarm"] = &bridge.Sensor{
+				Part:  base,
+				Label: pk + "/PumpOverheatAlarm",
+				Kind:  "bool",
+				Get: func() (string, error) {
+					return bridge.FormatSensorValue("bool",
+						pumpOf().PumpOverheatAlarm)
+				},
+			}
+		}
+	}
+
 	// SFPCS pump running. Two pumps normal, third standby.
 	// "Normal operation requires two pumps with the third pump
 	// serving as a standby."

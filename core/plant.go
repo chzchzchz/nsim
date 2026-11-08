@@ -484,6 +484,31 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 		rcpV = max(rcpV, 0)
 		pu.Velocity = Velocity(rcpV)
 	}
+
+	// RCP seal overheat (plans/p72_4.txt). Spec-named driver:
+	// seal injection is "high-pressure seal water for the reactor
+	// coolant pump (RCP) seals"
+	// (specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:76-77),
+	// entering "between the labyrinth seals and the No. 1 seal"
+	// (specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:84-92),
+	// and pumps operate only at pressure adequate for "pump seal
+	// requirements" (specs/the_westinghouse_pressurized_water_react/chapter_4/page_076.txt:42-46).
+	// No spec pressure setpoint exists; the sim carries no separate
+	// seal-injection flow state, so the charging-pump latch is the
+	// witness. ChargingFlow>0 is NOT safe: applyLevelControl reads
+	// 0 at zero level error with the pump still running
+	// (core/cvcs.go:391-403). IsRunning() gates so a pump commanded
+	// on but without drive does not accumulate.
+	for _, pu := range ret.ReactorCoolantPumps.All() {
+		sealOK := ret.Aux.ChemicalVolumeControlSystem.ChargingPumpRunning
+		sealOverheated := pu.IsRunning() && !sealOK
+		pu.SealOverheatAlarm = sealOverheated
+		if sealOverheated {
+			pu.SealHeatDamageFrac = min(pu.SealHeatDamageFrac+SealHeatRatePerSec*dt.Seconds(), 1)
+			pu.Damage = max(pu.Damage, float32(pu.SealHeatDamageFrac))
+		}
+	}
+
 	// Lumped hydraulic view for the graph, SVG, and legacy bridge
 	// paths; single-writer sync from the group above.
 	ret.ReactorCoolantPump.Running = ret.ReactorCoolantPumps.AnyRunning()

@@ -1429,6 +1429,34 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		}
 	}
 
+	// RCP seal overheat (plans/p72_4.txt). Fractions publish as
+	// percent (x100) per the index convention; alarms are live
+	// condition booleans.
+	for _, loop := range []string{"A", "B", "C", "D"} {
+		m["ReactorBuilding/ReactorCoolantPumps/"+loop+"/SealHeatDamage"] = &bridge.Sensor{
+			Part:  "ReactorBuilding/ReactorCoolantPumps",
+			Label: loop + "/SealHeatDamage",
+			Kind:  "percent",
+			Get: func(loop string) func() (string, error) {
+				return func() (string, error) {
+					return bridge.FormatSensorValue("percent",
+						100.0*p.ReactorBuilding.ReactorCoolantPumps.ByName(loop).SealHeatDamageFrac)
+				}
+			}(loop),
+		}
+		m["ReactorBuilding/ReactorCoolantPumps/"+loop+"/SealOverheatAlarm"] = &bridge.Sensor{
+			Part:  "ReactorBuilding/ReactorCoolantPumps",
+			Label: loop + "/SealOverheatAlarm",
+			Kind:  "bool",
+			Get: func(loop string) func() (string, error) {
+				return func() (string, error) {
+					return bridge.FormatSensorValue("bool",
+						p.ReactorBuilding.ReactorCoolantPumps.ByName(loop).SealOverheatAlarm)
+				}
+			}(loop),
+		}
+	}
+
 	// Reactor pressure vessel pressure:
 	// Operating pressure 2250 psia (155 bar); design pressure 2500 psia.
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:45
@@ -2094,6 +2122,27 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 	// "a substantial portion of the flow is directed to the RCS
 	//  hot legs."
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:132-133
+	// HHSI pump dead-head overheat (plans/p72_4.txt). Fraction
+	// publishes as percent (x100); alarm is a live condition boolean.
+	m["ReactorBuilding/SafetyInjectionSystem/PumpHeatDamage"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SafetyInjectionSystem",
+		Label: "PumpHeatDamage",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				100.0*p.ReactorBuilding.SafetyInjectionSystem.PumpHeatDamageFrac)
+		},
+	}
+	m["ReactorBuilding/SafetyInjectionSystem/PumpOverheatAlarm"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/SafetyInjectionSystem",
+		Label: "PumpOverheatAlarm",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.SafetyInjectionSystem.PumpOverheatAlarm)
+		},
+	}
+
 	m["ReactorBuilding/SafetyInjectionSystem/HHSIHotLegFlow"] = &bridge.Sensor{
 		Part:  "ReactorBuilding/SafetyInjectionSystem",
 		Label: "HHSIHotLegFlow",

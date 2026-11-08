@@ -126,6 +126,29 @@ func (e *EFWS) Step(dt time.Duration,
 		ret.AutoStartElapsed += dt
 	}
 
+	// Dead-head overheat (plans/p72_4.txt). Each pump has "an orificed
+	// recirculation line ... [that] provides recirculation flow any
+	// time the pumps are operating"
+	// (specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:12-21).
+	// Running with that line isolated (RecirculationValve.Open <= 0)
+	// is dead-heading.
+	//
+	// AFWPump shadows Pump.DriveReady (core/parts.go:1809-1821) and
+	// IsRunning() reads the embedded Pump.DriveReady, which Plant.Step
+	// never sets for AFW pumps (it writes AFWPump.DriveReady,
+	// core/plant.go:1719-1722). Using IsRunning() here would always
+	// read false for EFWS pumps, so the condition uses the outer
+	// AFWPump.DriveReady that the hydraulic path (EFWSSubsystemFlow,
+	// core/efws.go:256-267) also gates on.
+	for _, p := range []*EFWSPump{&ret.SubsystemA.MotorPump, &ret.SubsystemA.TurbinePump, &ret.SubsystemB.MotorPump, &ret.SubsystemB.TurbinePump} {
+		pumpDeadHead := p.Running && p.DriveReady && p.RecirculationValve.Open <= 0
+		p.PumpOverheatAlarm = pumpDeadHead
+		if pumpDeadHead {
+			p.PumpHeatDamageFrac = min(p.PumpHeatDamageFrac+DeadHeadHeatRatePerSec*dt.Seconds(), 1)
+			p.Damage = max(p.Damage, float32(p.PumpHeatDamageFrac))
+		}
+	}
+
 	return ret
 }
 

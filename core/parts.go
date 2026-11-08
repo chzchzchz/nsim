@@ -202,6 +202,29 @@ type Pump struct {
 	// matching the SWS / CCWS / CSS / HHSI readiness behaviour.
 	// See plans/x/uat_sat_gating.md for the wiring rationale.
 	DriveReady bool
+
+	// SealHeatDamageFrac is cumulative RCP seal-face overheat damage
+	// from running without seal injection. Only meaningful on
+	// ReactorCoolantPumps members. One-way latch: it never decreases
+	// (damage state). Plans/p72_1.txt convention 1.
+	SealHeatDamageFrac float64
+
+	// SealOverheatAlarm is the LIVE condition indicator: true exactly
+	// while the pump is running without seal injection. It clears
+	// when injection is restored. The *damage* persists in
+	// SealHeatDamageFrac; the alarm does not.
+	SealOverheatAlarm bool
+
+	// PumpHeatDamageFrac is cumulative overheat damage from
+	// dead-heading (running without miniflow recirculation). Used by
+	// the EFWS pump instances that embed Pump. One-way accumulator
+	// (damage state), consistent with SealHeatDamageFrac.
+	PumpHeatDamageFrac float64
+
+	// PumpOverheatAlarm is the LIVE condition indicator: true exactly
+	// while the dead-head condition is present; clears when the
+	// condition clears.
+	PumpOverheatAlarm bool
 }
 
 // IsRunning reports whether the pump is effectively running: the
@@ -3133,6 +3156,27 @@ const (
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:29-31
 	SISHHSIShutoffHead float64 = 2800.0
 
+	// SealHeatRatePerSec is the derived RCP seal-face overheat rate
+	// (1/s). Spec states no rate (plans/p72_1.txt search scope).
+	// 1000 s (16.7 min) to full damage, anchored to the sim's
+	// pump-sized thermal-warmup scale (RHRSTrainWarmupTime = 5 min,
+	// core/parts.go:2935-2937). The seal face is small and
+	// high-pressure (No. 1 seal stage), so it reaches damage
+	// temperature within a few warmup periods.
+	SealHeatRatePerSec = 0.001 // derived: 1/1000 s
+
+	// DeadHeadHeatRatePerSec is the derived dead-heading overheat
+	// rate (1/s). Spec states no rate. 2000 s (33 min) to full
+	// damage, anchored to the EFWS 30-minute assumed
+	// no-operator-action window after autostart
+	// (specs/the_westinghouse_pressurized_water_react/chapter_5/page_100.txt:36-39,
+	// EFWSFullOpenPeriod in core/efws.go): a dead-headed pump
+	// heats for at least that window before miniflow can be
+	// restored. The 30-second locked-rotor bypass
+	// (specs/the_westinghouse_pressurized_water_react/chapter_3/page_063.txt:1-4)
+	// governs start protection, not a thermal integral.
+	DeadHeadHeatRatePerSec = 0.0005 // derived: 1/2000 s
+
 	// SISHHSIShutoffHeadPsia converts the shutoff head to a
 	// pressure gate with the fresh-water gradient 0.433 psi/ft.
 	// The spec quotes the head in feet only; the gradient is the
@@ -3327,6 +3371,16 @@ type SIS struct {
 	// switchover logic has fired. Latched true after the first
 	// switchover to prevent repeated toggling.
 	SwitchoverComplete bool
+
+	// PumpHeatDamageFrac is cumulative overheat damage from
+	// dead-heading (running with miniflow isolated at switchover).
+	// Single accumulator for both HHSI pumps, which the sim models
+	// as one flag. One-way accumulator (damage state).
+	PumpHeatDamageFrac float64
+
+	// PumpOverheatAlarm is the LIVE condition indicator: true exactly
+	// while the dead-head condition is present; clears when it clears.
+	PumpOverheatAlarm bool
 }
 
 // EFWSTank models the primary emergency feedwater supply tank in
