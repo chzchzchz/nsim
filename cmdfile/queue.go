@@ -56,21 +56,55 @@ func (q *Queue) Submit(text string, nowNs int64) error {
 	if err != nil {
 		return err
 	}
+	entries := q.schedule(cmds, lines, nowNs)
+	q.entries = append(q.entries, entries...)
+	if len(cmds) > 0 {
+		q.rev++
+	}
+	return nil
+}
+
+// SubmitAll schedules already-parsed commands at nowNs + offset
+// (negative offsets clamp to nowNs) and returns the new entries.
+// The caller supplies the display text for each command.
+func (q *Queue) SubmitAll(cmds []Command, texts []string, nowNs int64) []Entry {
+	entries := q.scheduleAll(cmds, texts, nowNs)
+	q.entries = append(q.entries, entries...)
+	if len(cmds) > 0 {
+		q.rev++
+	}
+	return entries
+}
+
+func (q *Queue) schedule(cmds []Command, lines []string, nowNs int64) []Entry {
+	return q.scheduleAll(cmds, lines, nowNs)
+}
+
+func (q *Queue) scheduleAll(cmds []Command, texts []string, nowNs int64) []Entry {
+	out := make([]Entry, 0, len(cmds))
 	for i, c := range cmds {
 		offsetNs := c.TimeOffsetMs * int64(time.Millisecond)
 		due := max(nowNs, nowNs+offsetNs)
-		q.entries = append(q.entries, Entry{
+		text := ""
+		if i < len(texts) {
+			text = texts[i]
+		}
+		out = append(out, Entry{
 			Seq:   q.nextSeq,
-			Text:  lines[i],
+			Text:  text,
 			Cmd:   c,
 			DueNs: due,
 		})
 		q.nextSeq++
 	}
-	if len(cmds) > 0 {
-		q.rev++
-	}
-	return nil
+	return out
+}
+
+// Clear drops all queued entries and resets the sequence counter.
+func (q *Queue) Clear() {
+	q.entries = nil
+	q.nextSeq = 0
+	q.rev++
 }
 
 // FireDue applies every pending entry with DueNs <= nowNs, in

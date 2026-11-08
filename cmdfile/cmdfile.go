@@ -5,6 +5,7 @@ package cmdfile
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -107,12 +108,16 @@ func ResolveKey(m bridge.ControlMap, raw string) string {
 	return raw
 }
 
+// ErrUnknownControl is returned when a command names a control
+// that does not exist in the map.
+var ErrUnknownControl = errors.New("unknown control")
+
 // Apply resolves the key and invokes the control's Set.
 func Apply(m bridge.ControlMap, c Command) error {
 	key := ResolveKey(m, c.ControlKey)
 	ctrl, ok := m[key]
 	if !ok {
-		return fmt.Errorf("unknown control %q", c.ControlKey)
+		return fmt.Errorf("%w %q", ErrUnknownControl, c.ControlKey)
 	}
 	if ctrl.Set == nil {
 		return fmt.Errorf("control %q has no Set function", c.ControlKey)

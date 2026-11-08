@@ -24,6 +24,29 @@ func (j *Journal) Add(c Command, atNs int64) {
 	j.entries = append(j.entries, JournalEntry{AtNs: atNs, Cmd: c})
 }
 
+// Has reports whether a command with the same control, value, and
+// effect time already exists in the journal.
+func (j *Journal) Has(control, value string, atNs int64) bool {
+	return j.SeqOf(control, value, atNs) > 0
+}
+
+// SeqOf returns the 1-based insertion index of the first journal
+// entry with the given identity, or -1 when there is none. Clients
+// use it to reference the original journaled command after dedup.
+func (j *Journal) SeqOf(control, value string, atNs int64) int64 {
+	for i, e := range j.entries {
+		if e.Cmd.ControlKey == control && e.Cmd.Value == value && e.AtNs == atNs {
+			return int64(i) + 1
+		}
+	}
+	return -1
+}
+
+// Clear drops all journaled entries.
+func (j *Journal) Clear() {
+	j.entries = nil
+}
+
 // Entries returns a copy of the entries in insertion order.
 func (j *Journal) Entries() []JournalEntry {
 	out := make([]JournalEntry, len(j.entries))
