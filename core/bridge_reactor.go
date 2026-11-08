@@ -2336,4 +2336,37 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Liner thermal-cycle fatigue (plans/p72_5.txt): startup/
+	// shutdown cycle counter (raw) and normalized fatigue
+	// fraction (percent, x100). The counter publishes raw.
+	m["ReactorBuilding/ContainmentBuilding/ThermalCycleCount"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentBuilding",
+		Label: "ThermalCycleCount",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.ContainmentBuilding.ThermalCycleCount)
+		},
+	}
+	m["ReactorBuilding/ContainmentBuilding/LinerFatigue"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentBuilding",
+		Label: "LinerFatigue",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				100.0*p.ReactorBuilding.ContainmentBuilding.LinerFatigueFrac)
+		},
+	}
+	// Chloride SCC risk (plans/p72_5.txt): kind (c) derived risk
+	// condition, stored on the CSS, read here as a bool sensor.
+	m["ReactorBuilding/ContainmentBuilding/ChlorideSCCRisk"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ContainmentBuilding",
+		Label: "ChlorideSCCRisk",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.AuxiliaryBuilding.ContainmentSpraySystem.ChlorideSCCRisk)
+		},
+	}
+
 }

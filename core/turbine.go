@@ -478,6 +478,29 @@ func (t *Turbine) Step(dt time.Duration, sgPressure, condPressure Pressure, tavg
 		ret.HPExhaustPressure*0.98,
 	)
 
+	// Blade erosion: LP blade erosion from moisture carryover
+	// past the MSR. The spec names the invisible driver ("Highly
+	// effective moisture removal provisions result in improved
+	// cycle efficiency and minimization of blade erosion.",
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_201.txt:57-59)
+	// but gives no rate; the carryover law and allowance are
+	// derived (plans/p72_5.txt). Carryover uses INLET quality
+	// (1 - InletQuality), scaled by the MSR's removal efficiency.
+	// At design (quality 0.90) the residual is 0.005, below the
+	// 0.007 allowance, so full-load dry operation stays zero.
+	// At low load (quality 0.70) the residual is 0.015, above
+	// the allowance, so erosion accumulates at
+	// (0.015-0.007)*0.00005 = 4e-7/s, reaching 1.0 over ~700 h.
+	// Steady, wet-stagnant operation does NOT erode: carryover
+	// is the driver.
+	inletMoisture := max(0, 1.0-ret.MoistureSeparatorReheater.InletQuality)
+	residual := inletMoisture * (1.0 - MSRMoistureRemovalEfficiency)
+	carryover := max(0, residual-MSRRemovalAllowance)
+	if ret.State == TurbineRunning {
+		ret.BladeErosionFrac = min(ret.BladeErosionFrac+carryover*BladeErosionRatePerSec*dt.Seconds(), 1)
+		ret.Damage = max(ret.Damage, float32(ret.BladeErosionFrac))
+	}
+
 	return ret
 }
 

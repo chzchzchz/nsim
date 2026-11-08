@@ -800,6 +800,19 @@ func addTurbineBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Blade erosion (plans/p72_5.txt): cumulative LP blade
+	// erosion fraction, published as percent (x100, following the
+	// OxidizedFrac precedent).
+	m["TurbineBuilding/Turbine/BladeErosion"] = &bridge.Sensor{
+		Part:  "TurbineBuilding/Turbine",
+		Label: "BladeErosion",
+		Kind:  "percent",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("percent",
+				100.0*p.TurbineBuilding.Turbine.BladeErosionFrac)
+		},
+	}
+
 	// Generator MVA-limit alarm (chapter 15): apparent power exceeded
 	// the rating and the DEHM clamped output onto the rating circle.
 	// "output power, the power factor, and speed to ensure that the

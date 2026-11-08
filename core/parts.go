@@ -81,6 +81,68 @@ const (
 	CladTrendWindowSteps = 20000
 )
 
+// Blade-erosion + liner-fatigue constants (plans/p72_1.txt, plans/p72_5.txt).
+//
+// The spec names the moisture-carryover erosion mechanism but gives
+// no erosion rate, no carryover allowance, and no thermal-cycle
+// temperature band; all three rates below are derived. The cycle
+// budgets themselves are spec-given (40/500/1).
+const (
+	// BladeErosionRatePerSec is the fractional LP blade erosion
+	// consumed per second of sustained carryover above the
+	// allowance. Derived: spec states no rate. At sustained
+	// low-load carryover (0.008), the advance is 0.008*0.00005 =
+	// 4e-7/s, reaching 1.0 over ~700 h (at the theoretical max
+	// carryover 0.043, ~129 h). Erosion is a slow wear mechanism.
+	BladeErosionRatePerSec = 0.00005
+
+	// MSRRemovalAllowance is the liquid carryover exhaust credit
+	// before erosion. Derived from design: full-load HP exhaust
+	// quality 0.90 gives inlet moisture 0.10; MSRMoistureRemoval-
+	// Efficiency removes 95%, so residual carryover past the MSR
+	// at design is 0.10*(1-0.95)=0.005. At low load (quality
+	// 0.70) residual is 0.30*0.05=0.015. Allowance 0.007 sits just
+	// above design residual so full-load dry operation stays
+	// zero and low-load wet operation accumulates. Spec states
+	// no carryover allowance; search scope per plans/p72_1.txt.
+	MSRRemovalAllowance = 0.007
+
+	// ContainmentOutdoorCycleBudget is the spec's environmental
+	// thermal-cycle budget: 40 cycles over a 40-year life.
+	// Published as an informational constant; not integrated.
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_112.txt:120-122
+	ContainmentOutdoorCycleBudget = 40.0
+
+	// ContainmentStartupCycleBudget is the integrated startup/
+	// shutdown thermal-cycle budget: 500 cycles.
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_112.txt:130-134
+	ContainmentStartupCycleBudget = 500.0
+
+	// ContainmentDbaCycleBudget is the spec's DBA thermal-cycle
+	// budget: one cycle. Published as informational; no DBA
+	// detector is wired in this slice.
+	// specs/the_westinghouse_pressurized_water_react/chapter_6/page_112.txt:138-139
+	ContainmentDbaCycleBudget = 1.0
+
+	// ExcludedBudgetCycles is the outdoor + DBA budget
+	// explicitly excluded from the integrated startup/shutdown
+	// counter (40 + 1). Arithmetic is shown so the ~8% budget
+	// gap in LinerFatigueFrac is auditable.
+	ExcludedBudgetCycles = 40.0 + 1.0
+
+	// ContainmentThermalCycleBandF is the derived thermal-cycle
+	// hysteresis band: peak-to-trough lifts below 30°F consume
+	// no fatigue. The spec gives only the cycle counts, no band.
+	ContainmentThermalCycleBandF = 30.0
+
+	// ContainmentCycleWindowSteps is how many 1 ms steps the
+	// containment trend integrates over. Derived: per-step deltas
+	// are orders below the 30°F band at 1 ms ticks, so only
+	// window-summed trends carry band-scale magnitudes. Mirrors
+	// CladTrendWindowSteps (20 s at 1 ms).
+	ContainmentCycleWindowSteps = 20000
+)
+
 // Excore nuclear-instrument constants (plans/p71_1.txt).
 //
 // The Westinghouse PWR document (Chapter 7, Nuclear Measurements)
@@ -314,6 +376,12 @@ type Turbine struct {
 	Velocity
 
 	State TurbineState
+
+	// BladeErosionFrac is cumulative LP blade erosion from moisture
+	// carryover past the MSR (low load / failed moisture separation).
+	// The spec names the mechanism but no erosion alarm setpoint,
+	// so no alarm is wired; the % sensor is the display. plans/p72_5.txt.
+	BladeErosionFrac float64
 
 	// StopValve is the main-steam stop valve. Open=1 is normal
 	// operation; Open=0 is the trip state (auto-closed by reactor
@@ -2776,6 +2844,11 @@ type CVCS struct {
 	// the first active mode snaps the beds to its own temperature.
 	BTRSBedsEstablished bool
 
+	// CorrosionProductControlDegraded is a kind (c) derived risk
+	// condition: true while the BTRS demineralizer path is not in
+	// service. Recomputed each step. plans/p72_5.txt.
+	CorrosionProductControlDegraded bool
+
 	// BTRSLastExchangeMode records the most recent mode that actually
 	// exchanged boron. With the loop isolated the recirculation pump
 	// conditions the idle beds toward this mode's opposite so the next
@@ -4148,6 +4221,23 @@ type ContainmentSpraySystem struct {
 	// SprayHeaderOpen is false; CSSDesignFlow when both are
 	// true.
 	SprayFlow float64
+
+	// ChlorideSCCRisk is a kind (c) derived risk condition: true
+	// while a LOCA exists and spray additive is not being
+	// delivered. Recomputed each step, NOT latched. plans/p72_5.txt.
+	ChlorideSCCRisk bool
+
+	// NextContainmentPressure is the absolute containment
+	// pressure (psia) injected by Plant.Step before the CSS
+	// step, feeding the LOCA predicate for ChlorideSCCRisk.
+	// ContainmentSpraySystem does not carry containment pressure
+	// directly; this transient field keeps Step pure. Not
+	// serialized as plant state — it is a wire, not physics.
+	// Ordering guarantee: Plant.Step syncs this field from
+	// ContainmentBuilding.Pressure on every tick before the CSS
+	// step (core/plant.go); a direct CSS Step caller must set it
+	// before calling Step or locaPressure reads zero.
+	NextContainmentPressure Pressure `json:"-"`
 }
 
 // CSS design constants.
@@ -4408,6 +4498,44 @@ type ContainmentBuilding struct {
 	// recover, so no reset or spray path clears it. Also drives
 	// Part.Damage to 1. plans/p65_3.txt State.
 	ContainmentFailed bool
+
+	// ThermalCycleCount counts completed startup/shutdown thermal
+	// cycles against the spec's fatigue-load accounting. The spec
+	// counts three loads (40 outdoor + 500 startup/shutdown + 1
+	// DBA); the outdoor and DBA cycles are environmental/one-shot
+	// and are NOT folded into this counter — see the 41-cycle
+	// offset note in plans/p72_5.txt. `LinerFatigueFrac` is
+	// startup/shutdown-only.
+	ThermalCycleCount float64
+	// LinerFatigueFrac is ThermalCycleCount normalized to the
+	// 500-cycle startup/shutdown budget (capped at 1). It excludes
+	// the 40 outdoor and 1 DBA cycles the spec also counts
+	// (41/500 ≈ 8% of budget unaccounted); ExcludedBudgetCycles
+	// records that exclusion. plans/p72_5.txt State.
+	LinerFatigueFrac float64
+	// TrendStartF, TrendSteps, PeakF, TroughF, PrevTrendF are the
+	// cycle-detector memory: windowed peak/trough of bulk
+	// Temperature. They mirror the p72_2 clad-fatigue detector
+	// (FatiguePeakW/FatigueTroughW/FatigueTrendStartW/
+	// FatigueTrendSteps/PrevPowerSlope, zero-value seeded by
+	// MakePlant). plans/p72_5.txt State.
+	TrendStartF float64
+	TrendSteps  int
+	PeakF       float64
+	TroughF     float64
+	PrevTrendF  float64
+	// TrendSeeded latches once the detector has seeded its extrema
+	// from the first observed (non-zero) temperature. It replaces
+	// the "all four zero reads as unseeded" scan, which is fragile
+	// after JSON round-trips of a mid-window state (a below-freezing
+	// or zero-temperature build would re-pin the extrema and phantom
+	// a cycle). MakePlant leaves it false (plans/p72_1.txt
+	// convention 5); the first Step is the seed step.
+	TrendSeeded bool
+	// PrevTemperature is last step's bulk temperature. Retained
+	// for first-step suppression and diagnostics; the windowed
+	// detector compares window deltas, not this field. plans/p72_5.txt.
+	PrevTemperature Temperature
 
 	// FreeVolume is the lumped free volume of the containment
 	// atmosphere (ft³). Stated in the spec as 2,000,000 ft³

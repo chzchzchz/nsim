@@ -1299,6 +1299,18 @@ func addAuxiliaryBuildingSensors(p *Plant, m bridge.SensorMap) {
 		},
 	}
 
+	// Corrosion-product control status (plans/p72_5.txt): kind (c)
+	// derived risk condition, stored on CVCS, read here as bool.
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/CorrosionProductControlDegraded"] = &bridge.Sensor{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "CorrosionProductControlDegraded",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.CorrosionProductControlDegraded), nil
+		},
+	}
+
 	// Boron setpoint target: the operator-written concentration the
 	// tracking drive ramps toward through the BTRS flow modes. While
 	// tracking is released the field holds the last target.

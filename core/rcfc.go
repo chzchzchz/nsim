@@ -277,5 +277,54 @@ func (c *ContainmentBuilding) Step(dt time.Duration,
 	pPaOld := massKg * airSpecificGasConst * kelvinOld / volumeM3
 	ret.Pressure = Pressure(float64(c.Pressure) + (pPa-pPaOld)/paPerPsi)
 
+	// Liner thermal-cycle fatigue: windowed peak/trough cycle
+	// detector mirroring the p72_2 clad-fatigue detector
+	// (core/reactor.go FatiguePeakW/FatigueTroughW/
+	// FatigueTrendStartW/FatigueTrendSteps/PrevPowerSlope).
+	// The spec counts startup/shutdown interior temperature
+	// cycling against a 500-cycle budget
+	// (specs/the_westinghouse_pressurized_water_react/chapter_6/page_112.txt:130-134);
+	// it names the counts, not a detection algorithm. At 1 ms
+	// ticks per-step deltas are orders below the 30°F band, so
+	// trends are window-summed over ContainmentCycleWindowSteps
+	// (20 s) with running extrema: the count is phase-invariant.
+	// A cycle fires when the peak-to-trough lift reaches the band
+	// AND the window trend has returned to (or crossed) the
+	// opposite extreme; damage is amplitude-proportional
+	// (amp = lift/band). The 40 outdoor + 1 DBA cycles are
+	// published as constants, not integrated.
+	tempF := ret.Temperature.Float()
+	if !ret.TrendSeeded && tempF != 0 {
+		// First observed temperature seeds the tracker; the
+		// TrendSeeded latch replaces the "all four zero" scan
+		// (fragile across JSON round-trips of mid-window state).
+		// MakePlant leaves the detector at zero (plans/p72_1.txt
+		// convention 5), so the first Step is the seed step and
+		// cannot count a phantom cycle.
+		ret.TrendStartF = tempF
+		ret.PeakF = tempF
+		ret.TroughF = tempF
+		ret.TrendSeeded = true
+	}
+	ret.PeakF = max(ret.PeakF, tempF)
+	ret.TroughF = min(ret.TroughF, tempF)
+	ret.TrendSteps++
+	if ret.TrendSteps >= ContainmentCycleWindowSteps {
+		trend := tempF - ret.TrendStartF
+		lift := ret.PeakF - ret.TroughF
+		landed := (trend >= 0 && tempF >= ret.PeakF) || (trend <= 0 && tempF <= ret.TroughF)
+		if lift >= ContainmentThermalCycleBandF && landed {
+			amp := lift / ContainmentThermalCycleBandF
+			ret.ThermalCycleCount += amp
+			ret.PeakF = tempF
+			ret.TroughF = tempF
+		}
+		ret.PrevTrendF = trend
+		ret.TrendStartF = tempF
+		ret.TrendSteps = 0
+	}
+	ret.PrevTemperature = Temperature{Val: tempF, Unit: u.Fahrenheit}
+	ret.LinerFatigueFrac = min(ret.ThermalCycleCount/ContainmentStartupCycleBudget, 1)
+
 	return ret
 }

@@ -320,6 +320,18 @@ func (c *CVCS) Step(dt time.Duration,
 		ret.Diverting = false
 	}
 
+	// Corrosion-product control status: kind (c) derived risk
+	// condition, recomputed each step. Demineralizer service is
+	// the BTRS recirculation path: flow through the
+	// demineralizers is "routing [VCT flow] through the
+	// demineralizers during boration and dilution modes" via the
+	// BTRS recirculation pump
+	// (specs/the_westinghouse_pressurized_water_react/chapter_4/page_080.txt:37-39).
+	// In service iff the BTRS pump is running AND letdown is
+	// flowing AND not diverted:
+	inService := ret.BTRSRecirculationPumpRunning && ret.LetdownFlow.Float() > 0 && !ret.Diverting
+	ret.CorrosionProductControlDegraded = !inService
+
 	return ret
 }
 

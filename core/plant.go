@@ -741,6 +741,7 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 	// containment step; keep it for any in-ReactorBuilding-step
 	// reader by copying the last structured value.
 	ret.ContainmentPressure = ret.ContainmentBuilding.Pressure
+	ret.Aux.ContainmentSpraySystem.NextContainmentPressure = ret.ContainmentBuilding.Pressure
 	ret.Aux.ContainmentSpraySystem = ret.Aux.ContainmentSpraySystem.Step(dt)
 
 	return ret

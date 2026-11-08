@@ -64,6 +64,13 @@ func (c *ContainmentSpraySystem) Step(dt time.Duration) ContainmentSpraySystem {
 	ret := *c
 	dtSec := dt.Seconds()
 
+	// Chloride SCC risk: kind (c) derived risk condition,
+	// recomputed at the TOP of Step, before the early return, so
+	// the sensor cannot go stale when the spray pumps are
+	// secured (Running=false) or the bus is dead (DriveReady=false).
+	// plans/p72_5.txt Chemistry drivers.
+	ret.ChlorideSCCRisk = locaPressure(&ret) && !(ret.SATIsolationValveBOpen && ret.SATLevel.Float() > 0)
+
 	// DriveReady reflects whether the ESF bus that feeds
 	// the spray pumps is energised. Without bus power the
 	// pumps cannot deliver spray even if Running was latched
@@ -146,4 +153,22 @@ func (c *ContainmentSpraySystem) Step(dt time.Duration) ContainmentSpraySystem {
 	}
 
 	return ret
+}
+
+// containmentPressure reports the absolute containment pressure
+// feeding the LOCA predicate. ContainmentSpraySystem does not carry
+// containment pressure; the CSS step reads it from the ambient
+// field synced by Plant.Step (ContainmentPressure). The field is
+// injected via NextContainmentPressure before the CSS step.
+func (c *ContainmentSpraySystem) containmentPressure() Pressure {
+	return c.NextContainmentPressure
+}
+
+// locaPressure reports whether containment pressure is above the
+// CSS auto-start threshold (AtmosphericPressure +
+// CSSContainmentPressureSetpoint), i.e. a LOCA exists. Shared by
+// the early-return guard and the end-of-Step recompute so the two
+// paths cannot diverge.
+func locaPressure(c *ContainmentSpraySystem) bool {
+	return c.containmentPressure() > AtmosphericPressure+CSSContainmentPressureSetpoint
 }
