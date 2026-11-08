@@ -1193,6 +1193,18 @@ const (
 	// saturate it.
 	CVCSAutoBoronPositionSpanFrac float64 = 0.02
 
+	// CVCSAutoBoronDeepBandPitDriveCapFrac is the deep-band pit
+	// drive cap read only by the p68 preempt branch in
+	// applyAutoBoronControl — its sole production consumer, so it
+	// is deliberately not a system-wide cap. At the maneuver cap
+	// (0.3) the park's dilution credit runs at 0.24 ppm/s =
+	// 1.2e-4 pct/s against a ~5.6e-4 pct/s xenon pit
+	// (plans/p68_1.txt Outcome), so pit hours read this cap
+	// instead. Derived from probe, NOT spec: the spec states the
+	// mode+magnitude law (page_135.txt:58-65) but no ppm/min
+	// figure. Every non-pit use keeps the 0.3 maneuver cap.
+	CVCSAutoBoronDeepBandPitDriveCapFrac float64 = 0.7
+
 	// CVCSAutoBoronParkMaxLoadFrac is the demand ceiling below which
 	// the power-error tier's drive is scaled by remaining rod
 	// corrective travel (rods-first ordering): at house load the bank

@@ -493,10 +493,16 @@ func (c *CVCS) applyAutoBoronControl(
 		// above the 0.20 band this branch is dead (p58 mid-band
 		// contract). The diluting leg is not preempted: dilution
 		// there is already the same action.
+		// Drive (p70): the pit's mismatch is the band's largest and
+		// the credit must scale with it (page_135.txt:58-65, BTRS
+		// as the only boron path per page_231.txt:95-97), so the
+		// pit window paces against the deep-band pit cap; depth
+		// pacing below the cap is unchanged.
 		c.Mode = CVCSDilution
 		c.BTRSRecirculationPumpRunning = true
-		c.AutoBoronDrive = pacedPositionDrive(
-			CVCSAutoBoronLowInsertionFrac - rodInsertion)
+		c.AutoBoronDrive = pacedPositionDriveWithCap(
+			CVCSAutoBoronLowInsertionFrac-rodInsertion,
+			CVCSAutoBoronDeepBandPitDriveCapFrac)
 	case powerErrorFrac < -CVCSAutoBoronPowerErrBandFrac:
 		c.Mode = CVCSBoration
 		c.BTRSRecirculationPumpRunning = true
@@ -577,6 +583,15 @@ func errorTierRodAuthority(insertion float64, borating bool) float64 {
 // instability (page_231.txt:120-122), so pacing them would weaken the
 // spatial damping this chemistry exists to provide.
 func pacedPositionDrive(depth float64) float64 {
-	return min(max(depth/CVCSAutoBoronPositionSpanFrac, 0), 1) *
-		CVCSAutoBoronPositionDriveCapFrac
+	return pacedPositionDriveWithCap(depth,
+		CVCSAutoBoronPositionDriveCapFrac)
+}
+
+// pacedPositionDriveWithCap is the cap-parameterized pacing
+// helper (p70): depth pacing against an explicit cap. Every
+// non-pit use goes through pacedPositionDrive with the maneuver
+// cap; only the p68 preempt branch passes the pit cap, so the
+// maneuver legs are bit-identical.
+func pacedPositionDriveWithCap(depth, capFrac float64) float64 {
+	return min(max(depth/CVCSAutoBoronPositionSpanFrac, 0), 1) * capFrac
 }
