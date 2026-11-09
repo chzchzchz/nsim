@@ -94,3 +94,74 @@ describe("styles.css sticky header offset", () => {
         }
     });
 });
+
+describe("styles.css compact sensor/controls tiles", () => {
+    const compactRule = (
+        body: string,
+        selector: RegExp,
+        needle: string,
+    ): string => {
+        const match = body.match(selector)?.[0] ?? "";
+        expect(match, `missing rule ${selector}`).not.toBe("");
+        expect(match).toContain(needle);
+        return match;
+    };
+
+    it("keeps tile row spacing packed", () => {
+        const body = stripComments(css());
+        const tile = body.match(/\.tile\s*\{[^}]*\}/)?.[0] ?? "";
+        expect(tile).toContain("font-size: 11px");
+        expect(tile).toContain("line-height: 1.25");
+        const tileBody = body.match(/\n\s*\.tile-body\s*\{[^}]*\}/)?.[0] ?? "";
+        expect(tileBody).toContain("gap: 10px");
+        const fieldset = body.match(/\.tile fieldset\s*\{[^}]*\}/)?.[0] ?? "";
+        expect(fieldset).toContain("margin: 0 0 4px 0");
+        expect(fieldset).toContain("padding: 2px 6px");
+        const dataCell = body.match(/\.data-table td\s*\{[^}]*\}/)?.[0] ?? "";
+        expect(dataCell).toContain("padding: 1px 4px");
+        const ctlRow = body.match(/\.ctl-row\s*\{[^}]*\}/)?.[0] ?? "";
+        expect(ctlRow).toContain("gap: 4px");
+        expect(ctlRow).toContain("margin: 1px 0");
+    });
+
+    it("reserves the sensor value column under fixed layout", () => {
+        const body = stripComments(css());
+        compactRule(
+            body,
+            /\.tile \.readout-part \.data-table,\s*[\s\S]*?\{[^}]*\}/,
+            "table-layout: fixed",
+        );
+        compactRule(
+            body,
+            /\.tile \.readout-part \.data-table td:first-child,[\s\S]*?\{[^}]*\}/,
+            "width: 58%",
+        );
+        compactRule(
+            body,
+            /\.tile \.readout-part \.data-table td:nth-child\(2\),[\s\S]*?\{[^}]*\}/,
+            "width: 42%",
+        );
+        const value = body.match(
+            /\.tile \.readout-part \.data-table td:nth-child\(2\),[\s\S]*?\{[^}]*\}/,
+        )?.[0] ?? "";
+        expect(value).toContain("white-space: nowrap");
+        expect(value).toContain("text-align: right");
+        expect(value).toContain("font-variant-numeric: tabular-nums");
+    });
+
+    it("keeps control inputs pinned while labels shrink", () => {
+        const body = stripComments(css());
+        compactRule(
+            body,
+            /\.ctl-row \.label-text\s*\{[^}]*\}/,
+            "flex: 1 1 0",
+        );
+        compactRule(
+            body,
+            /\.tile input\[type="number"\],[\s\S]*?\{[^}]*\}/,
+            "flex: 0 0 auto",
+        );
+        const ctlRow = body.match(/\.ctl-row\s*\{[^}]*\}/)?.[0] ?? "";
+        expect(ctlRow).toContain("flex-wrap: nowrap");
+    });
+});

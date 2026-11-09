@@ -134,6 +134,9 @@ export function refreshSensors(
     }
     for (const r of rows) {
         let out: string;
+        // A longer raw value must remain discoverable without
+        // widening the fixed tabular value column.
+        let title: string | null = null;
         const errMsg = snap.errors[r.id];
         if (errMsg !== undefined) {
             out = `(error: ${errMsg})`;
@@ -147,10 +150,21 @@ export function refreshSensors(
                 const formatted = formatSensorValue(r.kind, v);
                 const u = unitFor(r.kind);
                 out = u ? `${formatted} ${u}` : formatted;
+                if (formatted !== v) {
+                    title = u ? `${v} ${u}` : v;
+                }
             }
         }
         if (r.cell.textContent !== out) {
             r.cell.textContent = out;
+        }
+        const currentTitle = r.cell.getAttribute("title");
+        if (title === null) {
+            if (currentTitle !== null) {
+                r.cell.removeAttribute("title");
+            }
+        } else if (currentTitle !== title) {
+            r.cell.setAttribute("title", title);
         }
     }
     lastRawByRows.set(rows, raw);

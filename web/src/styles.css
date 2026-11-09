@@ -153,22 +153,23 @@
         .pid-zoom button:hover { background: #eee; }
         #tiles {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 8px;
         }
         .tile {
             background: white;
             border: 1px solid #ccc;
             border-radius: 4px;
-            padding: 8px;
-            font-size: 12px;
+            padding: 6px;
+            font-size: 11px;
+            line-height: 1.25;
             min-width: 0;
         }
         .tile > h2 {
-            margin: 0 0 8px 0;
-            font-size: 14px;
+            margin: 0 0 5px 0;
+            font-size: 13px;
             border-bottom: 1px solid #ccc;
-            padding-bottom: 4px;
+            padding-bottom: 2px;
         }
         .tile > h2 {
             display: flex;
@@ -205,19 +206,19 @@
         .tile-body {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 16px;
+            gap: 10px;
         }
         .tile-body > div { min-width: 0; }
         .tile-body h3 {
-            margin: 0 0 4px 0;
-            font-size: 11px;
+            margin: 0 0 2px 0;
+            font-size: 10px;
             text-transform: uppercase;
             color: #555;
         }
         #controls fieldset,
         .tile fieldset {
-            margin: 0 0 8px 0;
-            padding: 4px 8px;
+            margin: 0 0 4px 0;
+            padding: 2px 6px;
             border: 1px solid #ccc;
             border-radius: 4px;
             /* Fieldsets refuse to shrink below their widest content
@@ -226,8 +227,19 @@
             min-inline-size: auto;
         }
         #controls legend,
-        .tile legend { font-weight: bold; font-size: 12px; }
-        .tile td { padding: 2px 6px; border-bottom: 1px solid #eee; }
+        .tile legend { font-weight: bold; font-size: 11px; padding: 0 2px; }
+        .tile td { padding: 1px 4px; border-bottom: 1px solid #eee; }
+        .tile input[type="number"],
+        .tile input[type="text"],
+        .tile select,
+        .tile button.btn {
+            flex: 0 0 auto;
+            max-width: 100%;
+            padding: 1px 3px;
+            font-size: 11px;
+            line-height: 1.2;
+        }
+        .tile input[type="checkbox"] { flex: 0 0 auto; }
         #readout {
             background: white;
             border: 1px solid #ccc;
@@ -240,12 +252,13 @@
         #readout th { padding: 2px 6px; border-bottom: 2px solid #ccc; }
         /* Shared widget/table primitives used by the panel modules. */
         .btn {
-            padding: 4px 12px;
+            padding: 2px 8px;
             background: #2c3e50;
             color: white;
             border: 1px solid #1a252f;
             cursor: pointer;
-            font-size: 13px;
+            font-size: 12px;
+            line-height: 1.2;
         }
         .btn:hover { background: #4a6178; }
         .btn:disabled {
@@ -261,12 +274,40 @@
             border-radius: 4px;
         }
         .data-table { width: 100%; border-collapse: collapse; }
-        .data-table td { padding: 2px 6px; border-bottom: 1px solid #eee; }
-        /* Inside the two-column tiles a wide id must break instead
-           of pushing the table into the neighbouring column. */
-        .tile .data-table td { overflow-wrap: anywhere; }
+        .data-table td { padding: 1px 4px; border-bottom: 1px solid #eee; }
+        /* Sensor read-out rows are label + value pairs. With
+           automatic layout a long unbroken label (for example
+           CorrosionProductControlDegraded) widens its column until
+           the value spills off the tile. Fixed layout reserves the
+           value column first: labels wrap anywhere, values stay
+           on one right-aligned tabular line. Alarm tables keep
+           automatic layout because two-column widths would clip
+           severity, description, and time columns. */
+        .tile .readout-part .data-table,
+        .tile .tile-body > div > .readout-part .data-table {
+            table-layout: fixed;
+            font-size: 11px;
+            line-height: 1.25;
+        }
+        .tile .readout-part .data-table td:first-child,
+        .tile .tile-body > div > .readout-part .data-table td:first-child {
+            width: 58%;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+        .tile .readout-part .data-table td:nth-child(2),
+        .tile .tile-body > div > .readout-part .data-table td:nth-child(2) {
+            width: 42%;
+            white-space: nowrap;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .tile .readout-part .data-table td:nth-child(n+3),
+        .tile .tile-body > div > .readout-part .data-table td:nth-child(n+3) {
+            overflow-wrap: anywhere;
+        }
         .data-table th {
-            padding: 2px 6px;
+            padding: 1px 4px;
             border-bottom: 2px solid #ccc;
             text-align: left;
             font-size: 10px;
@@ -287,31 +328,38 @@
         .sev-badge.sev-info    { background: #229954; }
         .mono { font-family: monospace; }
         .nowrap { white-space: nowrap; }
-        .readout-part { margin-bottom: 8px; }
+        .readout-part { margin-bottom: 4px; }
+        .readout-part:last-child { margin-bottom: 0; }
         .sub-heading {
             font-weight: bold;
             border-bottom: 1px solid #ccc;
-            margin-bottom: 2px;
+            margin-bottom: 1px;
         }
         .ctl-row {
             display: flex;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             align-items: center;
-            gap: 6px;
-            margin: 2px 0;
+            gap: 4px;
+            margin: 1px 0;
             /* Jump targets (P&ID anchors, log selection) scroll
                here; keep clear of the sticky header. */
             scroll-margin-top: var(--header-offset);
         }
+        .ctl-row .label-text {
+            flex: 1 1 0;
+            min-width: 0;
+        }
         .label-text {
-            overflow-wrap: break-word;
+            overflow-wrap: anywhere;
+            word-break: break-word;
             min-width: 0;
         }
         /* The (?) icon leads its label in control rows; DOM order
            stays label-first so the open popup still lands last. */
-        .ctl-row > .ctl-help { order: -1; }
-        .ctl-hint { opacity: 0.6; }
-        .ctl-hint.faint { opacity: 0.4; font-size: 10px; }
+        .ctl-row > .ctl-help { order: -1; flex: 0 0 auto; }
+        .ctl-row .ctl-hint { flex: 0 0 auto; }
+        .ctl-hint { opacity: 0.6; font-size: 10px; }
+        .ctl-hint.faint { opacity: 0.4; font-size: 9px; }
         .ctl-error { outline: 2px solid #b00; }
         .ctl-row.log-selected {
             /* Mirror the P&ID anchor flash: a filled background
@@ -337,15 +385,15 @@
             outline: none;
         }
         .ctl-help {
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
             line-height: 1;
             padding: 0;
             border: 1px solid #bbb;
             border-radius: 50%;
             background: none;
             color: #666;
-            font-size: 10px;
+            font-size: 8px;
             cursor: help;
         }
         .help-text {

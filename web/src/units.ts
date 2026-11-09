@@ -68,9 +68,16 @@ export function knownKind(kind: string): boolean {
     return kind in UNITS;
 }
 
-// formatSensorValue caps a numeric sensor value at two decimal
-// places. Non-numeric kinds (bool/enum/string) pass through
-// unchanged. The Go side already produces the raw string via
+// formatSensorValue keeps small readings at two decimals and
+// switches to four significant figures once |v| >= 10000, so
+// huge magnitudes (e.g. source-range counts) never produce a
+// dozen characters of false precision. Large values keep the
+// plain fixed form — "55150", not "5.515e4" — so magnitude is
+// scannable while the tile stays fit; only beyond six integer
+// digits does it fall back to exponent form, written without a
+// leading plus ("9.375e11") to save yet another character.
+// Non-numeric kinds (bool/enum/string) pass through unchanged.
+// The Go side already produces the raw string via
 // fmt.Sprintf("%v", f); we re-parse and reformat here so we can
 // apply a consistent precision policy without changing the bridge
 // contract. NaN/Infinity pass through unchanged so the user sees
@@ -83,5 +90,14 @@ export function formatSensorValue(kind: string, raw: string): string {
     if (!Number.isFinite(f)) {
         return raw;
     }
-    return f.toFixed(2);
+    if (Math.abs(f) < 10000) {
+        return f.toFixed(2);
+    }
+    // Four significant figures. Between 10000 and ~1e6 the
+    // plain fixed form is shorter than "5.515e4"; past ~1e6 the
+    // exponent form wins and drops the leading plus.
+    if (Math.abs(f) < 1_000_000) {
+        return String(Math.round(f / 10) * 10);
+    }
+    return f.toPrecision(4).replace("e+", "e");
 }

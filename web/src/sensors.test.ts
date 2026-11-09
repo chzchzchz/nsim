@@ -53,6 +53,8 @@ describe("refreshSensors", () => {
         expect(cells[0].textContent).toBe("2250.00 psig");
         expect(cells[1].textContent).toBe("✅");
         expect(cells[2].textContent).toBe("(error: sensor fault)");
+        expect(cells[0].getAttribute("title")).toBe("2250 psig");
+        expect(cells[1].getAttribute("title")).toBeNull();
     });
 
     it("skips cell writes when the payload is unchanged", () => {
@@ -72,6 +74,19 @@ describe("refreshSensors", () => {
         refreshSensors(rows, p.handle);
         refreshSensors(rows, p.handle);
         expect(writes).toBe(1);
+    });
+
+    it("keeps the exact raw value in the tooltip when display rounds it", () => {
+        const cell = document.createElement("td");
+        document.body.appendChild(cell);
+        const raw = JSON.stringify({
+            values: { "RCS/Pressure": "937483401827.15" },
+            errors: {},
+        });
+        const p = plantWithPayload(raw);
+        refreshSensors([row("RCS/Pressure", "psig", cell)], p.handle);
+        expect(cell.textContent).toBe("9.375e11 psig");
+        expect(cell.getAttribute("title")).toBe("937483401827.15 psig");
     });
 
     it("fills a rebuilt row set's fresh cells despite identical payload", () => {

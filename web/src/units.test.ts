@@ -16,6 +16,15 @@ describe("formatSensorValue", () => {
         expect(formatSensorValue("fahrenheit", "-1.2")).toBe("-1.20");
     });
 
+    it("switches to four significant figures for large magnitudes", () => {
+        expect(formatSensorValue("cps", "937483401827.15")).toBe("9.375e11");
+        // Mid-range fixed form is shorter than exponent form.
+        expect(formatSensorValue("cps", "55150")).toBe("55150");
+        expect(formatSensorValue("gpm", "12345")).toBe("12350");
+        expect(formatSensorValue("cps", "999950")).toBe("999950");
+        expect(formatSensorValue("cps", "12345678")).toBe("1.235e7");
+    });
+
     it("passes non-numeric kinds through unchanged", () => {
         expect(formatSensorValue("bool", "1")).toBe("1");
         expect(formatSensorValue("enum", "Running")).toBe("Running");

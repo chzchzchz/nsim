@@ -342,15 +342,29 @@ export function refreshRemoteSensors(
         const v = values[r.id];
         if (v === undefined) continue;
         let out: string;
+        // The displayed two-decimal value shares the compact
+        // tabular column; keep the exact raw value on hover.
+        let title: string | null = null;
         if (r.kind === "bool") {
             out = v === "true" || v === "1" ? "✅" : "❌";
         } else {
             const formatted = formatSensorValue(r.kind, v);
             const u = unitFor(r.kind);
             out = u ? `${formatted} ${u}` : formatted;
+            if (formatted !== v) {
+                title = u ? `${v} ${u}` : v;
+            }
         }
         if (r.cell.textContent !== out) {
             r.cell.textContent = out;
+        }
+        const currentTitle = r.cell.getAttribute("title");
+        if (title === null) {
+            if (currentTitle !== null) {
+                r.cell.removeAttribute("title");
+            }
+        } else if (currentTitle !== title) {
+            r.cell.setAttribute("title", title);
         }
     }
 }
