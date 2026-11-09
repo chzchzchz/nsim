@@ -220,11 +220,11 @@ def _draw_svg(name, times, series, y_title, path, is_bool=False, is_step=False):
         '<text x="%d" y="30" font-size="16" font-weight="bold">%s</text>'
         '<text x="%d" y="%d" font-size="12">%s</text>'
         '<text x="%d" y="%d" font-size="12">Time (s)</text>'
-        '<text x="20" y="%d" font-size="12" transform="rotate(-90 20 %d)">%s</text>'
+        '<text x="20" y="%d" font-size="12" text-anchor="middle" transform="rotate(-90 20 %d)">%s</text>'
         "%s%s</svg>"
         % (
             w, h, pad_l, _escape(name), pad_l + pw, pad_t, y_title,
-            pad_l + pw / 2, h - 12, pad_l + pw / 2, pad_t + ph / 2, _escape(y_title),
+            pad_l + pw / 2, h - 12, pad_t + ph / 2, pad_t + ph / 2, _escape(y_title),
             "".join(grid), trace,
         )
     )
