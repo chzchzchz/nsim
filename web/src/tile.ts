@@ -2,6 +2,12 @@
 // with the prefix label plus a minimize toggle, and a body host
 // for panel content. Used by both the prefix tiles in main.ts and
 // the alarm panel so every panel collapses the same way.
+//
+// Also owns the shared tile-group builder used by the local plant
+// (main.ts) and remote mode (remoteController.ts) so order,
+// layout, and minimized-state restore cannot drift apart.
+
+import type { SensorRow } from "./sensors";
 
 const MINIMIZE_GLYPH = "−";
 const RESTORE_GLYPH = "+";
@@ -65,4 +71,40 @@ function renderMinimizeToggle(tile: HTMLElement): HTMLElement {
         );
     });
     return btn;
+}
+
+
+
+// buildTile creates a single Controls|Sensors tile for one prefix
+// group via the supplied render callbacks and appends it to host.
+// Returns the tile root so callers can track sensor-row rows.
+export function buildTile(
+    host: HTMLElement,
+    prefix: string,
+    renderControls: (host: HTMLElement) => void,
+    renderSensors: (host: HTMLElement) => SensorRow[],
+    sensorRows: SensorRow[],
+): HTMLElement {
+    const { root, body } = makeTile(prefix || "(other)");
+    host.appendChild(root);
+
+    const ctlCol = document.createElement("div");
+    const ctlH = document.createElement("h3");
+    ctlH.textContent = "Controls";
+    ctlCol.appendChild(ctlH);
+    const ctlHost = document.createElement("div");
+    ctlCol.appendChild(ctlHost);
+    renderControls(ctlHost);
+
+    const senCol = document.createElement("div");
+    const senH = document.createElement("h3");
+    senH.textContent = "Sensors";
+    senCol.appendChild(senH);
+    const senHost = document.createElement("div");
+    senCol.appendChild(senHost);
+    sensorRows.push(...renderSensors(senHost));
+
+    body.appendChild(ctlCol);
+    body.appendChild(senCol);
+    return root;
 }

@@ -7,6 +7,7 @@ import { marked } from "marked";
 import { makeTile } from "./tile";
 import { crossReferenceHref, revealElement } from "./bindings";
 import { helpFor } from "./descriptions";
+import { sanitizeMarkdownHtml } from "./sanitize";
 
 export interface AlarmEntry {
     id: string;
@@ -250,7 +251,12 @@ function fillAlarmDetail(detail: HTMLTableRowElement, a: AlarmEntry): void {
     const help = helpFor(a.id);
     if (help !== undefined) {
         const md = document.createElement("div");
-        md.innerHTML = marked.parse(help, { async: false });
+        // Remote alarms carry server-controlled id/description; the
+        // help text is local markdown but still passes the same
+        // sanitizer as any rendered description.
+        md.innerHTML = sanitizeMarkdownHtml(
+            marked.parse(help, { async: false }),
+        );
         while (md.firstChild) body.appendChild(md.firstChild);
     } else {
         const desc = document.createElement("p");

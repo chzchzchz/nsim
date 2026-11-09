@@ -8,6 +8,7 @@ import { marked } from "marked";
 import type { BridgeMeta, PlantHandle } from "./plant";
 import { helpFor } from "./descriptions";
 import { knownKind } from "./units";
+import { sanitizeMarkdownHtml } from "./sanitize";
 
 export interface Entry {
     id: string;
@@ -76,12 +77,22 @@ export function groupByPrefix(bindings: PartBinding[]): PrefixGroup[] {
 // "DieselGenerator<wbr>/<wbr>Generator". The full path is preserved on
 // the PartBinding itself; only the heading text is shortened and
 // wrapped at slash boundaries.
+// The part string may originate from a remote server; callers that
+// insert the result with innerHTML must first be shielded by
+// escaping already-applied <wbr> tokens, so this function escapes
+// the raw part text before wrapping.
 export function displayPart(prefix: string): PartDisplay {
     const head = prefix + "/";
-    return (part: string): string =>
-        part.startsWith(head)
-            ? part.slice(head.length).replace(/\//g, "/<wbr>")
-            : part.replace(/\//g, "/<wbr>");
+    return (part: string): string => {
+        const stripped = part.startsWith(head)
+            ? part.slice(head.length)
+            : part;
+        return stripped
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\//g, "/<wbr>");
+    };
 }
 
 // PartDisplay shortens a full Part path for use as a heading.
@@ -137,10 +148,12 @@ export function crossReferenceHref(ev: Event): string {
 // to the referenced description if no rendered row exists). The
 // popup stays open unless the user explicitly closes it by
 // clicking the "?" button again.
+// Descriptions are bundled locally, but the help button also renders
+// for remote-mode bindings; never let raw HTML through.
 function openTip(btn: HTMLButtonElement, text: string): void {
     const tip = document.createElement("span");
     tip.className = "help-text md";
-    tip.innerHTML = marked.parse(text, { async: false });
+    tip.innerHTML = sanitizeMarkdownHtml(marked.parse(text, { async: false }));
     tip.addEventListener("click", (ev) => {
         const href = crossReferenceHref(ev);
         if (href === "") return;

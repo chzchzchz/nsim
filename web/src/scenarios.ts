@@ -48,6 +48,10 @@ export interface ScenarioPickerCallbacks {
     // onStart receives the chosen scenario id, or null when the
     // operator picked free play on the default plant.
     onStart(scenarioId: string | null): void;
+    // onServer asks the host (main.ts) to open the server picker;
+    // the scenario panel closes first so the two overlays never
+    // stack. Optional so older callers keep working.
+    onServer?(): void;
 }
 
 export interface ScenarioPicker {
@@ -131,6 +135,21 @@ export function renderScenarioPicker(
             body.appendChild(grid);
         }
         panel.appendChild(body);
+
+        if (callbacks.onServer) {
+            const serverRow = document.createElement("div");
+            serverRow.className = "scenario-server";
+            const serverBtn = document.createElement("button");
+            serverBtn.className = "scenario-server-btn";
+            serverBtn.textContent = "🌐 Connect to remote server…";
+            serverBtn.title = "Choose an nsimserve URL (remote mode)";
+            serverBtn.addEventListener("click", () => {
+                close();
+                callbacks.onServer!();
+            });
+            serverRow.appendChild(serverBtn);
+            panel.appendChild(serverRow);
+        }
     }
 
     function makeCard(s: ScenarioInfo): HTMLElement {

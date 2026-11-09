@@ -647,6 +647,22 @@ header#sim-bar #btn-write-mode {
 }
 .scenario-actions button.primary:hover { background: #3498db; }
 
+.scenario-server {
+    padding: 10px 18px 14px;
+    border-top: 1px solid #ddd;
+}
+.scenario-server-btn {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    background: #1f4e79;
+    color: white;
+    border: 1px solid #163a5c;
+    border-radius: 6px;
+}
+.scenario-server-btn:hover { background: #2a679e; }
+
 #objective {
     display: flex;
     align-items: baseline;

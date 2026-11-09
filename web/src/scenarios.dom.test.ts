@@ -108,6 +108,26 @@ describe("renderScenarioPicker", () => {
         expect(host.querySelector(".overlay-backdrop")).toBeNull();
     });
 
+    it("renders the server entry point only when onServer is wired", () => {
+        let serverClicks = 0;
+        renderScenarioPicker(host, catalog, {
+            onStart: () => {},
+            onServer: () => { serverClicks++; },
+        });
+        const btn = host.querySelector<HTMLElement>(".scenario-server-btn");
+        expect(btn?.textContent).toContain("remote server");
+        btn!.click();
+        expect(serverClicks).toBe(1);
+        expect(host.querySelector(".overlay-backdrop")).toBeNull();
+
+        const host2 = document.createElement("div");
+        document.body.appendChild(host2);
+        renderScenarioPicker(host2, catalog, { onStart: () => {} });
+        expect(
+            host2.querySelector(".scenario-server-btn"),
+        ).toBeNull();
+    });
+
     it("back returns to the list without choosing", () => {
         const started: (string | null)[] = [];
         renderScenarioPicker(host, catalog, {

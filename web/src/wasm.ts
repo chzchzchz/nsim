@@ -4,9 +4,17 @@
 
 // Sole polyfill loader: bundling it keeps window.Go available
 // under any deploy base, unlike a root-absolute script tag.
-import "../js/wasm_exec.js";
+import "./wasm_exec.js";
+
+// Test seam: unit/init tests inject a fake so they never fetch
+// the real wasm blob or exercise Go's runtime.
+export function setWasmLoaderForTest(impl: () => Promise<void>): void {
+    wasmLoader = impl;
+}
+let wasmLoader: (() => Promise<void>) | null = null;
 
 export async function loadWasm(): Promise<void> {
+    if (wasmLoader) return wasmLoader();
     const go = new window.Go();
     // BASE_URL always ends with "/" and honors Vite's `base`
     // option, so the module resolves under any deploy path.
