@@ -512,6 +512,38 @@ Checks:
   cleared flag is a legal state. After any long-hold run, confirm the
   end state still carries the commanded lineup (flag still set, valve
   still open) before crediting it.
+- **A derived-input channel construction-zero on the first tick
+  reads as physically absent to a sink gate.** The plant derives a
+  sink's per-step reading (heat input, HX rate) after the RPV step,
+  so at construction the channel is zero by construction, not by
+  physics. A gate that fires on "sink < threshold" then debits at
+  every fresh plant's first tick, manufacturing uncovery that no
+  real no-sink lineup produced. Seed derived channels to their
+  steady value at construction (MakePlant) AND give the gated debit
+  a level deadband, so the remaining trickle cannot flip a covered
+  node to its uncovered integrator. The one-tick lag is deliberate
+  and harmless; the construction-zero is not.
+- **An approach-point shutoff on a plant-owned sink bangs against
+  the gate.** A cooling HX that goes to exactly zero when the
+  primary reaches its approach temperature (CCW + 20 °F) alternates
+  between full rejection (plunging the primary to the approach
+  point) and zero (boiling off inventory until the pre-approach
+  temperature overshoots, then rejecting again). The covered film
+  law cannot be witnessed holding "declines monotonically" through
+  such a lineup — assert the covered leg through the dump envelope
+  (where the plant's own program rate, not the bang, sets the
+  cooldown) and declare the HX as state, not dynamics. Probing the
+  bang is the fix trigger for the sink, not a reason to ship a
+  green skipped witness.
+- **A capability duty is not a delivered duty.** A latent HX duty
+  computed from design flow (hundreds of MW) against a 20 MW load
+  delivers capability, not cooling: the plant integration plunges
+  the coolant to the approach floor in one tick and gaps the
+  covered leg. Cap delivered rejection at the decay load and make
+  the capability taper smoothly to zero AT the approach point —
+  two first-order limits, not flags. The gate sees delivered
+  rejection: sgW must be the capped copy, or the gate opens
+  falsely exactly when the plant is cooling hardest.
 
 ## 8. Justification audit for new tests
 

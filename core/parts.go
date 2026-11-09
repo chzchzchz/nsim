@@ -5965,6 +5965,95 @@ const (
 	// (specs/wiki/Leidenfrost_effect.txt:762-768).
 	CladSteamFilmHeatTransferWPerDegF = 6000.0
 
+	// CladWaterFilmHeatTransferWPerDegF is the Newton
+	// conductance hA (W/°F) for the lumped core in liquid
+	// contact: Qfilm = hA·(CladTempF − Outlet). Tier-B derived
+	// (plans/p77_1.txt State) with a sourced window. The form
+	// q = h·ΔT is sourced (specs/wiki/Critical_heat_flux.txt:727);
+	// DNB is "a large decrease in the heat transfer coefficient"
+	// (specs/the_westinghouse_pressurized_water_react/chapter_2/page_036.txt:101-106).
+	// The nucleate window brackets the film drop at
+	// 7.2–54 °F over saturation (specs/wiki/Nucleate_boiling.txt:640,644)
+	// and the covered core is subcooled without significant bulk
+	// boiling (specs/the_westinghouse_pressurized_water_react/chapter_1/page_017.txt:68-70).
+	// No spec supplies a wall coefficient, and the tree carries no
+	// rod diameter, so the value is calibrated to the rated hot-leg
+	// offset: rated outlet 621 °F, historical pinants 51 °F over outlet
+	// (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60-61),
+	// 3.8e9/51 ≈ 7.5e7, inside the sourced nucleate band. Tier-B
+	// calibration with window: hA ∈ [7.0e7, 8.4e7] keeps the rated
+	// drop in 45–60 °F and the shutdown drop single-digit; retuning
+	// outside the window breaks Witness 1 by construction. Two-plus
+	// orders above the steam film because the liquid film must pass
+	// the full 3.8 GW through-wall flux at a tens-of-°F drop, while
+	// the steam film closes against a ~19 MW tail at a ~3,000 °F lift.
+	CladWaterFilmHeatTransferWPerDegF = 7.5e7
+
+	// CladCoveredExcessCapF is the ceiling on the covered
+	// film drop grossW/hA. Derived ceiling from the sourced
+	// average-clad normal-operation limit: "limiting the average
+	// cladding temperature to less than 850°F"
+	// (specs/westinghouse_tech_manual/chapter_2/page_0209.txt:8-10).
+	// At rated bulk 621 °F (specs/the_westinghouse_pressurized_water_react/chapter_3/page_065.txt:60-61)
+	// the headroom is 229 °F; the 100 °F cap leaves hot-spot
+	// margin for the 13.6 kW/ft peak-power limit
+	// (specs/westinghouse_tech_manual/chapter_2/page_0210.txt:18-19)
+	// and keeps the Gen-avg check inside the 229 °F window with
+	// 2.3x margin. Never reached in normal covered operation
+	// (rated ~51 °F, shutdown decay ~3 °F); exists only as a margin
+	// guard, never as the uncovery trigger. Tier-B (plan edit:
+	// cites the sourced 850 °F anchor instead of derived-only).
+	CladCoveredExcessCapF = 100.0
+
+	// CladBoiloffDebitGalPerJoule is the latent-heat
+	// conversion for the boil-off debit: BreakDischarged +=
+	// Qnet·dt·this. Mass basis: one gallon of liquid boils by
+	// Q/[h_fg · kg/gal] where kg/gal = KilogramsPerGallon
+	// (core/parts.go:2271).
+	// Bracket (high-pressure RCS to secondary): the low-pressure
+	// textbook anchor is ExtractionSteamEnthalpy ~1.16 MJ/kg at
+	// 60–80 psia (core/parts.go:2263-2266; the spec states no
+	// number). At 2,250 psia h_fg falls with pressure toward the
+	// critical point — a pressure table alone cannot give
+	// enthalpy; at least one steam table is citable and no
+	// cached spec carries an h_fg figure at 2,250 psia, so the
+	// bracket [650, 1160] kJ/kg is the documented modeling
+	// assumption carrying this constant. The debit uses the
+	// higher-pressure end, 650 kJ/kg, which is conservative
+	// (larger debit, faster uncovery). Margin: at 247 MW, 650
+	// kJ/kg gives ~360k gal/h (0.86/h of the 419,438 gal
+	// drainable inventory); at 19 MW, ~27k gal/h. An h_fg
+	// breakout fitted to a steam table would narrow this
+	// bracket; the value is brought in as a named
+	// pressure-dependent argument here, not a silently
+	// recomputed literal.
+	CladBoiloffDebitGalPerJoule = 1.0 / (650000.0 * 3.785411784)
+
+	// CladBoiloffDebitGateFrac is the no-sink gate for the
+	// boil-off debit: debit only when sgW < gate·grossW.
+	// Tier-B derived modeling choice (plans/p77_1.txt State).
+	// 0.5 keeps sensible cooldown (dump/RHRS is sgW) from
+	// false-firing; tighten to 0.1 if Witness 5 misclassifies.
+	// The gate expresses spec conservatism: damage requires
+	// uncovery first ("Low water level uncovers the core,
+	// allowing it to heat up", specs/wiki/Nuclear_meltdown.txt:981-983);
+	// debiting while a sink carries the heat would manufacture
+	// uncovery the spec does not support.
+	CladBoiloffDebitGateFrac = 0.5
+
+	// CladUncoveryEpsilonGal is the lumped deadband below which a
+	// debit does not uncover the core: 1% of the drainable
+	// inventory (RCSDrainableInventoryGal ≈ 419,438 gal, so
+	// ~4,200 gal). "Low water level uncovers the core"
+	// (specs/wiki/Nuclear_meltdown.txt:981-983) means the level
+	// actually falls below the core top, not that a few gallons
+	// were boiled at power. Tier-B derived anchor for the lumped
+	// level geometry the tree does not carry; keeps RPV-alone
+	// witnesses covered through the guaranteed post-trip boil-off
+	// tail (Witness 3: ~68 gal/tick at 247 MW, ~62 ticks to cross).
+	// Plans/p77_1.txt Criterion 3.
+	CladUncoveryEpsilonGal = 4200.0
+
 	// Zr-steam kinetics (plans/p65_2.txt, stage 4 rapid
 	// oxidation). Baker-Just parabolic law w² = 33.3e6·t·
 	// exp(−45500/RT) (mg²/cm⁴, ANL-6548, as printed in

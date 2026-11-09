@@ -276,16 +276,19 @@ func TestPlant_HDS_TwinPlantOpenBreakGenerates(t *testing.T) {
 	h2B := b.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent
 	assert.InDelta(t, h2A, h2B, 1e-9, "pre-divergence plants identical")
 	require.NoError(t, cmB["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0"))
-	// Stuck-open plant `a` crosses onset on the slow drain
-	// (plans/p65_2.txt: generation now requires oxidation,
-	// not merely inventory); step `a` to ~2 h. The G4 gate
-	// crossing at 35 min was the structural-ramp regime.
-	for i := 0; i < int(2*time.Hour/dt); i++ {
+	// Stuck-open plant `a` crosses oxidation onset on the slow drain
+	// (plans/p65_2.txt: generation now requires oxidation, not merely
+	// inventory). The 4x sgW rescale (plans/p77_1.txt) makes secondary
+	// removal truthful, delaying onset from ~2 h to ~5 h (probed:
+	// clad crosses 1472 °F at h≈5, H2 gap opens by h≈5-6). Step
+	// 5 h so the gap is decisive; both twins run the same span.
+	span := 5 * time.Hour
+	for i := 0; i < int(span/dt); i++ {
 		a.Step(dt)
 		a.Update()
 	}
 	// Closed plant `b` settles covered; step it the same span.
-	stepN(&b, int(2*time.Hour/dt), dt)
+	stepN(&b, int(span/dt), dt)
 	h2A = a.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent
 	h2B = b.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent
 	const gapFloor = 0.002

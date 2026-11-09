@@ -19,8 +19,13 @@ func TestPlant_DesignBasisLOCADoesNotDamageMax(t *testing.T) {
 		p.Update()
 	}
 	rpv := p.ReactorBuilding.ReactorPressureVessel
-	satF := PressurizerSatTemperatureF(float64(RPVDesignPressure))
-	assert.InDelta(t, satF, rpv.CladTempF, 50, "covered clad tracks saturation")
+	// Covered clad is the bulk fixed point (Outlet + film drop,
+	// plans/p77_1.txt Criterion 7), not the saturation clamp; the
+	// at-power permissive keeps fission at rating so the DNB branch
+	// cannot fire. Exact zero uncovery: MakePlant seeds HeatInput to
+	// the steady per-loop value, so tick 1 reads a real sgW and the
+	// boil-off gate never micro-debits at rated power.
+	assert.InDelta(t, rpv.Outlet.Float()+51.0, rpv.CladTempF, 5, "covered clad is bulk-anchored")
 	assert.Equal(t, 0.0, rpv.UncoveryFrac, "no break, no uncovery")
 	assert.Equal(t, 0.0, rpv.CoreDamageFrac, "covered core never damages")
 	assert.Equal(t, float32(0), rpv.Damage)
@@ -43,8 +48,10 @@ func TestRPV_CladHeatsPastCoolantOnUncovery(t *testing.T) {
 	// directly (no Plant-level applyHotLegBreak needed for the unit check).
 	r.BreakDischarged = Volume{Val: RCSDrainableInventoryGal * 0.9, Unit: u.Gallon}
 	start := r.CladTempF
-	satF := PressurizerSatTemperatureF(float64(RPVDesignPressure))
-	require.InDelta(t, satF, start, 1, "seed sets clad at saturation")
+	// Bulk film seed (plans/p77_1.txt): 621 + 51 = 672, not satF
+	// (668). The gap is 3.4 °F, so a 5 °F tolerance proves the new
+	// anchor while keeping the dead code honest.
+	require.InDelta(t, CoreReferenceOutletF+51.0, start, 5, "seed sets clad at the bulk film point")
 
 	// Band window: just after the scram tick collapses fission,
 	// the fast decay pool holds the sourced 6.5% shutdown level,
@@ -98,8 +105,11 @@ func TestRPV_StageAnchorsInSequence(t *testing.T) {
 		Pressure:    RPVDesignPressure,
 	}
 	r.SeedSteadyStatePower(CoreRatedThermalPower)
+	// Stay covered: sgW at the plant-total steady value so the
+	// boil-off gate never opens (RPV-alone witnesses pass sgW=0;
+	// plans/p77_1.txt Criterion 7 isolates the helper for that).
 	for i := 0; i < int(2*time.Second/DefaultTimeStep); i++ {
-		r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0, 0)
+		r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0, Watts(float64(r.TotalThermalPower())))
 	}
 	assert.Equal(t, 0.0, r.UncoveryFrac)
 	assert.Equal(t, 0.0, r.CoreDamageFrac)

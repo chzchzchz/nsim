@@ -298,10 +298,13 @@ func TestPlant_FukushimaClassWalker(t *testing.T) {
 	r := p.ReactorBuilding.ReactorPressureVessel
 	assert.Equal(t, 1.0, r.UncoveryFrac, "decay-only uncovery completes")
 	// With the steam film (plans/p76_1.txt) the 4 h tail
-	// plateaus at ~2088 °F; the adiabatic 2240 °F crossing is
-	// no longer reachable. The regime anchor is the damage
-	// ramp: clad is ~570 °F past ballooning.
-	assert.Greater(t, r.CladTempF, BallooningF+500, "reaches deep past ballooning")
+	// plateaus at ~1754 °F after the boil-off h_fg re-anchor
+	// (650 kJ/kg, plans/p77_1.txt fix, probed 2026-11-09: at 247 MW
+	// the debit is 360k gal/h, faster uncovery but early boil-off
+	// vents steam heat through the break); the adiabatic 2240 °F
+	// crossing is no longer reachable. The regime anchor is the
+	// damage ramp: clad is deep past ballooning.
+	assert.Greater(t, r.CladTempF, BallooningF+100, "reaches deep past ballooning")
 	assert.Greater(t, r.OxidizedFrac, 0.0, "oxidation accumulates")
 	h := p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
 	assert.Greater(t, h.HydrogenVolumePercent, 0.0, "H2 present")

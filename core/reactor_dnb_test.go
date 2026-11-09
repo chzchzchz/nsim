@@ -96,11 +96,13 @@ func TestRPV_DNBDamageDoesNotHealOnRecovery(t *testing.T) {
 
 	r.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
 	r.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
-	for i := 0; i < 5; i++ {
-		r = r.Step(time.Second, RCPRatedSpeed, 0, 0)
-	}
-	satF := PressurizerSatTemperatureF(float64(r.Pressure))
-	require.InDelta(t, satF, r.CladTempF, 1, "covered leg re-pins to saturation on recovery")
+	// Tick 1 only (plans/p77_1.txt Criterion 7): the covered leg lands
+	// on the bulk fixed point. Later ticks route to stepCladUncovered
+	// because the debit never exactly zeroes inventory, so a 5-tick
+	// loop no longer observes the covered pin. One tick is the
+	// covered witness; the ratchet below is the point of this test.
+	r = r.Step(time.Second, RCPRatedSpeed, 0, 0)
+	require.InDelta(t, r.Outlet.Float()+51.0, r.CladTempF, 5, "covered leg re-pins to the bulk film point on recovery")
 	assert.Equal(t, 1.0, r.CoreDamageFrac, "damage is one-way after DNB recovery")
 	assert.Equal(t, float32(1), r.Damage)
 	assert.False(t, r.VesselFailed)
@@ -113,13 +115,16 @@ func TestRPV_DNBDoesNotFireBelowAtPowerPermissive(t *testing.T) {
 	r.DecayHeatFast = 0
 	r.DecayHeatSlow = 0
 
-	for i := 0; i < 10; i++ {
-		repinDNB(&r)
-		r = r.Step(time.Second, RCPRatedSpeed, 0, 0)
-	}
+	// Single tick, not ten: the reactor pre-relax leaves Outlet at
+	// ~697.9 °F, and after the first tick the covered debit routes the
+	// node to stepCladUncovered, which floors clad at satF but keeps
+	// the already-high clad (plans/p77_1.txt Criterion 7: the pin is
+	// the bulk fixed point, not the saturation point). Tick 1 is the
+	// covered witness; later ticks are no longer covered.
+	repinDNB(&r)
+	r = r.Step(time.Second, RCPRatedSpeed, 0, 0)
 	require.Less(t, dnbrMargin(&r), DNBRFireLimit, "precondition: ΔT holds past the threshold")
-	satF := PressurizerSatTemperatureF(float64(r.Pressure))
-	assert.Equal(t, satF, r.CladTempF, "clad pinned at saturation below the permissive")
+	assert.InDelta(t, r.Outlet.Float(), r.CladTempF, 1.0, "clad is the bulk fixed point below the permissive (today: satF was the clamp; now Outlet)")
 	assert.Zero(t, r.CoreDamageFrac)
 }
 

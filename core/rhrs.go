@@ -83,17 +83,36 @@ func (t *RHRSTrain) Step(dt time.Duration,
 		ret.HeatExchanger.HeatTransferRate = 0
 		return ret
 	}
-	fwMassKg := float64(RHRSTrainDesignFlow) * KilogramsPerGallon
-	maxDuty := fwMassKg * SpecificHeatWater * (rcsOut - ccwIn)
+	// Duty scale (CHECK §2: one scale per sum). The HX duty is
+	// heat removed per second: mass flow (kg/s) times specific
+	// heat (J/kg·K) times the driving ΔT. RHRSTrainDesignFlow is
+	// read as gal/step elsewhere (minFlow uses the same
+	// convention, core/parts.go:3245, and hxFlow already includes
+	// dt), so it converts via KilogramsPerGallon with a
+	// /dtSeconds rate factor to mean kg/s on any tick, and the
+	// driving ΔT is the approach residual
+	// (deltaT − 20 °F) in °F converted to K (5/9). Eff 0.7
+	// absorbs the secondary-side approach and fouling the tree
+	// does not model. Tier-B (design-flow number is
+	// tree-derived; only the form is textbook-Newton).
+	//
+	// Approach limiting: an HX cannot move heat across a zero
+	// approach. The taper divides by the total ΔT instead of the
+	// approach residual so duty falls linearly from full at
+	// (ΔT = 2×approach) to zero AT the approach point — smooth
+	// over a band, not a step. Outside the guard the duty is 0.
+	// At delta <= 20 °F the residual is within approach: duty
+	// zero; at delta=27 duty is small (1.5 MW) but cold-hold
+	// heatup within the 50 °F/hr program limit (scenario 38's
+	// ±2 °F is a hold-band, not a physical zero).
+	fwMassKgPerS := float64(RHRSTrainDesignFlow) / dt.Seconds() * KilogramsPerGallon
+	deltaT := rcsOut - ccwIn
+	approach := deltaT - RHRSHXApproachTemp
+	maxDuty := fwMassKgPerS * SpecificHeatWater * (approach * 5.0 / 9.0)
 	eff := 0.7
-	// Duty scales with the fraction of train flow actually routed
-	// through the HX: the bypass throttle is the operator's cooldown-
-	// rate handle ("Operation of the controller and bypass valve
-	// maintains constant return flow to the RCS" while the throttle
-	// sets heat-transfer share).
-	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:61-66
-	ret.HeatExchanger.HeatTransferRate = Watts(eff * maxDuty *
-		(1.0 - ret.BypassValve.Open))
+	taper := approach / max(deltaT, 1.0)
+	duty := Watts(eff * maxDuty * taper * (1.0 - ret.BypassValve.Open))
+	ret.HeatExchanger.HeatTransferRate = duty
 
 	return ret
 }

@@ -69,6 +69,14 @@ func scenario3ColdPlant() *Plant {
 // train and starting the lumped RCP hands the temperature over to the
 // decay-plus-pump-heat balance, which must begin heating and stay under
 // the 50 F/hr limit.
+//
+// Pre-p77 premise (documented): at 138 °F vs CCW 115 °F the approach is
+// 23 °F; the pre-fix capability duty (hundreds of MW regardless of
+// approach) would have crushed any decay load. The tapered duty
+// (rhrs.go, approach-scaled, plans/p77_1.txt RHRS fix) rejects
+// ~1 MW there, so decay heat does warm the refueling plant slowly
+// (~0.01 °F/s, probed). The contract tested here is decay-driven
+// warming within the program rate, not an absolute cold hold.
 func TestScenario3_SecuredRHRSHeatupUnderLimit(t *testing.T) {
 	t.Parallel()
 	p := scenario3ColdPlant()
@@ -76,8 +84,8 @@ func TestScenario3_SecuredRHRSHeatupUnderLimit(t *testing.T) {
 	window := 5 * time.Second
 	before := outletF(p)
 	stepFor(p, window, DefaultTimeStep)
-	require.LessOrEqual(t, outletF(p), before,
-		"a running RHR train must keep the cold plant from heating")
+	require.LessOrEqual(t, (outletF(p)-before)/window.Seconds(), OpHeatupRateLimit,
+		"a running RHR train keeps refueling heatup under the program rate")
 
 	setControl(t, p,
 		"AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/PumpRunning", "0")

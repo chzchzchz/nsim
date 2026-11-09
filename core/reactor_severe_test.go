@@ -198,10 +198,11 @@ func TestPlant_SevereAccidentClassWalker(t *testing.T) {
 	}
 	rpv := beyond.ReactorBuilding.ReactorPressureVessel
 	assert.Equal(t, 1.0, rpv.UncoveryFrac, "precondition: core uncovered")
-	// Film-cooled plateau is ~2088 °F; the adiabatic 2240 °F
-	// wall is obsolete (plans/p76_1.txt). Deep into the
+	// Film-cooled plateau is ~1754 °F after the boil-off h_fg
+	// re-anchor (650 kJ/kg, plans/p77_1.txt fix, probed 2026-11-09):
+	// faster early boil-off vents steam heat. Deep into the
 	// damage ramp (1520→2200 °F) is the regime anchor.
-	assert.Greater(t, rpv.CladTempF, BallooningF+500, "precondition: clad deep into damage ramp")
+	assert.Greater(t, rpv.CladTempF, BallooningF+100, "precondition: clad deep into damage ramp")
 
 	// Unit-level melt-regime leg: seed at the melt regime,
 	// uncovered, and step once. The plant-level walker cannot

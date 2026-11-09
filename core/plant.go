@@ -32,6 +32,25 @@ import (
 // (main-steam-line break discharge, plans/p34_1.txt), which the RPV
 // integrates against physics alone. With no break open the fault share
 // is zero and every planned-evolution trajectory is unchanged.
+// rhrsDeliveredRejection returns the heat the RHRS actually
+// rejects toward the ultimate sink this tick: the tapered HX
+// capability duty reads back from the trains, capped at decay
+// headroom (Class 10). One spelling for both the sgW gate and
+// the takeover integration so the two cannot drift apart. The
+// 2× headroom is Tier-B: closing within a factor of two of the
+// load keeps sensible cooldown just under cap while acknowledging
+// the approach ramp; tighten only with a witnessed number
+// (specs/wiki/Decay_heat.txt:643, specs/the_westinghouse_pressurized_water_react/chapter_4/page_086.txt:61-66
+// for the bypass-throttle handle). Takes dampers-free variables
+// only; the caller preserves the HeatTransferRate capability
+// fields for telemetry.
+func rhrsDeliveredRejection(rhrs *RHRS, decayHeat Watts) float64 {
+	raw := float64(rhrs.TrainA.HeatExchanger.HeatTransferRate +
+		rhrs.TrainB.HeatExchanger.HeatTransferRate)
+	decayW := float64(decayHeat)
+	return min(raw, 2.0*max(decayW, 1.0))
+}
+
 func (r *ReactorBuilding) secondaryExcessDrawW(offtakeFraction float64, turbineAdmitting bool, op PlantOperation, dt time.Duration) (Watts, Watts) {
 	if r.Aux != nil && r.Aux.ResidualHeatRemovalSystem.HasTakenOver {
 		return 0, 0
@@ -471,14 +490,24 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 	// read as previous-tick values because HeatInput and the
 	// RHRS rejection are both derived after this RPV step
 	// (RHRS.Step runs below). One-tick lag is deliberate and
-	// harmless: the clad tau is hours. plans/p76_1.txt Wiring.
+	// harmless: the clad tau is hours. plans/p76_1.txt Wiring,
+	// rescaled plant-total in plans/p77_1.txt: HeatInput is
+	// per-loop (TotalThermalPower()/SteamGeneratorLoopCount),
+	// while the clad legs read it against plant-total grossW.
 	prevHeatInput := ret.SteamGenerator.HeatInput
+	// Delivered-vs-capability distinction (Class 10): the HX
+	// reads back its tapered capability duty, so sgW caps it at
+	// decay headroom. One helper, one spelling, in both the
+	// sgW gate and the takeover integration below; drift between
+	// the two is what gaps a covered leg. The 2× headroom is
+	// Tier-B: closing and reopening within a factor of two of the
+	// load keeps sensible cooldown just under cap while acknowledging
+	// the approach ramp; tighten only with a witnessed number.
 	var sgW Watts
 	if ret.Aux.ResidualHeatRemovalSystem.HasTakenOver {
-		sgW = ret.Aux.ResidualHeatRemovalSystem.TrainA.HeatExchanger.HeatTransferRate +
-			ret.Aux.ResidualHeatRemovalSystem.TrainB.HeatExchanger.HeatTransferRate
+		sgW = Watts(rhrsDeliveredRejection(&ret.Aux.ResidualHeatRemovalSystem, ret.ReactorPressureVessel.TotalThermalPower()))
 	} else {
-		sgW = prevHeatInput
+		sgW = Watts(float64(prevHeatInput) * float64(SteamGeneratorLoopCount))
 	}
 	rpv := ret.ReactorPressureVessel.Step(dt, ret.ReactorCoolantPump.Velocity,
 		pacedExcess, sgW)
@@ -638,11 +667,16 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 		// minus HX rejection); ReactorPressureVessel.Step's own
 		// secondary-excess path is suppressed for this regime by
 		// secondaryExcessDrawW, keeping one writer per regime.
-		rejectionW := float64(
-			ret.Aux.ResidualHeatRemovalSystem.TrainA.HeatExchanger.HeatTransferRate,
-		) + float64(
-			ret.Aux.ResidualHeatRemovalSystem.TrainB.HeatExchanger.HeatTransferRate,
-		)
+		//
+		// Load cap (Class 10): an uncapped super-capability HX duty
+		// (500+ MW at entry) would plunge the outlet to the approach
+		// floor in one tick and gap the primary. Cap the delivered
+		// rejection at the decay load this tick plus a bounded
+		// overshoot (decay itself is 15–19 MW at shutdown,
+		// specs/wiki/Decay_heat.txt:643), so the takeover integrates
+		// a gentle cooling ramp, not a slam. Same helper as the sgW
+		// gate read above — one spelling, no drift.
+		rejectionW := rhrsDeliveredRejection(&ret.Aux.ResidualHeatRemovalSystem, ret.ReactorPressureVessel.TotalThermalPower())
 		decayW := float64(ret.ReactorPressureVessel.TotalThermalPower())
 		netW := decayW - rejectionW
 		deltaTK := netW / (RCSMassKg * SpecificHeatWater) * dt.Seconds()
@@ -2916,6 +2950,13 @@ func MakePlant() Plant {
 	// the plant.
 	p.ReactorBuilding.ReactorPressureVessel.SeedSteadyStatePower(
 		CoreRatedThermalPower)
+	// HeatInput is derived per-Step from the RPV, so seed it to its
+	// steady per-loop value; otherwise tick 1 reads sgW=0 and the
+	// covered boil-off (plans/p77_1.txt) debits a startup placeholder
+	// as if the sink were absent.
+	p.ReactorBuilding.SteamGenerator.HeatInput = Watts(
+		float64(p.ReactorBuilding.ReactorPressureVessel.TotalThermalPower()) / float64(SteamGeneratorLoopCount),
+	)
 	// The secondary side starts at its full-load shell pressure.
 	// Leaving it at the zero value arms the low-steamline SI trigger
 	// (500 psia) on every fresh plant: "Full load pressure, shell

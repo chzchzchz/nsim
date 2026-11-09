@@ -84,10 +84,20 @@ func TestCladColdShutdownLockoutNoDamage(t *testing.T) {
 	require.NoError(t, cm["ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock"].Set("1"))
 	stepN(&p, int(600*time.Second/dt), dt)
 	rpv := p.ReactorBuilding.ReactorPressureVessel
+	// plans/p77_1.txt Criterion 6: still a negative control.
+	// MakePlant seeds HeatInput so tick 1 reads a real sgW
+	// (core/plant.go) and the covered leg never micro-debits.
+	// At 600 s the outlet sits at 612.7 °F (rate-limited 50 °F/hr,
+	// not the 558 °F tau target); the clad excess at that point is
+	// ~0.3 °F (fast pool drained in the first minute, slow pool
+	// 19 MW) so clad reads ~613 °F — the plan's ~574 °F estimate
+	// assumed the 247 MW fast pool stays charged, which it does
+	// not. Read Outlet from the plant when asserting this number.
 	assert.Equal(t, 0.0, rpv.UncoveryFrac, "covered: no uncovery")
 	assert.Equal(t, 0.0, rpv.CoreDamageFrac, "covered: no damage")
 	assert.False(t, rpv.VesselFailed, "covered: no latch")
-	assert.Less(t, rpv.CladTempF, 800.0, "covered clad pinned near saturation, got %.1f", rpv.CladTempF)
+	assert.Less(t, rpv.CladTempF, 800.0, "covered clad bulk-anchored, got %.1f", rpv.CladTempF)
+	assert.InDelta(t, 612.7, rpv.Outlet.Float(), 5.0, "outlet rate-limited, not tau target")
 }
 
 // Criterion 2: cooling inflection with secondary removal.

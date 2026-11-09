@@ -440,7 +440,14 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 	// it, ΔT cannot drive DNBR down. Uncovery wins the tie.
 	dnbFire := powerFrac >= RPSAtPowerPermissiveFraction && dnbrMargin(&ret) < DNBRFireLimit
 	dtSeconds := dt.Seconds()
-	if ret.UncoveryFrac > 0 {
+	// A debit below the lumped uncovering deadband does not
+	// uncover the core: "Low water level uncovers the core"
+	// (specs/wiki/Nuclear_meltdown.txt:981-983) requires the
+	// level to actually fall below the core top. UncoveryFrac
+	// stays the ledger fraction; the BRANCH keeps the covered
+	// leg until r.BreakDischarged crosses CladUncoveryEpsilonGal.
+	uncovered := r.BreakDischarged.Float() > CladUncoveryEpsilonGal
+	if uncovered {
 		ret.stepCladUncovered(dt, sgW)
 		// Zr-steam feedback (plans/p65_2.txt Step 1): Baker-Just
 		// oxidation advance plus reaction enthalpy over the same
@@ -463,7 +470,7 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 		ret.CladTempF = max(satF, ret.CladTempF+rateFPerSec*min(dtSeconds, 1))
 		ret.OxidePickupRate = 0
 	} else {
-		ret.CladTempF = satF
+		ret.stepCladCovered(dt, sgW)
 		ret.OxidePickupRate = 0
 	}
 	// One-way damage ratchet: stageDamage is a temperature
@@ -472,11 +479,11 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 	ret.CoreDamageFrac = max(ret.CoreDamageFrac, stageDamage(ret.CladTempF))
 	ret.Damage = float32(ret.CoreDamageFrac)
 	// Vessel failure latch (plans/p65_3.txt Step 1): uncovered
-	// clad past the zircaloy melting regime. Covered clad is
-	// pinned at saturation above, so only an uncovered core can
-	// reach ZrMeltF; the UncoveryFrac conjunct states that
-	// explicitly. One-way: never cleared.
-	if ret.UncoveryFrac > 0 && ret.CladTempF >= ZrMeltF {
+	// clad past the zircaloy melting regime. Covered clad sits at
+	// the bulk film point, so only a truly uncovered core can
+	// reach ZrMeltF; the uncovered conjunct (deadband-crossed,
+	// above) states that explicitly. One-way: never cleared.
+	if uncovered && ret.CladTempF >= ZrMeltF {
 		ret.VesselFailed = true
 	}
 
@@ -631,9 +638,11 @@ func (r *ReactorPressureVessel) SeedSteadyStatePower(p Watts) {
 	r.Iodine135 = pFraction
 	r.Xenon135 = xenonEquilibriumPhysical(pFraction)
 	r.Nitrogen16 = pFraction
-	// Covered core: clad tracks saturation at design pressure.
-	// plans/p65_1.txt State (CladTempF seeding).
-	r.CladTempF = PressurizerSatTemperatureF(float64(RPVDesignPressure))
+	// Covered core: clad is the hot-leg film point
+	// (Outlet + rated film drop, plans/p77_1.txt). Seeded at the
+	// bulk reference so a seeded full-load plant starts on its
+	// steady covered place; the tail re-derives it every Step.
+	r.CladTempF = CoreReferenceOutletF + float64(CoreRatedThermalPower)/CladWaterFilmHeatTransferWPerDegF
 	r.UncoveryFrac = 0
 	r.CoreDamageFrac = 0
 	r.OxidizedFrac = 0
@@ -1398,6 +1407,55 @@ func (r *ReactorPressureVessel) stepCladUncovered(dt time.Duration, sgW Watts) {
 	}
 	netW := grossW - waterW - filmW
 	r.CladTempF = max(satF, r.CladTempF+netW/CladThermalMassCpJPerDegF*9.0/5.0*min(dtS, 1))
+}
+
+// stepCladCovered advances the covered lumped rod:
+//   - film drop: over the hot-leg bulk by grossW/hA (the
+//     through-wall heat flux; the coolant already carried up the
+//     core delta-T must pass from pellet to coolant through this
+//     film);
+//   - boil-off: the heat the plant does NOT carry away
+//     (Qnet = grossW - sgW) leaves as inventory when the sink is
+//     mostly absent (sgW < gate * grossW), so uncovery — not the
+//     covered leg — is the only path to further heatup.
+//
+// The cap binds the film drop only; it never gates the debit
+// (a 3.3 °F drop at shutdown decay never reaches 100 °F, so
+// gating the debit on the cap would make uncovery impossible).
+// When the plant carries the flux (gate closed) the clad is
+// exactly bulk + rated film drop — the subcooled equilibrium,
+// not saturation. plans/p77_1.txt Step functions.
+func (r *ReactorPressureVessel) stepCladCovered(dt time.Duration, sgW Watts) {
+	// Hot-leg bulk: the Outlet temperature the reactor relaxes.
+	// Inlet is the SG cold-leg return; the lumped hot rod lives
+	// at the hot end.
+	bulkF := r.Outlet.Float()
+	grossW := float64(r.TotalThermalPower())
+	netW := grossW
+	if sgW > 0 {
+		netW -= min(float64(sgW), grossW)
+	}
+	// Film drop: gross (through-wall) flux through the liquid
+	// film. Algebraically at the current tick's bulk (the film
+	// tracks the coolant within a tick; the uncovered leg is
+	// the one with hours-scale dynamics).
+	excess := grossW / CladWaterFilmHeatTransferWPerDegF
+	if excess > CladCoveredExcessCapF {
+		excess = CladCoveredExcessCapF
+	}
+	r.CladTempF = bulkF + excess
+	// Boil-off: unsunk heat leaves as inventory, but only when
+	// the sink is mostly absent. At 247 MW this debits ~360k gal/h
+	// (0.86 of the 419,438 gal drainable inventory per hour); at
+	// the 19 MW tail, ~27k gal/h. An active sink carries the unsunk
+	// heat instead.
+	if netW > 0 && float64(sgW) < CladBoiloffDebitGateFrac*grossW {
+		boilGal := netW * dt.Seconds() * CladBoiloffDebitGalPerJoule
+		r.BreakDischarged = Volume{
+			Val:  min(r.BreakDischarged.Float()+boilGal, RCSDrainableInventoryGal),
+			Unit: u.Gallon,
+		}
+	}
 }
 
 // stageDamage maps clad temperature to lumped damage fraction:
