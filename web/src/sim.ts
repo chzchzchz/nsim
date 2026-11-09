@@ -15,7 +15,12 @@ export interface SimUI {
     onReset: () => void;
 }
 
-const FPS_MIN = 1;
+// The header Frames/s box is shared: locally it drives the WASM
+// tick (FPS_MIN_LOCAL = 1), remotely it drives the server poll at
+// 1000/fps ms capped at 1 Hz (FPS_MIN_REMOTE = 0.1, so 0.5 fps
+// polls every 2 s). The clamp in attachUI uses the local floor;
+// the remote path reads the raw parsed value itself.
+const FPS_MIN_LOCAL = 1;
 const FPS_MAX = 240;
 const SPS_MIN = 0;
 const SPS_MAX = 1000000;
@@ -43,12 +48,15 @@ export class Sim {
         ui.stepBtn.addEventListener("click", () => this.stepOnce());
         ui.resetBtn.addEventListener("click", () => this.reset());
         ui.fpsInput.addEventListener("change", () => {
-            this.framesPerSecond = clampInt(
-                ui.fpsInput, FPS_MIN, FPS_MAX, this.framesPerSecond,
+            // Local floor is 1: a sub-1 local tick would just lag
+            // the UI. Remote mode reads the raw value through its
+            // own handler in main.ts.
+            this.framesPerSecond = clampNumber(
+                ui.fpsInput, FPS_MIN_LOCAL, FPS_MAX, this.framesPerSecond,
             );
         });
         ui.spsInput.addEventListener("change", () => {
-            this.stepsPerSecond = clampInt(
+            this.stepsPerSecond = clampNumber(
                 ui.spsInput, SPS_MIN, SPS_MAX, this.stepsPerSecond,
             );
         });
@@ -95,13 +103,15 @@ export class Sim {
     }
 }
 
-function clampInt(
+function clampNumber(
     input: HTMLInputElement,
     min: number,
     max: number,
     fallback: number,
 ): number {
-    const v = parseInt(input.value, 10);
+    // parseFloat, not parseInt: callers pass fractional bounds
+    // (FPS_MIN_LOCAL is an integer but SPS is also clamped here).
+    const v = parseFloat(input.value);
     const clamped = Number.isNaN(v) ? fallback : Math.min(max, Math.max(min, v));
     input.value = String(clamped);
     return clamped;

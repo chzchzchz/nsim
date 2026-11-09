@@ -4,13 +4,26 @@
 
 // @vitest-environment happy-dom
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 import { initLogs } from "./logs";
+
+const store = new Map<string, string>();
+beforeEach(() => {
+    store.clear();
+    vi.stubGlobal("localStorage", {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => void store.set(k, String(v)),
+    });
+});
+afterEach(() => {
+    vi.unstubAllGlobals();
+});
 
 let host: HTMLElement;
 let panel: ReturnType<typeof initLogs>;
 
 beforeEach(() => {
+    // (localStorage stub is installed by the outer beforeEach)
     host = document.createElement("section");
     host.id = "logs";
     document.body.appendChild(host);
@@ -184,6 +197,118 @@ describe("log entry selection", () => {
         input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
         expect(p.selected()).toBeNull();
         expect(seen).toEqual([entry, null, entry, null]);
+    });
+
+    it("follow checkbox defaults off and persists via setFollow", () => {
+        const client = { postLogComment: () => Promise.resolve({ seq: 99 }) } as never;
+        host.innerHTML = "";
+        document.body.removeChild(host);
+        const host2 = document.createElement("section");
+        document.body.appendChild(host2);
+        store.clear();
+        const p = initLogs(host2, client, () => {});
+        expect(p.follow()).toBe(false);
+        const cb = host2.querySelector<HTMLInputElement>("#logs-follow")!;
+        expect(cb.checked).toBe(false);
+        p.setFollow(true);
+        expect(p.follow()).toBe(true);
+        expect(localStorage.getItem("nsim:logs:follow")).toBe("1");
+        p.setFollow(false);
+        expect(localStorage.getItem("nsim:logs:follow")).toBe("0");
+        // A fresh panel restores the persisted value.
+        const host3 = document.createElement("section");
+        document.body.appendChild(host3);
+        p.setFollow(true);
+        const p2 = initLogs(host3, client, () => {});
+        expect(p2.follow()).toBe(true);
+    });
+
+    it("autoSelect selects the entry and showAutoBanner shows comment + dismiss", () => {
+        const seen: (unknown)[] = [];
+        host.innerHTML = "";
+        document.body.removeChild(host);
+        const host2 = document.createElement("section");
+        document.body.appendChild(host2);
+        const client = { postLogComment: () => Promise.resolve({ seq: 99 }) } as never;
+        const p = initLogs(host2, client, (e) => seen.push(e));
+        const entry = { seq: 11, kind: "operation", atMs: 1000, control: "A/B", value: "1", comment: "crisis03: open it" };
+        p.append([entry]);
+        p.autoSelect(entry);
+        expect(p.selected()).toEqual(entry);
+        expect(seen).toEqual([entry]);
+        const row = host2.querySelector<HTMLElement>(".log-row")!;
+        expect(row.classList.contains("log-selected")).toBe(true);
+        p.showAutoBanner(entry);
+        // The strip is page-level (in <body>, below the header),
+        // not inside the logs panel.
+        const auto = document.getElementById("alert-strip") as HTMLElement;
+        expect(auto.hidden).toBe(false);
+        expect(auto.textContent).toContain("crisis03: open it");
+        expect(auto.textContent).toContain("A/B = 1");
+        expect(host2.contains(auto)).toBe(false);
+        const dismiss = Array.from(auto.querySelectorAll("button")).find((b) => b.textContent === "×")!;
+        dismiss.click();
+        expect(auto.hidden).toBe(true);
+    });
+
+    it("showAutoBanner toasts pure comments (no control to jump to)", () => {
+        const client = { postLogComment: () => Promise.resolve({ seq: 99 }) } as never;
+        host.innerHTML = "";
+        document.body.removeChild(host);
+        const host2 = document.createElement("section");
+        document.body.appendChild(host2);
+        const p = initLogs(host2, client, () => {});
+        p.showAutoBanner({ seq: 1, kind: "comment", atMs: 0, comment: "hi there" });
+        const auto = document.getElementById("alert-strip") as HTMLElement;
+        expect(auto.hidden).toBe(false);
+        expect(auto.textContent).toContain("hi there");
+        // Empty comment text is still a no-op.
+        p.showAutoBanner({ seq: 2, kind: "comment", atMs: 0, comment: "" });
+        // Banner content is unchanged (still the previous toast).
+        expect(auto.textContent).toContain("hi there");
+        // A fresh alert replaces the previous one (single strip).
+        p.showAutoBanner({ seq: 3, kind: "operation", atMs: 0, control: "A/B", value: "0", comment: "replaced" });
+        expect(auto.textContent).toContain("replaced");
+        expect(auto.textContent).not.toContain("hi there");
+        expect(document.querySelectorAll("#alert-strip")).toHaveLength(1);
+    });
+
+    it("re-creating the panel hides a stale alert strip", () => {
+        const client = { postLogComment: () => Promise.resolve({ seq: 99 }) } as never;
+        host.innerHTML = "";
+        document.body.removeChild(host);
+        const host2 = document.createElement("section");
+        document.body.appendChild(host2);
+        const p = initLogs(host2, client, () => {});
+        p.showAutoBanner({ seq: 1, kind: "comment", atMs: 0, comment: "stale" });
+        const auto = document.getElementById("alert-strip") as HTMLElement;
+        expect(auto.hidden).toBe(false);
+        // Simulate a runId change: fresh initLogs on a new host.
+        const host3 = document.createElement("section");
+        document.body.appendChild(host3);
+        initLogs(host3, client, () => {});
+        expect(auto.hidden).toBe(true);
+    });
+
+    it("unchecking follow clears the live selection", () => {
+        const seen: (unknown)[] = [];
+        host.innerHTML = "";
+        document.body.removeChild(host);
+        const host2 = document.createElement("section");
+        document.body.appendChild(host2);
+        const client = { postLogComment: () => Promise.resolve({ seq: 99 }) } as never;
+        const p = initLogs(host2, client, (e) => seen.push(e));
+        const entry = { seq: 7, kind: "operation", atMs: 1000, control: "A/B", value: "1" };
+        p.append([entry]);
+        p.autoSelect(entry);
+        p.setFollow(true);
+        p.showAutoBanner(entry);
+        expect(p.selected()).toEqual(entry);
+        expect(document.getElementById("alert-strip")?.hidden).toBe(false);
+        p.setFollow(false);
+        expect(p.selected()).toBeNull();
+        expect(document.getElementById("alert-strip")?.hidden).toBe(true);
+        expect(seen).toEqual([entry, null]);
     });
 
     it("roving tabindex: only one operation row is tabbable", () => {

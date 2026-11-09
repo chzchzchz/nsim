@@ -91,6 +91,7 @@ async function main(): Promise<void> {
             stepBtn,
             resetBtn,
             spsInput,
+            fpsInput,
             spsEl,
             writeModeBtn,
             pidEl,
@@ -212,6 +213,17 @@ async function main(): Promise<void> {
             initAlarms();
             initConsolePanel();
         },
+    });
+
+    // Remote mode: the box drives the server poll interval at
+    // 1000/fps ms, capped at 1 Hz. Local mode: sim.attachUI's
+    // own handler drives the WASM tick (both listen to change).
+    fpsInput.addEventListener("change", () => {
+        if (fpsInput.disabled) return;
+        const fps = parseFloat(fpsInput.value);
+        if (!Number.isNaN(fps)) {
+            remote.setFramesPerSecond(fps);
+        }
     });
 
     // Scenario selection: the catalog ships inside the wasm binary.

@@ -545,6 +545,45 @@
     font-size: 12px;
 }
 .logs-banner span { flex: 1; cursor: pointer; }
+.logs-follow-row {
+    display: flex;
+    justify-content: flex-end;
+    padding: 2px 0 6px;
+}
+.logs-follow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #555;
+    cursor: pointer;
+}
+/* Page-level alert strip: fixed below the sticky header so it
+   follows the window and stays visible while the operator is
+   looking at the control tiles after an auto-follow jump. At most
+   one is ever shown; a new one replaces the old. */
+.alert-strip {
+    position: fixed;
+    /* Drop below the sticky header with real breathing room so
+       it never glues to the FPS/Steps row, and keep it below
+       the header's z-index so the sticky header paints above
+       it while scrolling. */
+    top: calc(var(--header-offset) + 12px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fdecea;
+    border: 1px solid var(--log-selected);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+    max-width: min(720px, calc(100vw - 32px));
+}
+.alert-strip .alert-strip-text { flex: 1; }
 .logs-list {
     max-height: 300px;
     overflow: auto;

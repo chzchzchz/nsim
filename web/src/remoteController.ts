@@ -51,6 +51,7 @@ export interface RemoteControllerHost {
     stepBtn: HTMLButtonElement;
     resetBtn: HTMLButtonElement;
     spsInput: HTMLInputElement;
+    fpsInput: HTMLInputElement;
     spsEl: HTMLElement;
     writeModeBtn: HTMLButtonElement;
     pidEl: HTMLElement;
@@ -92,12 +93,48 @@ export class RemoteController {
     private pollTimer: ReturnType<typeof setTimeout> | null = null;
     private pollGen = 0;
     private pollInFlight = false;
+    // Effective poll interval in ms. Defaults to 1000 ms (1 Hz)
+    // but follows the header's Frames/s box via setFramesPerSecond,
+    // hard-capped at 1 fps so a remote poll never spins faster
+    // than 1 Hz regardless of what the box says (the box serves
+    // the local WASM tick at 1–240 fps).
+    private pollMs = 1000;
 
     constructor(
         private host: RemoteControllerHost,
         private hooks: RemoteControllerHooks,
-        private pollMs = 1000,
-    ) {}
+        pollMs = 1000,
+    ) {
+        this.pollMs = RemoteController.pollMsFor(pollMs);
+    }
+
+    // pollMsFor clamps a poll interval to the 1 Hz hard cap.
+    static pollMsFor(ms: number): number {
+        return ms < 1000 ? 1000 : ms;
+    }
+
+    // setFramesPerSecond applies the header Frames/s value to the
+    // remote poll: 1000/fps ms, capped at 1 fps (1000 ms). Values
+    // ≥ 1 fps (including the default 60) all collapse to 1 Hz.
+    setFramesPerSecond(fps: number): void {
+        const ms = fps > 0 ? 1000 / fps : 1000;
+        this.pollMs = RemoteController.pollMsFor(ms);
+        // Cancel the pending timer so the new interval takes
+        // effect on the next scheduled tick. When not connected
+        // pollTimer is always null, so this is a no-op there.
+        if (this.pollTimer !== null) {
+            clearTimeout(this.pollTimer);
+            this.pollTimer = null;
+            if (this.connected) {
+                this.startPoll();
+            }
+        }
+    }
+
+    // pollIntervalMs exposes the effective interval for tests.
+    pollIntervalMs(): number {
+        return this.pollMs;
+    }
 
     get connected(): boolean {
         return this.mode !== "local" && this.client !== null;
@@ -121,6 +158,9 @@ export class RemoteController {
         this.host.spsEl.textContent = "steps/s: —";
         if (this.hooks.scenarioNameEl) this.hooks.scenarioNameEl.textContent = "";
         this.setVisible(true);
+        // FPS box stays live in remote mode: it drives the poll
+        // interval at 1000/fps ms, capped at 1 Hz. A value of 0.5
+        // fps polls every 2 s.
         this.startPoll();
         this.applyWritable();
         this.host.statusEl.textContent = `connected: ${base}`;
@@ -444,6 +484,21 @@ export class RemoteController {
                 foreign.length,
                 foreign[foreign.length - 1],
             );
+            // Auto-follow: select the latest foreign entry so its
+            // control jumps into view with the red box (same path
+            // as a manual row click), and show the toast. A burst
+            // batch collapses to the single latest entry — one
+            // scroll, one rememberReturn, one toast — instead of
+            // firing N of each.
+            if (this.logsPanel.follow()) {
+                const latest = foreign[foreign.length - 1];
+                if (latest !== undefined) {
+                    if (latest.control) {
+                        this.logsPanel.autoSelect(latest);
+                    }
+                    this.logsPanel.showAutoBanner(latest);
+                }
+            }
         }
         const newest = entries[entries.length - 1].seq;
         this.lastSeq = Math.max(status.latestSeq, newest);

@@ -42,6 +42,7 @@ function makeHost() {
     const stepBtn = document.createElement("button");
     const resetBtn = document.createElement("button");
     const spsInput = document.createElement("input");
+    const fpsInput = document.createElement("input");
     const spsEl = document.createElement("span");
     const writeModeBtn = document.createElement("button");
     writeModeBtn.style.display = "none";
@@ -58,10 +59,10 @@ function makeHost() {
     return {
         host: {
             tilesEl, alarmsEl, consoleEl, logsEl, statusEl,
-            startBtn, stepBtn, resetBtn, spsInput, spsEl, writeModeBtn, pidEl,
+            startBtn, stepBtn, resetBtn, spsInput, fpsInput, spsEl, writeModeBtn, pidEl,
         },
         scenarioNameEl,
-        els: { tilesEl, logsEl, startBtn, stepBtn, resetBtn, writeModeBtn },
+        els: { tilesEl, logsEl, startBtn, stepBtn, resetBtn, writeModeBtn, fpsInput },
     };
 }
 
@@ -83,6 +84,29 @@ describe("RemoteController", () => {
         expect(c.connected).toBe(false);
         expect(c.writable).toBe(false);
         expect(c.client).toBeNull();
+        c.stopPoll();
+    });
+
+    it("poll interval is capped at 1 fps and follows the FPS box", () => {
+        const { host } = makeHost();
+        // pollMsFor is a pure helper for unit tests.
+        expect(RemoteController.pollMsFor(16)).toBe(1000);
+        expect(RemoteController.pollMsFor(1000)).toBe(1000);
+        expect(RemoteController.pollMsFor(2000)).toBe(2000);
+        const capped = new RemoteController(host, {}, 16);
+        expect(capped.pollIntervalMs()).toBe(1000);
+        const c = new RemoteController(host, {}, 60_000);
+        // A large interval is kept (only the fast side is capped).
+        expect(c.pollIntervalMs()).toBe(60_000);
+        // setFramesPerSecond: 60 fps -> 1000/60 = 16.6 ms -> capped.
+        c.setFramesPerSecond(60);
+        expect(c.pollIntervalMs()).toBe(1000);
+        // 1 fps -> 1000 ms.
+        c.setFramesPerSecond(1);
+        expect(c.pollIntervalMs()).toBe(1000);
+        // 0.5 fps -> 2000 ms (below the cap).
+        c.setFramesPerSecond(0.5);
+        expect(c.pollIntervalMs()).toBe(2000);
         c.stopPoll();
     });
 
@@ -326,6 +350,157 @@ describe("RemoteController", () => {
         logRow.click();
         expect(rowA.classList.contains("log-selected")).toBe(false);
         expect(c.selectedLogControl).toBeNull();
+        c.disconnect();
+    });
+
+    it("pollLogs auto-follows foreign entries when follow is on", async () => {
+        const ctl = { key: "P/A", part: "P", label: "A", kind: "bool", value: "1" };
+        const initial = { seq: 5, kind: "operation", atMs: 1000, control: "P/A", value: "1" };
+        const fresh = { seq: 6, kind: "operation", atMs: 2000, control: "P/A", value: "0", comment: "crisis03: close it" };
+        let logBatch: unknown[] = [initial];
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            const u = String(url);
+            if (u.includes("/status")) return jsonResponse({ ...statusBody, latestSeq: 6 });
+            if (u.includes("/controls")) return jsonResponse([ctl]);
+            if (u.includes("/sensors")) return jsonResponse([]);
+            if (u.includes("/alarms")) return jsonResponse([]);
+            if (u.includes("/logs")) return jsonResponse(logBatch);
+            return jsonResponse({});
+        }));
+        const { host, els } = makeHost();
+        const c = new RemoteController(host, {}, 60_000);
+        c.connect("http://127.0.0.1:8080");
+        await vi.waitFor(() => {
+            expect(els.tilesEl.querySelectorAll(".ctl-row").length).toBe(1);
+        });
+        const rowA = els.tilesEl.querySelector<HTMLElement>(".ctl-row")!;
+        // Opt in to follow and route the next poll to the fresh entry.
+        c.logsPanel!.setFollow(true);
+        logBatch = [fresh];
+        // lastSeq advanced to 5 on first poll (initial). Force a
+        // poll cycle that sees status.latestSeq=6 and fetches seq 6.
+        c.lastSeq = 5;
+        await c.drainNow();
+        await vi.waitFor(() => {
+            expect(c.selectedLogControl).toBe("P/A");
+        });
+        expect(rowA.classList.contains("log-selected")).toBe(true);
+        expect(c.logsPanel!.selected()?.seq).toBe(6);
+        expect(document.getElementById("alert-strip")?.hidden).toBe(false);
+        expect(document.getElementById("alert-strip")?.textContent).toContain("crisis03: close it");
+        // Dismiss it (same as click-again / Esc): selecting null
+        // clears the control outline.
+        c.logsPanel!.select(null);
+        expect(rowA.classList.contains("log-selected")).toBe(false);
+        expect(c.selectedLogControl).toBeNull();
+        // Alert strip stays until dismissed.
+        expect(document.getElementById("alert-strip")?.hidden).toBe(false);
+        c.disconnect();
+    });
+
+    it("pollLogs auto-follows a burst with a single jump to the last entry", async () => {
+        const ctl = { key: "P/A", part: "P", label: "A", kind: "bool", value: "1" };
+        const initial = { seq: 5, kind: "operation", atMs: 1000, control: "P/A", value: "1" };
+        const burst = [
+            { seq: 6, kind: "operation", atMs: 2000, control: "P/A", value: "0", comment: "first" },
+            { seq: 7, kind: "operation", atMs: 3000, control: "P/A", value: "1", comment: "second" },
+            { seq: 8, kind: "operation", atMs: 4000, control: "P/A", value: "0", comment: "last" },
+        ];
+        let logBatch: unknown[] = [initial];
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            const u = String(url);
+            if (u.includes("/status")) return jsonResponse({ ...statusBody, latestSeq: 8 });
+            if (u.includes("/controls")) return jsonResponse([ctl]);
+            if (u.includes("/sensors")) return jsonResponse([]);
+            if (u.includes("/alarms")) return jsonResponse([]);
+            if (u.includes("/logs")) return jsonResponse(logBatch);
+            return jsonResponse({});
+        }));
+        const { host, els } = makeHost();
+        const c = new RemoteController(host, {}, 60_000);
+        c.connect("http://127.0.0.1:8080");
+        await vi.waitFor(() => {
+            expect(els.tilesEl.querySelectorAll(".ctl-row").length).toBe(1);
+        });
+        const rowA = els.tilesEl.querySelector<HTMLElement>(".ctl-row")!;
+        const scrolls: ScrollIntoViewOptions[] = [];
+        rowA.scrollIntoView = (o?: ScrollIntoViewOptions) => { scrolls.push(o ?? {}); };
+        c.logsPanel!.setFollow(true);
+        logBatch = burst;
+        c.lastSeq = 5;
+        await c.drainNow();
+        // Exactly one jump, to the last entry of the burst.
+        expect(scrolls.map((o) => o.block)).toEqual(["center"]);
+        expect(c.selectedLogControl).toBe("P/A");
+        expect(c.logsPanel!.selected()?.seq).toBe(8);
+        const auto = document.getElementById("alert-strip") as HTMLElement;
+        expect(auto.textContent).toContain("last");
+        expect(auto.textContent).not.toContain("first");
+        c.disconnect();
+    });
+
+    it("pollLogs auto-follows a pure comment with a toast but no jump", async () => {
+        const ctl = { key: "P/A", part: "P", label: "A", kind: "bool", value: "1" };
+        const initial = { seq: 5, kind: "operation", atMs: 1000, control: "P/A", value: "1" };
+        const fresh = { seq: 6, kind: "comment", atMs: 2000, comment: "operator note" };
+        let logBatch: unknown[] = [initial];
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            const u = String(url);
+            if (u.includes("/status")) return jsonResponse({ ...statusBody, latestSeq: 6 });
+            if (u.includes("/controls")) return jsonResponse([ctl]);
+            if (u.includes("/sensors")) return jsonResponse([]);
+            if (u.includes("/alarms")) return jsonResponse([]);
+            if (u.includes("/logs")) return jsonResponse(logBatch);
+            return jsonResponse({});
+        }));
+        const { host, els } = makeHost();
+        const c = new RemoteController(host, {}, 60_000);
+        c.connect("http://127.0.0.1:8080");
+        await vi.waitFor(() => {
+            expect(els.tilesEl.querySelectorAll(".ctl-row").length).toBe(1);
+        });
+        const rowA = els.tilesEl.querySelector<HTMLElement>(".ctl-row")!;
+        let jumped = false;
+        rowA.scrollIntoView = () => { jumped = true; };
+        c.logsPanel!.setFollow(true);
+        logBatch = [fresh];
+        c.lastSeq = 5;
+        await c.drainNow();
+        expect(jumped).toBe(false);
+        expect(c.selectedLogControl).toBeNull();
+        expect(document.getElementById("alert-strip")?.textContent).toContain("operator note");
+        c.disconnect();
+    });
+
+    it("pollLogs does not auto-follow when follow is off", async () => {
+        const ctl = { key: "P/A", part: "P", label: "A", kind: "bool", value: "1" };
+        const initial = { seq: 5, kind: "operation", atMs: 1000, control: "P/A", value: "1" };
+        const fresh = { seq: 6, kind: "operation", atMs: 2000, control: "P/A", value: "0", comment: "crisis03: close it" };
+        let logBatch: unknown[] = [initial];
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            const u = String(url);
+            if (u.includes("/status")) return jsonResponse({ ...statusBody, latestSeq: 6 });
+            if (u.includes("/controls")) return jsonResponse([ctl]);
+            if (u.includes("/sensors")) return jsonResponse([]);
+            if (u.includes("/alarms")) return jsonResponse([]);
+            if (u.includes("/logs")) return jsonResponse(logBatch);
+            return jsonResponse({});
+        }));
+        const { host, els } = makeHost();
+        const c = new RemoteController(host, {}, 60_000);
+        c.connect("http://127.0.0.1:8080");
+        await vi.waitFor(() => {
+            expect(els.tilesEl.querySelectorAll(".ctl-row").length).toBe(1);
+        });
+        const rowA = els.tilesEl.querySelector<HTMLElement>(".ctl-row")!;
+        c.logsPanel!.setFollow(false);
+        logBatch = [fresh];
+        c.lastSeq = 5;
+        await c.drainNow();
+        expect(c.selectedLogControl).toBeNull();
+        expect(rowA.classList.contains("log-selected")).toBe(false);
+        // No strip exists yet (never shown) and it stays hidden.
+        expect(document.getElementById("alert-strip")).toBeNull();
         c.disconnect();
     });
 

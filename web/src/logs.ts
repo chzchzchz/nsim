@@ -9,6 +9,32 @@ import { RemoteError } from "./remote";
 const MAX_ROWS = 200;
 const LOG_SELECTED_CLASS = "log-selected";
 const SCROLL_LOCKOUT_MS = 500;
+const FOLLOW_KEY = "nsim:logs:follow";
+const ALERT_STRIP_ID = "alert-strip";
+
+// getAlertStrip returns the single page-level alert strip in
+// <body>, creating it on first use. Single-strip ownership: at
+// most one alert is ever shown; a new showAlert replaces it.
+// The strip is fixed below the sticky header so it follows the
+// window while the operator is looking at the tiles.
+function getAlertStrip(): HTMLDivElement {
+    let strip = document.getElementById(ALERT_STRIP_ID) as HTMLDivElement | null;
+    if (strip) return strip;
+    strip = document.createElement("div");
+    strip.id = ALERT_STRIP_ID;
+    strip.className = "alert-strip";
+    strip.hidden = true;
+    strip.setAttribute("role", "status");
+    document.body.appendChild(strip);
+    return strip;
+}
+
+function hideAlertStrip(): void {
+    const strip = document.getElementById(ALERT_STRIP_ID);
+    if (!strip) return;
+    strip.hidden = true;
+    strip.replaceChildren();
+}
 
 export interface LogsPanel {
     // Append newly fetched entries and advance the cursor.
@@ -26,6 +52,17 @@ export interface LogsPanel {
     // window; used to suppress the control-tile scroll while the
     // list is scrolling to the newest entry.
     isScrollLockoutActive(): boolean;
+    // Whether auto-follow is on (checkbox). When on, a foreign
+    // operation entry is auto-selected (jump + red box) and a
+    // toast banner with the comment is shown.
+    follow(): boolean;
+    setFollow(on: boolean): void;
+    // Auto-select `entry` (same as clicking its row): shows the
+    // red box on the control via onSelect and selects the row.
+    autoSelect(entry: LogEntry): void;
+    // Show the dismissible auto-banner for a foreign entry and
+    // auto-dismiss it; a no-op for comment-kind entries.
+    showAutoBanner(entry: LogEntry): void;
 }
 
 export function initLogs(
@@ -34,12 +71,41 @@ export function initLogs(
     onSelect?: (entry: LogEntry | null) => void,
 ): LogsPanel {
     hostEl.innerHTML = "";
+    // A re-created panel (runId change) must not leave the previous
+    // panel's alert strip on screen with stale text.
+    hideAlertStrip();
 
     const banner = document.createElement("div");
     banner.className = "logs-banner";
     banner.hidden = true;
     hostEl.appendChild(banner);
 
+    // Auto-follow toggle. The checkbox gates everything: when on,
+    // a foreign operation entry auto-selects (jump + red box) and
+    // posts a dismissible toast with the comment. Persisted so a
+    // refresh keeps the operator's choice; default off.
+    const followRow = document.createElement("div");
+    followRow.className = "logs-follow-row";
+    hostEl.appendChild(followRow);
+
+    const followLabel = document.createElement("label");
+    followLabel.className = "logs-follow";
+    followRow.appendChild(followLabel);
+
+    const followCb = document.createElement("input");
+    followCb.type = "checkbox";
+    followCb.id = "logs-follow";
+    try {
+        followCb.checked = localStorage.getItem(FOLLOW_KEY) === "1";
+    } catch {
+        followCb.checked = false;
+    }
+    followCb.title = "Auto-jump to the changed control (with red box) when a new foreign log entry arrives";
+    followCb.setAttribute("aria-label", "Auto-follow new log entries");
+    followLabel.append(followCb, document.createTextNode(" Follow new entries"));
+
+    // The auto-alert now lives in the page-level strip (see
+    // getAlertStrip), not in this panel.
     const listEl = document.createElement("div");
     listEl.className = "logs-list";
     hostEl.appendChild(listEl);
@@ -309,6 +375,57 @@ export function initLogs(
         renderBanner();
     }
 
+    let followOn = followCb.checked;
+
+    followCb.addEventListener("change", () => {
+        followOn = followCb.checked;
+        try {
+            localStorage.setItem(FOLLOW_KEY, followOn ? "1" : "0");
+        } catch {
+            // Private mode / SSR: the checkbox still works for
+            // this session.
+        }
+        if (!followOn) {
+            hideAlertStrip();
+            // Same rationale as setFollow(false) in the returned
+            // panel: unchecking follow clears the live selection.
+            if (selectedEntry !== null) {
+                applySelection(null);
+            }
+        }
+    });
+
+    function showAutoBanner(entry: LogEntry): void {
+        // Operation entries show control + comment; pure
+        // comments (no control) still toast the comment text so
+        // the operator hears them — there's just no control to
+        // jump to.
+        if (entry.kind !== "operation" && entry.kind !== "comment") return;
+        if (entry.kind === "operation" && !entry.control) return;
+        if (entry.kind === "comment" && !entry.comment) return;
+        // SingleStrip ownership: getAlertStrip returns the one
+        // page-level strip; a new alert replaces the old text.
+        const strip = getAlertStrip();
+        strip.hidden = false;
+        strip.innerHTML = "";
+        const msg = document.createElement("span");
+        msg.className = "alert-strip-text";
+        const what = entry.kind === "comment"
+            ? (entry.comment ?? "")
+            : entry.comment
+                ? `${entry.control} = ${entry.value} — ${entry.comment}`
+                : `${entry.control} = ${entry.value}`;
+        const at = `#${entry.seq} @ ${(entry.atMs / 1000).toFixed(1)}s`;
+        msg.textContent = `Control Update ${at}: ${what}`;
+        msg.title = what;
+        const dismiss = document.createElement("button");
+        dismiss.className = "btn";
+        dismiss.textContent = "×";
+        dismiss.setAttribute("aria-label", "Dismiss notification");
+        dismiss.addEventListener("click", hideAlertStrip);
+        strip.append(msg, dismiss);
+    }
+
     input.addEventListener("input", () => {
         postBtn.disabled = !writable || input.value.trim() === "";
     });
@@ -358,5 +475,33 @@ export function initLogs(
         isScrollLockoutActive(): boolean {
             return performance.now() - lastViewScrollAt < SCROLL_LOCKOUT_MS;
         },
+        follow(): boolean {
+            return followOn;
+        },
+        setFollow(on: boolean): void {
+            followOn = on;
+            followCb.checked = on;
+            try {
+                localStorage.setItem(FOLLOW_KEY, on ? "1" : "0");
+            } catch {
+                // See change handler.
+            }
+            if (!on) {
+                hideAlertStrip();
+                // Unchecking follow clears the live selection too:
+                // the toast jumping away with no red box would
+                // otherwise leave the control outlined forever.
+                if (selectedEntry !== null) {
+                    applySelection(null);
+                }
+            }
+        },
+        autoSelect(entry: LogEntry): void {
+            // Same path as a row click: row highlight + control
+            // outline via onSelect, with click-again/Esc to
+            // dismiss.
+            applySelection(entry);
+        },
+        showAutoBanner,
     };
 }
