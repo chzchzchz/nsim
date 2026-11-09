@@ -436,6 +436,71 @@ describe("RemoteController", () => {
         c.disconnect();
     });
 
+    it("log selection scroll centers the control in the viewport", async () => {
+        const ctl = { key: "P/A", part: "P", label: "A", kind: "bool", value: "1" };
+        const logEntry = { seq: 5, kind: "operation", atMs: 1000, control: "P/A", value: "1" };
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            const u = String(url);
+            if (u.includes("/status")) return jsonResponse({ ...statusBody, latestSeq: 5 });
+            if (u.includes("/controls")) return jsonResponse([ctl]);
+            if (u.includes("/sensors")) return jsonResponse([]);
+            if (u.includes("/alarms")) return jsonResponse([]);
+            if (u.includes("/logs")) return jsonResponse([logEntry]);
+            return jsonResponse({});
+        }));
+        const { host, els } = makeHost();
+        const c = new RemoteController(host, {}, 60_000);
+        c.connect("http://127.0.0.1:8080");
+        await vi.waitFor(() => {
+            expect(els.tilesEl.querySelectorAll(".ctl-row").length).toBe(1);
+        });
+        const rowA = els.tilesEl.querySelector<HTMLElement>(".ctl-row")!;
+        let opts: ScrollIntoViewOptions | undefined;
+        rowA.scrollIntoView = (o?: ScrollIntoViewOptions) => { opts = o; };
+        els.logsEl.querySelector<HTMLElement>(".log-row")!.click();
+        expect(rowA.classList.contains("log-selected")).toBe(true);
+        expect(opts?.block).toBe("center");
+        expect(opts?.behavior).toBe("smooth");
+        c.disconnect();
+    });
+
+    it("log click records a backtick return to the log view", async () => {
+        const ctl = { key: "P/A", part: "P", label: "A", kind: "bool", value: "1" };
+        const logEntry = { seq: 5, kind: "operation", atMs: 1000, control: "P/A", value: "1" };
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            const u = String(url);
+            if (u.includes("/status")) return jsonResponse({ ...statusBody, latestSeq: 5 });
+            if (u.includes("/controls")) return jsonResponse([ctl]);
+            if (u.includes("/sensors")) return jsonResponse([]);
+            if (u.includes("/alarms")) return jsonResponse([]);
+            if (u.includes("/logs")) return jsonResponse([logEntry]);
+            return jsonResponse({});
+        }));
+        const { host, els } = makeHost();
+        const c = new RemoteController(host, {}, 60_000);
+        c.connect("http://127.0.0.1:8080");
+        await vi.waitFor(() => {
+            expect(els.tilesEl.querySelectorAll(".ctl-row").length).toBe(1);
+        });
+        const rowA = els.tilesEl.querySelector<HTMLElement>(".ctl-row")!;
+        Object.defineProperty(window, "scrollY", { value: 250, configurable: true });
+        Object.defineProperty(window, "innerHeight", { value: 800, configurable: true });
+        // Control off-screen (under header) so the jump records.
+        rowA.getBoundingClientRect = () =>
+            ({ top: 0, bottom: 50, left: 0, right: 100, x: 0, y: 0, width: 100, height: 50, toJSON: () => ({}) }) as DOMRect;
+        rowA.scrollIntoView = () => {};
+        els.logsEl.querySelector<HTMLElement>(".log-row")!.click();
+        // Backtick now returns to the recorded page scrollY.
+        const scrolled: number[] = [];
+        window.scrollTo = ((o?: ScrollToOptions) => {
+            if (o && typeof o.top === "number") scrolled.push(o.top);
+        }) as typeof window.scrollTo;
+        const { jumpBack } = await import("./bindings");
+        expect(jumpBack()).toBe(true);
+        expect(scrolled).toEqual([250]);
+        c.disconnect();
+    });
+
     it("minimized tile suppresses scroll but keeps the outline", async () => {
         const ctl = { key: "P/A", part: "P", label: "A", kind: "bool", value: "1" };
         const logEntry = { seq: 5, kind: "operation", atMs: 1000, control: "P/A", value: "1" };

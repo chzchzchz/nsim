@@ -53,3 +53,44 @@ describe("styles.css hidden guard", () => {
         expect(body).toMatch(/\[hidden\]\s*\{[^}]*display:\s*none\s*!important/);
     });
 });
+
+describe("styles.css selection highlight", () => {
+    it("log-selected control rows use box-shadow, not bare outline", () => {
+        // The red border must actually be visible: an outline on
+        // .ctl-row is clipped by the flex line box and the
+        // fieldset padding, so it never showed. The rule must use
+        // box-shadow plus a filled background, matching the P&ID
+        // .ref-flash treatment.
+        const body = stripComments(css());
+        const match = body.match(/\.ctl-row\.log-selected\s*\{[^}]*\}/);
+        expect(match, "no .ctl-row.log-selected rule").not.toBeNull();
+        expect(match?.[0]).toContain("box-shadow");
+        expect(match?.[0]).toContain("var(--log-selected)");
+        expect(match?.[0]).toContain("background");
+    });
+
+    it("selected + flashing rows keep the persistent red box", () => {
+        const body = stripComments(css());
+        const match = body.match(/\.ctl-row\.log-selected\.ref-flash\s*\{[^}]*\}/);
+        expect(match, "missing combined selector").not.toBeNull();
+        expect(match?.[0]).toContain("box-shadow");
+        expect(match?.[0]).toContain("var(--log-selected)");
+    });
+});
+
+describe("styles.css sticky header offset", () => {
+    it("jump targets declare scroll-margin-top from --header-offset", () => {
+        const body = stripComments(css());
+        // --header-offset must be defined so scroll-margin-top
+        // resolves to a real length in every target rule.
+        expect(body).toMatch(/--header-offset:\s*\d+px/);
+        for (const selector of [".ctl-row", ".log-row"]) {
+            const esc = selector.replace(".", "\\.");
+            const match = body.match(new RegExp(`${esc}\\s*\\{[^}]*\\}`));
+            expect(match, `${selector} rule missing`).not.toBeNull();
+            expect(match?.[0], `${selector} must respect the header`).toContain(
+                "scroll-margin-top: var(--header-offset)",
+            );
+        }
+    });
+});

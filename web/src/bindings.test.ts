@@ -2,13 +2,20 @@
 // buildBindings needs a live plant handle and stays covered by the
 // manual loop in `make dev`.
 
+// @vitest-environment happy-dom
+
 import { describe, expect, it } from "vitest";
 import {
     displayPart,
     groupByPrefix,
+    headerClearance,
+    HEADER_OFFSET_PX,
     isAlarmControl,
+    jumpBack,
     recordReturn,
+    rememberReturn,
     takeReturn,
+    bindReturnKey,
     sortBindings,
     topLevelPrefix,
     type Entry,
@@ -173,5 +180,44 @@ describe("return slot (backtick)", () => {
         recordReturn(slot, 1500, false);
         expect(takeReturn(slot)).toEqual({ y: 1500 });
         expect(takeReturn(slot)).toBeNull();
+    });
+
+    it("jumpBack restores the recorded position once", () => {
+        // Off-screen jump: rememberReturn records the current
+        // scrollY, and the backtick-style jumpBack scrolls to it.
+        const offRow = document.createElement("div");
+        offRow.getBoundingClientRect = () =>
+            ({ top: 0, bottom: 50, left: 0, right: 100, x: 0, y: 0, width: 100, height: 50, toJSON: () => ({}) }) as DOMRect;
+        Object.defineProperty(window, "scrollY", { value: 400, configurable: true });
+        Object.defineProperty(window, "innerHeight", { value: 800, configurable: true });
+        rememberReturn(offRow);
+        const scrolled: ScrollToOptions[] = [];
+        window.scrollTo = ((o?: ScrollToOptions) => {
+            if (o) scrolled.push(o);
+        }) as typeof window.scrollTo;
+        expect(jumpBack()).toBe(true);
+        expect(scrolled).toEqual([{ top: 400, behavior: "smooth" }]);
+        // Slot is single-shot: a second backtick does nothing.
+        expect(jumpBack()).toBe(false);
+    });
+});
+
+describe("headerClearance (sticky header offset)", () => {
+    const H = 800;
+    it("treats a rect under the header as off-screen", () => {
+        // Row flush against the top edge (e.g. pinned under the
+        // sticky banner): rect.top = 0/20 looks "on screen" to
+        // the old rect.top >= 0 check but is hidden by the header.
+        expect(headerClearance({ top: 0, bottom: 100 }, H)).toBe(false);
+        expect(headerClearance({ top: HEADER_OFFSET_PX - 1, bottom: 200 }, H)).toBe(false);
+        expect(headerClearance({ top: HEADER_OFFSET_PX, bottom: 200 }, H)).toBe(true);
+        expect(headerClearance({ top: 600, bottom: 700 }, H)).toBe(true);
+    });
+
+    it("still respects the viewport bottom edge", () => {
+        // A rect whose bottom goes past the viewport is off-screen
+        // regardless of header.
+        expect(headerClearance({ top: HEADER_OFFSET_PX, bottom: H + 1 }, H)).toBe(false);
+        expect(headerClearance({ top: HEADER_OFFSET_PX, bottom: H }, H)).toBe(true);
     });
 });

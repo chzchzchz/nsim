@@ -8,6 +8,12 @@
             /* Log selection red: the selected log row and the
                control row it highlights must stay in sync. */
             --log-selected: #c0392b;
+            /* Height of the sticky header#sim-bar (padding 8px×2 +
+               2px border + ~20px content ≈ 38px) plus breathing
+               room. Kept for the headerClearance fast-path in
+               bindings.ts; scroll-margin-top is a fallback for
+               any scrollIntoView that doesn't use block: "center". */
+            --header-offset: 56px;
         }
         /* Structural guard: the `hidden` attribute is the visibility
            API for several components (logs banner, alarm details,
@@ -293,6 +299,9 @@
             align-items: center;
             gap: 6px;
             margin: 2px 0;
+            /* Jump targets (P&ID anchors, log selection) scroll
+               here; keep clear of the sticky header. */
+            scroll-margin-top: var(--header-offset);
         }
         .label-text {
             overflow-wrap: break-word;
@@ -305,13 +314,27 @@
         .ctl-hint.faint { opacity: 0.4; font-size: 10px; }
         .ctl-error { outline: 2px solid #b00; }
         .ctl-row.log-selected {
-            outline: 2px solid var(--log-selected);
-            outline-offset: 1px;
+            /* Mirror the P&ID anchor flash: a filled background
+               plus a full box so the highlight is visible even
+               when the row wraps to multiple lines. Outline alone
+               is clipped by the flex line box and the fieldset
+               padding, so it never showed. */
+            background: #fdecea;
+            box-shadow: 0 0 0 2px var(--log-selected);
             border-radius: 2px;
         }
         .ref-flash {
             outline: 2px solid #e8890c;
             background: #fdf3e3;
+        }
+        /* A selected row that also gets the P&ID jump flash keeps
+           the persistent red box: ref-flash is transient (1.5 s)
+           and log-selected must stay. The red background tints
+           the flash cream so the two don't fight. */
+        .ctl-row.log-selected.ref-flash {
+            background: #fdf3e3;
+            box-shadow: 0 0 0 2px var(--log-selected);
+            outline: none;
         }
         .ctl-help {
             width: 16px;
@@ -534,14 +557,15 @@
     padding: 2px 6px;
     border-bottom: 1px solid #f0f0f0;
     overflow-wrap: anywhere;
+    /* Jump targets (banner View, log selection) scroll here. */
+    scroll-margin-top: var(--header-offset);
 }
 .log-row.operation { background: #fbfcfd; }
 .log-row.comment { color: #555; font-style: italic; }
 .log-row[role="button"] { cursor: pointer; }
 .log-row.log-selected {
     background: #fdecea;
-    outline: 2px solid var(--log-selected);
-    outline-offset: -1px;
+    box-shadow: 0 0 0 2px var(--log-selected) inset;
 }
 .logs-input-row {
     display: flex;

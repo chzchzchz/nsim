@@ -26,6 +26,13 @@ describe("help popup (?) cross-reference behavior", () => {
         const target = document.createElement("div");
         target.dataset.bridgeId = "ReactorBuilding/RPV/CoreTemp";
         document.body.appendChild(target);
+        // Happy-dom reports rect.top 0 for every element; the
+        // flashRow fast-path now requires clearance from the
+        // sticky header, so give the target a visible position.
+        target.getBoundingClientRect = () =>
+            ({ top: 200, bottom: 300, left: 0, right: 100, x: 0, y: 200, width: 100, height: 100, toJSON: () => ({}) }) as DOMRect;
+        let scrollOpts: ScrollIntoViewOptions | undefined;
+        target.scrollIntoView = (o?: ScrollIntoViewOptions) => { scrollOpts = o; };
 
         btn.click();
         const popup = btn.nextElementSibling;
@@ -40,5 +47,7 @@ describe("help popup (?) cross-reference behavior", () => {
 
         expect(btn.nextElementSibling?.innerHTML).toBe(initialHtml);
         expect(target.classList.contains("ref-flash")).toBe(true);
+        // The on-screen fast-path must not scroll at all.
+        expect(scrollOpts).toBeUndefined();
     });
 });

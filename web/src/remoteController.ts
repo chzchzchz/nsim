@@ -28,7 +28,7 @@ import { loadPanelLayout } from "./layout";
 import { applyMinimized, buildTile } from "./tile";
 import { plantFromJSON } from "./plant";
 import { mountPlant } from "./svg";
-import { displayPart, groupByPrefix } from "./bindings";
+import { displayPart, groupByPrefix, rememberReturn } from "./bindings";
 import {
     buildRemoteBindings,
     renderRemotePanel,
@@ -208,7 +208,15 @@ export class RemoteController {
                 // let the existing outline be the feedback.
                 const tile = row.closest<HTMLElement>(".tile.minimized");
                 if (!tile) {
-                    row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                    // Record the return slot so the backtick key
+                    // takes the operator back to the log view.
+                    // rememberReturn no-ops when the row is
+                    // already on screen, matching flashRow.
+                    rememberReturn(row);
+                    // block: "center" puts the row in the middle
+                    // of the viewport, so the sticky header can't
+                    // obscure it.
+                    row.scrollIntoView({ behavior: "smooth", block: "center" });
                 }
             }
         }

@@ -176,6 +176,13 @@ function openTip(btn: HTMLButtonElement, text: string): void {
 // needed, or unsupported).
 const SCROLL_SETTLE_FALLBACK_MS = 1200;
 
+// HEADER_OFFSET_PX is the sticky header's height plus a small
+// margin, matching the --header-offset CSS variable. Rows that
+// land within this band under header#sim-bar are "off-screen" for
+// jump purposes even though rect.top >= 0; the fast-path in
+// flashRow must not skip the scroll for them.
+export const HEADER_OFFSET_PX = 56;
+
 // Jumps to a control row (from a P&ID click, a description link, or
 // an alarm row) move the page away from where the operator was
 // working. The previous scroll position is kept in a single slot so
@@ -214,12 +221,30 @@ export function takeReturn(slot: ReturnSlot): { y: number } | null {
     return { y };
 }
 
+// headerClearance reports whether a rect sits fully clear of
+// the sticky header and inside the viewport. A row under the
+// header is not "on screen" for jump purposes even though
+// rect.top >= 0. viewportHeight is the window's innerHeight at
+// the call site; exported for unit testing (happy-dom has no
+// window.innerHeight).
+export function headerClearance(
+    rect: { top: number; bottom: number },
+    viewportHeight: number,
+): boolean {
+    return rect.top >= HEADER_OFFSET_PX && rect.bottom <= viewportHeight;
+}
+
 // rememberReturn records where we are so a later backtick press can
 // undo a jump that is about to move us away from this spot.
-function rememberReturn(row: HTMLElement): void {
+// Exported so any jump that scrolls the page (P&ID reveal,
+// description link, log-row selection in remoteController) can
+// record the same return slot instead of inventing a second one —
+// the slot is a single-entry stack by design, so log → control
+// then P&ID → control each overwrite it, and backtick returns one
+// step at a time.
+export function rememberReturn(row: HTMLElement): void {
     const rect = row.getBoundingClientRect();
-    const visible =
-        rect.top >= 0 && rect.bottom <= window.innerHeight;
+    const visible = headerClearance(rect, window.innerHeight);
     recordReturn(returnSlot, window.scrollY, visible);
 }
 
@@ -266,11 +291,15 @@ function flashRow(row: HTMLElement): void {
         window.setTimeout(() => row.classList.remove("ref-flash"), REF_FLASH_MS);
     };
     const rect = row.getBoundingClientRect();
-    if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
+    if (headerClearance(rect, window.innerHeight)) {
         start();
         return;
     }
     rememberReturn(row);
+    // Center the row vertically: block: "center" puts it at the
+    // middle of the viewport, so the sticky header can't obscure
+    // it — that's the operator's natural resting spot after a
+    // jump. scroll-margin-top is irrelevant in this mode.
     row.scrollIntoView({ behavior: "smooth", block: "center" });
     // scrollend fires when the smooth jump settles; browsers
     // without it (or jumps that scroll nowhere) fall back to the
