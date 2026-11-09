@@ -2,15 +2,12 @@ Containment pressure high - something released mass and energy inside the sealed
 
 The response ladder follows containment design: stop the source where possible - [steamline isolation](rps.steamline_isolation) for breaks, securing discharge paths for relief flows - then actuate [containment spray](rps.containment_spray) when pressure threatens design targets. Spray condenses steam directly and scrubs airborne iodine while doing it, addressing two consequences at once.
 
-Watch pressure trend against [temperature](ReactorBuilding/ContainmentBuilding/Temperature): pressure responding to actions confirms the source is being managed; pressure ignoring them means the release continues somewhere unfound.
+Watch pressure trend against containment temperature: pressure responding to actions confirms the source is being managed; pressure ignoring them means the release continues somewhere unfound.
 
-Model note: raised directly off [containment pressure](ReactorBuilding/ContainmentBuilding/Pressure) against the design-pressure setpoint, gated on gauge psig.
-
-Source: specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:56-57
-Source: specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:4-9
+Model note: raised directly off [containment pressure](ReactorBuilding/ContainmentPressure) against the design-pressure setpoint, gated on gauge psig.
 
 Related controls: [PORV](ReactorBuilding/PORV/Open)
 Related sensors: [ContainmentPressure](ReactorBuilding/ContainmentPressure), [Temperature](ReactorBuilding/ContainmentBuilding/Temperature), [SprayHeaderOpen](AuxiliaryBuilding/ContainmentSpraySystem/SprayHeaderOpen), [PumpRunning](AuxiliaryBuilding/ContainmentSpraySystem/PumpRunning)
 
-Source: specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:56-57
-Source: specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:4-9
+Source: specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:56-58
+Source: specs/the_westinghouse_pressurized_water_react/chapter_6/page_115.txt:6-12
