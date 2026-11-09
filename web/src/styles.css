@@ -4,6 +4,15 @@
             background: #f5f5f5;
             color: #222;
         }
+        /* Structural guard: the `hidden` attribute is the visibility
+           API for several components (logs banner, alarm details,
+           objective banner). Any component rule that sets `display`
+           would otherwise override the browser's default
+           `[hidden] { display: none }` because author stylesheets
+           beat UA stylesheets. This global guard makes the bug
+           impossible regardless of per-component display values.
+           See styles.css.test.ts for the regression check. */
+        [hidden] { display: none !important; }
         header#sim-bar {
             position: sticky;
             top: 0;
@@ -228,6 +237,12 @@
             font-size: 13px;
         }
         .btn:hover { background: #4a6178; }
+        .btn:disabled {
+            background: #555;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        .btn:disabled:hover { background: #555; }
         .scroll-host {
             max-height: 300px;
             overflow: auto;
@@ -675,7 +690,6 @@ header#sim-bar #btn-write-mode {
     font-size: 13px;
     line-height: 1.4;
 }
-#objective[hidden] { display: none; }
 #objective .objective-title { flex: 1; color: #222; }
 #objective .objective-status {
     font-family: monospace;
