@@ -197,7 +197,7 @@ communication quality (see "status notes").
 
 ### Output 3 — `log-analysis.md`
 
-Confirm: `log-analysis.md` exists and contains all six of these
+Confirm: `log-analysis.md` exists and contains all seven of these
 sections before moving to phase 4. A ranking that doesn't name the
 deciding factor is not a ranking.
 
@@ -237,15 +237,45 @@ deciding factor is not a ranking.
 5. **Overall verdict** — one paragraph naming the strongest phase
    of the response, the single clearest flaw, and the weakest
    phase.
-6. **Qualitative summary** — a non-technical narrative, separate from
+6. **Score (N out of 100 points)** — a single numeric score with
+   a short rubric showing where the points were earned and lost.
+   The rubric is mandatory; a bare number is not a score. Use
+   these four buckets, always weighted the same way (25/25/25/25)
+   so scores are comparable across reviews; do not re-weight
+   per event (only quote different weights if comparing to
+   historical scores that did):
+
+   | Bucket | Weight | Full marks | Partial | Near zero |
+   |---|---|---|---|---|
+   | **Fix achieved** (25) | 25 | Fault isolated; every key parameter held in the safe band for the full run; shutdown margin and chemistry proven; 0 damage, seals intact; safety tanks not exhausted | Bounded but something degraded (alarm still active, VCT 0, boron low, margin unproven) — never let a bounded-but-unfixed plant reach 24 | Unisolated, parameters out of band, damage accruing, or safety tanks exhausted |
+   | **Operator job quality** (25) | 25 | Right actions in right sequence (source isolation → recovery → margin proof → closure); checked before declaring success; corrected when evidence changed | Right direction but premature / mis-sequenced moves, or one console-over-plant judgment | No effective action, or operator activity made plant worse |
+   | **Diagnostic & communication** (25) | 25 | Quantitative note at every phase boundary (measured numbers, watch items, named alternatives); distress note carries plant state; claims check out against sensors/charts | Mixed: some numeric boundaries, one numberless note, or one overclaimed "stable" | Numberless log, or claims sensors refute |
+   | **Completeness / gaps** (25) | 25 | Root cause named, chemistry and inventory accounted, alarm/SI/RHR verified, safe shutdown proven, post-"stabilized" drift hunted | A few gaps but no safety-relevant one; one tank/drift left unlogged | Root cause, chemistry, or margin never addressed; plant left unwatched after "bounded" |
+
+   Score each bucket to an integer 0–25; the total is their sum.
+   Worked (Crisis 03, 2026-11-09, `127.0.0.1:10100`): Fix 19 (bounded
+   and held, damage 0, but alarm active, VCT 0, boron 84.8 ppm
+   unaddressed) + Job 16 (seq 2 and 8 correct, seq 6 premature,
+   seq 10 contradicted) + Diag 18 (seq 1/3/5/7 verify; seq 0
+   numberless) + Gaps 16 (no root cause, SI/RHR unverified, VCT
+   unlogged, 418 s unwatched drift) = **69 out of 100**.
+   State the total as `N out of 100` on its own line (e.g.
+   `**Score: 62 out of 100**`) so it is findable without the
+   technical sections, kept stable even if phase 4 changes a
+   bucket's points (re-rank in chart-findings, don't re-score).
+7. **Qualitative summary** — a non-technical narrative, separate from
    the technical verdicts above, that a non-operator reader can
    follow. Write it from the log's own evidence (phase-1/2 numbers
    and phase-3 verdicts), not as a restatement of the table.
    Must name, in plain language: (a) what went wrong and when,
    (b) the contrasting events — what the operator did that helped
    vs. what made things worse, (c) how the plant ended up (stable
-   / damaged but bounded / still evolving), and (d) one sentence on
-   whether the record is trustworthy (audit-trail quality). Keep it
+   / damaged but bounded / still evolving), (d) whether the plant
+   was actually fixed (i.e. the initiating fault is resolved and
+   the plant is back in a safe, operable state — not merely
+   bounded), (e) whether the operator did a good job fixing it,
+   and (f) one sentence on whether the record is trustworthy
+   (audit-trail quality). Keep it
    3–5 short paragraphs or ~150–250 words; label it
    `## Qualitative summary` so it is findable without the technical
    sections. If any number is quoted, it must be live-current or
@@ -463,7 +493,7 @@ Everything below lands in the user-given output directory:
 | `sensors.json`, `controls.json` (outdir root) | bulk live reads |
 | `situation.md` (outdir root) | phase 1 (confirm: identity, headline state, alarms/queue, stability call) |
 | `initial-vs-current.md` (outdir root) | phase 2 (confirm: delta table, operator footprint, irreversible deltas, pre-existing faults) |
-| `log-analysis.md` (outdir root) | phase 3 (confirm: entry table, per-op verdicts, ranking, gaps, overall verdict, qualitative summary) |
+| `log-analysis.md` (outdir root) | phase 3 (confirm: entry table, per-op verdicts, ranking, gaps, overall verdict, score N out of 100, qualitative summary) |
 | `charts/` (`index.html` + SVGs/PNGs + `NNNN.NNN.json` per-step snapshots) | phase 4 via `scripts/chart_all.py` |
 | `chart-findings.md` (next to or inside `charts/`) | phase 4 commentary (confirm: stderr line, ~5 trajectories with numbers, per-verdict confirmation, controller behavior, replay caveat) |
 
@@ -490,6 +520,16 @@ Everything below lands in the user-given output directory:
   only part a non-operator reader will trust. Do not ship a
   `log-analysis.md` without it, and do not copy numbers into it
   without labeling live-current vs. replay.
+- **Confusing "bounded" with "fixed."** A plant can be bounded
+  (damage 0, containment intact) and still unfixed (fault isolated but
+  shutdown margin not proven, alarms still active, chemistry unverified,
+  tanks empty). The qualitative summary (phase 3, §6) must separately
+  say whether the plant was actually fixed and whether the operator did
+  a good job fixing it — stable/bounded does not answer either question.
+- **Scoring without a rubric.** A bare N out of 100 with no
+  per-bucket breakdown (Fix / Job / Diag / Gaps, each 0–25, fixed
+  weights) is not comparable across reviews; always show all four
+  and the evidence behind each.
 - **Declaring stabilized without a drift check.** After the last
   log entry, re-read `/sensors`; tanks emptying or levels
   drifting toward a setpoint with no operator watching are
