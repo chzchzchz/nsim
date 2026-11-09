@@ -225,12 +225,29 @@
             gap: 8px;
         }
         .tile-body > div { min-width: 0; }
-        .tile-body h3 {
+        .tile-section { min-width: 0; }
+        .tile-section.section-collapsed .tile-section-body { display: none; }
+        .tile-section-heading {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
             margin: 0 0 2px 0;
             font-size: 10px;
             text-transform: uppercase;
             color: #555;
+            cursor: pointer;
+            user-select: none;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 2px;
         }
+        .tile-section-heading:hover { color: #222; }
+        .tile-section-toggle {
+            font-size: 12px;
+            line-height: 1;
+            color: #555;
+        }
+        .tile-section-heading:hover .tile-section-toggle { color: #222; }
         #controls fieldset,
         .tile fieldset {
             margin: 0 0 4px 0;

@@ -166,4 +166,18 @@ describe("styles.css compact sensor/controls tiles", () => {
         const ctlRow = body.match(/\.ctl-row\s*\{[^}]*\}/)?.[0] ?? "";
         expect(ctlRow).toContain("flex-wrap: nowrap");
     });
+
+    it("collapses tile sections independently", () => {
+        const body = stripComments(css());
+        compactRule(
+            body,
+            /\.tile-section\.section-collapsed \.tile-section-body\s*\{[^}]*\}/,
+            "display: none",
+        );
+        compactRule(
+            body,
+            /\.tile-section-heading\s*\{[^}]*\}/,
+            "cursor: pointer",
+        );
+    });
 });
