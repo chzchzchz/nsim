@@ -10,6 +10,7 @@ import (
 
 	u "github.com/bcicen/go-units"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/chzchzchz/nsim/core"
 )
@@ -198,6 +199,79 @@ func seatedGroupCentre(out string, part string) (cx, cy float64, ok bool) {
 		return 0, 0, false
 	}
 	return x, y, true
+}
+
+// TestInjectionSinkDetourRemoved pins the cold-leg retarget: the
+// SIS/RHR edges terminate at InjectionSink only in the audit
+// graph, so the renderer must bend them straight to the RPV
+// cold leg (chapter_5/page_097.txt:22-26). Previously the dot
+// route to the west wall sink stayed in the middle of the
+// polyline (a 676-unit jump from the Sump to the west edge) and
+// only the final vertex was clipped to the RPV, leaving
+// void-crossing detours over the aux and turbine buildings.
+// CVCS charging (VCT) is excluded: its path goes through the
+// RCP seals and regenerative heat exchanger
+// (chapter_4/page_076.txt:91-95), not a cold-leg branch.
+func TestInjectionSinkDetourRemoved(t *testing.T) {
+	p := core.MakePlant()
+	out := renderPlant(t, &p)
+	// The sink-drained pipes are now source -> (hop) -> RPV:
+	// every polyline that touches the RPV and starts at a
+	// sink-fed source must be short. Long west excursions
+	// belong to legit suction routing (e.g. RPV->RHRS_B),
+	// which ends at a train, not at the RPV.
+	rpv := CurrentLayout().Pos["RPV"]
+	sources := []string{"Sump", "SISAccumulators", "RWST",
+		"RHRS_A", "RHRS_B"}
+	srcAnchors := make([]Anchor, 0, len(sources))
+	for _, id := range sources {
+		a, ok := CurrentLayout().Pos[id]
+		require.True(t, ok, "%s must be laid out", id)
+		srcAnchors = append(srcAnchors, a)
+	}
+	polyRe := regexp.MustCompile(`<polyline points="([^"]+)"`)
+	nums := regexp.MustCompile(`-?\d+(?:\.\d+)?`)
+	nearRPV := 0
+	longSink := 0
+	for _, m := range polyRe.FindAllStringSubmatch(out, -1) {
+		n := nums.FindAllString(m[1], -1)
+		var pts []Anchor
+		for i := 0; i+1 < len(n); i += 2 {
+			x, _ := strconv.ParseFloat(n[i], 64)
+			y, _ := strconv.ParseFloat(n[i+1], 64)
+			pts = append(pts, Anchor{X: x, Y: y})
+		}
+		if len(pts) < 2 {
+			continue
+		}
+		// Starts near a sink-fed source?
+		startsAtSource := false
+		for _, a := range srcAnchors {
+			if math.Hypot(pts[0].X-a.X, pts[0].Y-a.Y) < 90 {
+				startsAtSource = true
+				break
+			}
+		}
+		if !startsAtSource {
+			continue
+		}
+		// Ends near the RPV clipped edge?
+		last := pts[len(pts)-1]
+		if math.Hypot(last.X-rpv.X, last.Y-rpv.Y) < 90 {
+			nearRPV++
+			// The retargeted pipe is one clipped segment
+			// (source->RPV) or a hop bend (source->hop->RPV):
+			// at most 3 vertices and well under the old
+			// west detour length.
+			if len(pts) > 3 || routeLen(pts) > 600 {
+				longSink++
+			}
+		}
+	}
+	assert.GreaterOrEqual(t, nearRPV, 5,
+		"all five cold-leg sink-fed edges must terminate at the RPV")
+	assert.Zero(t, longSink,
+		"a sink-fed pipe with more than a hop bend is still detouring west")
 }
 
 // TestSeatedValvesOnPipes pins the operator-facing guarantee that

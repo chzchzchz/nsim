@@ -752,6 +752,14 @@ var valvePlacements = map[string]valvePlacement{
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_221.txt:13-14
 	"HPDV": {from: "HPHeaterDrain", to: "HDT", near: "HPHeaterDrain", shift: 0.12},
 	"CREJ": {from: "Condenser", to: "CST", near: "Condenser", shift: -0.06},
+	// EFWS turbine-pump steam-admission/recirculation valves
+	// sit on their pump discharge legs (Figure 5.2-1): admission
+	// from the main steam header, recirculation to the tank.
+	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:61-69
+	"EATSA": {from: "EATD", to: "SG", near: "EATD", shift: 0.20},
+	"EAREC": {from: "EFWSTankA", to: "EATD", near: "EATD", shift: 0.35},
+	"EBTSA": {from: "EBTD", to: "SG", near: "EBTD", shift: 0.20},
+	"EBREC": {from: "EFWSTankB", to: "EBTD", near: "EBTD", shift: 0.35},
 }
 
 // scalarValves binds valve-shaped model fields that are plain 0..1
@@ -931,6 +939,62 @@ func (r *renderer) kindOf(id string) string {
 	return diagramKindByID[id]
 }
 
+// heatSinkBounds are the two outside-the-buildings facilities
+// that dot leaves unclustered: the west intake/service-water
+// pair and the east cooling tower.
+// "water may be a river, lake, ocean, or cooling tower ...
+// Water enters the system through an intake house"
+// specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:29-34
+// The renderer draws a dashed site boundary around each so the
+// glyphs do not read as floating pipes in the black void (raster
+// audit). They are outside, not buildings, so the stroke is
+// dashed and no DOT cluster moves: dot owns every coordinate
+// and moving CoolingTower into cluster_turbine reshuffles the
+// containment ranks.
+var heatSinkBounds = []struct {
+	id    string
+	label string
+	allow []string
+}{
+	{id: "cluster_heatsink_west", label: "Heat Sink (Outside)", allow: []string{"Intake", "SWSHeader"}},
+	{id: "cluster_heatsink_east", label: "Cooling Tower (Outside)", allow: []string{"CoolingTower"}},
+}
+
+// siteBoundsBox returns the padded bounding rectangle of the
+// named symbols in document space.
+func (r *renderer) siteBoundsBox(ids []string) (x, y, w, h float64, ok bool) {
+	first := true
+	for _, id := range ids {
+		a, okA := r.anchor(id)
+		if !okA {
+			continue
+		}
+		sw, sh := r.size(r.kindOf(id))
+		minX, minY := a.X-sw/2-buildingPad, a.Y-sh/2-buildingPad
+		maxX, maxY := a.X+sw/2+buildingPad, a.Y+sh/2+buildingPad
+		if first {
+			x, y, w, h = minX, minY, maxX-minX, maxY-minY
+			first = false
+			continue
+		}
+		if minX < x {
+			w += x - minX
+			x = minX
+		}
+		if minY < y {
+			h += y - minY
+			y = minY
+		}
+		if maxX > x+w {
+			w = maxX - x
+		}
+		if maxY > y+h {
+			h = maxY - y
+		}
+	}
+	return x, y, w, h, !first
+}
+
 // containmentDomeMembers are the containment enclosures that
 // define the dome outline: the primary loop plus the cold-leg
 // safety set and the pressurizer relief train (Figures 1-5/3-1).
@@ -944,6 +1008,8 @@ var containmentDomeMembers = map[string]bool{
 	// Bottom-floor equipment: sump, spray tanks, CIS, HDS,
 	// filtration, RCFC and injection sink sit inside containment
 	// (Figures 5-1/6-4/6-5) and must be inside the dome outline.
+	// LDC (letdown cooler) now clusters to aux so it does not
+	// stretch the dome.
 	"Sump": true, "CIS": true, "CSSTank": true, "SATTank": true,
 	"HDS": true, "ContainmentFiltration": true, "InjectionSink": true,
 	"RCFC_A": true, "RCFC_B": true, "RCFC_C": true, "RCFC_D": true,
@@ -1332,27 +1398,94 @@ func (r *renderer) pipe(p *core.Plant, g *core.PlantGraph, e core.GraphEdge, see
 	if !ok {
 		return ""
 	}
-	// Cold-leg retarget (p66 plan (c)): SIS/RHR/ChgPump edges
-	// carry InjectionSink as a graph node, but the spec says
-	// they discharge into the cold legs
-	// (chapter_5/page_097.txt:22-26). Draw the final segment to
-	// the RPV anchor (clipped at its boundary), not the wall
-	// sink. Graph semantics unchanged.
+	// Cold-leg retarget (p66 plan (c)): SIS/RHR edges carry
+	// InjectionSink as a graph node, but the spec says they
+	// discharge into the cold legs
+	// (specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:22-26).
+	// The west wall sink is audit-only; routing a pipe to it
+	// and then jumping back to the RPV draws long
+	// void-crossing detours (Sump->sink is a 676-unit jump west
+	// across the aux and turbine buildings). The pipe instead
+	// bends through its pump/valve hop (if any) straight to the
+	// RPV clipped edge: source -> hop -> RPV. Graph semantics
+	// unchanged. CVCS charging (VCT->InjectionSink) is not a
+	// cold-leg branch line: its spec path is VCT -> charging
+	// pump -> RCP seals -> regenerative heat exchanger -> RCS
+	// (specs/the_westinghouse_pressurized_water_react/chapter_4/page_076.txt:91-95),
+	// so the sink vertices are kept for the charging leg
+	// only as the conduit back to the RCS, and the endpoint
+	// wears the RPV clip as before; the void crossing is the
+	// charged line's, documented rather than rerouted.
 	if e.To == "InjectionSink" {
-		if rpv, okR := r.anchor("RPV"); okR {
+		if e.From == "VCT" {
+			if rpv, okR := r.anchor("RPV"); okR {
+				rw, rh := r.size(r.kindOf("RPV"))
+				pts = append([]Anchor{}, pts...)
+				pts[len(pts)-1] = clipToward(rpv, pts[len(pts)-2], rw, rh)
+			}
+		} else if rpv, okR := r.anchor("RPV"); okR {
 			rw, rh := r.size(r.kindOf("RPV"))
-			pts = append([]Anchor{}, pts...)
-			pts[len(pts)-1] = clipToward(rpv, pts[len(pts)-2], rw, rh)
+			fa, okF := r.anchor(e.From)
+			if okF {
+				fw, fh := r.size(r.kindOf(e.From))
+				next := rpv
+				// Only bend through a real mapped hop. The
+				// stock valveHopFor default (id "Valve") is a
+				// routing-only phantom parked in the east
+				// void, not a device on this leg; bending
+				// through it re-creates the void crossing.
+				if h, okH := pumpHopFor(e); okH {
+					if ha, okA := r.anchor(h.id); okA {
+						next = ha
+					}
+				} else if e.Valve != nil {
+					if h, okV := valveHopFor(e, p); okV && h.id != "Valve" {
+						if ha, okA := r.anchor(h.id); okA {
+							next = ha
+						}
+					}
+				}
+				trimmed := []Anchor{clipToward(fa, next, fw, fh)}
+				if next.X != rpv.X || next.Y != rpv.Y {
+					trimmed = append(trimmed, next)
+				}
+				trimmed = append(trimmed, clipToward(rpv, trimmed[len(trimmed)-1], rw, rh))
+				if len(trimmed) >= 2 {
+					pts = trimmed
+				}
+			}
 		}
 	}
+	colour := ColourForEdge(e.From, e.To)
+	// Parallel pipes (same From>To, same polyline: dot drew one
+	// line for SG->Condenser x3, RPV->RHRS x2, SG->Outside x2).
+	// The first draws the shared polyline; later ones draw an
+	// offset copy so the diagram shows three parallel lines
+	// (classic P&ID) instead of one line with stray valves.
+	// Curve self-loops (CoolingTower->CoolingTower) and trivial
+	// 2-point legs never offset: an offset loop reads as a second
+	// tower instead of a site helper.
 	if seen != nil {
 		sig := routeSignature(r, e)
 		if seen[sig] {
-			return r.valveOnly(p, g, e)
+			if len(pts) > 4 && e.From != e.To {
+				// Draw an offset twin rather than collapsing
+				// to a lone valve glyph. The offset sign
+				// alternates so three legs read as three
+				// parallel lines (second one side, third
+				// the other).
+				if seen[sig+"\x00off"] {
+					pts = offsetParallel(pts, -parallelOffsetUnits)
+				} else {
+					pts = offsetParallel(pts, parallelOffsetUnits)
+					seen[sig+"\x00off"] = true
+				}
+			} else {
+				return r.valveOnly(p, g, e)
+			}
 		}
 		seen[sig] = true
 	}
-	colour := ColourForEdge(e.From, e.To)
 	var pathFrag string
 	switch classifyPipe(g, e) {
 	case pipeBlocked:
@@ -1369,9 +1502,11 @@ func (r *renderer) pipe(p *core.Plant, g *core.PlantGraph, e core.GraphEdge, see
 		pathFrag = DrawPipePathAnimated(pts, colour,
 			flowDurationSec(velocity, open))
 	case pipeWet:
-		pathFrag = DrawPipePath(pts, colour)
+		// Edge-aware so drain legs read dashed (Figure 1-2)
+		// while main steam stays thick solid.
+		pathFrag = DrawPipePathEdge(pts, colour, e.From, e.To)
 	default:
-		pathFrag = DrawPipePathIdle(pts, colour)
+		pathFrag = DrawPipePathIdleEdge(pts, colour, e.From, e.To)
 	}
 	if e.Valve == nil {
 		return pathFrag
@@ -1408,6 +1543,12 @@ func snapAngle(deg float64) float64 {
 // same geometry via different hop chains; the signature uses the
 // points themselves so identical-geometry edges dedupe while
 // distinct-route edges keep separate pipes.
+//
+// Identical chains (same From>To, same hop chain, same
+// polyline -- e.g. SG->Condenser x3 via plain, vent and drain
+// hops that dot routes almost identically) dedupe to the shared
+// line plus one offset twin, so the P&ID shows the parallels
+// instead of a single underline with stray valve glyphs.
 func routeSignature(r *renderer, e core.GraphEdge) string {
 	pts, ok := r.routeFor(e)
 	if !ok || len(pts) < 2 {
@@ -1420,18 +1561,50 @@ func routeSignature(r *renderer, e core.GraphEdge) string {
 	return e.From + ">" + e.To + "|" + b.String()
 }
 
+// parallelOffsetUnits separates parallel pipes dot drew as one
+// line (same From>To, same polyline). The second leg rides this
+// offset to one side of the shared polyline, the third to the
+// other, so P&ID shows three parallel lines instead of one.
+const parallelOffsetUnits = 6.0
+
+// offsetParallel shifts every point of pts laterally by offset
+// (positive = one side, negative = other), perpendicular to the
+// polyline's mean direction so a mostly-vertical leg offsets
+// horizontally and a horizontal leg offsets vertically.
+func offsetParallel(pts []Anchor, offset float64) []Anchor {
+	if len(pts) < 2 || offset == 0 {
+		return pts
+	}
+	mid := pts[len(pts)/2]
+	dx := mid.X - pts[0].X
+	dy := mid.Y - pts[0].Y
+	if dx == 0 && dy == 0 {
+		return pts
+	}
+	m := math.Hypot(dx, dy)
+	px, py := -dy/m*offset, dx/m*offset
+	out := make([]Anchor, len(pts))
+	for i, p := range pts {
+		out[i] = Anchor{X: p.X + px, Y: p.Y + py}
+	}
+	return out
+}
+
 // pipeWeightByColour attaches line weights to ColourForEdge
-// system classes (piping.go:220-249): red primary, brown
-// secondary (SG→Condenser), black blocked/other. Presentation
-// convention only; weights are not driven by sim load values.
+// system classes (piping.go): red primary thickest, brown steam
+// next (Figure 1-2: thick = steam, thin = feedwater), blue/ccws/
+// sis feeds, cvcs thinner, black blocked thinnest and barely
+// visible (shut auxiliary legs must not scream over live
+// systems). Presentation convention only; weights are not driven
+// by sim load values.
 var pipeWeightByColour = map[string]float64{
 	"red":   3.0,
-	"brown": 2.0,
+	"brown": 3.0, // steam thick (Figure 1-2)
 	"blue":  2.0,
-	"ccws": 2.0,
+	"ccws":  2.0,
 	"sis":   2.0,
 	"cvcs":  1.5,
-	"black": 1.0,
+	"black": 0.6,
 }
 
 func pipeWeightByColourFor(colour string) float64 {
@@ -1677,21 +1850,26 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		rows := []struct {
 			colour, label string
 			width         float64
+			dash          string
 		}{
-			{"red", "RCS primary", 3.0},
-			{"brown", "Steam / secondary", 2.0},
-			{"blue", "Feed / cooling water", 2.0},
-			{cvcsColour, "CVCS system", 1.5},
-			{"#7030a0", "SIS / RHR", 2.0},
-			{"#2e7d32", "CCWS (service water)", 2.0},
-			{"black", "Blocked / other", 1.0},
+			{"red", "RCS primary", 3.0, ""},
+			{"brown", "Steam / secondary", 3.0, ""},
+			{"blue", "Feed / cooling water", 2.0, ""},
+			{cvcsColour, "CVCS system", 1.5, ""},
+			{"#7030a0", "SIS / RHR", 2.0, ""},
+			{"#2e7d32", "CCWS (service water)", 2.0, ""},
+			{"black", "Blocked / other", 0.6, "7 4"},
 		}
 		_ = legH
 		for i, r := range rows {
 			y := ly + legRowH*(float64(i)+1) + 4
+			dash := ""
+			if r.dash != "" {
+				dash = fmt.Sprintf(` stroke-dasharray="%s"`, r.dash)
+			}
 			fmt.Fprintf(&b,
-				`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="%.1f"/>`+"\n",
-				lx+8, y, lx+34, y, r.colour, r.width)
+				`<line x1="%.0f" y1="%.0f" x2="%.0f" y2="%.0f" stroke="%s" stroke-width="%.1f"%s/>`+"\n",
+				lx+8, y, lx+34, y, r.colour, r.width, dash)
 			fmt.Fprintf(&b, `<text x="%.0f" y="%.0f" font-size="%.1f" fill="%s">%s</text>`+"\n",
 				lx+40, y+legFs*0.35, legFs, pidText, html.EscapeString(r.label))
 		}
@@ -1842,6 +2020,28 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 		b.WriteString("</g>\n")
 	}
 
+	// Heat-sink site boundaries (see heatSinkBounds): dashed
+	// outside boxes around the unclustered intake/service-water
+	// pair west of the auxiliary building and the cooling tower
+	// east of the turbine building. Render-only: node positions
+	// come from the unchanged DOT; the dashes say "outside",
+	// distinct from the solid building outlines.
+	for _, hs := range heatSinkBounds {
+		bx, by, bw, bh, ok := r.siteBoundsBox(hs.allow)
+		if !ok {
+			continue
+		}
+		bx, by = math.Max(bx, 0), math.Max(by, 0)
+		bw = math.Min(bw, DocumentWidth-bx)
+		bh = math.Min(bh, DocumentHeight-by)
+		fmt.Fprintf(&b, `<g data-cluster="%s">`+"\n", hs.id)
+		fmt.Fprintf(&b, `<rect x="%.0f" y="%.0f" width="%.0f" height="%.0f" `+
+			`fill="none" stroke="%s" stroke-width="1.5" stroke-dasharray="7 4"/>`+"\n",
+			bx, by, bw, bh, pidBuildingEdge)
+		writeLabel(bx+bw-76, by+16, math.Max(8.0, scaledFont(bh*0.03)), hs.label)
+		b.WriteString("</g>\n")
+	}
+
 	// River: the circulating water system's ultimate heat sink.
 	// "water may be a river, lake, ocean, or cooling tower ...
 	// Water enters the system through an intake house"
@@ -1851,33 +2051,24 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 	// tunnel path is Intake -> CWP -> below the turbine box ->
 	// Condenser, clipped at the box edge so the band never
 	// visibly crosses the turbine hall.
+	// The band used to run Intake -> CWP -> CoolingTower as one
+	// polyline: the Intake->CWP leg cut diagonally straight
+	// across the Auxiliary and containment buildings (raster
+	// audit: long diagonal blue band through the dome). The
+	// tunnel instead stays under the turbine hall (Figure 1-4),
+	// so the band is drawn in two clipped pieces that never
+	// cross a building outline: west Intake short stub, and the
+	// east under-turbine leg CWP -> below-box -> Condenser. The
+	// CoolingTower vertex is gone for the same reason: its east
+	// site helper is dotted off separately below.
 	if ia, ok := r.anchor("Intake"); ok {
-		var pts []Anchor
-		if cwp, okC := r.anchor("CWP"); okC {
-			pts = append(pts, Anchor{X: cwp.X - 60, Y: cwp.Y + 34})
-		}
-		pts = append(pts, Anchor{X: ia.X - 70, Y: ia.Y + 30},
-			Anchor{X: ia.X + 80, Y: ia.Y + 34})
-		if ct, okCT := r.anchor("CoolingTower"); okCT {
-			pts = append(pts, Anchor{X: ct.X - 20, Y: ct.Y + 62})
-		}
-		if ct, okCT := r.anchor("Condenser"); okCT {
-			// Route under the turbine box: clip the final leg at
-			// the box bottom edge instead of crossing it. The
-			// terminus is the condenser symbol bottom center,
-			// not ct.X-40: the condenser glyph is 400 units wide
-			// so an offset terminus still lands inside the symbol
-			// and the final leg bites into the box (raster audit).
-			cw, ch := r.size(r.kindOf("Condenser"))
-			end := clipToward(ct, Anchor{X: ct.X, Y: ct.Y + 1}, cw, ch)
-			if tbx, tby, tbw, tbh, okTB := r.clusterBox("cluster_turbine"); okTB {
-				_ = tbw
-				pts = append(pts, Anchor{X: end.X, Y: tby + tbh + 10})
-				pts = append(pts, end)
-				_ = tbx
-			} else {
-				pts = append(pts, end)
-			}
+		// West stub: Intake house to the document edge only.
+		// It must not run to CWP (east, inside the turbine
+		// box) or to the CoolingTower (far east, inside its
+		// own void); the tunnel physically routes underneath.
+		pts := []Anchor{
+			{X: ia.X - 70, Y: ia.Y + 30},
+			{X: ia.X + 80, Y: ia.Y + 34},
 		}
 		var pp strings.Builder
 		for i, p := range pts {
@@ -1886,12 +2077,37 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 			}
 			fmt.Fprintf(&pp, "%.1f,%.1f", p.X, p.Y)
 		}
-		// River band (p66): a 6px, 0.35-opacity band behind the
-		// intake/CW path (was 22px/0.5, a stripe obscuring
-		// Turbine Building symbols).
 		fmt.Fprintf(&b,
 			`<polyline points="%s" fill="none" stroke="%s" stroke-width="6" stroke-opacity="0.35"/>`+"\n",
 			pp.String(), riverColour)
+		// East under-turbine leg: CWP -> below the turbine
+		// box -> Condenser bottom. Clipped at the box edge so
+		// the band never crosses the turbine hall.
+		if cwp, okC := r.anchor("CWP"); okC {
+			if cond, okT := r.anchor("Condenser"); okT {
+				pts2 := []Anchor{{X: cwp.X - 60, Y: cwp.Y + 34}}
+				cw, ch := r.size(r.kindOf("Condenser"))
+				end := clipToward(cond, Anchor{X: cond.X, Y: cond.Y + 1}, cw, ch)
+				if tbx, tby, tbw, tbh, okTB := r.clusterBox("cluster_turbine"); okTB {
+					_ = tbw
+					pts2 = append(pts2, Anchor{X: end.X, Y: tby + tbh + 10})
+					pts2 = append(pts2, end)
+					_ = tbx
+				} else {
+					pts2 = append(pts2, end)
+				}
+				var pp2 strings.Builder
+				for i, p := range pts2 {
+					if i > 0 {
+						pp2.WriteString(" ")
+					}
+					fmt.Fprintf(&pp2, "%.1f,%.1f", p.X, p.Y)
+				}
+				fmt.Fprintf(&b,
+					`<polyline points="%s" fill="none" stroke="%s" stroke-width="6" stroke-opacity="0.35"/>`+"\n",
+					pp2.String(), riverColour)
+			}
+		}
 	}
 
 
@@ -2024,8 +2240,18 @@ func writePlantSVG(w io.Writer, p *core.Plant, l *Layout, o RenderOptions) error
 				a.X+dx, a.Y+dyDot, dotR, dotColour, pidDotEdge)
 			if pu.Velocity > 0 {
 				fs := scaledFont(sh)
-				writeLabel(a.X+dx, a.Y+dyDot+dotR+fs*0.9,
-					fs, fmt.Sprintf("%d rpm", int(pu.Velocity)))
+				// Gate the speed label against neighbour
+				// symbols and caption stacks, like readouts:
+				// at the dot corner (dx,dyDot) the label sat ON
+				// the pump body ("T1189 rpm"), and below the
+				// box it still straddles the SG edge. When it
+				// cannot fit clear, drop it (accessible via
+				// the group title/hover).
+				body := fmt.Sprintf("%d rpm", int(pu.Velocity))
+				cx, cy := a.X+dx, a.Y+sh/2+fs*1.3
+				if readoutFree(cx, cy, body, fs, "", symBoxes, captionBoxes) {
+					writeLabel(cx, cy, fs, body)
+				}
 			}
 		} else if run, okR := runAccessors[dp.id]; okR && run(p) {
 			dotR := math.Max(3, sw*0.06)

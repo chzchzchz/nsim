@@ -4,7 +4,7 @@
 
 // Sole polyfill loader: bundling it keeps window.Go available
 // under any deploy base, unlike a root-absolute script tag.
-import "./wasm_exec.js";
+import "../js/wasm_exec.js";
 
 // Test seam: unit/init tests inject a fake so they never fetch
 // the real wasm blob or exercise Go's runtime.

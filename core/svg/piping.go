@@ -13,17 +13,28 @@ import (
 // edges from PlantGraph. Helpers accept the same colour string
 // returned by ColourForEdge.
 //
-// Pipe colour convention (Westinghouse P&ID):
+// Pipe colour convention (Figure 1-2, Figure 15.3-1):
 //
 //	red    - primary coolant (RCS)
 //	brown  - steam / condensate (secondary)
 //	blue   - feedwater / cooling water (circulating water shares
 //	         the feedwater hue: both are liquid water supplies,
 //	         while the condenser steam/condensate sides stay brown)
-//	green  - service water (CCWS barrier)
-//	sis    - safety injection / residual heat removal (purple)
-//	cvcs   - chemical and volume control (light blue)
-//	black  — anything else
+//	green  - CCWS / service water (barrier)
+//	sis    - safety injection / RHRS (purple)
+//	cvcs   - CVCS letdown/charging (light blue)
+//	black  - blocked by a shut valve (positive zero flow)
+//
+// Figure 1-2 line discipline also applies: steam is drawn thick
+// (pipeWeightByColour brown 3.0 > feed 2.0, solid), drain legs
+// cascade back to the condenser dashed, and idle-but-connected
+// legs keep their system colour dimmed (pipeOpacityIdle)
+// instead of dropping to black. Black is reserved for
+// pipeBlocked (classifyPipe: shut valve), so the legend's
+// "Blocked / other" only covers legs a shut valve actually
+// blocks.
+//   - Figure 1-2: specs/the_westinghouse_pressurized_water_react/imgs/001.md
+//   - Figure 3-1: specs/the_westinghouse_pressurized_water_react/imgs/016.md
 //
 // Spec justification:
 //   - "Reactor coolant piping and fittings are made of stainless
@@ -60,8 +71,10 @@ func DrawPipe(fromX, fromY, toX, toY float64, colour string, elbowed bool) strin
 // pipeColours lists every colour ColourForEdge can return so the
 // document defines one flow-arrow marker per colour. Keys are the
 // names used in stroke attributes; values are the hex colours.
-// marker-mid is intentionally absent: direction is a single
-// marker-end per polyline (arrow blobs on short legs otherwise).
+// Direction is a single marker-end per polyline. marker-mid
+// fires per vertex, so it would pepper dot splines with arrow
+// blobs (170 instances on the real diagram); interior arrows
+// were tried and removed - end arrows carry direction.
 var pipeColours = map[string]string{
 	"red":   "red",
 	"blue":  "blue",
@@ -106,9 +119,69 @@ func pipeStrokeHex(colour string) string {
 // DrawPipePath renders dot's routed polyline for one edge as a
 // single SVG polyline so pipes follow graphviz's routing instead
 // of cutting straight across the drawing. Direction is a single
-// marker-end arrowhead; interior marker-mid is dropped so short
-// legs do not read as solid arrow blobs (see plan p66 rev 2).
+// marker-end arrowhead, plus one true mid-route arrow on long
+// coarse legs (split at the arc midpoint, one <path> segment
+// with marker-mid, not one marker per dot vertex).
 func DrawPipePath(pts []Anchor, colour string) string {
+	return drawPipePathMid(pts, colour, "", pipeOpacityFull)
+}
+
+// midArrowMinLen is the minimum routed-polyline length (document
+// units) carrying a mid-route arrow. Short legs get only the
+// end arrow: interior arrows there read as blobs.
+const midArrowMinLen = 60.0
+
+// midArrowMaxSegs caps vertices before a leg is considered too
+// fine-grained for a mid arrow (per-vertex arrows would blob).
+const midArrowMaxSegs = 12
+
+// pipeOpacityFull keeps flowing/wet legs at full strength; idle
+// legs are dimmed but keep their system colour (Figure 1-2).
+const pipeOpacityFull = 1.0
+
+// pipeOpacityIdle dims an idle-but-connected leg; the system
+// colour is kept (Figure 1-2) instead of dropping to black.
+const pipeOpacityIdle = 0.45
+
+// pipeDashByEdge encodes Figure 1-2 line discipline: extraction/
+// drain legs dashed, main steam/feed solid, blocked legs dashed
+// black. Keyed by "From>To" graph ids so drain hops
+// (LPHeaterDrain/HPHeaterDrain cascade back to the condenser)
+// read dashed while main steam stays thick solid.
+//   specs/the_westinghouse_pressurized_water_react/imgs/001.md
+var pipeDashByEdge = map[string]string{
+	"LPHeaterDrain>Condenser": "7 4",
+	"HPHeaterDrain>HDT":        "7 4",
+	"LPHeaterDrain>HDT":        "7 4",
+	"Condenser>LPHeaterDrain":  "7 4",
+}
+
+// pipeDashByColour is the colour-level dash: only blocked
+// ("black") reads dashed. Steam is thick but solid (Figure 1-2
+// main steam legs); drain is edge-aware via pipeDashByEdge.
+var pipeDashByColour = map[string]string{
+	"black": "7 4", // blocked/other reads dashed
+}
+
+// pipeDashFor returns the stroke-dasharray for a system colour,
+// or "" for solid lines.
+func pipeDashFor(colour string) string {
+	return pipeDashByColour[colour]
+}
+
+// pipeDashForEdge returns the stroke-dasharray for an edge's
+// From>To pair, or "" for solid. Drain/extraction cascade
+// legs (Figure 1-2 dashed) read dashed while main steam
+// stays thick solid.
+func pipeDashForEdge(fromID, toID string) string {
+	return pipeDashByEdge[fromID+">"+toID]
+}
+
+func drawPipePath(pts []Anchor, colour, edgeKey string, opacity float64) string {
+	return drawPipePathWithArrows(pts, colour, edgeKey, opacity, true)
+}
+
+func drawPipePathWithArrows(pts []Anchor, colour, edgeKey string, opacity float64, arrows bool) string {
 	var b strings.Builder
 	b.WriteString(`<polyline points="`)
 	for i, p := range pts {
@@ -121,9 +194,33 @@ func DrawPipePath(pts []Anchor, colour string) string {
 	// scales g#viewport for pan/zoom. Width encodes system class
 	// per pipeWeightByColour (svg.go): primary > secondary > aux.
 	fmt.Fprintf(&b, `" fill="none" stroke="%s" stroke-width="%.1f" `, pipeStrokeHex(colour), pipeWeightByColourFor(colour))
+	// Drain legs: edge-aware dash wins (Figure 1-2 extraction/
+	// drain), then blocked colour dash.
+	if from, to, ok := strings.Cut(edgeKey, ">"); ok {
+		if dash := pipeDashForEdge(from, to); dash != "" {
+			fmt.Fprintf(&b, `stroke-dasharray="%s" `, dash)
+		} else if dash := pipeDashFor(colour); dash != "" {
+			fmt.Fprintf(&b, `stroke-dasharray="%s" `, dash)
+		}
+	} else if dash := pipeDashFor(colour); dash != "" {
+		fmt.Fprintf(&b, `stroke-dasharray="%s" `, dash)
+	}
+	fmt.Fprintf(&b, `stroke-opacity="%.2f" `, opacity)
 	fmt.Fprintf(&b, `vector-effect="non-scaling-stroke" `)
+	if !arrows {
+		fmt.Fprintf(&b, `/>`)
+		return b.String()
+	}
 	fmt.Fprintf(&b, `marker-end="url(#arrow-%s)"/>`, colour)
 	return b.String()
+}
+
+// DrawPipePathEdge renders one graph edge's polyline: edge-aware
+// dash (Figure 1-2 drain) plus the same end arrow as
+// DrawPipePath. Used by the composition pass so drain legs
+// read dashed without affecting main steam.
+func DrawPipePathEdge(pts []Anchor, colour, fromID, toID string) string {
+	return drawPipePathMid(pts, colour, fromID+">"+toID, pipeOpacityFull)
 }
 
 // Flow-dash tuning: effective speed (rpm times valve open
@@ -164,22 +261,91 @@ func DrawPipePathAnimated(pts []Anchor, colour string, durSec float64) string {
 
 // DrawPipePathIdle renders a routed polyline for a passive leg the
 // model cannot observe (no pump, no valve): same geometry and
-// arrows as a flowing pipe, dimmed by the .idle rule so live lines
-// pop without losing direction or fluid-system information.
+// arrows as a flowing pipe, dimmed via stroke-opacity so live
+// lines pop without losing direction or fluid-system information.
 func DrawPipePathIdle(pts []Anchor, colour string) string {
-	base := DrawPipePath(pts, colour)
-	return strings.Replace(base, `/>`, ` class="idle"/>`, 1)
+	return DrawPipePathIdleEdge(pts, colour, "", "")
 }
+
+// DrawPipePathIdleEdge renders an idle-but-connected leg edge-
+// aware: drain edges keep their dash at reduced opacity.
+func DrawPipePathIdleEdge(pts []Anchor, colour, fromID, toID string) string {
+	return drawPipePathMid(pts, colour, fromID+">"+toID, pipeOpacityIdle)
+}
+
+// drawPipePathMid renders with a true mid-route arrow on long
+// coarse legs: the polyline is emitted as one <polyline> for
+// the ends, plus one short <path> segment at the arc midpoint
+// carrying marker-mid. One arrow, not one per vertex. Blocked
+// legs (colour "black") never take a mid arrow - they carry no
+// arrows at all.
+func drawPipePathMid(pts []Anchor, colour, edgeKey string, opacity float64) string {
+	if colour == "black" || !midArrowWanted(pts) {
+		return drawPipePath(pts, colour, edgeKey, opacity)
+	}
+	base := drawPipePath(pts, colour, edgeKey, opacity)
+	mid, deg := routePointAt(pts, routeLen(pts)/2)
+	_ = deg
+	// One short segment along the local direction.
+	at, _ := routePointAt(pts, routeLen(pts)/2)
+	ang := deg * math.Pi / 180
+	dx, dy := math.Cos(ang), math.Sin(ang)
+	segLen := 8.0
+	seg := []Anchor{{X: at.X - dx*segLen, Y: at.Y - dy*segLen},
+		{X: at.X + dx*segLen, Y: at.Y + dy*segLen}}
+	_ = mid
+	// Insert a short mid path before the polyline close.
+	base = strings.TrimSuffix(base, "/>")
+	return base + `/>` + drawMidArrow(seg, colour, opacity)
+}
+
+// drawMidArrow is one short oriented segment with marker-mid.
+func drawMidArrow(pts []Anchor, colour string, opacity float64) string {
+	var b strings.Builder
+	b.WriteString(`<polyline points="`)
+	for i, p := range pts {
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		fmt.Fprintf(&b, "%.1f,%.1f", p.X, p.Y)
+	}
+	fmt.Fprintf(&b, `" fill="none" stroke="%s" stroke-width="%.1f" `, pipeStrokeHex(colour), pipeWeightByColourFor(colour))
+	fmt.Fprintf(&b, `stroke-opacity="%.2f" `, opacity)
+	fmt.Fprintf(&b, `vector-effect="non-scaling-stroke" `)
+	fmt.Fprintf(&b, `marker-mid="url(#arrow-%s)" marker-end="url(#arrow-%s)"/>`, colour, colour)
+	return b.String()
+}
+
+// midArrowWanted reports whether pts is long and coarse enough
+// to carry one mid-route arrow.
+func midArrowWanted(pts []Anchor) bool {
+	if routeLen(pts) <= midArrowMinLen {
+		return false
+	}
+	if len(pts) > midArrowMaxSegs {
+		return false
+	}
+	return true
+}
+
+// pipeOpacityDead dims a blocked leg past idle: closed-valve legs
+// are the only dashed-black lines, and at opacity 0.45 a fan of a
+// dozen parallel lines reads as a ruled texture. Near-miss but
+// present-versus-green only, so the dash plus low opacity says
+// "dead" without touching the pipes under them.
+const pipeOpacityDead = 0.30
 
 // DrawPipePathDead renders a routed polyline whose flow state is
 // positively known to be zero - a shut valve blocking the path.
 // Black is the unassigned-pipe colour, so the leg reads as a dead
-// line rather than a dimmed hint of its former self; arrows stay
-// on for direction.
+// line rather than a dimmed hint of its former self. Blocked legs
+// carry no arrowheads (no flow to direct) and thin slowly so a
+// shut auxiliary leg does not scream over live systems.
 func DrawPipePathDead(pts []Anchor) string {
-	base := DrawPipePath(pts, "black")
-	return strings.Replace(base, `/>`, ` class="idle"/>`, 1)
+	return drawPipePathWithArrows(pts, "black", "", pipeOpacityDead, false)
 }
+
+
 
 // routeLen sums the segment lengths of a polyline.
 func routeLen(pts []Anchor) float64 {
@@ -273,10 +439,10 @@ func ColourForEdge(fromID, toID string) string {
 		return "cvcs"
 	case isCCWS(fromID) || isCCWS(toID):
 		return "ccws"
-	case isSIS(fromID) || isSIS(toID):
-		return "sis"
 	case isEFWS(fromID) || isEFWS(toID):
-		// EFWS pumps and tanks deliver feedwater to the SGs:
+		// EFWS pumps and tanks deliver feedwater to the SGs
+		// (checked before SIS so EFWS tanks read blue feedwater,
+		// not purple safety injection):
 		//   "The primary function of the Emergency Feedwater
 		//    System (EFWS) ... is to supply feedwater to the
 		//    steam generators following accident or transient
@@ -284,6 +450,8 @@ func ColourForEdge(fromID, toID string) string {
 		//    available."
 		//   specs/the_westinghouse_pressurized_water_react/chapter_5/page_098.txt:109-113
 		return "blue"
+	case isSIS(fromID) || isSIS(toID):
+		return "sis"
 	case fromID == "RPV" || toID == "RPV" ||
 		fromID == "Pressurizer" || toID == "Pressurizer" ||
 		fromID == "RCP" || toID == "RCP":
@@ -316,7 +484,7 @@ func ColourForEdge(fromID, toID string) string {
 //   specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:6-10
 func isCVCS(id string) bool {
 	switch id {
-	case "VCT", "ChgPump", "BTRS", "BTRSPUMP", "BRS":
+	case "VCT", "ChgPump", "BTRS", "BTRSPUMP", "BRS", "LDC":
 		return true
 	}
 	return false
@@ -330,9 +498,12 @@ func isCVCS(id string) bool {
 //    an intermediate barrier between these potentially
 //    radioactive systems and the Service Water System"
 //   specs/the_westinghouse_pressurized_water_react/chapter_5/page_102.txt:46-55
+// The service-water header that feeds CCWS (chapter_12) and its
+// intake house share the green service-water barrier reading.
 func isCCWS(id string) bool {
 	switch id {
-	case "CCWSSurge", "CCWSPump", "CCWSHX":
+	case "CCWSSurge", "CCWSPump", "CCWSHX",
+		"SWSHeader", "Intake":
 		return true
 	}
 	return false
@@ -344,18 +515,24 @@ func isCCWS(id string) bool {
 //    cold legs of the RCS. The HHSI and RHR pumps are aligned to
 //    take suction directly from the RWST."
 //   specs/the_westinghouse_pressurized_water_react/chapter_5/page_097.txt:22-26
+// RHRS train auxiliaries (recirculation, SOLIDPP, catch-tank VCT
+// interface) and LHRS train letter variants ride the same loop.
 func isSIS(id string) bool {
 	switch id {
 	case "RWST", "HHSI", "RHRS_A", "RHRS_B", "SISAccumulators",
 		"Sump", "InjectionSink", "CSSTank", "SATTank", "CSSPump",
 		"CIS", "RABYP", "RBBYP", "RAS1", "RAS2", "RBS1", "RBS2",
-		"EAMFV", "EATSA", "EAREC", "EBMFV", "EBTSA", "EBREC":
+		"EAMFV", "EATSA", "EAREC", "EBMFV", "EBTSA", "EBREC",
+		"SOLIDPP", "EFWSTankA", "EFWSTankB", "LDC", "PRT":
 		return true
 	}
 	return false
 }
 
 // isEFWS reports whether a node id belongs to emergency feedwater.
+// CST/HDT stay out on purpose: Condenser->CST is condensate recirculation
+// (brown, secondary side) and HDT->SG is already feedwater-blue via
+// the SG endpoint; the AFW pump endpoints carry the affinity.
 func isEFWS(id string) bool {
 	switch id {
 	case "EFWSTank", "EFWSTankA", "EFWSTankB", "EAMD", "EATD", "EBMD", "EBTD",

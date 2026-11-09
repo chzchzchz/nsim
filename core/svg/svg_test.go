@@ -709,6 +709,53 @@ func TestComputeLayout_RCPBetweenSGAndRPV(t *testing.T) {
 	assert.Equal(t, 118, len(symbolCount(t)), "symbol count drift (post-anchors): parallel edges keep both valve glyphs, pipe geometry deduped only")
 }
 
+// TestParallelPipesDrawDistinctLines pins the P4 twin fix: dot
+// routes the parallel groups SG->Condenser x3, RPV->RHRS x2
+// and SG->Outside x2 as identical polylines. The renderer must
+// draw an offset twin rather than collapsing to a single line
+// plus a stray valve glyph, so no two drawn polylines may
+// share identical points and the parallel legs each own a
+// distinct polyline (offset differs from the shared base).
+func TestParallelPipesDrawDistinctLines(t *testing.T) {
+	p := core.MakePlant()
+	out := renderPlant(t, &p)
+	polyRe := regexp.MustCompile(`<polyline points="([^"]+)"`)
+	seen := map[string]bool{}
+	dupes := 0
+	for _, m := range polyRe.FindAllStringSubmatch(out, -1) {
+		if seen[m[1]] {
+			dupes++
+		}
+		seen[m[1]] = true
+	}
+	assert.Zero(t, dupes, "identical polyline points would be a collapsed parallel pipe")
+	// Total drawn polylines covers the twin arithmetic:
+	// 76 before; duplicates now each own a distinct twin.
+	assert.GreaterOrEqual(t, strings.Count(out, `<polyline`), 80,
+		"parallel twins must each draw their own polyline")
+}
+
+// TestNoCoincidentPipeGeometry is the sibling invariant for
+// piping generally: the same identical-points scan as above,
+// phrased as "no two polylines are byte-identical" so a future
+// refactor that reintroduces a shared geometry fails at the
+// point level rather than at a count.
+func TestNoCoincidentPipeGeometry(t *testing.T) {
+	p := core.MakePlant()
+	out := renderPlant(t, &p)
+	pts := regexp.MustCompile(`<polyline points="([^"]+)"`).
+		FindAllStringSubmatch(out, -1)
+	require.NotEmpty(t, pts)
+	counts := map[string]int{}
+	for _, m := range pts {
+		counts[m[1]]++
+	}
+	for ptsStr, n := range counts {
+		assert.Equalf(t, 1, n,
+			"duplicate geometry %q drawn %d times", ptsStr[:min(40, len(ptsStr))], n)
+	}
+}
+
 // symbolCount counts top-level <use> outside <defs> in a render.
 func symbolCount(t *testing.T) []string {
 	t.Helper()
