@@ -47,7 +47,7 @@ cmd/nsim/         CLI inspector: dumps state, renders P&ID (DOT/SVG)
 cmd/nsimrun/      CLI runner: JSON plant in, JSON plant out
 web/              TypeScript + Vite dashboard over the Wasm build
 assets/           Operator help text baked into the web UI
-scripts/chart.sh  Sample a run over time and plot it with gnuplot
+scripts/chart.sh  Batch-chart every varying sensor after applying a command file (matplotlib PNGs, or SVG fallback) plus a filterable index.html
 skills/           Agent-facing workflow guides (scenario development, SVG, web UI, verification)
 specs/            Source documentation (Westinghouse PWR manual, ops manuals, Wikipedia cache)
 plans/            Design notes and scenario catalogs
