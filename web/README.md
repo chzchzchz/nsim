@@ -57,6 +57,18 @@ mkdir /srv/www && tar xzf web.tgz -C /srv/www
 
 The 🧭 Scenario picker lists the operator evolutions from `core/scenarios.go` (~38), grouped by section. Choosing one rebuilds the plant with that start state through the same reset path as Reset; Reset re-applies it, Free play uses the default plant. Malfunctions script their trigger ~30 s in (`Scenario.Script`), and console exports embed the scenario id so `nsimrun -cmd session.json` reproduces the run.
 
+## Remote mode (nsimserve)
+
+The UI can attach to a running `nsimserve` (`cmd/nsimserve`) instead of the local WASM plant. Click **🌐 Server**, enter a URL (default `http://127.0.0.1:8080`), and the header probes `GET {base}/livez` — healthy is HTTP 200 with `{"ok":true}`. `GET {base}/readyz` 503 means the server is up but rebuilding its plant. Errors show inline in the dialog; the app never half-switches.
+
+While connected, a 1 s poll loop refreshes the header clock, sensor/control tiles, alarms, console list, and the **Logs** panel. `GET /status` carries `siteName`, `runId`, `simTimeMs`, `latestSeq`, and the objective; a `runId` change rebuilds the tiles and resets the log cursor. New log rows appear live; a small banner appears above the panel when `latestSeq` advances past what you last saw (your own writes don't bump it). The P&ID stays a static local template in remote mode; tiles and logs are the source of truth.
+
+Remote mode starts **read-only**: control widgets, Start/Step/Reset, console submit, alarm acknowledge, and the log composer are disabled. The **🔒 Read-only** toggle switches to **✏️ Writable** — a UI gate only; the server accepts writes from any client. In writable mode, every individual control change asks for a comment in a confirm dialog before a `PUT /controls/{key}` is sent; cancelling submits nothing and reverts the widget. Lifecycle buttons (pause/resume/step/reset, Steps/s) and alarm acknowledge act directly. The Logs panel has a comment-only box (**Add comment to log…**) that posts `POST /logs {"comment":...}` at the current sim time — useful to annotate the run without touching the plant.
+
+Remote-only UI (Server button state, writable toggle, Logs panel, connected banner) renders only while connected; disconnecting restores local mode exactly.
+
+See `plans/web_remote_plan.md` for the full design and `cmd/nsimserve/README.md` for the server API.
+
 ## Extending
 
 The wasm surface (`plant.controlKeys`, `plant.sensorKeys`) mirrors the bridge factory. Add entries in `core/bridge.go` to surface new parts; the web UI picks them up on the next reset. Help text lives in `assets/descriptions/**` and is bundled as `public/descriptions.json` by `make descriptions`.

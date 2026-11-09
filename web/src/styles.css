@@ -448,6 +448,92 @@
 
 .cmd-more { color: #999; font-style: italic; }
 
+// Remote-mode additions (server picker, writable toggle,
+// logs panel, live alert). Only visible/active while connected.
+.server-url-label {
+    display: block;
+    margin: 8px 0 4px;
+    font-size: 12px;
+    font-weight: bold;
+    color: #555;
+}
+.server-error {
+    color: #b00;
+    font-size: 13px;
+    min-height: 16px;
+    margin-top: 6px;
+}
+.server-change {
+    font-family: monospace;
+    font-size: 13px;
+    padding: 8px;
+    background: #f4f6f8;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow-wrap: anywhere;
+}
+#logs {
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 12px;
+}
+#logs h2 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+}
+.logs-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff7e6;
+    border: 1px solid #e4c88a;
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+.logs-banner span { flex: 1; cursor: pointer; }
+.logs-list {
+    max-height: 300px;
+    overflow: auto;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 11px;
+}
+.log-row {
+    padding: 2px 6px;
+    border-bottom: 1px solid #f0f0f0;
+    overflow-wrap: anywhere;
+}
+.log-row.operation { background: #fbfcfd; }
+.log-row.comment { color: #555; font-style: italic; }
+.logs-input-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+.logs-input-row input {
+    flex: 1;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+.logs-error {
+    color: #b00;
+    font-family: monospace;
+    min-height: 14px;
+    margin-top: 4px;
+}
+header#sim-bar #btn-server,
+header#sim-bar #btn-write-mode {
+    background: #1f4e79;
+    border-color: #163a5c;
+}
+
 .overlay-backdrop {
     position: fixed;
     inset: 0;

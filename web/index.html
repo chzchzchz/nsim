@@ -11,6 +11,8 @@
         <span class="sim-title" title="nsim — pressurized water reactor simulator">nsim · PWR simulator</span>
         <button id="btn-scenario" title="Choose a starting scenario">🧭 Scenario</button>
         <span id="scenario-name" title="Active scenario"></span>
+        <button id="btn-server" title="Connect to an nsimserve server" style="display:none">🌐 Server</button>
+        <button id="btn-write-mode" title="Toggle read-only / writable" style="display:none">🔒 Read-only</button>
         <button id="btn-start">▶ Start</button>
         <button id="btn-step">⏭ Step</button>
         <button id="btn-reset">↺ Reset</button>
@@ -46,6 +48,7 @@
         <div id="alarms"></div>
         <div id="tiles"></div>
         <section id="console"></section>
+        <section id="logs" style="display:none"></section>
     </main>
     <script type="module" src="/src/main.ts"></script>
 </body>
