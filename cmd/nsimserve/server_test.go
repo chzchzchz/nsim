@@ -611,6 +611,33 @@ func TestCORSPreflight(t *testing.T) {
 	assert.Empty(t, body)
 }
 
+func TestReadOnlyRemoteGate(t *testing.T) {
+	s, err := NewServer("nsimserve", "", "", "", true, 1000, time.Millisecond, true)
+	require.NoError(t, err)
+
+	do := func(method, path, remoteAddr string) int {
+		var body io.Reader
+		if method != http.MethodGet {
+			body = strings.NewReader("{}")
+		}
+		req := httptest.NewRequest(method, path, body)
+		req.RemoteAddr = remoteAddr
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, req)
+		return w.Code
+	}
+	// Loopback POST passes; remote POST 403; remote GET passes.
+	code := do("POST", "/sim/pause", "127.0.0.1:1234")
+	assert.Equal(t, http.StatusOK, code)
+	code = do("POST", "/sim/pause", "203.0.113.1:1234")
+	assert.Equal(t, http.StatusForbidden, code)
+	code = do("GET", "/state", "203.0.113.1:1234")
+	assert.Equal(t, http.StatusOK, code)
+	code = do("PUT", "/controls/PlantOperation%2FPowerSetpointTarget", "198.51.100.9:54321")
+	// Gate fires before body validation, so non-loopback PUT is 403.
+	assert.Equal(t, http.StatusForbidden, code)
+}
+
 func TestMetricNameSanitizer(t *testing.T) {
 	assert.Equal(t, "nsim_a_b_c", metricName("a/b.c"))
 	assert.Equal(t, "nsim_ReactorBuilding_ReactorPressureVessel_Pressure",

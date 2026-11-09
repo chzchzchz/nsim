@@ -44,6 +44,10 @@ Flags:
   knobs are in [ENDPOINTS.md](ENDPOINTS.md).
 - `-paused` `false` — Start paused. By default the server starts
   stepping immediately.
+- `-read-only-remote` `false` — Reject mutable endpoints (`POST`/`PUT`/
+  `DELETE`) from non-loopback clients with `403`. Loopback and
+  `GET`/`HEAD` retain full access. Use when exposing the server on
+  a non-loopback `-addr` for read-only browsing.
 - `-webdir <dir>` — Optional: serve the built `web/` UI statically
   at `/`. API routes take precedence; no SVG is rendered server-side.
   P&ID rendering is client-side from sensor data.

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -162,6 +164,40 @@ func decodeJSONBody(r *http.Request, v any) error {
 	return nil
 }
 
+func isMutating(r *http.Request) bool {
+	return r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions
+}
+
+func parseRemoteAddr(addr string) (netip.Addr, bool) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	a, err := netip.ParseAddr(host)
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	return a.Unmap(), true
+}
+
+// readOnlyRemoteGate blocks mutating calls from non-loopback IPs
+// when -read-only-remote is enabled. Loopback, GET/HEAD, and
+// OPTIONS preflights pass: OPTIONS is a CORS preflight probe, not
+// a mutation.
+func (s *Server) readOnlyRemoteGate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.readOnlyRemote || !isMutating(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if a, ok := parseRemoteAddr(r.RemoteAddr); ok && a.IsLoopback() {
+			next.ServeHTTP(w, r)
+			return
+		}
+		writeError(w, http.StatusForbidden, "read-only for remote clients (-read-only-remote)")
+	})
+}
+
 // cors wraps the mux with the permissive CORS headers the future
 // remote web UI needs, and answers preflight without touching the
 // simulation.
@@ -191,13 +227,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("unknown path %q", r.URL.Path))
 	})
-	return logRequests(cors(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	gated := cors(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !s.methodAllowed(r) {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		mux.ServeHTTP(w, r)
-	})))
+	}))
+	return logRequests(s.readOnlyRemoteGate(gated))
 }
 
 func (s *Server) handleLivez(w http.ResponseWriter, _ *http.Request) {

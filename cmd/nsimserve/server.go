@@ -57,6 +57,11 @@ type Server struct {
 	scenarioID string
 	cmdPath    string
 
+	// readOnlyRemote gates mutable endpoints from non-loopback
+	// clients (-read-only-remote); loopback always retains write
+	// access.
+	readOnlyRemote bool
+
 	simTimeNs      int64
 	runId          int64
 	paused         bool
@@ -87,7 +92,7 @@ type Server struct {
 // The returned struct publishes the initial progress state. Only
 // runtime construction needs it; run-loop progress and journal
 // entries are established here before the server is published.
-func NewServer(siteName, scenarioID, plantPath, cmdPath string, paused bool, stepsPerSecond int, dt time.Duration) (*Server, error) {
+func NewServer(siteName, scenarioID, plantPath, cmdPath string, paused bool, stepsPerSecond int, dt time.Duration, readOnlyRemote ...bool) (*Server, error) {
 	if stepsPerSecond <= 0 {
 		return nil, fmt.Errorf("stepsPerSecond must be positive, got %d", stepsPerSecond)
 	}
@@ -120,6 +125,7 @@ func NewServer(siteName, scenarioID, plantPath, cmdPath string, paused bool, ste
 	if err != nil {
 		return nil, fmt.Errorf("failed to build initial plant: %w", err)
 	}
+	ro := len(readOnlyRemote) > 0 && readOnlyRemote[0]
 	s := &Server{
 		plant:          &p,
 		siteName:       siteName,
@@ -131,6 +137,7 @@ func NewServer(siteName, scenarioID, plantPath, cmdPath string, paused bool, ste
 		paused:         paused,
 		stepsPerSecond: stepsPerSecond,
 		dt:             dt,
+		readOnlyRemote: ro,
 		initialPlant:   mustClonePlant(&p),
 		initialBytes:   mustMarshalPlant(&p),
 		queue:          &cmdfile.Queue{},
