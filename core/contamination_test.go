@@ -142,7 +142,7 @@ func TestContamination_Barrier1DamageElevatesActivity(t *testing.T) {
 	r2.BreakDischarged = Volume{Val: RCSDrainableInventoryGal * 0.9, Unit: u.Gallon}
 	for range 100 {
 		r2.FissionPower = CoreFissionPowerAtRated
-		r2 = r2.Step(time.Second, 0, 0)
+		r2 = r2.Step(time.Second, 0, 0, 0)
 	}
 	assert.Greater(t, r2.CoreDamageFrac, 0.0,
 		"precondition: clad must be damaged")

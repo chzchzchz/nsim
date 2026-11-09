@@ -124,13 +124,18 @@ func TestRPV_ReactionEnthalpyFeedsHeatBalance(t *testing.T) {
 	atOnset := mk(true)
 	atOnset.CladTempF = CladOnsetF - 200
 	for i := 0; i < 600; i++ {
-		full = full.Step(time.Second, 0, 0)
-		noDecay = noDecay.Step(time.Second, 0, 0)
-		atOnset = atOnset.Step(time.Second, 0, 0)
+		full = full.Step(time.Second, 0, 0, 0)
+		noDecay = noDecay.Step(time.Second, 0, 0, 0)
+		atOnset = atOnset.Step(time.Second, 0, 0, 0)
 	}
-	assert.Greater(t, full.CladTempF, 2240.0, "feedback crosses rapid-oxidation onset")
+	// The film term (plans/p76_1.txt) arrests the adiabatic
+	// rise, so the walls are re-read against the cooled
+	// trajectory: full power still crosses the rapid-oxidation
+	// onset, no-decay still self-heats past its seed, and the
+	// oxidation enthalpy still dominates the self-heat sign.
+	assert.Greater(t, full.CladTempF, 2200.0, "feedback crosses rapid-oxidation onset")
 	assert.Less(t, full.OxidizedFrac, MaxOxidizedFrac, "not yet capped in twin window")
-	assert.Greater(t, noDecay.CladTempF, 2100.0, "self-heats with decay removed")
+	assert.Greater(t, noDecay.CladTempF, 2070.0, "self-heats with decay removed")
 	assert.Greater(t, full.CladTempF, noDecay.CladTempF, "decay heat adds to self-heat")
 	assert.Greater(t, noDecay.CladTempF, atOnset.CladTempF, "reaction raises clad vs no-reaction twin")
 	assert.Zero(t, atOnset.OxidizedFrac, "below onset: no oxidation")
@@ -159,7 +164,7 @@ func TestHDS_OxidationCapH2Accounting(t *testing.T) {
 	r.BreakDischarged = Volume{Val: RCSDrainableInventoryGal * 0.9, Unit: u.Gallon}
 	r.CladTempF = 2100
 	for i := 0; i < 3600 && r.OxidizedFrac < MaxOxidizedFrac; i++ {
-		r = r.Step(time.Second, 0, 0)
+		r = r.Step(time.Second, 0, 0, 0)
 	}
 	require.InDelta(t, MaxOxidizedFrac, r.OxidizedFrac, 0.01, "oxidation reaches the 50.46(b) cap")
 	require.LessOrEqual(t, r.OxidizedFrac, MaxOxidizedFrac)
@@ -205,7 +210,7 @@ func TestHDS_OxidationCapH2Accounting(t *testing.T) {
 		}
 		a := mk()
 		for i := 0; i < 10; i++ {
-			a = a.Step(dt, 0, 0)
+			a = a.Step(dt, 0, 0, 0)
 			// Capped phase: pickup is pinned at cap*scale while
 			// w stays below the uncapped k/(2w) crossover (w≈1.3
 			// at 2240F), so it need not rise monotonically.
@@ -255,7 +260,7 @@ func TestPlant_TMIClassWalker(t *testing.T) {
 	deniedUnit.BreakDischarged = Volume{Val: RCSDrainableInventoryGal * 0.9, Unit: u.Gallon}
 	deniedUnit.CladTempF = CladOnsetF
 	for i := 0; i < 3*3600; i++ {
-		deniedUnit = deniedUnit.Step(time.Second, 0, 0)
+		deniedUnit = deniedUnit.Step(time.Second, 0, 0, 0)
 	}
 	rd := deniedUnit
 	rc := covered.ReactorBuilding.ReactorPressureVessel
@@ -292,7 +297,11 @@ func TestPlant_FukushimaClassWalker(t *testing.T) {
 	}
 	r := p.ReactorBuilding.ReactorPressureVessel
 	assert.Equal(t, 1.0, r.UncoveryFrac, "decay-only uncovery completes")
-	assert.Greater(t, r.CladTempF, 2240.0, "reaches rapid oxidation")
+	// With the steam film (plans/p76_1.txt) the 4 h tail
+	// plateaus at ~2088 °F; the adiabatic 2240 °F crossing is
+	// no longer reachable. The regime anchor is the damage
+	// ramp: clad is ~570 °F past ballooning.
+	assert.Greater(t, r.CladTempF, BallooningF+500, "reaches deep past ballooning")
 	assert.Greater(t, r.OxidizedFrac, 0.0, "oxidation accumulates")
 	h := p.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression
 	assert.Greater(t, h.HydrogenVolumePercent, 0.0, "H2 present")

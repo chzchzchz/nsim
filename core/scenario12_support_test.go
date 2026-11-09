@@ -87,8 +87,8 @@ func TestRPV_SecondaryExcessCoolsOutlet(t *testing.T) {
 	base.FissionPower = CoreNeutronSourcePower
 	dump.FissionPower = CoreNeutronSourcePower
 	for range window {
-		base = base.Step(DefaultTimeStep, RCPRatedSpeed, 0)
-		dump = dump.Step(DefaultTimeStep, RCPRatedSpeed, excess)
+		base = base.Step(DefaultTimeStep, RCPRatedSpeed, 0, 0)
+		dump = dump.Step(DefaultTimeStep, RCPRatedSpeed, excess, 0)
 	}
 
 	// Differential readout: the shared relaxation term cancels
@@ -115,7 +115,7 @@ func TestRPV_SecondaryExcessSuppressedAtPower(t *testing.T) {
 	}
 	atPower.SeedSteadyStatePower(CoreRatedThermalPower)
 	for range int(60 * time.Second / DefaultTimeStep) {
-		atPower = atPower.Step(DefaultTimeStep, RCPRatedSpeed, excess)
+		atPower = atPower.Step(DefaultTimeStep, RCPRatedSpeed, excess, 0)
 	}
 	assert.InDelta(t, CoreReferenceOutletF, atPower.Outlet.Float(), 1.0,
 		"at power the draw must not walk the anchor: got %v",

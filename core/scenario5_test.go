@@ -50,7 +50,7 @@ func runReactivityApproach(t *testing.T, boron float64, restInsertion float64, h
 		steps := int(hold / DefaultTimeStep)
 		for range steps {
 			r.ControlRods = r.ControlRods.Step(DefaultTimeStep)
-			r = r.Step(DefaultTimeStep, 0, 0)
+			r = r.Step(DefaultTimeStep, 0, 0, 0)
 		}
 		require.InDelta(t, r.DemandInsertion, r.Insertion, 1e-9,
 			"rods must settle before sampling")
@@ -64,7 +64,7 @@ func TestScenario5_DilutionWithRodsInsertedStaysSubcritical(t *testing.T) {
 	r := scenario5Vessel()
 	r.BoronConcentration = CVCSInitialBoron - 400
 	for range int(10 * time.Second / DefaultTimeStep) {
-		r = r.Step(DefaultTimeStep, 0, 0)
+		r = r.Step(DefaultTimeStep, 0, 0, 0)
 	}
 	assert.Equal(t, CoreNeutronSourcePower, r.FissionPower,
 		"dilution alone must not lift power off the source floor")
@@ -87,7 +87,7 @@ func rAtRest(t *testing.T, boron float64, insertion float64) float32 {
 	r := scenario5Vessel()
 	r.Insertion = insertion
 	r.BoronConcentration = boron
-	out := r.Step(DefaultTimeStep, 0, 0)
+	out := r.Step(DefaultTimeStep, 0, 0, 0)
 	return out.Reactivity
 }
 
@@ -106,13 +106,13 @@ func TestScenario5_CrossingStepYieldsSustainedRiseWithoutRodMotion(t *testing.T)
 	r0 := scenario5Vessel()
 	r0.BoronConcentration = boron
 	r0.Insertion = 0
-	constOffset := float64(r0.Step(DefaultTimeStep, 0, 0).Reactivity)
+	constOffset := float64(r0.Step(DefaultTimeStep, 0, 0, 0).Reactivity)
 	atCritical := constOffset / 4.5
 
 	r := scenario5Vessel()
 	r.BoronConcentration = boron
 	r.Insertion = atCritical
-	r = r.Step(DefaultTimeStep, 0, 0)
+	r = r.Step(DefaultTimeStep, 0, 0, 0)
 	require.InDelta(t, 0.0, float64(r.Reactivity), 1e-6,
 		"closed-form critical position must null reactivity")
 
@@ -123,7 +123,7 @@ func TestScenario5_CrossingStepYieldsSustainedRiseWithoutRodMotion(t *testing.T)
 	first := r.FissionPower
 	r.Insertion = atCritical - withdrawStep
 	for range int(measure / DefaultTimeStep) {
-		r = r.Step(DefaultTimeStep, 0, 0)
+		r = r.Step(DefaultTimeStep, 0, 0, 0)
 	}
 	final := r.FissionPower
 
@@ -162,7 +162,7 @@ func TestScenario5_InstrumentsReportCriticalityEvidence(t *testing.T) {
 	r.BoronConcentration = 600
 	for range int(5 * time.Second / DefaultTimeStep) {
 		r.ControlRods = r.ControlRods.Step(DefaultTimeStep)
-		r = r.Step(DefaultTimeStep, 0, 0)
+		r = r.Step(DefaultTimeStep, 0, 0, 0)
 	}
 	// Wiring check: 1000 cps is the derived CoreSourceRangeCountsPerWatt
 	// anchor, recomputed from the same production constant.
@@ -181,7 +181,7 @@ func TestScenario5_InstrumentsReportCriticalityEvidence(t *testing.T) {
 	// buildup erodes it.
 	r0 := r
 	r0.Insertion = 0
-	constOffset := float64(r0.Step(DefaultTimeStep, 0, 0).Reactivity)
+	constOffset := float64(r0.Step(DefaultTimeStep, 0, 0, 0).Reactivity)
 	atCritical := constOffset / 4.5
 
 	firstCounts := r.SourceRangeCounts
@@ -189,7 +189,7 @@ func TestScenario5_InstrumentsReportCriticalityEvidence(t *testing.T) {
 	r.DemandInsertion = r.Insertion
 	for range int(2 * time.Second / DefaultTimeStep) {
 		r.ControlRods = r.ControlRods.Step(DefaultTimeStep)
-		r = r.Step(DefaultTimeStep, 0, 0)
+		r = r.Step(DefaultTimeStep, 0, 0, 0)
 	}
 	assert.Greater(t, r.SourceRangeCounts, firstCounts*1.01,
 		"counts climb while the chain builds without rod motion")

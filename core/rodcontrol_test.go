@@ -461,7 +461,7 @@ func TestRPV_PartLoadLineTracksTavgProgram(t *testing.T) {
 		rpv.Outlet = Temperature{Val: RCSNoLoadTavgF + load*
 			(CoreReferenceOutletF-RCSNoLoadTavgF), Unit: u.Fahrenheit}
 		for i := 0; i < int(900*time.Second/DefaultTimeStep); i++ {
-			rpv = rpv.Step(DefaultTimeStep, RCPRatedSpeed, 0)
+			rpv = rpv.Step(DefaultTimeStep, RCPRatedSpeed, 0, 0)
 			// Pin the neutron population: this test exercises the
 			// thermal program, not the kinetics.
 			rpv.FissionPower = fissionW

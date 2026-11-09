@@ -256,7 +256,7 @@ func TestScenario14_HZPCriticalityExpressible(t *testing.T) {
 	r.SeedSteadyStatePower(0)
 	r.Iodine135 = 1.0
 	r.Xenon135 = xenonEquilibriumPhysical(1.0)
-	r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
+	r.Step(DefaultTimeStep, RCPRatedSpeed, 0, 0)
 
 	assert.InDelta(t, 0.0, float64(r.Reactivity), 1e-3,
 		"critical hot-zero-power must be expressible near the reference shim, rho=%v",

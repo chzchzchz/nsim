@@ -53,11 +53,11 @@ func TestRPV_CladHeatsPastCoolantOnUncovery(t *testing.T) {
 	// window (probe-verified 1.65 °F/s) with 1 s ticks.
 	r2 := r
 	for i := 0; i < 1; i++ {
-		r2 = r2.Step(time.Second, 0, 0)
+		r2 = r2.Step(time.Second, 0, 0, 0)
 	}
 	winStart := r2.CladTempF
 	for i := 0; i < 5; i++ {
-		r2 = r2.Step(time.Second, 0, 0)
+		r2 = r2.Step(time.Second, 0, 0, 0)
 	}
 	rate := (r2.CladTempF - winStart) / 5.0
 	assert.Greater(t, r2.UncoveryFrac, 0.0, "voided ledger means uncovered")
@@ -71,7 +71,7 @@ func TestRPV_CladHeatsPastCoolantOnUncovery(t *testing.T) {
 	// step tail latches damage without waiting wall-clock heatup.
 	r3 := r2
 	r3.CladTempF = BallooningF + 100
-	r3 = r3.Step(DefaultTimeStep, 0, 0)
+	r3 = r3.Step(DefaultTimeStep, 0, 0, 0)
 	assert.Greater(t, r3.CoreDamageFrac, 0.0, "damage accrues past ballooning")
 	assert.Positive(t, r3.Damage, "Damage mirror tracks CoreDamageFrac")
 }
@@ -99,7 +99,7 @@ func TestRPV_StageAnchorsInSequence(t *testing.T) {
 	}
 	r.SeedSteadyStatePower(CoreRatedThermalPower)
 	for i := 0; i < int(2*time.Second/DefaultTimeStep); i++ {
-		r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
+		r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0, 0)
 	}
 	assert.Equal(t, 0.0, r.UncoveryFrac)
 	assert.Equal(t, 0.0, r.CoreDamageFrac)

@@ -24,7 +24,7 @@ func stepRPV(r ReactorPressureVessel, dt time.Duration, loadFraction float64) Re
 			float64(r.Reactivity), 0.5)
 	}
 	r.ControlRods = r.ControlRods.Step(dt)
-	return r.Step(dt, RCPRatedSpeed, 0)
+	return r.Step(dt, RCPRatedSpeed, 0, 0)
 }
 
 func seedRPV() ReactorPressureVessel {

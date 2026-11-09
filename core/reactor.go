@@ -55,7 +55,7 @@ import (
 //     (6.15 m3/sec) Design head 280 ft (85.3 m)"
 //     specs/the_westinghouse_pressurized_water_react/chapter_3/page_056.txt:124-130
 //     (cited for context; not directly used in the model).
-func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, secondaryExcess Watts) ReactorPressureVessel {
+func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, secondaryExcess Watts, sgW Watts) ReactorPressureVessel {
 	ret := *r
 
 	// 0) Trip forces full rod insertion per the scram definition:
@@ -441,8 +441,7 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 	dnbFire := powerFrac >= RPSAtPowerPermissiveFraction && dnbrMargin(&ret) < DNBRFireLimit
 	dtSeconds := dt.Seconds()
 	if ret.UncoveryFrac > 0 {
-		rateFPerSec := float64(ret.TotalThermalPower()) / CladThermalMassCpJPerDegF * 9.0 / 5.0
-		ret.CladTempF = max(satF, ret.CladTempF+rateFPerSec*min(dtSeconds, 1))
+		ret.stepCladUncovered(dt, sgW)
 		// Zr-steam feedback (plans/p65_2.txt Step 1): Baker-Just
 		// oxidation advance plus reaction enthalpy over the same
 		// lumped mass as the decay-heat integrator above. Runs
@@ -458,7 +457,7 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 			oxidationInventoryKinetics(
 				ret.CladTempF, ret.OxidizedInventoryFrac)*dtSeconds, 1.0)
 		rxnW := oxidRate * ReactionEnthalpyJPerFrac
-		ret.CladTempF += rxnW / CladThermalMassCpJPerDegF * 9.0 / 5.0 * dtSeconds
+		ret.CladTempF = max(satF, ret.CladTempF+rxnW/CladThermalMassCpJPerDegF*9.0/5.0*dtSeconds)
 	} else if dnbFire {
 		rateFPerSec := float64(ret.TotalThermalPower()) / CladThermalMassCpJPerDegF * 9.0 / 5.0
 		ret.CladTempF = max(satF, ret.CladTempF+rateFPerSec*min(dtSeconds, 1))
@@ -1367,6 +1366,38 @@ func bakerJustDwDt(cladF float64, oxidizedFrac float64) float64 {
 	w := math.Max(oxidizedFrac*OxideWeightMaxMgPerCm2,
 		OxideWeightFloorMgPerCm2)
 	return bakerJustDwDtForScale(cladF, w)
+}
+
+// stepCladUncovered advances the uncovered clad by one dt with
+// the net-balance heat-removal leg, partitioned by coverage:
+//   - (1 - UncoveryFrac): covered share is cooled by the
+//     secondary flux the plant carries this tick (SG boil or
+//     RHRS rejection);
+//   - UncoveryFrac: steam-exposed share is cooled by the
+//     stagnant-steam Newton film.
+//
+// The lumped mass is J/R (J/K-equivalent); every rate is ×9/5
+// (K/s → °F/s) on the same clock, identical to the pre-existing
+// gross and oxidation lines, so the probe-verified 1.65 °F/s
+// band anchor is untouched. plans/p76_1.txt Step functions.
+func (r *ReactorPressureVessel) stepCladUncovered(dt time.Duration, sgW Watts) {
+	if r.UncoveryFrac <= 0 {
+		return
+	}
+	satF := PressurizerSatTemperatureF(float64(r.Pressure))
+	dtS := dt.Seconds()
+	cov := 1.0 - r.UncoveryFrac
+	grossW := float64(r.TotalThermalPower())
+	waterW := 0.0
+	if sgW > 0 {
+		waterW = min(float64(sgW), grossW) * cov
+	}
+	filmW := 0.0
+	if dT := r.CladTempF - satF; dT > 0 {
+		filmW = CladSteamFilmHeatTransferWPerDegF * dT * r.UncoveryFrac
+	}
+	netW := grossW - waterW - filmW
+	r.CladTempF = max(satF, r.CladTempF+netW/CladThermalMassCpJPerDegF*9.0/5.0*min(dtS, 1))
 }
 
 // stageDamage maps clad temperature to lumped damage fraction:

@@ -290,7 +290,7 @@ func TestExcore_ReactivityIdentity(t *testing.T) {
 	t.Parallel()
 	r := ReactorPressureVessel{}
 	r.SeedSteadyStatePower(CoreRatedThermalPower)
-	r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0)
+	r = r.Step(DefaultTimeStep, RCPRatedSpeed, 0, 0)
 	// Sensor value must equal the field.
 	s := &ReactorPressureVessel{}
 	*s = r

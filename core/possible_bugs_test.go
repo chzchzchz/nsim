@@ -93,9 +93,9 @@ func TestBug_DopplerFeedbackDependsOnBoron(t *testing.T) {
 			Outlet:      Temperature{Val: float64(CoreDopplerReferenceTempF), Unit: u.Fahrenheit},
 		}
 		hot.SeedSteadyStatePower(CoreRatedThermalPower)
-		hot = hot.Step(DefaultTimeStep, RCPRatedSpeed, 0)
+		hot = hot.Step(DefaultTimeStep, RCPRatedSpeed, 0, 0)
 		ref.SeedSteadyStatePower(CoreRatedThermalPower)
-		ref = ref.Step(DefaultTimeStep, RCPRatedSpeed, 0)
+		ref = ref.Step(DefaultTimeStep, RCPRatedSpeed, 0, 0)
 		return hot.Reactivity - ref.Reactivity
 	}
 

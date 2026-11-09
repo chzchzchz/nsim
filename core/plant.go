@@ -467,8 +467,21 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 	rpvOutletPreStepF := ret.ReactorPressureVessel.Outlet.Float()
 	pacedExcess, faultExcess := ret.secondaryExcessDrawW(
 		sgSteamOutflowFraction, turbineAdmitting, op, dt)
+	// sgW: the secondary heat the plant is already carrying,
+	// read as previous-tick values because HeatInput and the
+	// RHRS rejection are both derived after this RPV step
+	// (RHRS.Step runs below). One-tick lag is deliberate and
+	// harmless: the clad tau is hours. plans/p76_1.txt Wiring.
+	prevHeatInput := ret.SteamGenerator.HeatInput
+	var sgW Watts
+	if ret.Aux.ResidualHeatRemovalSystem.HasTakenOver {
+		sgW = ret.Aux.ResidualHeatRemovalSystem.TrainA.HeatExchanger.HeatTransferRate +
+			ret.Aux.ResidualHeatRemovalSystem.TrainB.HeatExchanger.HeatTransferRate
+	} else {
+		sgW = prevHeatInput
+	}
 	rpv := ret.ReactorPressureVessel.Step(dt, ret.ReactorCoolantPump.Velocity,
-		pacedExcess)
+		pacedExcess, sgW)
 	ret.ReactorPressureVessel = rpv
 	ret.ReactorPressureVessel.applyFaultOvercool(dt, faultExcess,
 		ret.SteamGenerator.Pressure)

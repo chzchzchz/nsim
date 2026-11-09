@@ -44,7 +44,7 @@ func TestReactorFissionPower_WidthInvariance(t *testing.T) {
 		rpv.ControlRods.Insertion = 0
 		rpv.ControlRods.BoronConcentration = CVCSInitialBoron + 200
 		for i := 0; i < steps; i++ {
-			rpv = rpv.Step(dt, RCPRatedSpeed, 0)
+			rpv = rpv.Step(dt, RCPRatedSpeed, 0, 0)
 		}
 		return float64(rpv.FissionPower)
 	}

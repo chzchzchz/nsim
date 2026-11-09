@@ -64,7 +64,7 @@ func TestScenario11_ColdShutdownMarginHoldsWithoutRodCredit(t *testing.T) {
 	rpv.DecayHeatSlow = 0
 	rpv.ControlRods.BoronConcentration = targetBoron
 
-	rpv = rpv.Step(DefaultTimeStep, RCPRatedSpeed, 0)
+	rpv = rpv.Step(DefaultTimeStep, RCPRatedSpeed, 0, 0)
 
 	assert.LessOrEqual(t, float64(rpv.Reactivity), marginTarget,
 		"cold shutdown margin must hold with no rod credit, rho=%v", rpv.Reactivity)

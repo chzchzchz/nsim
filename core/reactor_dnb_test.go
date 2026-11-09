@@ -65,7 +65,7 @@ func TestRPV_CoveredDNBBurnsOutWithinBand(t *testing.T) {
 	var tCross, tFull time.Duration
 	for i := 1; i <= 600; i++ {
 		repinDNB(&r)
-		r = r.Step(dt, RCPRatedSpeed, 0)
+		r = r.Step(dt, RCPRatedSpeed, 0, 0)
 		require.InDelta(t, CoreReferenceInletF+dnbTestDTF, r.Outlet.Float(), 1.0,
 			"precondition: re-pinned ΔT holds the fault line")
 		if tCross == 0 && r.CoreDamageFrac > 0 {
@@ -97,7 +97,7 @@ func TestRPV_DNBDamageDoesNotHealOnRecovery(t *testing.T) {
 	r.Inlet = Temperature{Val: CoreReferenceInletF, Unit: u.Fahrenheit}
 	r.Outlet = Temperature{Val: CoreReferenceOutletF, Unit: u.Fahrenheit}
 	for i := 0; i < 5; i++ {
-		r = r.Step(time.Second, RCPRatedSpeed, 0)
+		r = r.Step(time.Second, RCPRatedSpeed, 0, 0)
 	}
 	satF := PressurizerSatTemperatureF(float64(r.Pressure))
 	require.InDelta(t, satF, r.CladTempF, 1, "covered leg re-pins to saturation on recovery")
@@ -115,7 +115,7 @@ func TestRPV_DNBDoesNotFireBelowAtPowerPermissive(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		repinDNB(&r)
-		r = r.Step(time.Second, RCPRatedSpeed, 0)
+		r = r.Step(time.Second, RCPRatedSpeed, 0, 0)
 	}
 	require.Less(t, dnbrMargin(&r), DNBRFireLimit, "precondition: ΔT holds past the threshold")
 	satF := PressurizerSatTemperatureF(float64(r.Pressure))
@@ -131,7 +131,7 @@ func TestRPV_UncoveryWinsDNBOverlap(t *testing.T) {
 	r.CladTempF = ZrMeltF
 
 	repinDNB(&r)
-	r = r.Step(time.Second, RCPRatedSpeed, 0)
+	r = r.Step(time.Second, RCPRatedSpeed, 0, 0)
 	assert.Greater(t, r.UncoveryFrac, 0.0, "overlap tick is uncovered")
 	assert.Greater(t, r.OxidizedFrac, 0.0, "uncovered leg takes the steam reaction")
 	assert.True(t, r.VesselFailed, "uncovered leg still latches the vessel")
@@ -151,7 +151,7 @@ func TestRPV_WarmStartZeroFlowNoDNBRAtReference(t *testing.T) {
 	}
 	r.SeedSteadyStatePower(CoreRatedThermalPower)
 	for i := 0; i < 20; i++ {
-		r = r.Step(time.Second, 0, 0)
+		r = r.Step(time.Second, 0, 0, 0)
 		assert.GreaterOrEqual(t, dnbrMargin(&r), DNBRFireLimit,
 			"reference ΔT holds the margin at zero flow")
 		assert.Zero(t, r.CoreDamageFrac)

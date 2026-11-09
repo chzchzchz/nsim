@@ -68,31 +68,32 @@ func TestPlant_ReliefVesselLatches(t *testing.T) {
 
 	// The plant-level walker cannot reach ZrMeltF on a testable
 	// horizon: decay heat is capped by the collapsed slow pool
-	// (20 h tau), so 4 h of uncovered clad reaches ~2546 F from
-	// saturation (probe: RPV-only tail, full cap, 4 h, failed=false).
-	// The reachability claim is therefore the onset +
+	// (20 h tau), so the film term (plans/p76_1.txt) arrests the
+	// rise. The reachability claim is therefore the onset +
 	// direction + latch-gate witness, same precedent as
 	// TestPlant_SevereAccidentClassWalker: continue this plant's
 	// own uncovered vessel (BreakDischarged at the cap and
 	// BreakDischargedNonCreditable = cap, i.e. relief-drained) at
-	// 1 s ticks until the slow-pool tail crosses ZrMeltF, and
-	// assert the latch fires. Collapse of dead time is honest
-	// here: first contact with the melt regime is the event;
-	// the PCU horizon is not quoted as a requirement.
+	// 1 s ticks; the onset (CladOnsetF) is crossed and damage
+	// stages, but with hA = 6000 W/°F the stagnant-steam film
+	// prevents the decay-only tail from crossing ZrMeltF
+	// (plans/p76_1.txt acceptance 3: SBO plateau with oxidation
+	// does not latch on 48 h). The latch itself is pinned by
+	// TestRPV_VesselFailedLatchesOnUncoveredMeltRegime, which
+	// seeds at the melt regime.
 	melt := rpv
 	melt.BreakDischarged = Volume{Val: RCSDrainableInventoryGal, Unit: u.Gallon}
 	melt.BreakDischargedNonCreditable = Volume{Val: RCSDrainableInventoryGal, Unit: u.Gallon}
 	melt.Trip = true
-	latched := false
-	for i := 0; i < 3600*6; i++ {
-		melt = melt.Step(time.Second, 0, 0)
-		if melt.VesselFailed {
-			latched = true
-			break
-		}
+	for i := 0; i < 3600*4; i++ {
+		melt = melt.Step(time.Second, 0, 0, 0)
 	}
-	require.True(t, latched,
-		"relief-uncovered (non-creditable) tail must cross ZrMeltF and latch VesselFailed")
+	assert.Greater(t, melt.CladTempF, CladOnsetF,
+		"relief-uncovered tail crosses the oxidation onset")
+	assert.Greater(t, melt.OxidizedFrac, 0.0,
+		"relief-uncovered tail oxidizes")
+	assert.False(t, melt.VesselFailed,
+		"with the steam film, decay-only tail does not latch (plateau)")
 	assert.Equal(t, 1.0, melt.UncoveryFrac,
 		"fully voided (relief-drained) core stays uncovered")
 }

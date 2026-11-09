@@ -5949,7 +5949,21 @@ const (
 	// heat 6.5% × 3,800 MWt ≈ 247 MW divided by the sourced
 	// pre-damage heatup band midpoint (~0.65 K/s, ~1.17 °F/s;
 	// specs/wiki/Nuclear_meltdown.txt) gives ≈2.5e8 J/°F.
+	// The mass is J/R (Rankine, J/K-equivalent): Δ°F = ΔK/°R,
+	// so the 9/5 K→°F conversion stays on the rate (one clock
+	// for gross, film, and oxidation). plans/p76_1.txt.
 	CladThermalMassCpJPerDegF = 2.5e8
+
+	// CladSteamFilmHeatTransferWPerDegF is the Newton film
+	// conductance hA (W/°F) for the lumped rod in stagnant
+	// steam: Qfilm = hA·(CladTempF − SatF). Tier-B derived
+	// (plans/p76_1.txt State): no spec coefficient exists in
+	// specs/ or the cached wiki; 6000 W/°F puts the post-trip
+	// net rate inside the 0.54–1.8 °F/s band and lets the
+	// slow-pool tail inflect as decay falls. Lumped h_conv
+	// truncation of the film form h = h_conv + 3/4 h_rad
+	// (specs/wiki/Leidenfrost_effect.txt:762-768).
+	CladSteamFilmHeatTransferWPerDegF = 6000.0
 
 	// Zr-steam kinetics (plans/p65_2.txt, stage 4 rapid
 	// oxidation). Baker-Just parabolic law w² = 33.3e6·t·

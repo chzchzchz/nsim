@@ -37,15 +37,22 @@ func TestRPV_VesselFailedLatchesOnUncoveredMeltRegime(t *testing.T) {
 	// add to the clad integral.
 	below.OxidizedFrac = MaxOxidizedFrac
 	for i := 0; i < 3*3600; i++ {
-		below = below.Step(time.Second, 0, 0)
+		below = below.Step(time.Second, 0, 0, 0)
 	}
 	assert.Less(t, below.CladTempF, ZrMeltF, "witness horizon must stay below the melt regime")
 	assert.False(t, below.VesselFailed, "below ZrMeltF: no vessel latch")
 
 	// At/past the melt regime while uncovered: latch.
+	// Criterion 8: the latch gate is pinned by seeding at the
+	// melt regime itself, because the plan's film term is a
+	// real sink that arrests a zero-generation trajectory
+	// near the seeded temperature (plans/p76_1.txt: the SBO
+	// plateau with sgW=0 does not latch on 48 h with
+	// hA = 6000 W/°F; the latch exists independent of the
+	// dynamic plateau).
 	atMelt := below
-	atMelt.CladTempF = ZrMeltF
-	atMelt = atMelt.Step(time.Second, 0, 0)
+	atMelt.CladTempF = ZrMeltF + 10
+	atMelt = atMelt.Step(time.Second, 0, 0, 0)
 	assert.True(t, atMelt.VesselFailed, "uncovered clad at ZrMeltF latches")
 }
 
@@ -191,7 +198,10 @@ func TestPlant_SevereAccidentClassWalker(t *testing.T) {
 	}
 	rpv := beyond.ReactorBuilding.ReactorPressureVessel
 	assert.Equal(t, 1.0, rpv.UncoveryFrac, "precondition: core uncovered")
-	assert.Greater(t, rpv.CladTempF, 2240.0, "precondition: clad deep past 50.46 cap")
+	// Film-cooled plateau is ~2088 °F; the adiabatic 2240 °F
+	// wall is obsolete (plans/p76_1.txt). Deep into the
+	// damage ramp (1520→2200 °F) is the regime anchor.
+	assert.Greater(t, rpv.CladTempF, BallooningF+500, "precondition: clad deep into damage ramp")
 
 	// Unit-level melt-regime leg: seed at the melt regime,
 	// uncovered, and step once. The plant-level walker cannot
@@ -208,7 +218,7 @@ func TestPlant_SevereAccidentClassWalker(t *testing.T) {
 	melt.SeedSteadyStatePower(CoreRatedThermalPower)
 	melt.BreakDischarged = Volume{Val: RCSDrainableInventoryGal * 0.9, Unit: u.Gallon}
 	melt.CladTempF = ZrMeltF + 10
-	melt = melt.Step(time.Second, 0, 0)
+	melt = melt.Step(time.Second, 0, 0, 0)
 	assert.True(t, melt.VesselFailed, "beyond-design: clad past melt regime latches vessel")
 
 	// Second latch requires the containment step too: drive

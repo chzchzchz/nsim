@@ -285,7 +285,7 @@ func TestRPV_FlowDegradedTargetRaisesOutletOnlyWhenForced(t *testing.T) {
 		r := ReactorPressureVessel{}
 		r.SeedSteadyStatePower(CoreRatedThermalPower)
 		for i := 0; i < int(120*time.Second/testDt); i++ {
-			r = r.Step(testDt, speed, 0)
+			r = r.Step(testDt, speed, 0, 0)
 		}
 		return r.Outlet.Float()
 	}
