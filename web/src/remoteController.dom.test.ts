@@ -45,13 +45,20 @@ function makeHost() {
     const spsEl = document.createElement("span");
     const writeModeBtn = document.createElement("button");
     writeModeBtn.style.display = "none";
-    document.body.append(tilesEl, alarmsEl, consoleEl, logsEl, statusEl);
+    const pidWrap = document.createElement("div");
+    pidWrap.className = "pid-wrap";
+    const pidEl = document.createElement("div");
+    pidEl.id = "pid";
+    const handle = document.createElement("div");
+    handle.className = "pid-resize-handle";
+    pidWrap.append(pidEl, handle);
+    document.body.append(tilesEl, alarmsEl, consoleEl, logsEl, statusEl, pidWrap);
     const scenarioNameEl = document.createElement("span");
     scenarioNameEl.textContent = "named";
     return {
         host: {
             tilesEl, alarmsEl, consoleEl, logsEl, statusEl,
-            startBtn, stepBtn, resetBtn, spsInput, spsEl, writeModeBtn,
+            startBtn, stepBtn, resetBtn, spsInput, spsEl, writeModeBtn, pidEl,
         },
         scenarioNameEl,
         els: { tilesEl, logsEl, startBtn, stepBtn, resetBtn, writeModeBtn },
@@ -232,6 +239,51 @@ describe("RemoteController", () => {
         expect(seen.some((s) => s.includes("/sim/reset"))).toBe(true);
         expect(c.lastRunId).toBe(-1);
         c.disconnect();
+    });
+
+    it("refreshSvg fetches /state and mounts the wasm-rendered diagram", async () => {
+        const plantJson = JSON.stringify({ ReactorBuilding: {} });
+        let svgCalls = 0;
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            const u = String(url);
+            if (u.includes("/state")) return jsonResponse(plantJson as unknown as Record<string, unknown>);
+            if (u.includes("/status")) return jsonResponse(statusBody);
+            if (u.includes("/controls")) return jsonResponse([]);
+            if (u.includes("/sensors")) return jsonResponse([]);
+            if (u.includes("/alarms")) return jsonResponse([]);
+            if (u.includes("/logs")) return jsonResponse([]);
+            return jsonResponse({});
+        }));
+        // Fake the wasm factory: plantFromJSON is called with the
+        // JSON string; return a handle whose getSvg is deterministic.
+        (window as unknown as Record<string, unknown>).nsimPlantFromJSON = () => {
+            svgCalls++;
+            return {
+                getSvg: () => "<svg/>",
+            };
+        };
+        const { host } = makeHost();
+        const pidEl = host.pidEl;
+        const c = new RemoteController(host, {}, 60_000);
+        c.connect("http://127.0.0.1:8080");
+        c.stopPoll();
+        await c.drainNow();
+        await new Promise((r) => setTimeout(r, 30));
+        expect(svgCalls).toBeGreaterThan(0);
+        expect(pidEl.innerHTML).toContain("<svg");
+        c.disconnect();
+    });
+
+    it("disconnect resets the SVG swap guards so local restore re-renders", () => {
+        const { host } = makeHost();
+        const c = new RemoteController(host, {}, 60_000);
+        c.connect("http://127.0.0.1:8080");
+        c.stopPoll();
+        c.lastSvgHtml = "<svg>remote</svg>";
+        c.lastSvgSimTimeMs = 999;
+        c.disconnect();
+        expect(c.lastSvgHtml).toBe("");
+        expect(c.lastSvgSimTimeMs).toBe(-1);
     });
 
     it("setVisible(false) keeps toggling logs independent of serverBtn", () => {

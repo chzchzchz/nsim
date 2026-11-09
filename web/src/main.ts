@@ -93,6 +93,7 @@ async function main(): Promise<void> {
             spsInput,
             spsEl,
             writeModeBtn,
+            pidEl,
         },
         {
             scenarioNameEl,
@@ -231,9 +232,18 @@ async function main(): Promise<void> {
             if (id === null) return; // no free play remotely
             // Set the title only after the server confirms the
             // reset; otherwise a failed reset would show a
-            // scenario that is not running.
+            // scenario that is not running. Surface failures in
+            // the status line instead of failing silently.
             void remote.applyScenario(id).then((ok) => {
-                if (!ok) return;
+                if (!ok) {
+                    // Append rather than replace: statusEl is the
+                    // live sim-status line (paused/running), and
+                    // overwriting it with a failure note would
+                    // destroy the connection context.
+                    statusEl.textContent +=
+                        " (scenario reset failed — see console)";
+                    return;
+                }
                 const title =
                     scenarios.find((s) => s.id === id)?.title ?? "";
                 scenarioNameEl.textContent = title;

@@ -55,6 +55,10 @@ declare global {
         // nsimScenarios returns the JSON snapshot of the operator
         // evolution catalog rendered by the selection screen.
         nsimScenarios: () => string;
+        // nsimPlantFromJSON reconstructs a plant handle from a
+        // JSON snapshot of *core.Plant (GET /state shape) so remote
+        // mode can render the P&ID without a server SVG endpoint.
+        nsimPlantFromJSON: (json: string) => PlantHandle;
     }
 }
 
@@ -63,4 +67,11 @@ export function newPlant(scenarioId?: string): PlantHandle {
         throw new Error("nsim wasm not loaded; call loadWasm() first");
     }
     return window.nsimNewPlant(scenarioId);
+}
+
+export function plantFromJSON(json: string): PlantHandle {
+    if (typeof window === "undefined" || !window.nsimPlantFromJSON) {
+        throw new Error("nsim wasm not loaded; call loadWasm() first");
+    }
+    return window.nsimPlantFromJSON(json);
 }

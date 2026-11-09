@@ -146,6 +146,43 @@ func TestSetControlBumpsAndValidates(t *testing.T) {
 	}
 }
 
+func TestPlantFromJSONRoundTrip(t *testing.T) {
+	src := newTestHandle(t)
+	raw, err := src.plantJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := newPlantFromJSON(raw)
+	if err != nil {
+		t.Fatalf("newPlantFromJSON: %v", err)
+	}
+	if len(h.controls) != len(src.controls) {
+		t.Fatalf("controls: got %d want %d", len(h.controls), len(src.controls))
+	}
+	if len(h.sensors) != len(src.sensors) {
+		t.Fatalf("sensors: got %d want %d", len(h.sensors), len(src.sensors))
+	}
+	svg, err := h.getSvg()
+	if err != nil {
+		t.Fatalf("getSvg after round-trip: %v", err)
+	}
+	if !strings.Contains(svg, "<svg") {
+		t.Fatal("expected svg document after round-trip")
+	}
+	if h.scenarioID != "" {
+		t.Fatalf("scenarioID should be empty, got %q", h.scenarioID)
+	}
+	if h.progress != nil {
+		t.Fatal("progress should be nil for JSON-restored plants")
+	}
+}
+
+func TestPlantFromJSONRejectsBadInput(t *testing.T) {
+	if _, err := newPlantFromJSON("not-json"); err == nil {
+		t.Fatal("expected error for non-JSON input")
+	}
+}
+
 func TestObjectiveCachePerGeneration(t *testing.T) {
 	h := newTestHandle(t)
 	first, err := h.objectiveJSON()

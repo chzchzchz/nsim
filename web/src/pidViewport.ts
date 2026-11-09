@@ -248,10 +248,12 @@ export class PidViewport {
         this.bindResizer();
     }
 
-    // TRUST BOUNDARY: svgText must come from the local wasm plant
-    // (plant.getSvg()), never from a remote server. Remote SVG
-    // would need DOMParser parsing with <script>/<foreignObject>
-    // stripping before any innerHTML assignment (see sanitize.ts).
+    // TRUST BOUNDARY: svgText must be wasm-generated (either from
+    // the local plant or from a plant reconstructed from remote
+    // JSON via plantFromJSON). Never fetch raw SVG markup from a
+    // remote server — server SVG would need DOMParser parsing with
+    // <script>/<foreignObject> stripping before any innerHTML
+    // assignment (see sanitize.ts).
     mountSvg(svgText: string): void {
         this.canvas.innerHTML = svgText;
         this.applyTransform();

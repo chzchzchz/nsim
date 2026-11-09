@@ -25,6 +25,8 @@ import type { LogsPanel } from "./logs";
 import { initLogs } from "./logs";
 import { loadPanelLayout } from "./layout";
 import { applyMinimized, buildTile } from "./tile";
+import { plantFromJSON } from "./plant";
+import { mountPlant } from "./svg";
 import { displayPart, groupByPrefix } from "./bindings";
 import {
     buildRemoteBindings,
@@ -50,6 +52,7 @@ export interface RemoteControllerHost {
     spsInput: HTMLInputElement;
     spsEl: HTMLElement;
     writeModeBtn: HTMLButtonElement;
+    pidEl: HTMLElement;
 }
 
 export interface RemoteControllerHooks {
@@ -72,6 +75,13 @@ export class RemoteController {
     sensorRows: SensorRow[] = [];
     logsPanel: LogsPanel | null = null;
     alarmPanel: { refresh(json: string): void } | null = null;
+    // Last rendered SVG text so the 1 Hz refresh swaps only when
+    // the diagram actually changed (same rule as main.ts local).
+    lastSvgHtml = "";
+    // Last simTimeMs for which an SVG refresh ran; gates the
+    // /state fetch so we do not pull the full plant JSON on ticks
+    // where simulated time did not move (paused idle).
+    lastSvgSimTimeMs = -1;
 
     private pollTimer: ReturnType<typeof setTimeout> | null = null;
     private pollGen = 0;
@@ -99,6 +109,8 @@ export class RemoteController {
         this.ownSeq = -1;
         this.failures = 0;
         this.sensorRows = [];
+        this.lastSvgHtml = "";
+        this.lastSvgSimTimeMs = -1;
         this.host.spsEl.textContent = "steps/s: —";
         if (this.hooks.scenarioNameEl) this.hooks.scenarioNameEl.textContent = "";
         this.setVisible(true);
@@ -115,6 +127,8 @@ export class RemoteController {
         this.lastSeq = -1;
         this.ownSeq = -1;
         this.failures = 0;
+        this.lastSvgHtml = "";
+        this.lastSvgSimTimeMs = -1;
         this.stopPoll();
         this.logsPanel = null;
         this.setVisible(false);
@@ -304,9 +318,55 @@ export class RemoteController {
                 this.alarmPanel.refresh(JSON.stringify(alarms));
             }
             await this.pollLogs(client, status);
+            // Remote P&ID: reconstruct the plant in the local wasm
+            // and render the SVG client-side, the same renderer
+            // local mode uses. Polling GET /state instead of /svg
+            // avoids adding a server endpoint (see main.ts). Gated
+            // on simulated time so paused/idle ticks don't pull the
+            // full plant JSON and re-render an identical SVG.
+            if (status.simTimeMs !== this.lastSvgSimTimeMs) {
+                await this.refreshSvg(client);
+                this.lastSvgSimTimeMs = status.simTimeMs;
+            }
         } finally {
             this.pollInFlight = false;
         }
+    }
+
+    // refreshSvg fetches GET /state, reconstructs the plant in the
+    // local wasm, renders the P&ID, and swaps only on change (the
+    // 1 Hz diagram-poll rule in main.ts). Tolerates failure:
+    // a transient /state error leaves the previous diagram in place.
+    // A missing wasm export (e.g. a test stub or an older blob)
+    // is also tolerated: remote mode still works without a P&ID.
+    // A render failure is surfaced on the status line so a
+    // persistent bug does not silently leave a stale diagram.
+    async refreshSvg(client: RemoteClient): Promise<void> {
+        let state: unknown;
+        try {
+            state = await client.state();
+        } catch {
+            return;
+        }
+        if (this.client !== client) return;
+        let svg: string;
+        try {
+            if (typeof window === "undefined" || !window.nsimPlantFromJSON) {
+                return;
+            }
+            const plant = plantFromJSON(JSON.stringify(state));
+            const raw = plant.getSvg();
+            svg = raw as string;
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error("remote svg render failed:", err);
+            this.host.statusEl.textContent = `P&ID render failed: ${msg}`;
+            return;
+        }
+        if (typeof svg !== "string") return;
+        if (svg === this.lastSvgHtml) return;
+        mountPlant(this.host.pidEl, svg);
+        this.lastSvgHtml = svg;
     }
 
     async pollLogs(client: RemoteClient, status: StatusView): Promise<void> {

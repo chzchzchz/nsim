@@ -53,6 +53,32 @@ type plantHandle struct {
 	svgCache     genCache
 }
 
+// newPlantFromJSON reconstructs a plantHandle from a
+// JSON-serialized *core.Plant (the shape GET /state on nsimserve
+// returns via json.Marshal). It must mirror newPlantHandle's
+// derived maps so getSvg/sensor/control accessors work on the
+// reconstructed plant. Scenario script/progress state is not
+// serialized in the plant JSON and is left nil, so objectiveJSON
+// correctly reports inactive for remote plants.
+func newPlantFromJSON(data string) (*plantHandle, error) {
+	var p core.Plant
+	if err := json.Unmarshal([]byte(data), &p); err != nil {
+		return nil, fmt.Errorf("decode plant JSON: %w", err)
+	}
+	h, err := newPlantHandle("")
+	if err != nil {
+		return nil, err
+	}
+	h.p = &p
+	h.scenarioID = ""
+	h.script = nil
+	h.progress = nil
+	h.controls = p.GetControlMap()
+	h.sensors = p.GetSensorMap()
+	h.stateGen = 1
+	return h, nil
+}
+
 func newPlantHandle(scenarioID string) (*plantHandle, error) {
 	p := core.MakePlant()
 	var script []core.ScriptCommand
@@ -550,6 +576,21 @@ func main() {
 			return jsError(err)
 		}
 		return s
+	}))
+	// nsimPlantFromJSON reconstructs a plant handle from a JSON
+	// snapshot of *core.Plant (the shape GET /state on nsimserve
+	// returns). Remote mode uses it to render the P&ID without
+	// needing a server SVG endpoint: the client already ships the
+	// SVG renderer in this wasm blob.
+	js.Global().Set("nsimPlantFromJSON", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) == 0 || args[0].Type() != js.TypeString {
+			return jsError(fmt.Errorf("nsimPlantFromJSON: missing JSON string arg"))
+		}
+		h, err := newPlantFromJSON(args[0].String())
+		if err != nil {
+			return jsError(err)
+		}
+		return jsHandle(h)
 	}))
 
 	// Block forever. The wasm module's lifecycle is tied to the
