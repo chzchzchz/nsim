@@ -99,7 +99,14 @@ describe("tile layout under long labels", () => {
             ".ctl-row .label-text",
         );
         expect(ctlLabel).not.toBeNull();
-        expect(window.getComputedStyle(ctlLabel!).overflowWrap).toBe("anywhere");
+        expect(window.getComputedStyle(ctlLabel!).overflowWrap).toBe("break-word");
+
+        // Stacked single column: every widget gets full tile width.
+        const tileBody = host.querySelector<HTMLElement>(".tile-body");
+        expect(tileBody).not.toBeNull();
+        expect(
+            window.getComputedStyle(tileBody!).gridTemplateColumns,
+        ).toBe("1fr");
 
         document.head.querySelectorAll("style").forEach((s) => s.remove());
         host.remove();

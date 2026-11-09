@@ -164,7 +164,7 @@
         .pid-zoom button:hover { background: #eee; }
         #tiles {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 8px;
         }
         .tile {
@@ -214,10 +214,15 @@
             outline: 2px dashed #e67e22;
             background: #fff8ef;
         }
+        /* Stacked single column: controls above sensors so
+           every widget gets the full tile width. Panels like
+           PlantOperation carry seven controls (enums, bools,
+           numerics) beside only a few sensors; the old 1fr/1fr
+           split forced selects to wrap and sensors to clip. */
         .tile-body {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
+            grid-template-columns: 1fr;
+            gap: 8px;
         }
         .tile-body > div { min-width: 0; }
         .tile-body h3 {
@@ -290,8 +295,9 @@
            automatic layout a long unbroken label (for example
            CorrosionProductControlDegraded) widens its column until
            the value spills off the tile. Fixed layout reserves the
-           value column first: labels wrap anywhere, values stay
-           on one right-aligned tabular line. Alarm tables keep
+           value column first: labels wrap at camel-case or
+           anywhere as a last resort, values stay on one
+           right-aligned tabular line. Alarm tables keep
            automatic layout because two-column widths would clip
            severity, description, and time columns. */
         .tile .readout-part .data-table,
@@ -302,13 +308,13 @@
         }
         .tile .readout-part .data-table td:first-child,
         .tile .tile-body > div > .readout-part .data-table td:first-child {
-            width: 58%;
-            overflow-wrap: anywhere;
+            width: 62%;
+            overflow-wrap: break-word;
             word-break: break-word;
         }
         .tile .readout-part .data-table td:nth-child(2),
         .tile .tile-body > div > .readout-part .data-table td:nth-child(2) {
-            width: 42%;
+            width: 38%;
             white-space: nowrap;
             text-align: right;
             font-variant-numeric: tabular-nums;
@@ -350,8 +356,8 @@
             display: flex;
             flex-wrap: nowrap;
             align-items: center;
-            gap: 4px;
-            margin: 1px 0;
+            gap: 6px;
+            margin: 2px 0;
             /* Jump targets (P&ID anchors, log selection) scroll
                here; keep clear of the sticky header. */
             scroll-margin-top: var(--header-offset);
@@ -361,7 +367,7 @@
             min-width: 0;
         }
         .label-text {
-            overflow-wrap: anywhere;
+            overflow-wrap: break-word;
             word-break: break-word;
             min-width: 0;
         }

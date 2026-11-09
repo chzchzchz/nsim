@@ -113,15 +113,17 @@ describe("styles.css compact sensor/controls tiles", () => {
         expect(tile).toContain("font-size: 11px");
         expect(tile).toContain("line-height: 1.25");
         const tileBody = body.match(/\n\s*\.tile-body\s*\{[^}]*\}/)?.[0] ?? "";
-        expect(tileBody).toContain("gap: 10px");
+        // Stacked single column: controls above sensors.
+        expect(tileBody).toContain("grid-template-columns: 1fr");
+        expect(tileBody).toContain("gap: 8px");
         const fieldset = body.match(/\.tile fieldset\s*\{[^}]*\}/)?.[0] ?? "";
         expect(fieldset).toContain("margin: 0 0 4px 0");
         expect(fieldset).toContain("padding: 2px 6px");
         const dataCell = body.match(/\.data-table td\s*\{[^}]*\}/)?.[0] ?? "";
         expect(dataCell).toContain("padding: 1px 4px");
         const ctlRow = body.match(/\.ctl-row\s*\{[^}]*\}/)?.[0] ?? "";
-        expect(ctlRow).toContain("gap: 4px");
-        expect(ctlRow).toContain("margin: 1px 0");
+        expect(ctlRow).toContain("gap: 6px");
+        expect(ctlRow).toContain("margin: 2px 0");
     });
 
     it("reserves the sensor value column under fixed layout", () => {
@@ -134,12 +136,12 @@ describe("styles.css compact sensor/controls tiles", () => {
         compactRule(
             body,
             /\.tile \.readout-part \.data-table td:first-child,[\s\S]*?\{[^}]*\}/,
-            "width: 58%",
+            "width: 62%",
         );
         compactRule(
             body,
             /\.tile \.readout-part \.data-table td:nth-child\(2\),[\s\S]*?\{[^}]*\}/,
-            "width: 42%",
+            "width: 38%",
         );
         const value = body.match(
             /\.tile \.readout-part \.data-table td:nth-child\(2\),[\s\S]*?\{[^}]*\}/,
