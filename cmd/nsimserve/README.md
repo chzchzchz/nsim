@@ -349,7 +349,8 @@ answers preflight `204` with CORS headers.
 | `GET /commands/export` | Journaled operations as the `nsimrun -cmd *.json` envelope. Round-trip: export and replay it through `nsimrun`. |
 | `GET /logs`, `POST /logs` | Append-only timestamped log of cmdfile operations (with their attached comments) plus bare comments. `GET` returns `[{seq, kind, atMs, control, value, comment, source}]` in timestamp order. Optional half-open range `?lo=<seq>&hi=<seq>`: `seq >= lo` and `seq < hi`; absent bounds are unbounded. `POST {"comment":"..."}` appends a comment at the current sim time and returns `{"seq", "comment", "atMs"}`. Never deduplicated: re-submitting an identical command appends a second entry, with its own `seq`. |
 | `GET /alarms` | `Plant.Alarms()` (same shape as the extra `Alarms` key of `nsimrun` stdout). |
-| `GET /state` | Full plant JSON — byte-compatible with `nsimrun` stdout and `nsimrun -plant` input. The single state endpoint; there is no `/snapshot` and no `POST /state`. |
+| `GET /state` | Full plant JSON — byte-compatible with `nsimrun` stdout and `nsimrun -plant` input. The single live state endpoint; there is no `/snapshot` and no `POST /state`. |
+| `GET /initial-state` | Cold-start plant JSON — the lineup at boot or last `POST /sim/reset` (same `-scenario`/`-plant` resolution as server start, before first `Step`). Byte-compatible with `/state`; use to diff or replay the run start. |
 | `GET /` (with `-webdir`) | Static files from the web build; API routes take precedence. |
 
 Clock and pacing knobs are in

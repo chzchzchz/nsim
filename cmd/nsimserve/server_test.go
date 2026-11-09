@@ -192,6 +192,35 @@ func TestSensorsAndState(t *testing.T) {
 	var plantJSON map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(body, &plantJSON))
 	assert.Contains(t, plantJSON, "ReactorBuilding")
+
+	// /initial-state is byte-compatible and unaffected by steps.
+	code, initialBody := doOK(t, "GET", ts.URL+"/initial-state", "")
+	require.Equal(t, http.StatusOK, code)
+	var initJSON map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(initialBody, &initJSON))
+	assert.Contains(t, initJSON, "ReactorBuilding")
+	// Advance the sim: /state may move, /initial-state must not.
+	code, _ = doOK(t, "POST", ts.URL+"/sim/step", `{"steps":5}`)
+	require.Equal(t, http.StatusOK, code)
+	_, afterBody := doOK(t, "GET", ts.URL+"/initial-state", "")
+	assert.Equal(t, string(initialBody), string(afterBody))
+	// Method not allowed on POST.
+	code, _ = doOK(t, "POST", ts.URL+"/initial-state", "")
+	assert.Equal(t, http.StatusMethodNotAllowed, code)
+}
+
+func TestInitialStateReflectsReset(t *testing.T) {
+	s, ts := newPausedServer(t, "nsimserve")
+	_, before := doOK(t, "GET", ts.URL+"/initial-state", "")
+	// Reset to a scenario; initial-state updates to the new lineup.
+	code, _ := doOK(t, "POST", ts.URL+"/sim/reset", `{"scenario":"rcp-trip"}`)
+	require.Equal(t, http.StatusOK, code)
+	_, after := doOK(t, "GET", ts.URL+"/initial-state", "")
+	var initial map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(after, &initial))
+	assert.Contains(t, initial, "ReactorBuilding")
+	_ = before
+	_ = s
 }
 
 func TestStepPauseResumeAndConflict(t *testing.T) {

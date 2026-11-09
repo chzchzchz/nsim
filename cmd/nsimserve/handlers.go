@@ -59,6 +59,7 @@ func (s *Server) buildRoutes() []route {
 		{http.MethodPost, "/sim/speed", s.handleSpeed},
 		{http.MethodGet, "/alarms", s.handleAlarms},
 		{http.MethodGet, "/state", s.handleState},
+		{http.MethodGet, "/initial-state", s.handleInitialState},
 		{http.MethodGet, "/metrics", s.handleMetrics},
 	}
 }
@@ -865,14 +866,27 @@ func (s *Server) handleAlarms(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, alarms)
 }
 
-func (s *Server) handleState(w http.ResponseWriter, _ *http.Request) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	b, err := json.Marshal(s.plant)
+func writePlantJSON(w http.ResponseWriter, plant *core.Plant) {
+	b, err := json.Marshal(plant)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(b)
+	_, _ = w.Write([]byte("\n"))
+}
+
+func (s *Server) handleState(w http.ResponseWriter, _ *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	writePlantJSON(w, s.plant)
+}
+
+func (s *Server) handleInitialState(w http.ResponseWriter, _ *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	b := s.initialBytes
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write(b)
 	_, _ = w.Write([]byte("\n"))

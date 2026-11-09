@@ -132,6 +132,9 @@ func (s *Server) restoreResumeState(snap serverSnapshot) error {
 	defer s.mu.Unlock()
 	plant := snap.Plant
 	s.plant = &plant
+	cp, cb := snapshotPlant(&plant)
+	s.initialPlant = cp
+	s.initialBytes = cb
 	s.controls = plant.GetControlMap()
 	s.sensors = plant.GetSensorMap()
 	s.script = snap.Script

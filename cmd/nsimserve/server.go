@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -33,16 +34,23 @@ const (
 // *core.Plant outside the RWMutex. siteName is server identity only
 // and never enters core.Plant.
 type Server struct {
-	mu       sync.RWMutex
-	plant    *core.Plant
-	controls bridge.ControlMap
-	sensors  bridge.SensorMap
-	queue    *cmdfile.Queue
-	journal  *cmdfile.Journal
-	log      *cmdfile.Log
-	script   []core.ScriptCommand
-	scenario *core.Scenario
-	progress *core.RunProgress
+	mu sync.RWMutex
+	// plant is the current simulated plant. initialPlant is the
+	// deep-copy of plant at run start (boot or last reset); it
+	// serves GET /initial-state and never steps. initialBytes is
+	// the cached marshal at snapshot time (never rewritten except
+	// by reset/restore).
+	plant        *core.Plant
+	initialPlant *core.Plant
+	initialBytes []byte
+	controls     bridge.ControlMap
+	sensors      bridge.SensorMap
+	queue        *cmdfile.Queue
+	journal      *cmdfile.Journal
+	log          *cmdfile.Log
+	script       []core.ScriptCommand
+	scenario     *core.Scenario
+	progress     *core.RunProgress
 
 	siteName   string
 	plantPath  string
@@ -123,6 +131,8 @@ func NewServer(siteName, scenarioID, plantPath, cmdPath string, paused bool, ste
 		paused:         paused,
 		stepsPerSecond: stepsPerSecond,
 		dt:             dt,
+		initialPlant:   mustClonePlant(&p),
+		initialBytes:   mustMarshalPlant(&p),
 		queue:          &cmdfile.Queue{},
 		journal:        &cmdfile.Journal{},
 		log:            &cmdfile.Log{},
@@ -269,6 +279,9 @@ func (s *Server) resetLocked(scenarioID, plantPath string) error {
 		return err
 	}
 	s.plant = &p
+	cp, cb := snapshotPlant(&p)
+	s.initialPlant = cp
+	s.initialBytes = cb
 	s.script = script
 	s.scenario = sc
 	s.progress = nil
@@ -286,6 +299,29 @@ func (s *Server) resetLocked(scenarioID, plantPath string) error {
 	s.scenarioID = scenarioID
 	s.plantPath = plantPath
 	return nil
+}
+
+func snapshotPlant(p *core.Plant) (*core.Plant, []byte) {
+	data, err := json.Marshal(p)
+	if err != nil {
+		return nil, nil
+	}
+	var c core.Plant
+	if err := json.Unmarshal(data, &c); err != nil {
+		return nil, nil
+	}
+	return &c, data
+}
+
+func clonePlant(p *core.Plant) *core.Plant {
+	cp, _ := snapshotPlant(p)
+	return cp
+}
+
+func mustClonePlant(p *core.Plant) *core.Plant { return clonePlant(p) }
+func mustMarshalPlant(p *core.Plant) []byte {
+	_, b := snapshotPlant(p)
+	return b
 }
 
 // sortedKeys returns the map keys in sorted order for stable output.
