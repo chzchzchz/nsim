@@ -529,50 +529,94 @@ def main(argv=None):
         print("%d sensors" % len(selected), file=sys.stderr)
         return 0
 
-    series_by = {}
+    # Flatten each snapshot once and pull the selected sensors out of
+    # it. The old loop re-walked the whole plant tree once per sensor
+    # (sensors x snapshots tree walks), which dominated run time on
+    # long traces; walking once per snapshot is sensors x snapshots
+    # dict lookups instead. Min/max per sensor is tracked here too so
+    # the mirror check below needs no second pass over the series.
+    # Sensor lookup goes through a pre-split path trie per snapshot so
+    # skipped subtrees (Alarms, unselected buildings) are never walked
+    # and only the selected leaves do dict work.
+    n_snap = len(snapshots)
+    series_by = {name: [None] * n_snap for name in selected}
+    bounds = {}  # name -> (lo, hi) over finite values, absent if none
+    # Split each sensor name once into a path tuple; the snapshot walk
+    # then descends only along paths that lead to a selected sensor.
+    path_trie = {}
     for name in selected:
-        series = []
-        for snap in snapshots:
-            val = _walk(snap).get(name)
-            if isinstance(val, bool):
-                series.append(1.0 if val else 0.0)
-            elif isinstance(val, (int, float)) and math.isfinite(val):
-                series.append(float(val))
-            else:
-                series.append(None)
-        series_by[name] = series
+        node = path_trie
+        for part in name.split("."):
+            node = node.setdefault(part, {})
+        node[None] = name
+    for ti, snap in enumerate(snapshots):
+        stack = [(snap, path_trie)]
+        while stack:
+            node, trie = stack.pop()
+            if not isinstance(node, dict):
+                name = trie.get(None)
+                if name is not None:
+                    if isinstance(node, bool):
+                        num = 1.0 if node else 0.0
+                    elif isinstance(node, (int, float)) and math.isfinite(node):
+                        num = float(node)
+                    else:
+                        continue
+                    series_by[name][ti] = num
+                    if name in bounds:
+                        lo, hi = bounds[name]
+                        if num < lo:
+                            lo = num
+                        if num > hi:
+                            hi = num
+                        bounds[name] = (lo, hi)
+                    else:
+                        bounds[name] = (num, num)
+                continue
+            for k, v in node.items():
+                child = trie.get(k)
+                if child is not None:
+                    stack.append((v, child))
 
     # Collapse metadata noise: constant value, and pure mirror images
     # of an already kept series, neither add information. Mirror
     # detection uses relative tolerance so floating-point drift in
     # derived quantities (e.g. psi vs bar mirrors) still collapses.
+    #
+    # Two mirrors must have nearly equal (min, max) within the
+    # tolerance, so candidates with disjoint ranges are skipped before
+    # any per-point work. Min/max/range are precomputed once per kept
+    # series (from the extraction pass above) instead of being rebuilt
+    # inside the pairwise loop, which made the old check O(S^2 x T)
+    # min/max rebuilding. Kept series with identical tuples are hashed
+    # so the common exact-duplicate case is O(1) per candidate; only
+    # near-miss pairs reach the full per-point tolerance check.
     MIRROR_TOL = 1e-6
-    finite_by = {}
-    for name, series in series_by.items():
-        finite_by[name] = [v for v in series if v is not None]
     kept = []
     kept_series = []
+    kept_bounds = []  # (lo, hi, rng) parallel to kept_series
+    kept_by_tuple = {}
     for name in selected:
         series = series_by[name]
-        finite = finite_by[name]
-        if not finite:
+        b = bounds.get(name)
+        if b is None:
             continue
-        lo, hi = min(finite), max(finite)
+        lo, hi = b
         if lo == hi:
             continue
         rng = hi - lo
+        tup = tuple(series)
+        if tup in kept_by_tuple:
+            continue
         dup = False
-        for other in kept_series:
-            ofinite = [v for v in other if v is not None]
-            if not ofinite:
-                continue
-            orng = max(ofinite) - min(ofinite)
-            if orng == 0:
+        for k, other in enumerate(kept_series):
+            olo, ohi, orng = kept_bounds[k]
+            tol = MIRROR_TOL * max(1.0, orng, rng)
+            if abs(lo - olo) > tol or abs(hi - ohi) > tol:
                 continue
             if all(
-                a is not None and b is not None
-                and abs(a - b) <= MIRROR_TOL * max(1.0, orng, rng)
-                for a, b in zip(series, other)
+                a is not None and c is not None and abs(a - c) <= tol
+                for a, c in zip(series, other)
             ):
                 dup = True
                 break
@@ -580,6 +624,8 @@ def main(argv=None):
             continue
         kept.append(name)
         kept_series.append(series)
+        kept_bounds.append((lo, hi, rng))
+        kept_by_tuple[tup] = name
     if not kept:
         # Everything was constant; chart the first sensor anyway so
         # the user sees a flat line instead of an empty directory.
