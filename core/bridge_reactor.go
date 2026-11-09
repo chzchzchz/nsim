@@ -629,6 +629,24 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	m["ReactorBuilding/ReliefRoutingToLetdownCondenser"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReliefRoutingToLetdownCondenser",
+		Label: "RoutingToLetdownCondenser",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.ReliefRoutingToLetdownCondenser)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReliefRoutingToLetdownCondenser = v
+			return nil
+		},
+	}
+
 	// Pressurizer ASME-code safety valves (chapter 3):
 	// "If system pressure continues to rise, self-actuating
 	// ASME-code safety valves will open. Steam from the
@@ -976,6 +994,24 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/Ejected"] = &bridge.Control{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "Ejected",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.Ejected)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.ReactorPressureVessel.ControlRods.Ejected = v
+			return nil
+		},
+	}
+
 	// Automatic rod control engage switch. With it latched the
 	// controller integrates the Tavg program error into
 	// DemandInsertion each step; the manual demand path above is
@@ -1169,6 +1205,24 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 			if v {
 				p.ReactorBuilding.RefuelingOperations.CavityFlooding = false
 			}
+			return nil
+		},
+	}
+
+	m["ReactorBuilding/RefuelingOperations/MidLoop"] = &bridge.Control{
+		Part:  "ReactorBuilding/RefuelingOperations",
+		Label: "MidLoop",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.ReactorBuilding.RefuelingOperations.MidLoop)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.ReactorBuilding.RefuelingOperations.MidLoop = v
 			return nil
 		},
 	}
@@ -1991,6 +2045,56 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 		Get: func() (string, error) {
 			return bridge.FormatSensorValue("gallon",
 				p.ReactorBuilding.PressurizedReliefTank.Level.Float())
+		},
+	}
+
+	m["ReactorBuilding/ReliefRoutingToLetdownCondenser"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReliefRoutingToLetdownCondenser",
+		Label: "RoutingToLetdownCondenser",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.ReliefRoutingToLetdownCondenser)
+		},
+	}
+
+	m["ReactorBuilding/LetdownCondenserLevel"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/LetdownCondenserLevel",
+		Label: "Level",
+		Kind:  "gallon",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("gallon",
+				p.ReactorBuilding.LetdownCondenserLevel.Float())
+		},
+	}
+
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/EjectedEvent"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "EjectedEvent",
+		Kind:  "bool",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("bool",
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.EjectedEvent)
+		},
+	}
+
+	m["ReactorBuilding/ReactorPressureVessel/ControlRods/EjectedReactivityPct"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+		Label: "EjectedReactivityPct",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				p.ReactorBuilding.ReactorPressureVessel.ControlRods.EjectedReactivityPct)
+		},
+	}
+
+	m["ReactorBuilding/RefuelingOperations/MidLoopLevelFrac"] = &bridge.Sensor{
+		Part:  "ReactorBuilding/RefuelingOperations",
+		Label: "MidLoopLevelFrac",
+		Kind:  "normalized",
+		Get: func() (string, error) {
+			return bridge.FormatSensorValue("normalized",
+				1.0-p.ReactorBuilding.ReactorPressureVessel.BreakDischarged.Float()/RCSDrainableInventoryGal)
 		},
 	}
 

@@ -1736,6 +1736,31 @@ type ControlRods struct {
 	// specs/pwr_sim/chapter_4/page_049.txt:61-67
 	DroppedBank bool
 
+	// Ejected latches one control cluster ejected from the core.
+	// It is a withdrawal (the cluster leaves the core fully), so
+	// the worth enters as a direct +RodEjectionWorthPct reactivity
+	// term (EjectedReactivityPct below), not as an Insertion shift:
+	// the operating point is Insertion=0 (fully withdrawn) so any
+	// shift would clamp to zero.
+	//
+	// "The control groups are selected to be symmetrical, worth
+	// about one-percent in reactivity… and to give an acceptable
+	// transient in the hypothetical instance of a rod cluster
+	// ejection."
+	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_039.txt:28-33
+	Ejected bool
+
+	// EjectedEvent is a one-step pulse raised on the false→true
+	// transition of Ejected; RPS reads it to fire the flux-rate
+	// trip in the latch tick. Plant.Step clears it the next step.
+	EjectedEvent bool
+
+	// EjectedReactivityPct is the ejected cluster's worth on the
+	// percent Δk/k scale: RodEjectionWorthPct while Ejected is
+	// latched, else zero. Written by ControlRods.Step and added
+	// to ret.Reactivity in ReactorPressureVessel.Step.
+	EjectedReactivityPct float64
+
 	// AutoControl engages the automatic Tavg-program rod
 	// controller, which integrates the program error into
 	// DemandInsertion each step. The zero value keeps the demand
@@ -1828,6 +1853,14 @@ func (c ControlRods) Step(dt time.Duration) ControlRods {
 	// motion recovers it, whatever the demand does.
 	if ret.DroppedBank {
 		ret.Insertion = max(ret.Insertion, RodDroppedBankInsertion)
+	}
+	// Ejected cluster: insertion shift would clamp to zero at the
+	// normal operating point (Insertion=0 fully withdrawn), so the
+	// ejection enters as a direct reactivity term above.
+	if ret.Ejected {
+		ret.EjectedReactivityPct = RodEjectionWorthPct
+	} else {
+		ret.EjectedReactivityPct = 0
 	}
 	return ret
 }
@@ -2798,6 +2831,20 @@ type CVCS struct {
 	// been secured."
 	// specs/the_westinghouse_pressurized_water_react/chapter_16/page_227.txt:100-104
 	AuxSprayValveOpen float64
+
+	// AuxSealCoolingStandby is the standby seal-cooling latch: while
+	// seal injection is off, the seal water heat exchanger cooled
+	// by the component cooling water system provides the second
+	// heat sink for the RCP seals. Only counts when the CCWS is
+	// running and drive-ready (checked in Plant.Step).
+	//
+	// "Provides high-pressure seal water for the reactor coolant
+	// pump (RCP) seals"
+	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_073.txt:76-77
+	// "The seal water heat exchanger is also used to cool… This heat
+	// exchanger is cooled by the component cooling water system."
+	// specs/westinghouse_tech_manual/chapter_4/page_0380.txt:27-29
+	AuxSealCoolingStandby bool
 
 	// AuxSprayDrive is the effective auxiliary spray drive (0..1)
 	// delivered last step: the valve position gated by the charging
@@ -5516,6 +5563,13 @@ type RefuelingOperations struct {
 	// assemblies has been performed during the fuel-handling
 	// phase. Reset only on a full cycle reset.
 	FuelTransferred bool
+
+	// MidLoop latches reduced-inventory mid-loop operation: the
+	// RCS is lowered to MidLoopLevelFrac of drainable inventory
+	// while the reactor coolant pumps keep running. The drain is
+	// a non-creditable ledger debit (like cavity drain); pumps
+	// are not gated, so dry-run emerges from UncoveryFrac.
+	MidLoop bool
 }
 
 // Refueling operations design constants (plans/p24_1.txt).
@@ -5572,6 +5626,17 @@ const (
 	// percent of a fuel assembly weight".
 	// specs/the_westinghouse_pressurized_water_react/chapter_13/page_178.txt:109-111
 	RefuelingWeightSafetyFactor float64 = 1.10
+
+	// MidLoopLevelFrac is the fraction of drainable inventory
+	// remaining at mid-loop operation. Derived: spec gives no
+	// number; 0.35 (loop mid-height) makes UncoveryFrac>0 while
+	// pumps keep suction.
+	MidLoopLevelFrac float64 = 0.35
+
+	// MidLoopDrainGalPerSec is the mid-loop drain rate (gal/s).
+	// Derived: ~3x letdown design, ~1/4 hot-leg break (120 gal/s);
+	// reaches mid-loop in ~4 min from full.
+	MidLoopDrainGalPerSec float64 = 30.0
 )
 
 // RefuelingCavityDepthGallonsPerFoot is the gallons-per-foot-of-depth
@@ -6215,6 +6280,32 @@ const (
 	// 'At-Power' Permissive P-7 light extinguishes."
 	// specs/westinghouse_plant_operations/chapter_19/page_018.txt:3-5
 	RPSAtPowerPermissiveFraction float64 = 0.10
+
+	// RodEjectionWorthPct is one control group's worth in percent
+	// Δk/k, the ejection transient.
+	// "The control groups are selected to be symmetrical, worth
+	// about one-percent in reactivity… and to give an acceptable
+	// transient in the hypothetical instance of a rod cluster
+	// ejection."
+	// specs/the_westinghouse_pressurized_water_react/chapter_2/page_039.txt:28-33
+	RodEjectionWorthPct float64 = 1.0
+
+	// RPSFluxRateTripPerSec is the fission-power rate of change
+	// (power-fraction per second) that declares the high-flux-rate
+	// trip outright. Derived: no spec number; the value matches
+	// RodInsertionSpeed (0.05 frac/s), separating mechanical rod
+	// motion (at or below it) from an ejection step (well above).
+	// "High flux rate trips protect the reactor in case of rod
+	// ejection or accidental rod drop"
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_137.txt:163-168
+	RPSFluxRateTripPerSec float64 = 0.05
+
+	// RPSFluxRateImpulsePct is the one-step fission-power rise
+	// (percent of rated) that also declares the flux-rate trip.
+	// Derived: half the ejection worth in a single step, so a
+	// coarse dt cannot mask a 1% Δk ejection as rate ≤ 0.05/s.
+	RPSFluxRateImpulsePct float64 = 0.5
+
 
 	// RPSHighNeutronFluxTripFraction is the neutron-flux fraction of
 	// rated full-power flux that declares the overpower reactor trip

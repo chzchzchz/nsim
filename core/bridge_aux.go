@@ -805,6 +805,24 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
+	m["AuxiliaryBuilding/ChemicalVolumeControlSystem/AuxSealCoolingStandby"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/ChemicalVolumeControlSystem",
+		Label: "AuxSealCoolingStandby",
+		Kind:  "bool",
+		Get: func() string {
+			return bridge.BoolToStr(
+				p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AuxSealCoolingStandby)
+		},
+		Set: func(s string) error {
+			v, err := bridge.StrToBool(s)
+			if err != nil {
+				return err
+			}
+			p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AuxSealCoolingStandby = v
+			return nil
+		},
+	}
+
 	// CVCS automatic pressurizer level control engage switch.
 	// "The pressurizer level control system adjusts charging
 	// flow from the CVCS to maintain pressurizer level at a

@@ -52,6 +52,15 @@ func (n *csstNode) level() Volume      { return *n.vol }
 func (n *csstNode) setLevel(v Volume)  { *n.vol = v }
 func (n *csstNode) capacity() Volume   { return CSSTCapacity }
 
+// ldcNode adapts ReactorBuilding.LetdownCondenserLevel; capacity is
+// LetdownCondenserCapacityGal (pressurizer.go).
+type ldcNode struct{ vol *Volume }
+
+func (n *ldcNode) pressure() Pressure { return Pressure(0) }
+func (n *ldcNode) level() Volume      { return *n.vol }
+func (n *ldcNode) setLevel(v Volume)  { *n.vol = v }
+func (n *ldcNode) capacity() Volume   { return Volume{Val: LetdownCondenserCapacityGal, Unit: u.Gallon} }
+
 // satNode adapts CSS.SATLevel; capacity is the technical-manual
 // tank size (SATCapacity, parts.go:3825, b44edd3).
 type satNode struct{ vol *Volume }

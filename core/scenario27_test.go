@@ -122,7 +122,7 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 	low := RPSLowPressurizerPressureTrip - 1
 	s1 := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, low, 50,
 		CoreReferenceInletF, AtmosphericPressure, 1.0, 1, 0,
-		false)
+		false, false)
 	assert.Equal(t, 1, s1.TripSignalCount,
 		"low pressurizer pressure contributes one voting channel")
 	assert.True(t, s1.SafetyInjectionActuated,
@@ -131,7 +131,7 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 		"low pressurizer pressure is a steamline-isolation trigger")
 	s2 := s1.Step(DefaultTimeStep, SteamGeneratorShellPressure, low, 50,
 		CoreReferenceInletF, AtmosphericPressure, 1.0, 1, 0,
-		false)
+		false, false)
 	assert.True(t, s2.ReactorTripped,
 		"the SI latch votes the reactor trip")
 
@@ -141,7 +141,7 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 	s3 := cold.Step(DefaultTimeStep, SteamGeneratorShellPressure, low, 50,
 		CoreReferenceInletF, AtmosphericPressure,
 		RPSAtPowerPermissiveFraction/2, 1, 0,
-		false)
+		false, false)
 	assert.False(t, s3.SafetyInjectionActuated)
 	assert.Equal(t, 0, s3.TripSignalCount)
 
@@ -150,7 +150,7 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 	tested := ReactorProtectionSystem{ChannelTest: RPSPressurizerChannelInTest}
 	s4 := tested.Step(DefaultTimeStep, SteamGeneratorShellPressure, low, 50,
 		CoreReferenceInletF, AtmosphericPressure, 1.0, 1, 0,
-		false)
+		false, false)
 	assert.False(t, s4.SafetyInjectionActuated,
 		"isolated channel cannot actuate protections")
 
@@ -158,7 +158,7 @@ func TestScenario26_LowPressurizerPressureVotesTripAndSI(t *testing.T) {
 	ok := ReactorProtectionSystem{}
 	s5 := ok.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 50,
 		CoreReferenceInletF, AtmosphericPressure, 1.0, 1, 0,
-		false)
+		false, false)
 	assert.Equal(t, 0, s5.TripSignalCount)
 	assert.False(t, s5.SafetyInjectionActuated)
 }

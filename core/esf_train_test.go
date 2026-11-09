@@ -185,18 +185,18 @@ func TestRPS_SteamlineIsolationBlockGatesOnlySteamlineTrigger(t *testing.T) {
 	lvl, tcold, cont, pw := nominalArgs()
 	blocked := ReactorProtectionSystem{SteamlineIsolationBlocked: true}
 	r := blocked.Step(DefaultTimeStep, lowHeader, PressurizerHeaterTarget, lvl, tcold, cont, pw, 1, 0,
-		false)
+		false, false)
 	assert.False(t, r.SteamlineIsolationActuated,
 		"a blocked low-steamline trigger must not isolate the steamlines")
 
 	r = blocked.Step(DefaultTimeStep, nominalSl, PressurizerHeaterTarget, lvl, tcold, hotContainment, pw, 1, 0,
-		false)
+		false, false)
 	assert.True(t, r.SteamlineIsolationActuated,
 		"high containment pressure must stay live while blocked")
 
 	unblocked := ReactorProtectionSystem{}
 	r = unblocked.Step(DefaultTimeStep, lowHeader, PressurizerHeaterTarget, lvl, tcold, cont, pw, 1, 0,
-		false)
+		false, false)
 	assert.True(t, r.SteamlineIsolationActuated,
 		"an unblocked low header must isolate the steamlines")
 }

@@ -136,7 +136,7 @@ func TestRPS_SafetyInjectionBlockGatesActuation(t *testing.T) {
 
 	blocked := ReactorProtectionSystem{SafetyInjectionBlocked: true}
 	blocked = blocked.Step(DefaultTimeStep, lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 0,
-		false)
+		false, false)
 	assert.False(t, blocked.SafetyInjectionActuated,
 		"a blocked SI signal must not actuate below the setpoint")
 	assert.False(t, blocked.ReactorTripped,
@@ -144,7 +144,7 @@ func TestRPS_SafetyInjectionBlockGatesActuation(t *testing.T) {
 
 	open := ReactorProtectionSystem{}
 	open = open.Step(DefaultTimeStep, lowSteamline, PressurizerHeaterTarget, 50, CoreReferenceInletF, 0, 0, 1, 0,
-		false)
+		false, false)
 	assert.True(t, open.SafetyInjectionActuated,
 		"without the block the same state must actuate SI")
 }

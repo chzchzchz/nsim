@@ -46,6 +46,22 @@ type ReactorBuilding struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:35-37
 	PRTSprayValve Valve
 
+	// ReliefRoutingToLetdownCondenser selects the letdown
+	// condenser as the relief sink instead of the PRT. False
+	// (default) keeps relief in the PRT per the design basis.
+	//
+	// "Steam from the safety and/or relief valves is piped to the
+	// pressurizer relief tank"
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:31-34
+	// vs "steam vapor going to the letdown condenser through the
+	// failed opened pressure relief valve CV22"
+	// specs/pwr_sim/chapter_4/page_049.txt:30-31
+	ReliefRoutingToLetdownCondenser bool
+
+	// LetdownCondenserLevel is the lumped letdown-condenser level
+	// (gal) when relief is routed there. Zero at construction.
+	LetdownCondenserLevel Volume
+
 	// Aux points at the canonical AuxiliaryBuilding that lives on
 	// Plant. The Step function reads CVCS / RHRS / CCWS / CSS /
 	// RCFC / EFWS through this pointer so its single-step writes

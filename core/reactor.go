@@ -322,7 +322,8 @@ func (r *ReactorPressureVessel) Step(dt time.Duration, rcpSpeed Velocity, second
 	axialFrac := ret.AxialOffset / 100
 	xenonPct := float32(CoreXenonEquilibriumWorthPct *
 		(xenonNormalized(ret.Xenon135+axialFrac*ret.Xenon135AxialDeviation/2) - 1.0))
-	ret.Reactivity = rodPct + dopplerPct + moderatorPct + boronPct + xenonPct
+	ret.Reactivity = rodPct + dopplerPct + moderatorPct + boronPct + xenonPct +
+		float32(ret.ControlRods.EjectedReactivityPct)
 
 	// 5) Thermal power = fission chain power + fission-product
 	// decay heat (+ RCP shaft loss, added below). The two nuclear

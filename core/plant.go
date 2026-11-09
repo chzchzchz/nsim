@@ -331,6 +331,32 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 		}
 	}
 
+	// Mid-loop drain: reduced-inventory operation with pumps
+	// running. Ledger-only debit through the shared debit()
+	// path; UncoveryFrac follows next tick from BreakDischarged
+	// (reactor.go:432). Ordered after the letdown debit so both
+	// writers share the seeded breakRemaining budget.
+	if ret.RefuelingOperations.MidLoop {
+		target := MidLoopLevelFrac * RCSDrainableInventoryGal
+		remaining := RCSDrainableInventoryGal - ret.ReactorPressureVessel.BreakDischarged.Float()
+		if remaining > 0 {
+			current := RCSDrainableInventoryGal - ret.ReactorPressureVessel.BreakDischarged.Float()
+			if current > target {
+				gal := min(MidLoopDrainGalPerSec*dt.Seconds(), current-target)
+				gal = min(gal, remaining)
+				gal = ret.ReactorPressureVessel.debit(gal)
+				if gal > 0 {
+					ret.ReactorPressureVessel.BreakDischarged = vol(
+						ret.ReactorPressureVessel.BreakDischarged,
+						ret.ReactorPressureVessel.BreakDischarged.Float()+gal)
+					ret.ReactorPressureVessel.BreakDischargedNonCreditable = vol(
+						ret.ReactorPressureVessel.BreakDischargedNonCreditable,
+						ret.ReactorPressureVessel.BreakDischargedNonCreditable.Float()+gal)
+				}
+			}
+		}
+	}
+
 	// Reactor Protection System step. Runs before the
 	// ReactorPressureVessel step so the ReactorTripped latch
 	// is available when RPV drops rods this step. The RPS
@@ -372,6 +398,7 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 		float64(ret.ReactorCoolantPumps.Velocity())/float64(RCPRatedSpeed),
 		pzrLevelPct,
 		turbineTripped,
+		ret.ReactorPressureVessel.ControlRods.EjectedEvent,
 	)
 	// Propagate the reactor trip to the reactor pressure
 	// vessel so the RPV step drops rods and follows the
@@ -416,8 +443,18 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 	if op.StepbackActive {
 		ret.ReactorPressureVessel.ControlRods.DemandInsertion = op.StepbackDemand
 	}
+	// EjectedEvent pulse: raise on the false→true transition of
+	// Ejected (one-step telemetry lag). The RPS step (line 361) has
+	// already run this tick, so the pulse lands next tick; the
+	// flux-rate sees the +1% step the tick after. Cleared next
+	// tick regardless of the latch (a pulse, not a level).
 	ret.ReactorPressureVessel.ControlRods =
 		ret.ReactorPressureVessel.ControlRods.Step(dt)
+	if ret.ReactorPressureVessel.ControlRods.EjectedEvent {
+		ret.ReactorPressureVessel.ControlRods.EjectedEvent = false
+	} else if ret.ReactorPressureVessel.ControlRods.Ejected {
+		ret.ReactorPressureVessel.ControlRods.EjectedEvent = true
+	}
 
 	// While RHRS owns primary cooling (HasTakenOver) the takeover
 	// integration below must evolve the outlet from its pre-step value;
@@ -500,7 +537,10 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 	// (core/cvcs.go:391-403). IsRunning() gates so a pump commanded
 	// on but without drive does not accumulate.
 	for _, pu := range ret.ReactorCoolantPumps.All() {
-		sealOK := ret.Aux.ChemicalVolumeControlSystem.ChargingPumpRunning
+		ccwsReady := ret.Aux.ComponentCoolingWaterSystem.PumpRunning &&
+			ret.Aux.ComponentCoolingWaterSystem.DriveReady
+		standby := ret.Aux.ChemicalVolumeControlSystem.AuxSealCoolingStandby && ccwsReady
+		sealOK := ret.Aux.ChemicalVolumeControlSystem.ChargingPumpRunning || standby
 		sealOverheated := pu.IsRunning() && !sealOK
 		pu.SealOverheatAlarm = sealOverheated
 		if sealOverheated {
@@ -716,7 +756,12 @@ func (r *ReactorBuilding) Step(dt time.Duration,
 	//     high pressure signal."
 	//     specs/the_westinghouse_pressurized_water_react/chapter_6/page_114.txt:55-57
 	if reliefDischarge.Float() > 0 {
-		if !ret.PRTRuptureDiscBurst {
+		if ret.ReliefRoutingToLetdownCondenser {
+			lvl := min(ret.LetdownCondenserLevel.Float()+reliefDischarge.Float(),
+				LetdownCondenserCapacityGal)
+			ret.LetdownCondenserLevel = vol(ret.LetdownCondenserLevel, lvl)
+			// no rupture disc on this small condenser in this fidelity band
+		} else if !ret.PRTRuptureDiscBurst {
 			lvl := min(ret.PressurizedReliefTank.Level.Float()+
 				reliefDischarge.Float(), PressurizedReliefTankCapacityGal)
 			ret.PressurizedReliefTank.Level = vol(
@@ -3848,6 +3893,7 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 	add("SWSHeader", "ServiceWaterHeader", &passThroughNode{})
 	add("SISAccumulators", "SafetyInjectionSystem", &accNode{vol: &sis.Accumulator.Level, capVol: &sis.Accumulator.Capacity})
 	add("PRT", "PressurizerReliefTank", &target.ReactorBuilding.PressurizedReliefTank)
+	add("LDC", "LetdownCondenser", &ldcNode{vol: &target.ReactorBuilding.LetdownCondenserLevel})
 	add("CIS", "ContainmentIsolationSystem", &cisSink{})
 	add("InjectionSink", "InjectionSink", &injectionSink{})
 	// p63_1: audit nodes for loop circuits whose pumps were
@@ -4047,6 +4093,19 @@ func (p *Plant) BuildGraphFor(target *Plant) *PlantGraph {
 
 	// Pressurizer relief to PRT (PRT is a Tank, already fluidNode).
 	flowEdge("Pressurizer", "PRT", nil, nil, func(time.Duration) float64 {
+		open := max(target.ReactorBuilding.PORV.Open, target.ReactorBuilding.SafetyValve.Open) * target.ReactorBuilding.BlockValve.Open
+		if open <= 0 {
+			return 0
+		}
+		if target.ReactorBuilding.ReliefRoutingToLetdownCondenser {
+			return 0
+		}
+		return PressurizerReliefDischargeGalPerSec * open
+	})
+	flowEdge("Pressurizer", "LDC", nil, nil, func(time.Duration) float64 {
+		if !target.ReactorBuilding.ReliefRoutingToLetdownCondenser {
+			return 0
+		}
 		open := max(target.ReactorBuilding.PORV.Open, target.ReactorBuilding.SafetyValve.Open) * target.ReactorBuilding.BlockValve.Open
 		if open <= 0 {
 			return 0

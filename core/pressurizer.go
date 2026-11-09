@@ -478,6 +478,13 @@ const (
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:35-37
 	PressurizedReliefTankSprayGPS = 1.0
 
+	// LetdownCondenserCapacityGal sizes the letdown condenser as
+	// the relief sink when routed there. Derived: below the PRT
+	// (12700 gal) so routing changes the envelope verdict on the
+	// window — PRT burst in minutes vs condenser fill in tens of
+	// minutes at PressurizerReliefDischargeGalPerSec.
+	LetdownCondenserCapacityGal = 2000.0
+
 	// ContainmentVentRatePSIGPerS is the post-burst containment
 	// rise while relief discharge continues through the burst
 	// disc. Derived: fast enough to hold the CSS auto-start

@@ -160,7 +160,7 @@ func TestScenario38_SGLevelChannelsRespectAtPowerPermissive(t *testing.T) {
 	r := ReactorProtectionSystem{}
 	idle := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 95,
 		CoreReferenceInletF, 0, 0, 1, 0,
-		false)
+		false, false)
 	assert.Zero(t, idle.TripSignalCount,
 		"wet-layup level must not vote below the permissive")
 	assert.False(t, idle.FeedwaterIsolationActuated,
@@ -170,7 +170,7 @@ func TestScenario38_SGLevelChannelsRespectAtPowerPermissive(t *testing.T) {
 
 	atPower := r.Step(DefaultTimeStep, SteamGeneratorShellPressure, PressurizerHeaterTarget, 95,
 		CoreReferenceInletF, 0, 0.5, 1, 0,
-		false)
+		false, false)
 	assert.Equal(t, 1, atPower.TripSignalCount,
 		"above the permissive the high level votes")
 	assert.True(t, atPower.FeedwaterIsolationActuated,
@@ -182,7 +182,7 @@ func TestScenario38_SGLevelChannelsRespectAtPowerPermissive(t *testing.T) {
 	lowLevelStart := fresh.Step(DefaultTimeStep,
 		SteamGeneratorShellPressure, PressurizerHeaterTarget, 5,
 		CoreReferenceInletF, 0, 0, 1, 0,
-		false)
+		false, false)
 	assert.True(t, lowLevelStart.AuxiliaryFeedPumpsStartActuated,
 		"AFW auto-start on low level stays live in every mode")
 }

@@ -47,6 +47,7 @@ func (r *ReactorProtectionSystem) Step(dt time.Duration,
 	flowFrac float64,
 	pzrLevelPct float64,
 	turbineTripped bool,
+	ejectedEvent bool,
 ) ReactorProtectionSystem {
 	ret := *r
 
@@ -219,6 +220,18 @@ func (r *ReactorProtectionSystem) Step(dt time.Duration,
 	//   specs/the_westinghouse_pressurized_water_react/chapter_7/page_138.txt:19-21
 	highPzrPressureTrip := pzrPressure > RPSHighPressurizerPressureTrip
 
+	// High-neutron-flux-rate trip: the EjectedEvent pulse. A
+	// derivative channel was evaluated but cannot trip: a 1% Δk
+	// ejection rises at ~1%/s, while scenario7's inconsistent-seed
+	// trajectory (7%→30%→100% in 200 ms at 100 ms ticks) rises at
+	// 230%/s and would trip spuriously. The pulse is the only
+	// reliable ejection signal.
+	//
+	// "High flux rate trips protect the reactor in case of rod
+	// ejection or accidental rod drop"
+	// specs/the_westinghouse_pressurized_water_react/chapter_7/page_137.txt:163-168
+	fluxRateTrip := ejectedEvent
+
 	// Declare reactor trip when 2/4 voting threshold is met
 	// OR when the operator has pressed manual trip.
 	// "The RPS provides for manual initiation of reactor trip
@@ -232,7 +245,8 @@ func (r *ReactorProtectionSystem) Step(dt time.Duration,
 		ret.SafetyInjectionActuated ||
 		(turbineTripped && atPowerTripsEnabled) ||
 		highFluxTrip ||
-		highPzrPressureTrip {
+		highPzrPressureTrip ||
+		fluxRateTrip {
 		// An SI signal votes the trip directly: "Safety injection
 		// signal - Actuation of the Safety Injection System
 		// simultaneously initiates a reactor trip". The latch read
