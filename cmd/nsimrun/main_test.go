@@ -165,3 +165,71 @@ func TestBuildInitialPlant(t *testing.T) {
 		require.ErrorContains(t, err, "mutually exclusive")
 	})
 }
+
+// Snapshots must carry the same trajectories the single-document path
+// produces: cadence derived from whole-run step recompute with Go's
+// per-chunk tick truncation, boundary commands included in their
+// boundary snapshot, trailing commands in the final snapshot.
+func TestSnapshotCadenceAndEmission(t *testing.T) {
+	t.Run("cadence matches Python recompute", func(t *testing.T) {
+		_, cadence := sampleTicks(5, 1, core.DefaultTimeStep)
+		require.Equal(t, int64(1000), cadence)
+		// 5/3 chunks of 1.6667s, truncated to 1666 ticks each.
+		_, cadence = sampleTicks(5, 2, core.DefaultTimeStep)
+		require.Equal(t, int64(1666), cadence)
+		// 3s with step 10s: one chunk covering the whole run.
+		_, cadence = sampleTicks(3, 10, core.DefaultTimeStep)
+		require.Equal(t, int64(3000), cadence)
+	})
+
+	t.Run("runLoop emits t0 interior and final in order", func(t *testing.T) {
+		p := core.MakePlant()
+		steps := 5000
+		_, cadenceMs := sampleTicks(5, 1, core.DefaultTimeStep)
+		var at []int64
+		err := runLoop(&p, nil, p.GetControlMap(), nil, steps, core.DefaultTimeStep, cadenceMs,
+			func(elapsedMs int64, snap core.Plant) error {
+				at = append(at, elapsedMs)
+				return nil
+			})
+		require.NoError(t, err)
+		assert.Equal(t, []int64{0, 1000, 2000, 3000, 4000, 5000}, at)
+	})
+
+	t.Run("boundary command lands in its boundary snapshot", func(t *testing.T) {
+		p := core.MakePlant()
+		cmds, err := cmdfile.Parse(strings.NewReader(
+			"1000 ReactorBuilding/ReactorCoolantPump/Running 0\n"))
+		require.NoError(t, err)
+		// t=0 plus interior at 1000ms plus final at 2000ms: 3 plants.
+		var snaps []core.Plant
+		err = runLoop(&p, cmds, p.GetControlMap(), nil, 1500, core.DefaultTimeStep, 1000,
+			func(_ int64, snap core.Plant) error {
+				snaps = append(snaps, snap)
+				return nil
+			})
+		require.NoError(t, err)
+		require.Len(t, snaps, 3)
+		// The control map writes through to the loop pumps, so check
+		// whichever pump the command actually drives.
+		assert.False(t, snaps[1].ReactorBuilding.ReactorCoolantPumps.AnyRunning(),
+			"boundary snapshot must reflect the command at its offset")
+	})
+
+	t.Run("non-divisible cadence emits interior points without duplication", func(t *testing.T) {
+		p := core.MakePlant()
+		// main() sets steps = n*truncated-ticks (3*1666=4998) for the
+		// sampling path; the interior emit at tick 4998 would be the
+		// final point, so only 3 cadence emits + t0 + final.
+		steps := 4998
+		_, cadenceMs := sampleTicks(5, 2, core.DefaultTimeStep)
+		var at []int64
+		err := runLoop(&p, nil, p.GetControlMap(), nil, steps, core.DefaultTimeStep, cadenceMs,
+			func(elapsedMs int64, snap core.Plant) error {
+				at = append(at, elapsedMs)
+				return nil
+			})
+		require.NoError(t, err)
+		assert.Equal(t, []int64{0, 1666, 3332, 4998}, at)
+	})
+}

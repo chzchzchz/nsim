@@ -14,6 +14,8 @@ Flags:
 - `-scenario <id>` — Starting scenario id from the catalog (`core.Scenarios`; see plans/x/scenarios.txt, e.g. `rcp-trip`, `dilution-to-criticality`). Applies the scenario's minimal starting-state override and merges its opening script (scheduled trigger commands) with any `-cmd` commands. Mutually exclusive with `-plant`. This is how a web-console export captured during a scenario replays faithfully: pass the same `-scenario` alongside `-cmd`.
 - `-seconds <number>` — Number of seconds to simulate. Plain number (e.g. `5`, `1.5`), not a duration string like `1s`.
 - `-cmd <file>` — Command file. Each line is `TimeOffset Part.Label Value`. The control is set once elapsed time reaches the offset (in milliseconds). Supports dot or slash paths. Blank lines and lines starting with `#` are ignored. Logs errors and continues on parse/set failures. Files ending in `.json` (case insensitive) are loaded as web-console exports: `{"scenario":"...","commands":[{"offsetMs":...,"control":...,"value":...]}` — a `scenario` field names the evolution the session ran under and is applied automatically when `-scenario` is absent (a conflicting explicit flag is an error); offsets are measured from simulation start.
+- `-snapshot-step <seconds>` — Emit plant snapshots as JSONL (one marshaled plant per line) at t=0, every N seconds of simulated time, plus the final state. Cadence follows the whole-run recompute `step = total/ceil(total/N)` with Go's per-chunk tick truncation, so points match the chart driver. Default (0) keeps the single-document output.
+- `-snapshot-out <file>` — Write snapshot JSONL to this file instead of stdout. Alarms are emitted as one trailing `{"Alarms": [...]}` line; per-snapshot lines decode as bare plants.
 
 Command-file notes:
 
@@ -26,8 +28,8 @@ Command-file notes:
 1. Initializes a plant from `-scenario` or from the scenario named in the `-cmd` JSON export (catalog starting state plus opening script), or from `-plant` merged over defaults, otherwise from built-in defaults.
 2. Merges the JSON over the defaults per top-level key: a top-level object present in the file (e.g. `TurbineBuilding`) replaces that entire default subtree, so fields absent from the file become zero values rather than design defaults. Top-level buildings not named in the file keep their defaults.
 3. If `-cmd` is provided, reads time-stamped control commands and applies them as the simulation advances.
-4. Steps the simulation forward by the requested duration (1 ms per internal step).
-5. Writes the final plant state as JSON to stdout. When a scenario is active, stderr also reports whether its objective ended MET or pending.
+4. Steps the simulation forward by the requested duration (1 ms per internal step). With `-snapshot-step`, emits each cadence snapshot along the way instead of only the final state.
+5. Writes the final plant state as JSON to stdout (or snapshot JSONL with `-snapshot-step`). When a scenario is active, stderr also reports whether its objective ended MET or pending.
 
 ## Examples
 

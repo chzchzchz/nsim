@@ -12,24 +12,13 @@ Usage:
 
 Design (why this shape):
 
-- The Go simulator core (nsimrun) only emits the final plant state, so
-  intermediate snapshots have to come from repeated chunked runs whose
-  output feeds the next run's -plant input. That sampling loop lives
-  here, next to the charting code, instead of in bash where it was
-  previously: polling processes, re-parsing JSON, and fanning out
-  over a thousand series is Python-shaped work.
-- A command file's offsets are absolute milliseconds from simulation
-  start. Re-applying the whole file at every chunk re-applies each
-  control at every chunk boundary, not at its offset, which mangles
-  the trajectory. Each chunk therefore gets its own windowed sub-file
-  holding only the commands whose offset falls inside it. The first
-  chunk owns offset 0; later chunks own (start, end]; a command
-  exactly on a boundary belongs to the chunk that ends there so it
-  still lands inside the run (Go applies offsets at or beyond the
-  simulated duration after the final step).
-- Nothing about the trace is saved between runs except the plant
-  snapshot: offsets are rebased per chunk, so a resume would need
-  the offsets too.
+- nsimrun emits every snapshot in one process via -snapshot-step,
+  so Python just parses the JSONL stream and charts it. A single
+  full-duration run applies each command at its absolute offset;
+  the old per-chunk restart model (one nsimrun per snapshot chained
+  through -plant files, with windowed command sub-files) is gone.
+  Polling two-jsonles, re-parsing JSON, and fanning out over a
+  thousand series remains Python-shaped work.
 - Sensors are discovered by walking the first snapshot. Any scalar
   number or boolean is a plottable series; strings and arrays are
   skipped (mode labels, names). Booleans plot as 0/1 steps so switchover
@@ -115,15 +104,6 @@ def _parse_cmdfile(path):
         max_ms = max(max_ms, off)
         cmds.append(line)
     return cmds, "", max_ms
-
-
-def _windowed_files(cmds):
-    """Split whole-file command lines into (offset, line) tuples."""
-    windows = []
-    for line in cmds:
-        windows.append((int(float(line.split()[0])), line))
-    windows.sort(key=lambda t: t[0])
-    return windows
 
 
 def _match(patterns, name):
@@ -377,9 +357,8 @@ def main(argv=None):
 
     os.makedirs(opts.out, exist_ok=True)
     opts.out = os.path.abspath(opts.out)
-    # Intermediate plant snapshots and windowed command sub-files live
-    # outside the out dir and are removed on exit, so --keep-json only
-    # leaves the snapshots the user asked for.
+    # The built nsimrun binary lives outside the out dir and is removed
+    # on exit, so --keep-json only leaves the snapshots asked for.
     workdir = tempfile.mkdtemp(prefix="chart_all_")
     atexit.register(shutil.rmtree, workdir, ignore_errors=True)
 
@@ -411,8 +390,6 @@ def main(argv=None):
     if opts.bin:
         run_cmd = [os.path.abspath(opts.bin)]
     else:
-        # Build nsimrun once instead of `go run` per chunk, which
-        # recompiled on every step in long runs.
         built = os.path.join(workdir, "nsimrun")
         with contextlib.redirect_stderr(sys.stderr):
             proc = subprocess.run(
@@ -423,89 +400,55 @@ def main(argv=None):
             return 1
         run_cmd = [built]
 
-    # Window commands per chunk: chunk i owns (start_ms, end_ms]; the
-    # first chunk also owns offset 0 so a command at t=0 is applied
-    # before the first step, as it would be in a single full run.
-    windows = _windowed_files(cmds)
-    subfiles = [[] for _ in range(n_steps)]
-    for off, line in windows:
-        # Map an absolute offset to its winning chunk. The same
-        # (start, end] rule as before keeps boundary commands in
-        # the chunk that ends at the boundary, and trailing offsets
-        # beyond the run in the final chunk.
-        idx = min(n_steps - 1, max(0, int(math.floor((off - 1) / (step * 1000.0))) if off else 0))
-        subfiles[idx].append(line)
-    subfile_paths = []
-    for i, lines in enumerate(subfiles):
-        if lines:
-            path = os.path.join(workdir, ".cmd_%03d.txt" % i)
-            with open(path, "w") as fh:
-                fh.write("\n".join(lines) + "\n")
-            subfile_paths.append(path)
-        else:
-            subfile_paths.append(None)
-
-    prev = opts.plant
     scenario = opts.scenario or file_scenario
     times = []
     snapshots = []
 
-    def run_chunk(i, t, chunk_args):
-        args = list(run_cmd) + chunk_args
-        if prev:
-            args += ["-plant", os.path.abspath(prev)]
-        try:
-            proc = subprocess.run(args, capture_output=True, text=True, cwd=repo_root)
-        except FileNotFoundError:
-            print("error: failed to run %r" % args[0], file=sys.stderr)
-            return None
-        if proc.returncode != 0:
-            print(
-                "error: nsimrun failed at chunk %d (t=%gs):\n%s"
-                % (i, t, proc.stderr.strip()[-2000:]),
-                file=sys.stderr,
-            )
-            return None
-        try:
-            snap = json.loads(proc.stdout)
-        except json.JSONDecodeError as exc:
-            print("error: nsimrun emitted invalid JSON at t=%gs: %s" % (t, exc), file=sys.stderr)
-            return None
-        times.append(round(t, 9))
-        snapshots.append(snap)
-        # Always chain the next chunk through a temp file in the
-        # workdir. The old --keep-json path left `prev` None after
-        # the first chunk, silently resetting the sim to defaults.
-        tmp = os.path.join(workdir, ".plant_%03d.json" % i)
-        with open(tmp, "w") as fh:
-            json.dump(snap, fh)
-        return tmp
-
-    # t=0 snapshot: starting plant before any chunk. Without it the
-    # first chart point sits at t=step, hiding the initial state.
-    init_args = ["-seconds", "0"]
-    if scenario and not opts.plant:
-        init_args += ["-scenario", scenario]
-    t0_tmp = run_chunk(0, 0.0, init_args)
-    if t0_tmp is None:
+    # One nsimrun process for the whole trace. Go emits snapshots at
+    # t=0, step, 2*step, ..., total (same recompute as above) and
+    # applies the full command file at absolute offsets; the
+    # {"Alarms": ...} trailer line is not a plant snapshot.
+    args = list(run_cmd) + ["-seconds", _fmt_num(total), "-snapshot-step", _fmt_num(step)]
+    if opts.cmd:
+        args += ["-cmd", os.path.abspath(opts.cmd)]
+    if opts.plant:
+        args += ["-plant", os.path.abspath(opts.plant)]
+    elif scenario:
+        args += ["-scenario", scenario]
+    try:
+        proc = subprocess.run(args, capture_output=True, text=True, cwd=repo_root)
+    except FileNotFoundError:
+        print("error: failed to run %r" % args[0], file=sys.stderr)
         return 1
-    prev = t0_tmp
-    if opts.keep_json:
-        with open(os.path.join(opts.out, "%06.3f.json" % 0.0), "w") as fh:
-            json.dump(snapshots[0], fh, indent=1)
-
-    for i in range(n_steps):
-        t = total if i == n_steps - 1 else (i + 1) * step
-        chunk_args = ["-seconds", _fmt_num(step)]
-        if subfile_paths[i]:
-            chunk_args += ["-cmd", os.path.abspath(subfile_paths[i])]
-        tmp = run_chunk(i, t, chunk_args)
-        if tmp is None:
+    if proc.returncode != 0:
+        print(
+            "error: nsimrun failed:\n%s" % proc.stderr.strip()[-2000:],
+            file=sys.stderr,
+        )
+        return 1
+    snapshots = []
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            continue
+        try:
+            doc = json.loads(line)
+        except json.JSONDecodeError as exc:
+            print("error: nsimrun emitted invalid JSON: %s" % exc, file=sys.stderr)
             return 1
-        prev = tmp
-        if opts.keep_json:
+        # The {"Alarms": ...} trailer line is the only non-plant doc.
+        if set(doc.keys()) == {"Alarms"}:
+            continue
+        snapshots.append(doc)
+    if not snapshots:
+        print("error: nsimrun emitted no snapshots", file=sys.stderr)
+        return 1
+    # Go emits one snapshot per cadence point (t=0, step, ..., total);
+    # map them in order, pinning the last point to total.
+    times = [round(i * step, 9) for i in range(len(snapshots) - 1)] + [round(total, 9)]
+    if opts.keep_json:
+        for t, snap in zip(times, snapshots):
             with open(os.path.join(opts.out, "%06.3f.json" % t), "w") as fh:
-                json.dump(snapshots[-1], fh, indent=1)
+                json.dump(snap, fh, indent=1)
 
     # Discover sensors from the first snapshot.
     flat0 = _walk(snapshots[0]) if snapshots else {}

@@ -46,6 +46,25 @@ func LoadCommands(path string) ([]cmdfile.Command, string, error) {
 	return cmds, "", err
 }
 
+// plantedTopKeys is the JSON key set of a full marshaled Plant. nsimrun
+// output always carries it (plus the ignored "Alarms" key). fullPlant
+// reports whether m covers it, in which case decoding data into a Plant
+// matches the merge path exactly since every user subtree replaces its
+// default subtree.
+var plantTopKeys = []string{
+	"AuxiliaryBuilding", "Electrical", "Outside",
+	"PlantOperation", "ReactorBuilding", "TurbineBuilding",
+}
+
+func fullPlant(m map[string]json.RawMessage) bool {
+	for _, k := range plantTopKeys {
+		if _, ok := m[k]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // BuildInitialPlant resolves the starting lineup: a catalog scenario
 // when named, otherwise a plantPath JSON merged over design defaults,
 // otherwise plain MakePlant. The returned script holds the scenario's
@@ -73,16 +92,27 @@ func BuildInitialPlant(scenarioID, plantPath string) (core.Plant, []core.ScriptC
 		if err != nil {
 			return core.Plant{}, nil, nil, fmt.Errorf("read plant file: %w", err)
 		}
+		// Files produced by nsimrun cover every top-level plant key,
+		// so the defaults merge is a no-op (each user subtree fully
+		// replaces the default subtree). Detect that case and decode
+		// directly to skip three JSON passes per ingest.
+		var usrMap map[string]json.RawMessage
+		if err := json.Unmarshal(data, &usrMap); err != nil {
+			return core.Plant{}, nil, nil, fmt.Errorf("parse plant JSON: %w", err)
+		}
+		if fullPlant(usrMap) {
+			if err := json.Unmarshal(data, &p); err != nil {
+				return core.Plant{}, nil, nil, fmt.Errorf("apply plant JSON: %w", err)
+			}
+			break
+		}
 		defaults, err := json.Marshal(p)
 		if err != nil {
 			return core.Plant{}, nil, nil, fmt.Errorf("marshal defaults: %w", err)
 		}
-		var defMap, usrMap map[string]json.RawMessage
+		var defMap map[string]json.RawMessage
 		if err := json.Unmarshal(defaults, &defMap); err != nil {
 			return core.Plant{}, nil, nil, fmt.Errorf("parse defaults: %w", err)
-		}
-		if err := json.Unmarshal(data, &usrMap); err != nil {
-			return core.Plant{}, nil, nil, fmt.Errorf("parse plant JSON: %w", err)
 		}
 		for k, v := range usrMap {
 			defMap[k] = v
