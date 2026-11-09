@@ -17,6 +17,7 @@ import { RemoteClient, RemoteError } from "./remote";
 import type {
     AlarmEntryRemote,
     ControlEntry,
+    LogEntry,
     SensorEntry,
     StatusView,
 } from "./remote";
@@ -82,6 +83,11 @@ export class RemoteController {
     // /state fetch so we do not pull the full plant JSON on ticks
     // where simulated time did not move (paused idle).
     lastSvgSimTimeMs = -1;
+    // Bridge id of the control row currently outlined because
+    // its log entry is selected; null when nothing is selected.
+    // Kept (not just the DOM class) so the outline can be
+    // re-applied after tiles are rebuilt on a runId change.
+    selectedLogControl: string | null = null;
 
     private pollTimer: ReturnType<typeof setTimeout> | null = null;
     private pollGen = 0;
@@ -109,6 +115,7 @@ export class RemoteController {
         this.ownSeq = -1;
         this.failures = 0;
         this.sensorRows = [];
+        this.clearLogSelectionOutline();
         this.lastSvgHtml = "";
         this.lastSvgSimTimeMs = -1;
         this.host.spsEl.textContent = "steps/s: —";
@@ -127,6 +134,7 @@ export class RemoteController {
         this.lastSeq = -1;
         this.ownSeq = -1;
         this.failures = 0;
+        this.clearLogSelectionOutline();
         this.lastSvgHtml = "";
         this.lastSvgSimTimeMs = -1;
         this.stopPoll();
@@ -165,6 +173,45 @@ export class RemoteController {
             !(visible && this.connected),
         );
         this.host.logsEl.toggleAttribute("hidden", !visible);
+    }
+
+    // Outline the control row for the selected log entry (red
+    // border via .ctl-row.log-selected) and clear the previous
+    // one. Toggled from the Logs panel click: selecting the same
+    // entry again passes null and removes the outline. Scrolls
+    // the control into view only for explicit user selections,
+    // and not while the banner "View" scroll is in flight.
+    onLogSelection(entry: LogEntry | null): void {
+        this.selectedLogControl = entry?.control ?? null;
+        const scroll = !this.logsPanel?.isScrollLockoutActive();
+        this.applyLogSelectionOutline(scroll);
+    }
+
+    // Clear any selected control row; used on disconnect/connect
+    // so a stale outline is removed without relying on tilesEl
+    // being rebuilt by the onDisconnected hook.
+    private clearLogSelectionOutline(): void {
+        this.selectedLogControl = null;
+        this.applyLogSelectionOutline(false);
+    }
+
+    private applyLogSelectionOutline(scroll: boolean): void {
+        const rows = this.host.tilesEl.querySelectorAll<HTMLElement>(".ctl-row");
+        for (const row of Array.from(rows)) {
+            const isSelected =
+                this.selectedLogControl !== null &&
+                row.dataset.bridgeId === this.selectedLogControl;
+            row.classList.toggle("log-selected", isSelected);
+            if (isSelected && scroll) {
+                // Minimized tiles hide .tile-body; scrolling to an
+                // invisible row does nothing, so bail quietly and
+                // let the existing outline be the feedback.
+                const tile = row.closest<HTMLElement>(".tile.minimized");
+                if (!tile) {
+                    row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                }
+            }
+        }
     }
 
     applyWritable(): void {
@@ -269,7 +316,10 @@ export class RemoteController {
                 this.lastSeq = -1;
                 this.ownSeq = -1;
                 this.host.logsEl.innerHTML = "";
-                this.logsPanel = initLogs(this.host.logsEl, client);
+                this.selectedLogControl = null;
+                this.logsPanel = initLogs(this.host.logsEl, client, (entry) =>
+                    this.onLogSelection(entry),
+                );
                 this.logsPanel.setWritable(this.writable);
                 await this.buildTiles();
                 // A concurrent disconnect/connect while building
@@ -451,6 +501,23 @@ export class RemoteController {
         for (const s of sensors) sensorValues[s.key] = s.value;
         refreshRemoteSensors(this.sensorRows, sensorValues);
         refreshRemoteControls(this.host.tilesEl, controlValues);
+        // Tiles were just rebuilt, so re-apply any live log
+        // selection outline to the fresh rows (without scrolling:
+        // this is not a user selection). If the selected control
+        // is no longer in the catalog (new run), reconcile by
+        // clearing the log selection too, so the log row doesn't
+        // claim a control that doesn't exist.
+        const hadSelection = this.selectedLogControl !== null;
+        this.applyLogSelectionOutline(false);
+        if (
+            hadSelection &&
+            this.selectedLogControl !== null &&
+            !this.host.tilesEl.querySelector<HTMLElement>(
+                `.ctl-row.log-selected[data-bridge-id="${CSS.escape(this.selectedLogControl)}"]`,
+            )
+        ) {
+            this.logsPanel?.select(null);
+        }
 
         this.host.alarmsEl.innerHTML = "";
         const alarms = await client

@@ -295,4 +295,176 @@ describe("RemoteController", () => {
         expect(els.logsEl.style.display).toBe("none");
         c.disconnect();
     });
+
+    it("log selection outlines matching control and clears on deselect", async () => {
+        const ctl = { key: "P/A", part: "P", label: "A", kind: "bool", value: "1" };
+        const ctl2 = { key: "P/B", part: "P", label: "B", kind: "bool", value: "0" };
+        const logEntry = { seq: 5, kind: "operation", atMs: 1000, control: "P/A", value: "1" };
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            const u = String(url);
+            if (u.includes("/status")) return jsonResponse({ ...statusBody, latestSeq: 5 });
+            if (u.includes("/controls")) return jsonResponse([ctl, ctl2]);
+            if (u.includes("/sensors")) return jsonResponse([]);
+            if (u.includes("/alarms")) return jsonResponse([]);
+            if (u.includes("/logs")) return jsonResponse([logEntry]);
+            return jsonResponse({});
+        }));
+        const { host, els } = makeHost();
+        const c = new RemoteController(host, {}, 60_000);
+        c.connect("http://127.0.0.1:8080");
+        await vi.waitFor(() => {
+            expect(els.tilesEl.querySelectorAll(".ctl-row").length).toBe(2);
+        });
+        const rows = Array.from(els.tilesEl.querySelectorAll<HTMLElement>(".ctl-row"));
+        const rowA = rows.find((r) => r.dataset.bridgeId === "P/A")!;
+        const rowB = rows.find((r) => r.dataset.bridgeId === "P/B")!;
+        const logRow = els.logsEl.querySelector<HTMLElement>(".log-row")!;
+        logRow.click();
+        expect(rowA.classList.contains("log-selected")).toBe(true);
+        expect(rowB.classList.contains("log-selected")).toBe(false);
+        expect(c.selectedLogControl).toBe("P/A");
+        logRow.click();
+        expect(rowA.classList.contains("log-selected")).toBe(false);
+        expect(c.selectedLogControl).toBeNull();
+        c.disconnect();
+    });
+
+    it("selection missing from new catalog reconciles via logsPanel.select(null)", async () => {
+        const ctl = { key: "P/A", part: "P", label: "A", kind: "bool", value: "1" };
+        const logEntry = { seq: 5, kind: "operation", atMs: 1000, control: "P/A", value: "1" };
+        let controls: unknown[] = [ctl];
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            const u = String(url);
+            if (u.includes("/status")) return jsonResponse({ ...statusBody, latestSeq: 5 });
+            if (u.includes("/controls")) return jsonResponse(controls);
+            if (u.includes("/sensors")) return jsonResponse([]);
+            if (u.includes("/alarms")) return jsonResponse([]);
+            if (u.includes("/logs")) return jsonResponse([logEntry]);
+            return jsonResponse({});
+        }));
+        const { host, els } = makeHost();
+        const c = new RemoteController(host, {}, 60_000);
+        c.connect("http://127.0.0.1:8080");
+        await vi.waitFor(() => {
+            expect(els.tilesEl.querySelectorAll(".ctl-row").length).toBe(1);
+        });
+        const logRow = els.logsEl.querySelector<HTMLElement>(".log-row")!;
+        logRow.click();
+        expect(c.selectedLogControl).toBe("P/A");
+        const spy = vi.spyOn(c.logsPanel!, "select");
+        // Simulate a run change where the control is gone from
+        // the catalog, then rebuild tiles.
+        controls = [];
+        await c.buildTiles();
+        expect(spy).toHaveBeenCalledWith(null);
+        expect(c.selectedLogControl).toBeNull();
+        expect(c.logsPanel!.selected()).toBeNull();
+        c.disconnect();
+    });
+
+    it("selection survives a same-catalog rebuild and does not scroll", async () => {
+        const ctl = { key: "P/A", part: "P", label: "A", kind: "bool", value: "1" };
+        const logEntry = { seq: 5, kind: "operation", atMs: 1000, control: "P/A", value: "1" };
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            const u = String(url);
+            if (u.includes("/status")) return jsonResponse({ ...statusBody, latestSeq: 5 });
+            if (u.includes("/controls")) return jsonResponse([ctl]);
+            if (u.includes("/sensors")) return jsonResponse([]);
+            if (u.includes("/alarms")) return jsonResponse([]);
+            if (u.includes("/logs")) return jsonResponse([logEntry]);
+            return jsonResponse({});
+        }));
+        const { host, els } = makeHost();
+        const c = new RemoteController(host, {}, 60_000);
+        c.connect("http://127.0.0.1:8080");
+        await vi.waitFor(() => {
+            expect(els.tilesEl.querySelectorAll(".ctl-row").length).toBe(1);
+        });
+        const logRow = els.logsEl.querySelector<HTMLElement>(".log-row")!;
+        logRow.click();
+        let scrolled = false;
+        const rowA = els.tilesEl.querySelector<HTMLElement>(".ctl-row")!;
+        rowA.scrollIntoView = () => { scrolled = true; };
+        const spy = vi.spyOn(c.logsPanel!, "select");
+        await c.buildTiles();
+        // Rebuild re-applies outline without scrolling and
+        // without clearing the selection.
+        const newRowA = els.tilesEl.querySelector<HTMLElement>(".ctl-row")!;
+        expect(newRowA.classList.contains("log-selected")).toBe(true);
+        expect(scrolled).toBe(false);
+        expect(spy).not.toHaveBeenCalled();
+        expect(c.selectedLogControl).toBe("P/A");
+        c.disconnect();
+    });
+
+    it("scroll lockout suppresses control scroll after banner View", async () => {
+        const ctl = { key: "P/A", part: "P", label: "A", kind: "bool", value: "1" };
+        const logEntry = { seq: 5, kind: "operation", atMs: 1000, control: "P/A", value: "1" };
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            const u = String(url);
+            if (u.includes("/status")) return jsonResponse({ ...statusBody, latestSeq: 5 });
+            if (u.includes("/controls")) return jsonResponse([ctl]);
+            if (u.includes("/sensors")) return jsonResponse([]);
+            if (u.includes("/alarms")) return jsonResponse([]);
+            if (u.includes("/logs")) return jsonResponse([logEntry]);
+            return jsonResponse({});
+        }));
+        const { host, els } = makeHost();
+        const c = new RemoteController(host, {}, 60_000);
+        c.connect("http://127.0.0.1:8080");
+        await vi.waitFor(() => {
+            expect(els.tilesEl.querySelectorAll(".ctl-row").length).toBe(1);
+        });
+        const rowA = els.tilesEl.querySelector<HTMLElement>(".ctl-row")!;
+        let scrolled = false;
+        rowA.scrollIntoView = () => { scrolled = true; };
+        // Seed a foreign entry and click View (starts lockout).
+        c.logsPanel!.append([{ seq: 6, kind: "comment", atMs: 2000, comment: "x" }]);
+        c.logsPanel!.noteForeign(1, { seq: 6, kind: "comment", atMs: 2000, comment: "x" });
+        const viewBtn = Array.from(
+            els.logsEl.querySelectorAll<HTMLElement>(".logs-banner button"),
+        ).find((b) => b.textContent === "View")!;
+        const lastLogRow = els.logsEl.querySelector<HTMLElement>(".log-row:last-child")!;
+        lastLogRow.scrollIntoView = () => {};
+        viewBtn.click();
+        // Within the lockout, selecting a log entry should outline
+        // but not scroll.
+        const logRow = els.logsEl.querySelector<HTMLElement>(".log-row.operation")!;
+        logRow.click();
+        expect(rowA.classList.contains("log-selected")).toBe(true);
+        expect(scrolled).toBe(false);
+        c.disconnect();
+    });
+
+    it("minimized tile suppresses scroll but keeps the outline", async () => {
+        const ctl = { key: "P/A", part: "P", label: "A", kind: "bool", value: "1" };
+        const logEntry = { seq: 5, kind: "operation", atMs: 1000, control: "P/A", value: "1" };
+        vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+            const u = String(url);
+            if (u.includes("/status")) return jsonResponse({ ...statusBody, latestSeq: 5 });
+            if (u.includes("/controls")) return jsonResponse([ctl]);
+            if (u.includes("/sensors")) return jsonResponse([]);
+            if (u.includes("/alarms")) return jsonResponse([]);
+            if (u.includes("/logs")) return jsonResponse([logEntry]);
+            return jsonResponse({});
+        }));
+        const { host, els } = makeHost();
+        const c = new RemoteController(host, {}, 60_000);
+        c.connect("http://127.0.0.1:8080");
+        await vi.waitFor(() => {
+            expect(els.tilesEl.querySelectorAll(".ctl-row").length).toBe(1);
+        });
+        // Minimize the tile containing the control.
+        const tile = els.tilesEl.querySelector<HTMLElement>(".tile")!;
+        tile.classList.add("minimized");
+        const rowA = els.tilesEl.querySelector<HTMLElement>(".ctl-row")!;
+        let scrolled = false;
+        rowA.scrollIntoView = () => { scrolled = true; };
+        const logRow = els.logsEl.querySelector<HTMLElement>(".log-row")!;
+        logRow.click();
+        expect(rowA.classList.contains("log-selected")).toBe(true);
+        expect(c.selectedLogControl).toBe("P/A");
+        expect(scrolled).toBe(false);
+        c.disconnect();
+    });
 });
