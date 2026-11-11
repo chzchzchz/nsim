@@ -1,0 +1,12 @@
+# damage_03: HHSI dead-head after RWST loss (large break LOCA)
+# Hot-leg break with SI: RWST drains (HHSI discharge), recirculation
+# switchover to the sump completes (RWST < 5,000 gal, ~3,300 s), the
+# orificed miniflow isolation valves close, and the HHSI pumps
+# dead-head against the sealed recirculation line.
+# Damage accumulates from switchover; measure PumpHeatDamageFrac /
+# PumpOverheatAlarm on ReactorBuilding/SafetyInjectionSystem/PumpHeatDamage.
+# Measured nsimrun -seconds 5600 -timestep 10ms: PumpHeatDamageFrac
+# 1.0 at ~5,600 s; RWSTLevel 4,973 gal; SwitchoverComplete true;
+# vessel intact at 859 F.
+# Faults injected: ReactorBuilding/Faults/HotLegBreak
+0 ReactorBuilding/Faults/HotLegBreak 1.0

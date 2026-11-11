@@ -129,6 +129,7 @@ done
 
 - `damage/damage_01_rcp_seal_overheat.txt` — damage_01: RCP seal overheat (charging lost while RCPs running)
 - `damage/damage_02_efws_turbine_deadhead.txt` — damage_02: EFWS turbine-pump deadhead (recirculation isolated)
+- `damage/damage_03_hhsi_deadhead_rwst_lost.txt` — damage_03: HHSI pump dead-head overheat after RWST depletion (large break, SI actuates, switchover)
 
 ## Files in `contamination/`
 
@@ -183,6 +184,7 @@ Disaster-only (no recover twin by design): `02` (order-matters trip),
 |---|---|---|---|
 | `damage_01_rcp_seal_overheat.txt` | RCP seal-face overheat, charging lost, all 4 RCPs running | 1,000 s | `SealHeatRatePerSec` |
 | `damage_02_efws_turbine_deadhead.txt` | EFWS turbine-pump deadhead, recirculation shut | 2,000 s | `DeadHeadHeatRatePerSec` |
+| `damage_03_hhsi_deadhead_rwst_lost.txt` | HHSI pump deadhead after RWST depletion (large break LOCA) | ~5,600 s incl. RWST drain | `DeadHeadHeatRatePerSec` |
 
 Go-test-only (no cmdfile): turbine blade erosion (700 h), SG water hammer
 (20 events), clad fatigue (500 cycles), liner fatigue (cycles),
