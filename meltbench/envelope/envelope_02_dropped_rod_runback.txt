@@ -9,4 +9,5 @@
 # no clad damage, no vessel failure. Clad stays at saturation.
 #
 # Validated via nsimrun -seconds 60: ReactorTripped=true, Damage=0.
-0 ReactorBuilding/ReactorPressureVessel/ControlRods/DroppedBank 1
+# Faults injected: ReactorBuilding/Faults/DroppedBank
+0 ReactorBuilding/Faults/DroppedBank 1

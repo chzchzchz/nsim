@@ -26,5 +26,6 @@
 # class) — the untripped lineup is what makes it corium-
 # positive. UncoveryFrac stays small (<2%) at the latch point:
 # the lumped clad anchor, not ledger fullness, drives the melt.
-0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 0.1
+# Faults injected: ReactorBuilding/Faults/HotLegBreak
+0 ReactorBuilding/Faults/HotLegBreak 0.1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

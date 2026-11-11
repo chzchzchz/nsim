@@ -286,7 +286,7 @@ func TestSGTubeRupture_SensorsRegisteredAndRead(t *testing.T) {
 
 	// Control round-trips through the bridge grammar.
 	cm := GetControlMap(&p)
-	ctrl, ok := cm["ReactorBuilding/SteamGenerator/SGTubeRupture/Open"]
+	ctrl, ok := cm["ReactorBuilding/Faults/SGTubeRupture"]
 	require.True(t, ok, "SGTubeRupture control must be registered")
 	require.NoError(t, ctrl.Set("1"))
 	assert.Contains(t, ctrl.Get(), "1")

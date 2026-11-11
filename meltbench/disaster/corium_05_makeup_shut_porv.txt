@@ -9,7 +9,8 @@
 # Note: MakePlant already defaults this valve to Open=0/Auto=false,
 # so the two makeup commands pin the lineup explicitly; the active
 # faults are PORVStuckOpen + SIBlock.
+# Faults injected: ReactorBuilding/Faults/PORVStuckOpen
 0 ReactorBuilding/ReactorMakeupControlValve/Open 0
 0 ReactorBuilding/ReactorMakeupControlValve/Auto 0
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
-0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/Faults/PORVStuckOpen 1

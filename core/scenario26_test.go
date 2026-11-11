@@ -28,7 +28,7 @@ func TestScenario26_StuckPORVVentsUntilBlockValveIsolates(t *testing.T) {
 	t.Parallel()
 	p := MakePlant()
 	cm := GetControlMap(&p)
-	require.NoError(t, cm["ReactorBuilding/Pressurizer/PORVStuckOpen"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/PORVStuckOpen"].Set("1"))
 
 	stepN(&p, int(1*time.Second/DefaultTimeStep), DefaultTimeStep)
 
@@ -55,7 +55,7 @@ func TestScenario26_StuckPORVVentsUntilBlockValveIsolates(t *testing.T) {
 	// the failed-component latch. With the failure cleared the
 	// auto-reclose returns and shuts the valve below its setpoint.
 	require.NoError(t, cm["ReactorBuilding/BlockValve/Open"].Set("0"))
-	require.NoError(t, cm["ReactorBuilding/Pressurizer/PORVStuckOpen"].Set("0"))
+	require.NoError(t, cm["ReactorBuilding/Faults/PORVStuckOpen"].Set("0"))
 	stepN(&p, int(1*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	assert.Equal(t, float64(0), p.ReactorBuilding.PORV.Open,

@@ -23,5 +23,6 @@
 # Spec: leaked primary becomes secondary inventory; ECCS refill
 # cannot retire the non-creditable share (creditSafetyInjection
 # floor, core/reactor.go).
-0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
+# Faults injected: ReactorBuilding/Faults/SGTubeRupture
+0 ReactorBuilding/Faults/SGTubeRupture 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

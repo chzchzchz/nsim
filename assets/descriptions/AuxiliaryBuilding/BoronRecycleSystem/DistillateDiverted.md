@@ -4,5 +4,5 @@ The sequence it reflects: the scintillation counter in the distillate line sees 
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:28-30
 
-Related controls: [Carryover](AuxiliaryBuilding/BoronRecycleSystem/Carryover)
+Related controls: [Carryover](AuxiliaryBuilding/Faults/EvaporatorCarryover)
 Related sensors: [DistillateRadiation](AuxiliaryBuilding/BoronRecycleSystem/DistillateRadiation), [Recirculating](AuxiliaryBuilding/BoronRecycleSystem/Recirculating)

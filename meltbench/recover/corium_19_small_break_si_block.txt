@@ -12,7 +12,8 @@
 # is what recovers. Contrast corium_14 (full break 120 gal/s
 # outruns ECCS even after trip): at 12 gal/s ECCS wins once
 # fission is off (see TestPlant_TMIClassWalker covered leg).
-0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 0.1
+# Faults injected: ReactorBuilding/Faults/HotLegBreak
+0 ReactorBuilding/Faults/HotLegBreak 0.1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
 10000 ReactorBuilding/ReactorPressureVessel/Trip 1
 10000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 0

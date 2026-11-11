@@ -7,7 +7,7 @@ Controls for governor, voltage regulator, breaker, and synchronization sit on ph
 Source: specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:133-136
 Source: specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:1-8
 
-Related controls: [RunningFraction](AuxiliaryBuilding/DieselGenerator/RunningFraction)
+Related controls: [RunningFraction](AuxiliaryBuilding/Faults/DieselARunningFraction)
 Related sensors: [ReadyToLoad](AuxiliaryBuilding/DieselGenerator/ReadyToLoad), [Energized](Electrical/ESFBusA/Energized)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:133-136

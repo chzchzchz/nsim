@@ -11,4 +11,5 @@
 # - BlockValve isolates; heaters re-establish pressure.
 #
 # Validated via nsimrun -seconds 60: PORV.Open=1, pzr holds ~2249 psia.
-0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+# Faults injected: ReactorBuilding/Faults/PORVStuckOpen
+0 ReactorBuilding/Faults/PORVStuckOpen 1

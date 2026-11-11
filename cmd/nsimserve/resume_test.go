@@ -31,7 +31,7 @@ func TestResumeStateRoundTripRestoresRun(t *testing.T) {
 	require.Len(t, snap.Log.Entries(), 2)
 	require.Len(t, snap.Queue.Entries(), 1)
 
-	restored, err := NewServer("restored", "", "", "", false, 1, time.Millisecond)
+	restored, err := NewServer("restored", "", "", "", false, 1, time.Millisecond, false)
 	require.NoError(t, err)
 	require.NoError(t, restored.restoreResumeState(snap))
 	assert.Equal(t, int64(5*time.Millisecond), restored.simTimeNs)
@@ -121,7 +121,7 @@ func TestShutdownEndpointIsIdempotentConcurrently(t *testing.T) {
 }
 
 func TestCaptureSnapshotIncludesScenarioID(t *testing.T) {
-	s, err := NewServer("nsimserve", "rcp-trip", "", "", true, 1000, time.Millisecond)
+	s, err := NewServer("nsimserve", "rcp-trip", "", "", true, 1000, time.Millisecond, false)
 	require.NoError(t, err)
 	s.mu.Lock()
 	snap := s.captureLocked()

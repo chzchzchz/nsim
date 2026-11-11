@@ -1,0 +1,15 @@
+# contamination_05: SG tube rupture + atmospheric dump valve open
+# Path A via the ADV: operator opens (or the ADV sticks open), venting
+# secondary steam to atmosphere instead of the condenser. Entrained
+# primary activity (the SGTR leak boils into the header) would normally
+# discharge through the waste-gas holdup; the ADVs dump to atmosphere.
+# In the current build the gas-inflow model routes everything through
+# the 60-day Xe-133 first-order lag (see plans/p78_1.txt), so the
+# direct release is negligible at 1,800 s and this file records the gap.
+# Measured nsimrun -seconds 1800 -timestep 10ms: PrimaryActivityFrac
+# 0.984; SteamlineRadiation 1.0 (trip); GasHoldupActivity 20.8;
+# GasReleasedBq 3.8e-3; PlantVentActivityBq 4.2e-6; LiquidReleasedBq 0.
+# Faults injected: ReactorBuilding/Faults/SGTubeRupture
+0 ReactorBuilding/Faults/SGTubeRupture 1
+0 ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

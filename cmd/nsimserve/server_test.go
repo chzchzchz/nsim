@@ -20,7 +20,7 @@ import (
 // loop; tests drive time explicitly via POST /sim/step.
 func newPausedServer(t *testing.T, site string) (*Server, *httptest.Server) {
 	t.Helper()
-	s, err := NewServer(site, "", "", "", true, 1000, time.Millisecond)
+	s, err := NewServer(site, "", "", "", true, 1000, time.Millisecond, false)
 	require.NoError(t, err)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
@@ -75,7 +75,7 @@ func TestLivezReadyzAndStatus(t *testing.T) {
 }
 
 func TestLoopAdvancesSimTime(t *testing.T) {
-	s, err := NewServer("nsimserve", "", "", "", false, 1000, time.Millisecond)
+	s, err := NewServer("nsimserve", "", "", "", false, 1000, time.Millisecond, false)
 	require.NoError(t, err)
 	stop := make(chan struct{})
 	done := make(chan struct{})
@@ -111,7 +111,7 @@ func TestMetricsGaugesAndSiteInfo(t *testing.T) {
 }
 
 func TestSaveOnShutdownWritesPlantJSON(t *testing.T) {
-	s, err := NewServer("nsimserve", "", "", "", true, 1000, time.Millisecond)
+	s, err := NewServer("nsimserve", "", "", "", true, 1000, time.Millisecond, false)
 	require.NoError(t, err)
 	path := t.TempDir() + "/plant.json"
 	require.NoError(t, saveOnShutdown(s, path))
@@ -519,7 +519,7 @@ func TestResetReloadsStartupCommands(t *testing.T) {
 	cmdFile := t.TempDir() + "/cmds.txt"
 	require.NoError(t, os.WriteFile(cmdFile,
 		[]byte("0 PlantOperation.PowerSetpointTarget 42\n"), 0o644))
-	s, err := NewServer("nsimserve", "", "", cmdFile, true, 1000, time.Millisecond)
+	s, err := NewServer("nsimserve", "", "", cmdFile, true, 1000, time.Millisecond, false)
 	require.NoError(t, err)
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
@@ -540,13 +540,13 @@ func TestResetReloadsStartupCommands(t *testing.T) {
 }
 
 func TestNewServerValidatesBounds(t *testing.T) {
-	_, err := NewServer("nsimserve", "", "", "", true, 0, time.Millisecond)
+	_, err := NewServer("nsimserve", "", "", "", true, 0, time.Millisecond, false)
 	assert.Error(t, err)
-	_, err = NewServer("nsimserve", "", "", "", true, maxStepsPerSecond+1, time.Millisecond)
+	_, err = NewServer("nsimserve", "", "", "", true, maxStepsPerSecond+1, time.Millisecond, false)
 	assert.Error(t, err)
-	_, err = NewServer("nsimserve", "", "", "", true, 1000, 0)
+	_, err = NewServer("nsimserve", "", "", "", true, 1000, 0, false)
 	assert.Error(t, err)
-	_, err = NewServer("nsimserve", "", "", "", true, 1000, maxTimestepMs*time.Millisecond+time.Millisecond)
+	_, err = NewServer("nsimserve", "", "", "", true, 1000, maxTimestepMs*time.Millisecond+time.Millisecond, false)
 	assert.Error(t, err)
 }
 
@@ -570,7 +570,7 @@ func TestPostCommandsJSONVsTextSniffEquivalence(t *testing.T) {
 }
 
 func TestScenarioProgressLatches(t *testing.T) {
-	s, err := NewServer("nsimserve", "rcp-trip", "", "", true, 1000, time.Millisecond)
+	s, err := NewServer("nsimserve", "rcp-trip", "", "", true, 1000, time.Millisecond, false)
 	require.NoError(t, err)
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
@@ -612,7 +612,7 @@ func TestCORSPreflight(t *testing.T) {
 }
 
 func TestReadOnlyRemoteGate(t *testing.T) {
-	s, err := NewServer("nsimserve", "", "", "", true, 1000, time.Millisecond, true)
+	s, err := NewServer("nsimserve", "", "", "", true, 1000, time.Millisecond, false, true)
 	require.NoError(t, err)
 
 	do := func(method, path, remoteAddr string) int {
@@ -652,4 +652,120 @@ func urlEncodeKey(key string) string {
 func jsonStr(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+// Fault injectors (*/Faults/*) are absent from the operator surface
+// and rejected on the write paths unless the server is started with
+// -allowFaultCommands; the read-only fault catalog lives on
+// GET /sim/faults.
+func TestFaultControlsHiddenAndGated(t *testing.T) {
+	faultKey := "ReactorBuilding/Faults/PORVStuckOpen"
+	faultURL := "/controls/" + urlEncodeKey(faultKey)
+
+	t.Run("list omits faults", func(t *testing.T) {
+		_, ts := newPausedServer(t, "nsimserve")
+		code, body := doOK(t, "GET", ts.URL+"/controls", "")
+		require.Equal(t, http.StatusOK, code)
+		var out []controlEntry
+		require.NoError(t, json.Unmarshal(body, &out))
+		require.NotEmpty(t, out)
+		for _, e := range out {
+			assert.NotContains(t, e.Key, "/Faults/")
+			assert.False(t, e.Fault)
+		}
+	})
+
+	t.Run("get by key does not resolve faults", func(t *testing.T) {
+		_, ts := newPausedServer(t, "nsimserve")
+		code, _ := doOK(t, "GET", ts.URL+faultURL, "")
+		assert.Equal(t, http.StatusNotFound, code)
+	})
+
+	t.Run("/sim/faults serves exactly the fault entries", func(t *testing.T) {
+		s, ts := newPausedServer(t, "nsimserve")
+		code, body := doOK(t, "GET", ts.URL+"/sim/faults", "")
+		require.Equal(t, http.StatusOK, code)
+		var out []controlEntry
+		require.NoError(t, json.Unmarshal(body, &out))
+		s.mu.RLock()
+		want := map[string]bool{}
+		for key, ctrl := range s.controls {
+			if ctrl.IsFault() {
+				want[key] = true
+			}
+		}
+		s.mu.RUnlock()
+		require.Len(t, out, len(want))
+		for _, e := range out {
+			assert.True(t, e.Fault)
+			assert.True(t, want[e.Key], "unexpected fault entry %q", e.Key)
+			require.Contains(t, e.Key, "/Faults/")
+		}
+	})
+
+	gatedWrites := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{"PUT fault key", "PUT", faultURL, `{"value":"1"}`},
+		{"PUT dot-spelled fault key", "PUT", "/controls/" + urlEncodeKey("ReactorBuilding.Faults.PORVStuckOpen"), `{"value":"1"}`},
+		{"POST single fault", "POST", "/commands", `{"commands":[{"offsetMs":0,"control":"ReactorBuilding/Faults/PORVStuckOpen","value":"1"}]}`},
+		{"POST dot-spelled fault", "POST", "/commands", `{"commands":[{"offsetMs":0,"control":"ReactorBuilding.Faults.PORVStuckOpen","value":"1"}]}`},
+		{"POST mixed batch rejects atomically", "POST", "/commands", `{"commands":[{"offsetMs":0,"control":"PlantOperation/PowerSetpointTarget","value":"80"},{"offsetMs":0,"control":"ReactorBuilding/Faults/PORVStuckOpen","value":"1"}]}`},
+		{"POST text-form fault", "POST", "/commands", "0 ReactorBuilding.Faults.PORVStuckOpen 1\n"},
+	}
+	for _, tc := range gatedWrites {
+		t.Run(tc.name, func(t *testing.T) {
+			_, ts := newPausedServer(t, "nsimserve")
+			_, beforeFault := doOK(t, "GET", ts.URL+"/sim/faults", "")
+			_, beforeOrdinary := doOK(t, "GET", ts.URL+"/controls/PlantOperation%2FPowerSetpointTarget", "")
+			ct := "application/json"
+			if tc.method == "POST" && tc.body[:2] != "{\"" {
+				ct = "text/plain"
+			}
+			req, err := http.NewRequest(tc.method, ts.URL+tc.path, strings.NewReader(tc.body))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", ct)
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			resp.Body.Close()
+			assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+			assert.Contains(t, string(body), "requires -allowFaultCommands")
+			assert.Contains(t, string(body), `"code":403`)
+			// Rejected write applied and journaled nothing.
+			_, cmdsBody := doOK(t, "GET", ts.URL+"/commands", "")
+			var view commandsView
+			require.NoError(t, json.Unmarshal(cmdsBody, &view))
+			assert.Empty(t, view.Entries)
+			_, stBody := doOK(t, "GET", ts.URL+"/status", "")
+			var st statusView
+			require.NoError(t, json.Unmarshal(stBody, &st))
+			assert.Equal(t, int64(-1), st.LatestSeq)
+			_, afterOrdinary := doOK(t, "GET", ts.URL+"/controls/PlantOperation%2FPowerSetpointTarget", "")
+			assert.Equal(t, string(beforeOrdinary), string(afterOrdinary))
+			_, afterFault := doOK(t, "GET", ts.URL+"/sim/faults", "")
+			assert.Equal(t, string(beforeFault), string(afterFault))
+		})
+	}
+
+	t.Run("-allowFaultCommands admits and journals fault commands", func(t *testing.T) {
+		s, err := NewServer("faults-on", "", "", "", true, 1000, time.Millisecond, true)
+		require.NoError(t, err)
+		ts := httptest.NewServer(s.Handler())
+		t.Cleanup(ts.Close)
+		code, _ := doOK(t, "PUT", ts.URL+faultURL, `{"value":"1"}`)
+		require.Equal(t, http.StatusOK, code)
+		code, body := doOK(t, "GET", ts.URL+"/sim/faults", "")
+		require.Equal(t, http.StatusOK, code)
+		assert.Contains(t, string(body), `"PORVStuckOpen"`)
+		assert.Contains(t, string(body), `"value": "1"`)
+		_, stBody := doOK(t, "GET", ts.URL+"/status", "")
+		var st statusView
+		require.NoError(t, json.Unmarshal(stBody, &st))
+		assert.NotEqual(t, int64(-1), st.LatestSeq)
+	})
 }

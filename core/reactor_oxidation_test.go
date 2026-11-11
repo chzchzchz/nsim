@@ -234,7 +234,7 @@ func TestPlant_TMIClassWalker(t *testing.T) {
 	// full-power heatup by p65_1 design; the coverage pin is a
 	// tripped-plant invariant.)
 	covered.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0.1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("0.1"))
 	// Witness strategy (documented in plans/p65_2.txt): the
 	// 0.1-open small break drains at 12 gal/s, so the covered
 	// leg never depressurizes on any testable horizon. The
@@ -288,7 +288,7 @@ func TestPlant_FukushimaClassWalker(t *testing.T) {
 	dt := 50 * time.Millisecond
 	p := MakePlant()
 	cm := GetControlMap(&p)
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
 	for i := 0; i < int(4*time.Hour/dt); i++ {
 		p.Step(dt)
 		p.Update()

@@ -16,6 +16,7 @@
 # 2,487/2,530/2,698 F (above ballooning, oxidation capped),
 # VesselFailed=false. High-damage but NOT corium-positive, same
 # class as corium_18; the melt tail needs ~47 h at constant rate.
-0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
-0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
+# Faults injected: ReactorBuilding/Faults/PORVStuckOpen, ReactorBuilding/Faults/SGTubeRupture
+0 ReactorBuilding/Faults/PORVStuckOpen 1
+0 ReactorBuilding/Faults/SGTubeRupture 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

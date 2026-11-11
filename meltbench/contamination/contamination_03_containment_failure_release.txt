@@ -1,12 +1,26 @@
 # contamination_03: stuck PORV + safety + SI blocked, untripped
-# Path B -> C sequence: relief overfills the PRT, activity entrains
-# into the primary (PrimaryActivityFrac 55,602 at 600 s, 175,178 at
-# 1,800 s, CoreDamageFrac 1), containment air accumulates; on
-# ContainmentFailed the retained inventory drains via Path C (charcoal
-# bypass). Validated via nsimrun -seconds 600/1800: VF=true,
-# ContainmentFailed=false within the window (CSS holds), GasReleasedBq
-# 0 — the Path C release itself requires the containment latch, which
-# the window does not reach; this is the approach control.
-0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
-0 ReactorBuilding/SafetyValve/Open 1
+# Path B: both stuck relief paths (PORV and mechanically latched
+# spring safety valve) share the block-valve line-up; steam vents to
+# the PRT, the PRT fills and its rupture disc bursts at 12,700 gal,
+# venting relief discharge to containment. The containment holds —
+# ContainmentFailed never latches in this window, CSS holds, and
+# GasReleasedBq stays 0 because Path C requires the containment latch.
+# This is the approach control, not an observed Path C release.
+# Measured nsimrun -seconds 600 and 1800, -timestep 10ms:
+# CladTempF 672 F (600 s) / 950 F (1,800 s); vessel intact;
+# CoreDamageFrac 0; PrimaryActivityFrac ~1.00002; PRT burst between
+# 600 and 1,800 s; ContainmentPressure ~17 psia; ContainmentFailed
+# false at 1,800 s; GasReleasedBq 0. (Header's earlier verdict of
+# VesselFailed=true, CoreDamageFrac=1, PrimaryActivityFrac 55k/175k
+# does not reproduce on the current build, with or without the
+# safety-valve latch; those numbers are stale.)
+# Long horizon (36,000 s, ~10 h, nsimrun -timestep 10ms): vessel fails,
+# CoreDamageFrac 1, PrimaryActivityFrac ~3.1e5, PRT stays burst — but
+# containment is pinned at ~17 psia by the CSS drag (proportional to
+# excess pressure) and hydrogen stays 0 % (oxidation gate requires an
+# uncovered core, which this lineup never produces). Path C is
+# unreachable from this lineup at any run length.
+# Faults injected: ReactorBuilding/Faults/PORVStuckOpen, ReactorBuilding/Faults/PressurizerSafetyValve
+0 ReactorBuilding/Faults/PORVStuckOpen 1
+0 ReactorBuilding/Faults/PressurizerSafetyValve 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

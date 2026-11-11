@@ -1,0 +1,15 @@
+# contamination_06: SG tube rupture + stuck SG safety valve
+# Path A via the SG safety valve: the mechanically latched SG safety
+# valve (ReactorBuilding/Faults/SGSafetyValve) vents secondary steam
+# directly to atmosphere, same bypass class as the ADV. Contaminated
+# steam leaves without charcoal delay; in the current build the
+# gas-inflow model routes everything through the 60-day Xe-133
+# first-order lag (see plans/p78_1.txt), so the release shown below
+# records the gap.
+# Measured nsimrun -seconds 1800 -timestep 10ms: PrimaryActivityFrac
+# 0.984; SteamlineRadiation 1.0 (trip); GasHoldupActivity 20.8;
+# GasReleasedBq 3.8e-3; PlantVentActivityBq 4.2e-6; LiquidReleasedBq 0.
+# Faults injected: ReactorBuilding/Faults/SGTubeRupture, ReactorBuilding/Faults/SGSafetyValve
+0 ReactorBuilding/Faults/SGTubeRupture 1
+0 ReactorBuilding/Faults/SGSafetyValve 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

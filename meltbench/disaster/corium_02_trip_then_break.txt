@@ -6,6 +6,7 @@
 # Avoided outcome: corium, i.e. clad past the zircaloy melting
 # regime until VesselFailed latches (CladTempF >= 3,410 F while
 # uncovered).
+# Faults injected: ReactorBuilding/Faults/HotLegBreak
 0 ReactorBuilding/ReactorPressureVessel/Trip 1
-5000 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 1
+5000 ReactorBuilding/Faults/HotLegBreak 1
 5000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

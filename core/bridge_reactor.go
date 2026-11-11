@@ -313,9 +313,9 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	// inserts the full "100 % main steam header break".
 	//   "insert the malfunction '100 % main steam header break'"
 	//   specs/pwr_sim/chapter_4/page_053.txt:14-16
-	m["ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open"] = &bridge.Control{
-		Part:  "ReactorBuilding/SteamGenerator/MainSteamLineBreak",
-		Label: "Open",
+	m["ReactorBuilding/Faults/MainSteamLineBreak"] = &bridge.Control{
+		Part:  "ReactorBuilding/Faults",
+		Label: "MainSteamLineBreak",
 		Kind:  "normalized",
 		Get: func() string {
 			return fmt.Sprintf("%v",
@@ -338,9 +338,9 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	// Steam generator tube rupture malfunction (gap G2). Open is the
 	// normalized rupture size; 1 inserts the double-ended-equivalent
 	// full break of the largest tube.
-	m["ReactorBuilding/SteamGenerator/SGTubeRupture/Open"] = &bridge.Control{
-		Part:  "ReactorBuilding/SteamGenerator/SGTubeRupture",
-		Label: "Open",
+	m["ReactorBuilding/Faults/SGTubeRupture"] = &bridge.Control{
+		Part:  "ReactorBuilding/Faults",
+		Label: "SGTubeRupture",
 		Kind:  "normalized",
 		Get: func() string {
 			return fmt.Sprintf("%v",
@@ -365,9 +365,9 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	// inserts the full "RC hot leg #1 LOCA break".
 	//   "select the malfunction 'RC hot leg #1 LOCA break'"
 	//   specs/pwr_sim/chapter_4/page_053.txt:55-56
-	m["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"] = &bridge.Control{
-		Part:  "ReactorBuilding/ReactorPressureVessel/HotLegBreak",
-		Label: "Open",
+	m["ReactorBuilding/Faults/HotLegBreak"] = &bridge.Control{
+		Part:  "ReactorBuilding/Faults",
+		Label: "HotLegBreak",
 		Kind:  "normalized",
 		Get: func() string {
 			return fmt.Sprintf("%v",
@@ -388,31 +388,31 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	}
 
 	// Steam generator safety valve (chapter 15).
-	// Self-actuating ASME-Code spring-loaded safety valve;
-	// the bridge exposes it as a control for completeness
-	// (the Step function will also auto-trip it on
-	// overpressure).
+	// Stuck-open SG safety-valve malfunction latch.
+	// Self-actuating ASME-Code spring-loaded valve: the Step
+	// pops it at the setpoint and reseats at 0.97x. A bridge
+	// Set latches it mechanically open (ignores pressure);
+	// Set back to 0 clears the latch (simulated repair).
+	// Not an operator action. No spec citation for the
+	// stuck-open exercise in the cached text; simulator
+	// construct.
 	// "Safety valves in each steam generator outlet main
 	// steam line."
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:42-45
-	m["ReactorBuilding/SteamGenerator/SafetyValve/Open"] = &bridge.Control{
-		Part:  "ReactorBuilding/SteamGenerator/SafetyValve",
-		Label: "Open",
-		Kind:  "normalized",
+	m["ReactorBuilding/Faults/SGSafetyValve"] = &bridge.Control{
+		Part:  "ReactorBuilding/Faults",
+		Label: "SGSafetyValve",
+		Kind:  "bool",
 		Get: func() string {
-			return fmt.Sprintf("%v",
-				p.ReactorBuilding.SteamGenerator.SafetyValve.Open)
+			return bridge.BoolToStr(
+				p.ReactorBuilding.SteamGenerator.SafetyValveStuckOpen)
 		},
 		Set: func(s string) error {
-			validated, err := bridge.ConvertControlValue("normalized", s)
+			v, err := bridge.StrToBool(s)
 			if err != nil {
 				return err
 			}
-			v, err := strconv.ParseFloat(validated, 64)
-			if err != nil {
-				return err
-			}
-			p.ReactorBuilding.SteamGenerator.SafetyValve.Open = v
+			p.ReactorBuilding.SteamGenerator.SafetyValveStuckOpen = v
 			return nil
 		},
 	}
@@ -611,8 +611,8 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	// auto-reclose and operator close writes; only the block valve
 	// terminates the inventory loss.
 	// specs/pwr_sim/chapter_4/page_049.txt:26-31
-	m["ReactorBuilding/Pressurizer/PORVStuckOpen"] = &bridge.Control{
-		Part:  "ReactorBuilding/Pressurizer",
+	m["ReactorBuilding/Faults/PORVStuckOpen"] = &bridge.Control{
+		Part:  "ReactorBuilding/Faults",
 		Label: "PORVStuckOpen",
 		Kind:  "bool",
 		Get: func() string {
@@ -647,33 +647,31 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-	// Pressurizer ASME-code safety valves (chapter 3):
+	// Stuck-open pressurizer safety-valve malfunction latch.
+	// Spring-loaded ASME-code safety valve: the Step trips it
+	// when pressure exceeds PressurizerSafetySetpoint. A bridge
+	// Set latches it mechanically open (ignores pressure); Set
+	// back to 0 clears the latch (simulated repair). Not an
+	// operator action. No spec citation for the stuck-open
+	// exercise in the cached text; simulator construct.
 	// "If system pressure continues to rise, self-actuating
 	// ASME-code safety valves will open. Steam from the
 	// safety and/or relief valves is piped to the pressurizer
 	// relief tank."
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:30-34
-	// These are spring-loaded and self-actuating; the bridge
-	// exposes the aggregate state for visibility. The Step
-	// function auto-trips the safety valve when pressure exceeds
-	// PressurizerSafetySetpoint.
-	m["ReactorBuilding/SafetyValve/Open"] = &bridge.Control{
-		Part:  "ReactorBuilding/SafetyValve",
-		Label: "Open",
-		Kind:  "normalized",
+	m["ReactorBuilding/Faults/PressurizerSafetyValve"] = &bridge.Control{
+		Part:  "ReactorBuilding/Faults",
+		Label: "PressurizerSafetyValve",
+		Kind:  "bool",
 		Get: func() string {
-			return fmt.Sprintf("%v", p.ReactorBuilding.SafetyValve.Open)
+			return bridge.BoolToStr(p.ReactorBuilding.Pressurizer.SafetyValveStuckOpen)
 		},
 		Set: func(s string) error {
-			validated, err := bridge.ConvertControlValue("normalized", s)
+			v, err := bridge.StrToBool(s)
 			if err != nil {
 				return err
 			}
-			v, err := strconv.ParseFloat(validated, 64)
-			if err != nil {
-				return err
-			}
-			p.ReactorBuilding.SafetyValve.Open = v
+			p.ReactorBuilding.Pressurizer.SafetyValveStuckOpen = v
 			return nil
 		},
 	}
@@ -976,8 +974,8 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 	// signal raises the automatic load runback.
 	// specs/pwr_sim/chapter_4/page_049.txt:61-67
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:26-29
-	m["ReactorBuilding/ReactorPressureVessel/ControlRods/DroppedBank"] = &bridge.Control{
-		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+	m["ReactorBuilding/Faults/DroppedBank"] = &bridge.Control{
+		Part:  "ReactorBuilding/Faults",
 		Label: "DroppedBank",
 		Kind:  "bool",
 		Get: func() string {
@@ -994,8 +992,12 @@ func addReactorBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-	m["ReactorBuilding/ReactorPressureVessel/ControlRods/Ejected"] = &bridge.Control{
-		Part:  "ReactorBuilding/ReactorPressureVessel/ControlRods",
+	// Rod ejection malfunction insert: a standard
+	// design-basis reactivity-injection accident. No spec
+	// citation exists for a rod-ejection malfunction in the
+	// cached Westinghouse document; simulator construct.
+	m["ReactorBuilding/Faults/Ejected"] = &bridge.Control{
+		Part:  "ReactorBuilding/Faults",
 		Label: "Ejected",
 		Kind:  "bool",
 		Get: func() string {
@@ -2407,9 +2409,10 @@ func addReactorBuildingSensors(p *Plant, m bridge.SensorMap) {
 	// instrumentation only: no specs/ citation names (or
 	// implies) a core-damage indicator as a plant instrument.
 	// The tech manual treats core damage as PRA/analysis output
-	// (chapter_12/0325/0327), while the specs' real
-	// accident instrumentation is core-exit thermocouples and
-	// excore detectors (chapter_7/page_119). The cumulative
+	// (chapter_3/page_0325.txt:18-33, chapter_3/page_0327.txt:4-12), while the specs' real
+	// accident instrumentation is excore detectors
+	// (chapter_7/page_119.txt:64-80) and fuel-assembly outlet
+	// thermocouples (chapter_7/page_124.txt:8-12). The cumulative
 	// BreakDischarged ledgers are likewise model-internal
 	// bookkeeping: the spec records only per-step break flow
 	// (pwr_sim/chapter_4/page_053.txt:64-65), never a total.

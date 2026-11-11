@@ -486,21 +486,24 @@ func jsMeta(
 	controls bridge.ControlMap,
 	sensors bridge.SensorMap,
 ) js.Value {
-	meta := func(part, label, kind string, enumVals []string) js.Value {
+	meta := func(part, label, kind string, enumVals []string, fault bool) js.Value {
 		obj := js.Global().Get("Object").New()
 		obj.Set("part", part)
 		obj.Set("label", label)
 		obj.Set("kind", kind)
+		if fault {
+			obj.Set("fault", true)
+		}
 		if len(enumVals) > 0 {
 			obj.Set("enum", jsStringSlice(enumVals))
 		}
 		return obj
 	}
 	if c, ok := controls[id]; ok {
-		return meta(c.Part, c.Label, c.Kind, c.Enum)
+		return meta(c.Part, c.Label, c.Kind, c.Enum, c.IsFault())
 	}
 	if s, ok := sensors[id]; ok {
-		return meta(s.Part, s.Label, s.Kind, nil)
+		return meta(s.Part, s.Label, s.Kind, nil, false)
 	}
 	return js.Global().Get("Error").New(fmt.Sprintf("unknown id %q", id))
 }

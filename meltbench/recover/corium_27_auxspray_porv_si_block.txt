@@ -6,8 +6,9 @@
 # (UncoveryFrac 0.0000), clad 1,001/1,065/1,107 F, Oxidation 0,
 # VesselFailed=false. Without the trip the run latches at 300 s
 # like corium_27.
+# Faults injected: ReactorBuilding/Faults/PORVStuckOpen
 0 AuxiliaryBuilding/ChemicalVolumeControlSystem/AuxSprayValve/Open 1
-0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/Faults/PORVStuckOpen 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
 10000 AuxiliaryBuilding/ChemicalVolumeControlSystem/AuxSprayValve/Open 0
 10000 ReactorBuilding/BlockValve/Open 0

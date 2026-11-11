@@ -35,6 +35,7 @@ import {
 import { RemoteError } from "./remote";
 import { renderServerPicker } from "./serverPicker";
 import { RemoteController } from "./remoteController";
+import { initFaultToggle } from "./faults";
 
 const COPY_FEEDBACK_MS = 1500;
 // Stepping runs on a wall-clock accumulator so the achieved rate
@@ -154,6 +155,15 @@ async function main(): Promise<void> {
         }
     };
     rebuildTiles();
+    // Shared header toggle: shows/hides the fault injectors in
+    // whichever console is live; state persists across reloads.
+    initFaultToggle(() => {
+        if (remote.connected) {
+            void remote.rebuildControlTiles();
+        } else {
+            rebuildTiles();
+        }
+    });
     tilesEl.addEventListener("panel-layout-changed", () =>
         persistTileLayout(tilesEl),
     );

@@ -92,7 +92,7 @@ func TestEnvelope02_RodEjectionTripsReactor(t *testing.T) {
 // specs/pwr_sim/chapter_4/page_049.txt:30-31
 func TestEnvelope01_CV22RoutingToLetdownCondenser(t *testing.T) {
 	p := MakePlant()
-	require.NoError(t, p.GetControlMap()["ReactorBuilding/Pressurizer/PORVStuckOpen"].Set("1"))
+	require.NoError(t, p.GetControlMap()["ReactorBuilding/Faults/PORVStuckOpen"].Set("1"))
 	require.NoError(t, p.GetControlMap()["ReactorBuilding/ReliefRoutingToLetdownCondenser"].Set("1"))
 	prtBefore := p.ReactorBuilding.PressurizedReliefTank.Level.Float()
 	for i := 0; i < 600; i++ {

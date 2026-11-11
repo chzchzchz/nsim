@@ -2,4 +2,5 @@
 # chapter_7/page_137: ejection is the fast local power excursion; the
 # simulator's ControlRods.Ejected (bdf8cc6) models it as stuck positive
 # insertion. The RPS rate trip catches it.
-0 ReactorBuilding/ReactorPressureVessel/ControlRods/Ejected 1
+# Faults injected: ReactorBuilding/Faults/Ejected
+0 ReactorBuilding/Faults/Ejected 1

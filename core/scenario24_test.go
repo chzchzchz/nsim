@@ -187,7 +187,7 @@ func TestPlant_StepbackFailureStillScramsViaSDS(t *testing.T) {
 	t.Parallel()
 	testDt := 10 * time.Millisecond
 	p := newScenario24Plant(t)
-	setControl(t, p, "PlantOperation/StepbackFailed", "1")
+	setControl(t, p, "PlantOperation/Faults/StepbackFailed", "1")
 
 	pumps := p.ReactorBuilding.ReactorCoolantPumps.All()
 	pumps[0].Running = false
@@ -217,7 +217,7 @@ func TestPlant_UnprotectedLossOfFlowChallengesMargin(t *testing.T) {
 	t.Parallel()
 	testDt := 10 * time.Millisecond
 	p := newScenario24Plant(t)
-	setControl(t, p, "PlantOperation/StepbackFailed", "1")
+	setControl(t, p, "PlantOperation/Faults/StepbackFailed", "1")
 	setControl(t, p,
 		"ReactorBuilding/ReactorProtectionSystem/ChannelTest", "Flow")
 

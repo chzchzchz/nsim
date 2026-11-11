@@ -686,9 +686,9 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 	// become contaminated, a scintillation counter is located in the
 	// line leading into the tank."
 	// specs/the_westinghouse_pressurized_water_react/chapter_4/page_088.txt:25-28
-	m["AuxiliaryBuilding/BoronRecycleSystem/Carryover"] = &bridge.Control{
-		Part:  "AuxiliaryBuilding/BoronRecycleSystem",
-		Label: "Carryover",
+	m["AuxiliaryBuilding/Faults/EvaporatorCarryover"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/Faults",
+		Label: "EvaporatorCarryover",
 		Kind:  "bool",
 		Get: func() string {
 			return bridge.BoolToStr(
@@ -900,17 +900,17 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 		},
 	}
 
-	// Diesel generator load fraction (chapter 11):
-	// "Loads are automatically sequenced on the diesel generator
-	// buses over a short period of time to preclude the possibility
-	// of overload trip due to simultaneous starting loads."
+	// Diesel generator load fraction: simulator construct with
+	// no plant control. No spec passage authorizes an externally
+	// settable derating lever; the passage cited below governs
+	// breaker step order against simultaneous starting loads, not
+	// fractional output, and is not a justification for this
+	// control. The reactor step multiplies fuel burn and generator
+	// real power by this fraction (core/diesel.go).
 	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:137-140
-	// The plant state machine multiplies fuel burn and generator
-	// real power by this fraction
-	// (core/diesel.go:114,173).
-	m["AuxiliaryBuilding/DieselGenerator/RunningFraction"] = &bridge.Control{
-		Part:  "AuxiliaryBuilding/DieselGenerator",
-		Label: "RunningFraction",
+	m["AuxiliaryBuilding/Faults/DieselARunningFraction"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/Faults",
+		Label: "DieselARunningFraction",
 		Kind:  "normalized",
 		Get: func() string {
 			return fmt.Sprintf("%v",
@@ -958,8 +958,8 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 
 	// Train-B diesel controls mirror the train-A entries above:
 	// each train's diesel is an independent unit with its own
-	// start, load-fraction, and breaker controls on physically
-	// separated portions of the main control board
+	// start and breaker controls on physically separated portions
+	// of the main control board
 	// "controls for the governor, voltage regulator, generator
 	// breaker, and synchronization for each diesel generator are
 	// located on physically separated portions of the main control
@@ -998,9 +998,15 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 			return nil
 		},
 	}
-	m["AuxiliaryBuilding/DieselGeneratorB/RunningFraction"] = &bridge.Control{
-		Part:  "AuxiliaryBuilding/DieselGeneratorB",
-		Label: "RunningFraction",
+	// Train-B diesel load fraction: simulator construct with no
+	// plant control, same standing as train A. Neither the
+	// control-board placement passage cited above nor the
+	// load-sequencing passage authorizes an externally settable
+	// derating lever.
+	// specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:2-4
+	m["AuxiliaryBuilding/Faults/DieselBRunningFraction"] = &bridge.Control{
+		Part:  "AuxiliaryBuilding/Faults",
+		Label: "DieselBRunningFraction",
 		Kind:  "normalized",
 		Get: func() string {
 			return fmt.Sprintf("%v",
@@ -1150,6 +1156,12 @@ func addAuxiliaryBuildingControls(p *Plant, m bridge.ControlMap) {
 	// connected to the main steam line from a steam generator.
 	// This line is fitted with a steam admission valve..."
 	// specs/the_westinghouse_pressurized_water_react/chapter_5/page_099.txt:42-47
+	// The valve is pneumatically fail-open and the plant step
+	// re-latches it open whenever an SG header holds pressure
+	// (core/plant.go): a console close is ineffective by
+	// construction while turbine feed is available. The Set
+	// path exists for initial alignment and model completeness,
+	// not as an operator override; SG pressure always wins.
 	// Recirculation echoes the feedwater interlock: "The pump
 	// starting circuits are interlocked to prevent starting unless
 	// the recirculation control valves are open."

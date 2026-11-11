@@ -140,10 +140,10 @@ func TestBridge_ReliefAndIsolationValveControls(t *testing.T) {
 	m := GetControlMap(&p)
 	for _, id := range []string{
 		"ReactorBuilding/PORV/Open",
-		"ReactorBuilding/SafetyValve/Open",
+		"ReactorBuilding/Faults/PressurizerSafetyValve",
 		"ReactorBuilding/BlockValve/Open",
 		"ReactorBuilding/SteamGenerator/MainSteamIsolationValve/Open",
-		"ReactorBuilding/SteamGenerator/SafetyValve/Open",
+		"ReactorBuilding/Faults/SGSafetyValve",
 		"ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open",
 		"AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve1/Open",
 		"AuxiliaryBuilding/ResidualHeatRemovalSystem/TrainA/SuctionValve2/Open",

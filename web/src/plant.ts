@@ -14,6 +14,10 @@ export interface BridgeMeta {
     // callback receives (matches the iota order in the Go
     // backend).
     enum?: string[];
+    // fault is set only for fault injectors (<System>/Faults/*):
+    // simulator malfunction latches, hidden by both consoles unless
+    // the shared "Faults" header toggle is on.
+    fault?: boolean;
 }
 
 export interface PlantHandle {

@@ -52,6 +52,7 @@ mkdir /srv/www && tar xzf web.tgz -C /srv/www
 * **Control & sensor tiles** — every entry from `bridge.GetControlMap` / `GetSensorMap`, grouped by building; drag headings to reorder, `−`/`+` to collapse; order persists in `localStorage`.
 * **Command console** — `TimeOffsetMs Part.Label Value` lines; export the journal as JSON for headless replay with `nsimrun -cmd`.
 * **Scenario banner** — active evolution, objective, unmet bounds; latches green when complete.
+* **Faults toggle** — hidden by default; reveals the fault injectors (`<System>/Faults/*`, simulator malfunction latches, not operator actions). One header checkbox drives both the local WASM console and the remote console; the choice persists in `localStorage`. Not a security boundary — remote fault writes still require `-allowFaultCommands` on the server.
 
 ## Scenarios
 
@@ -66,6 +67,8 @@ While connected, a 1 s poll loop refreshes the header clock, sensor/control tile
 Remote mode starts **read-only**: control widgets, Start/Step/Reset, console submit, alarm acknowledge, and the log composer are disabled. The **🔒 Read-only** toggle switches to **✏️ Writable** — a UI gate only; the server accepts writes from any client. In writable mode, every individual control change asks for a comment in a confirm dialog before a `PUT /controls/{key}` is sent; cancelling submits nothing and reverts the widget. Lifecycle buttons (pause/resume/step/reset, Steps/s) and alarm acknowledge act directly. The Logs panel has a comment-only box (**Add comment to log…**) that posts `POST /logs {"comment":...}` at the current sim time — useful to annotate the run without touching the plant.
 
 Remote-only UI (Server button state, writable toggle, Logs panel, connected banner) renders only while connected; disconnecting restores local mode exactly.
+
+The fault injectors do not appear in `GET /controls`; the remote console fetches `GET /sim/faults` only while the **Faults** header toggle is on and renders them as ordinary control widgets. The server still rejects fault writes with 403 unless it was started with `-allowFaultCommands`.
 
 See `plans/web_remote_plan.md` for the full design and `cmd/nsimserve/README.md` for the server API.
 

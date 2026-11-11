@@ -112,7 +112,7 @@ func TestScenario35_CarryoverTripsAutoDivertAndReleaseResumesDelivery(t *testing
 	require.False(t, brs.DistillateDiverted)
 
 	setControl(t, &p,
-		"AuxiliaryBuilding/BoronRecycleSystem/Carryover", "1")
+		"AuxiliaryBuilding/Faults/EvaporatorCarryover", "1")
 	latchSec := 0
 	for ; latchSec < 180 && !brs.DistillateDiverted; latchSec++ {
 		stepFor(&p, time.Second, testDt)
@@ -131,7 +131,7 @@ func TestScenario35_CarryoverTripsAutoDivertAndReleaseResumesDelivery(t *testing
 		"returned distillate must pool inside the train for reprocessing")
 
 	setControl(t, &p,
-		"AuxiliaryBuilding/BoronRecycleSystem/Carryover", "0")
+		"AuxiliaryBuilding/Faults/EvaporatorCarryover", "0")
 
 	releaseSec := 0
 	for ; releaseSec < 180 && brs.DistillateDiverted; releaseSec++ {

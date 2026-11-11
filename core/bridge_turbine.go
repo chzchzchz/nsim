@@ -217,8 +217,8 @@ func addTurbineBuildingControls(p *Plant, m bridge.ControlMap) {
 	// emergency-trip path.
 	// "Thrust bearing trip"
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_206.txt:34
-	m["TurbineBuilding/Turbine/ThrustBearingWorn"] = &bridge.Control{
-		Part:  "TurbineBuilding/Turbine",
+	m["TurbineBuilding/Faults/ThrustBearingWorn"] = &bridge.Control{
+		Part:  "TurbineBuilding/Faults",
 		Label: "ThrustBearingWorn",
 		Kind:  "bool",
 		Get: func() string {

@@ -2,7 +2,7 @@ Routes pressurizer relief and safety discharge to the letdown condenser instead 
 
 Set it to reproduce the diverted-relief transient, clear it to restore the design routing. While latched the PRT stays cold and the [LetdownCondenserLevel](ReactorBuilding/LetdownCondenserLevel) climbs, which is also the fastest way to confirm the routing changed. The discharge is the same mass either way; only the sink changes. The PRT (pressurizer relief tank) normally condenses and collects this discharge, so the diverted path overloads the small letdown condenser instead.
 
-Related controls: [PORVStuckOpen](ReactorBuilding/Pressurizer/PORVStuckOpen)
+Related controls: [PORVStuckOpen](ReactorBuilding/Faults/PORVStuckOpen)
 Related sensors: [LetdownCondenserLevel](ReactorBuilding/LetdownCondenserLevel)
 
 Source: specs/pwr_sim/chapter_4/page_049.txt:30-31

@@ -75,7 +75,7 @@ func TestSteamLineBreak_ProtectionResponse(t *testing.T) {
 	// Insert the malfunction through the control map so the
 	// registration grammar is exercised with the dynamics.
 	sm := p.GetControlMap()
-	key := "ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open"
+	key := "ReactorBuilding/Faults/MainSteamLineBreak"
 	ctrl, ok := sm[key]
 	require.True(t, ok, "break control must be registered")
 	require.NoError(t, ctrl.Set("1"))
@@ -143,7 +143,7 @@ func TestSteamLineBreak_LowSteamlinePressureAnnunciates(t *testing.T) {
 	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 
 	sm := p.GetControlMap()
-	key := "ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open"
+	key := "ReactorBuilding/Faults/MainSteamLineBreak"
 	ctrl, ok := sm[key]
 	require.True(t, ok, "break control must be registered")
 	require.NoError(t, ctrl.Set("1"))
@@ -248,7 +248,7 @@ func TestPlant_MSLBDoesNotDebitPrimaryLedger(t *testing.T) {
 
 	merelyOpened := p.ReactorBuilding.SteamGenerator.MainSteamLineBreak.Open
 	require.Zero(t, merelyOpened, "precondition: intact header")
-	ctrl, ok := p.GetControlMap()["ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open"]
+	ctrl, ok := p.GetControlMap()["ReactorBuilding/Faults/MainSteamLineBreak"]
 	require.True(t, ok, "break control must be registered")
 	require.NoError(t, ctrl.Set("1"))
 
@@ -283,7 +283,7 @@ func TestPlant_MSLBContainmentChargedOnce(t *testing.T) {
 	synchronizeAndCloseBreaker(&p)
 	stepN(&p, int(2*time.Second/DefaultTimeStep), DefaultTimeStep)
 
-	ctrl, ok := p.GetControlMap()["ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open"]
+	ctrl, ok := p.GetControlMap()["ReactorBuilding/Faults/MainSteamLineBreak"]
 	require.True(t, ok, "break control must be registered")
 	require.NoError(t, ctrl.Set("1"))
 
@@ -336,7 +336,7 @@ func TestPlant_MSLBOvercoolIsHeatNotInventory(t *testing.T) {
 	testDt := 10 * time.Millisecond
 	stepN(&p, int(2*time.Second/testDt), testDt)
 
-	ctrl, ok := p.GetControlMap()["ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open"]
+	ctrl, ok := p.GetControlMap()["ReactorBuilding/Faults/MainSteamLineBreak"]
 	require.True(t, ok, "break control must be registered")
 	require.NoError(t, ctrl.Set("1"))
 
@@ -388,7 +388,7 @@ func TestPlant_BreakClassesShareOneCappedLedger(t *testing.T) {
 	paired.ReactorBuilding.ReactorPressureVessel.HotLegBreak.Open = 1
 	paired.ReactorBuilding.ReactorPressureVessel.BreakDischarged =
 		Volume{Val: RCSDrainableInventoryGal - 0.5, Unit: u.Gallon}
-	require.NoError(t, paired.GetControlMap()["ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open"].Set("1"))
+	require.NoError(t, paired.GetControlMap()["ReactorBuilding/Faults/MainSteamLineBreak"].Set("1"))
 	paired.SteamOfftakeFraction = 1
 	for i := 0; i < 40; i++ {
 		paired.Step(dt)
@@ -469,7 +469,7 @@ func TestPlant_SteamLineBreakOvercoolsPastProgramEnvelope(t *testing.T) {
 	testDt := 10 * time.Millisecond
 	stepN(&p, int(2*time.Second/testDt), testDt)
 
-	ctrl, ok := p.GetControlMap()["ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open"]
+	ctrl, ok := p.GetControlMap()["ReactorBuilding/Faults/MainSteamLineBreak"]
 	require.True(t, ok, "break control must be registered")
 	require.NoError(t, ctrl.Set("1"))
 

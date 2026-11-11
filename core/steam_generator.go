@@ -46,6 +46,17 @@ type SteamGenerator struct {
 	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:42-45
 	SafetyValve Valve
 
+	// SafetyValveStuckOpen models the spring-loaded ASME-Code
+	// safety valve stuck mechanically open: while latched the
+	// valve holds the Open state regardless of SG pressure. No
+	// stuck-open safety-valve exercise exists in the cached
+	// pwr_sim text; this is a simulator construct, symmetric with
+	// the pressurizer PORV/SafetyValve latches. The spec
+	// establishes the valve exists and self-actuates on
+	// overpressure.
+	// specs/the_westinghouse_pressurized_water_react/chapter_15/page_207.txt:42-45
+	SafetyValveStuckOpen bool
+
 	// AtmosphericDumpValve is the power-operated atmospheric
 	// dump valve (also called the "steam dump to
 	// atmosphere") on the SG outlet steam line, upstream
@@ -605,7 +616,7 @@ func (s *SteamGenerator) Step(dt time.Duration, steamOutflowFraction float64,
 	//   "self-actuating ASME-code [safety valves] which open
 	//    automatically to reduce steam pressure"
 	//   specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:34-38
-	if ret.Pressure >= SteamGeneratorSafetyValveSetpointPsia {
+	if ret.SafetyValveStuckOpen || ret.Pressure >= SteamGeneratorSafetyValveSetpointPsia {
 		ret.SafetyValve.Open = 1
 	} else if ret.Pressure <
 		SteamGeneratorSafetyValveSetpointPsia*SteamGeneratorSafetyValveRecloseFraction {

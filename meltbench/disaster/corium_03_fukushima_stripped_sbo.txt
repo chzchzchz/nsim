@@ -10,6 +10,7 @@
 # no cmdfile line can re-strip after every tick, so the run is
 # validated with a plant JSON whose SIS state is already stripped,
 # plus these controls.
-0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 1
+# Faults injected: ReactorBuilding/Faults/HotLegBreak
+0 ReactorBuilding/Faults/HotLegBreak 1
 0 ReactorBuilding/SafetyInjectionSystem/HHSIPumpRunning 0
 0 ReactorBuilding/SafetyInjectionSystem/AccumulatorIsolation/Shut 1

@@ -6,6 +6,7 @@
 // confirmChange.ts) so every change carries a comment.
 
 import { isAlarmControl, makeHelpButton, type PartBinding, type PartDisplay } from "./bindings";
+import { isFaultEntry, showFaultInjectors } from "./faults";
 import { helpFor } from "./descriptions";
 import { rangeFor, unitFor } from "./units";
 import { formatSensorValue } from "./units";
@@ -34,7 +35,7 @@ export function buildRemoteBindings(
     for (const c of controls) {
         bucketFor(c.part).controls.push({
             id: c.key,
-            meta: { part: c.part, label: c.label, kind: c.kind, enum: c.enum },
+            meta: { part: c.part, label: c.label, kind: c.kind, enum: c.enum, fault: c.fault },
         });
     }
     for (const s of sensors) {
@@ -55,10 +56,13 @@ export function renderRemotePanel(
     writeControl: ControlWriter,
 ): void {
     host.innerHTML = "";
+    const showFaults = showFaultInjectors();
     const controlParts = bindings
         .map((b) => ({
             part: b.part,
-            controls: b.controls.filter((e) => !isAlarmControl(e.id)),
+            controls: b.controls.filter(
+                (e) => !isAlarmControl(e.id) && (showFaults || !isFaultEntry(e)),
+            ),
             sensors: b.sensors,
         }))
         .filter((b) => b.controls.length > 0);

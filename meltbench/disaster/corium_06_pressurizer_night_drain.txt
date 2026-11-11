@@ -8,8 +8,9 @@
 # uncovered).
 # Spray drives pressure toward the saturation floor; PORV bleeds the
 # remaining bubble. Cascade: RCS depressurizes toward saturation.
+# Faults injected: ReactorBuilding/Faults/PORVStuckOpen
 0 ReactorBuilding/Pressurizer/HeatersOn 0
 0 ReactorBuilding/Pressurizer/HeaterAutoControl 0
 0 ReactorBuilding/Pressurizer/SprayOpen 1
-0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/Faults/PORVStuckOpen 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

@@ -88,7 +88,7 @@ func TestScenario27_DroppedBankRaisesLoadRunback(t *testing.T) {
 	t.Parallel()
 	p := MakePlant()
 	cm := GetControlMap(&p)
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/ControlRods/DroppedBank"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/DroppedBank"].Set("1"))
 
 	stepN(&p, 100, DefaultTimeStep)
 

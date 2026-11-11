@@ -6,7 +6,5 @@ Upstream of the stop valves sit the ASME safety valves and atmospheric dump valv
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10
 
-Related controls: [AtmosphericDumpValve](ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open), [SafetyValve](ReactorBuilding/SteamGenerator/SafetyValve/Open), [StopValve](TurbineBuilding/Turbine/StopValve)
+Related controls: [AtmosphericDumpValve](ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open), [SafetyValve](ReactorBuilding/Faults/SGSafetyValve), [StopValve](TurbineBuilding/Turbine/StopValve)
 Related sensors: [AtmosphericDumpValve](ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open), [SafetyValve](ReactorBuilding/SteamGenerator/SafetyValve/Open)
-
-Source: $W/chapter_15/page_215.txt:8-10

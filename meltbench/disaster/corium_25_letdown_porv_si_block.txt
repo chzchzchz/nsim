@@ -14,7 +14,8 @@
 # UncoveryFrac 0.0036/0.0050), clad 8,889 F at 300 s, Oxidation at
 # the 0.17 cap, VesselFailed=true. Anchor-driven, not ledger
 # fullness (contrast corium_17).
+# Faults injected: ReactorBuilding/Faults/PORVStuckOpen
 0 AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen 1
 0 AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning 0
-0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/Faults/PORVStuckOpen 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

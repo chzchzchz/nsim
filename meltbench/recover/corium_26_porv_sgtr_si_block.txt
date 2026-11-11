@@ -9,8 +9,9 @@
 # clad 2,314/2,487/2,698 F, Oxidation at the 0.17 cap,
 # VesselFailed=false. Not a full close: the leak is non-creditable
 # and pressure stays above the termination curve in the window.
-0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
-0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
+# Faults injected: ReactorBuilding/Faults/PORVStuckOpen, ReactorBuilding/Faults/SGTubeRupture
+0 ReactorBuilding/Faults/PORVStuckOpen 1
+0 ReactorBuilding/Faults/SGTubeRupture 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
 10000 ReactorBuilding/BlockValve/Open 0
 10000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 0

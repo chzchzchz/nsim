@@ -7,8 +7,9 @@
 # pins at 20, UncoveryFrac 0.0018/0.0086/0.0172), clad 1,001/1,065/
 # 1,107 F, Oxidation 0, VesselFailed=false. Without the trip the
 # run latches like corium_24; the trip is the decisive step.
-0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
-0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 0.1
+# Faults injected: ReactorBuilding/Faults/PORVStuckOpen, ReactorBuilding/Faults/HotLegBreak
+0 ReactorBuilding/Faults/PORVStuckOpen 1
+0 ReactorBuilding/Faults/HotLegBreak 0.1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
 10000 ReactorBuilding/BlockValve/Open 0
 10000 ReactorBuilding/ReactorPressureVessel/Trip 1

@@ -42,6 +42,7 @@ func (s *Server) buildRoutes() []route {
 		{http.MethodGet, "/readyz", s.handleReadyz},
 		{http.MethodGet, "/status", s.handleStatus},
 		{http.MethodGet, "/sim/scenarios", s.handleScenarios},
+		{http.MethodGet, "/sim/faults", s.handleFaults},
 		{http.MethodGet, "/sensors", s.handleSensors},
 		{http.MethodGet, "/sensors/{key...}", s.handleSensor},
 		{http.MethodGet, "/controls", s.handleControls},
@@ -382,9 +383,35 @@ func (s *Server) handleControls(w http.ResponseWriter, _ *http.Request) {
 	out := make([]controlEntry, 0, len(s.controls))
 	for _, key := range sortedKeys(s.controls) {
 		ctrl := s.controls[key]
+		// The operator catalog never carries fault injectors; they
+		// are served by GET /sim/faults instead.
+		if ctrl.IsFault() {
+			continue
+		}
 		out = append(out, controlEntry{
 			Key: key, Part: ctrl.Part, Label: ctrl.Label, Kind: ctrl.Kind,
 			Enum: ctrl.Enum, Value: controlValue(ctrl),
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleFaults serves exactly the fault-injection controls: the
+// deliberate malfunction latches an operator may not issue. They are
+// separated from /controls so the operator surface stays fault-free;
+// reading the fault menu is not a privileged operation.
+func (s *Server) handleFaults(w http.ResponseWriter, _ *http.Request) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]controlEntry, 0, 16)
+	for _, key := range sortedKeys(s.controls) {
+		ctrl := s.controls[key]
+		if !ctrl.IsFault() {
+			continue
+		}
+		out = append(out, controlEntry{
+			Key: key, Part: ctrl.Part, Label: ctrl.Label, Kind: ctrl.Kind,
+			Enum: ctrl.Enum, Value: controlValue(ctrl), Fault: true,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -401,6 +428,12 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 	resolved := cmdfile.ResolveKey(s.controls, key)
 	ctrl, ok := s.controls[resolved]
 	if !ok {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("unknown control %q", key))
+		return
+	}
+	// Fault injectors are not part of the operator surface; a direct
+	// lookup must not leak them either.
+	if ctrl.IsFault() {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("unknown control %q", key))
 		return
 	}
@@ -427,6 +460,16 @@ func (s *Server) handlePutControl(w http.ResponseWriter, r *http.Request) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.allowFaultCommands {
+		// Resolve before Apply so a dot-spelled fault key is gated the
+		// same as the slash form; the rejected PUT is not journaled
+		// or logged.
+		resolved := cmdfile.ResolveKey(s.controls, key)
+		if ctrl, ok := s.controls[resolved]; ok && ctrl.IsFault() {
+			writeError(w, http.StatusForbidden, fmt.Sprintf("fault control %q requires -allowFaultCommands", resolved))
+			return
+		}
+	}
 	cmd := cmdfile.Command{ControlKey: key, Value: body.Value}
 	if err := cmdfile.Apply(s.controls, cmd); err != nil {
 		if errors.Is(err, cmdfile.ErrUnknownControl) {
@@ -573,6 +616,11 @@ func (s *Server) handlePostCommands(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			s.mu.Unlock()
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown control %q", c.ControlKey))
+			return
+		}
+		if ctrl.IsFault() && !s.allowFaultCommands {
+			s.mu.Unlock()
+			writeError(w, http.StatusForbidden, fmt.Sprintf("fault control %q requires -allowFaultCommands", key))
 			return
 		}
 		if _, err := bridge.ConvertControlValue(ctrl.Kind, c.Value); err != nil {

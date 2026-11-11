@@ -13,7 +13,8 @@
 # containment pressure and clad stays near 1,430 F.
 # This is a no-closing probe, not a stable recovery; the
 # un-recovered twin is corium_01 (SI stays blocked).
-0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 1
+# Faults injected: ReactorBuilding/Faults/HotLegBreak
+0 ReactorBuilding/Faults/HotLegBreak 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
 10000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 0
 10000 ReactorBuilding/ReactorProtectionSystem/Reset Reset

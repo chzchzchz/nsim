@@ -4,7 +4,5 @@ Discharge goes to the [pressurizer relief tank](ReactorBuilding/PressurizedRelie
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:23-30
 
-Related controls: [PRTSprayValve](ReactorBuilding/PRTSprayValve/Open), [SafetyValve](ReactorBuilding/SafetyValve/Open)
+Related controls: [PRTSprayValve](ReactorBuilding/PRTSprayValve/Open), [SafetyValve](ReactorBuilding/Faults/PressurizerSafetyValve)
 Related sensors: [Level](ReactorBuilding/PressurizedReliefTank/Level), [PRTRuptureDiscBurst](ReactorBuilding/PRTRuptureDiscBurst), [SafetyValve](ReactorBuilding/SafetyValve/Open)
-
-Source: specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:23-30

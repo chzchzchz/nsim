@@ -38,6 +38,7 @@ import {
 } from "./remoteTiles";
 import { renderAlarms } from "./alarms";
 import { confirmControlChange } from "./confirmChange";
+import { showFaultInjectors } from "./faults";
 
 export type RemoteMode = "local" | "readonly" | "writable";
 
@@ -396,15 +397,19 @@ export class RemoteController {
                     return null;
                 }
             };
-            const [controls, sensors, alarms] = await Promise.all([
+            const [controls, sensors, alarms, faultList] = await Promise.all([
                 tolerant(client.controls()),
                 tolerant(client.sensors()),
                 tolerant(client.alarms()),
+                showFaultInjectors() ? tolerant(client.faults()) : Promise.resolve([] as ControlEntry[]),
             ]);
             if (this.client !== client) return;
             if (controls !== null) {
                 const values: Record<string, string> = {};
                 for (const c of controls) values[c.key] = c.value;
+                if (faultList !== null) {
+                    for (const c of faultList) values[c.key] = c.value;
+                }
                 refreshRemoteControls(this.host.tilesEl, values);
             }
             if (sensors !== null) {
@@ -507,13 +512,27 @@ export class RemoteController {
 
     async buildTiles(): Promise<void> {
         if (!this.client) return;
+        await this.rebuildControlTiles();
+        await this.rebuildAlarmsAndConsole();
+    }
+
+    // rebuildControlTiles refetches the catalog and rebuilds only the
+    // control/sensor tiles. The header fault toggle uses it so
+    // switching fault visibility never tears down the console or the
+    // alarm panel (typed-but-unsubmitted command text survives).
+    async rebuildControlTiles(): Promise<void> {
+        if (!this.client) return;
         const client = this.client;
-        const [controls, sensors] = await Promise.all([
+        const [controls, sensors, faultList] = await Promise.all([
             client.controls().catch(() => [] as ControlEntry[]),
             client.sensors().catch(() => [] as SensorEntry[]),
+            showFaultInjectors()
+                ? client.faults().catch(() => [] as ControlEntry[])
+                : Promise.resolve([] as ControlEntry[]),
         ]);
         if (!this.client) return;
-        const bindings = buildRemoteBindings(controls, sensors);
+        const allControls = [...controls, ...faultList];
+        const bindings = buildRemoteBindings(allControls, sensors);
         const groups = groupByPrefix(bindings);
         const layout = loadPanelLayout(groups.map((g) => g.prefix));
         const ordered = layout
@@ -524,7 +543,7 @@ export class RemoteController {
         this.host.tilesEl.innerHTML = "";
         this.sensorRows = [];
         const controlValues: Record<string, string> = {};
-        for (const c of controls) controlValues[c.key] = c.value;
+        for (const c of allControls) controlValues[c.key] = c.value;
         for (const group of ordered as ReturnType<typeof groupByPrefix>) {
             buildTile(
                 this.host.tilesEl,
@@ -582,6 +601,11 @@ export class RemoteController {
             this.logsPanel?.select(null);
         }
 
+    }
+
+    private async rebuildAlarmsAndConsole(): Promise<void> {
+        const client = this.client;
+        if (!client) return;
         this.host.alarmsEl.innerHTML = "";
         const alarms = await client
             .alarms()

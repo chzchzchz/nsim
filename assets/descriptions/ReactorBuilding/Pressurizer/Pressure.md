@@ -5,8 +5,5 @@ Reading it well means reading it alongside [level](ReactorBuilding/Pressurizer/W
 Source: specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:42-43
 Source: specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:23-34
 
-Related controls: [PORV](ReactorBuilding/PORV/Open), [SafetyValve](ReactorBuilding/SafetyValve/Open)
+Related controls: [PORV](ReactorBuilding/PORV/Open), [SafetyValve](ReactorBuilding/Faults/PressurizerSafetyValve)
 Related sensors: [PORV](ReactorBuilding/PORV/Open), [SafetyValve](ReactorBuilding/SafetyValve/Open), [Water](ReactorBuilding/Pressurizer/Water)
-
-Source: specs/the_westinghouse_pressurized_water_react/chapter_16/page_225.txt:42-43
-Source: specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:23-30

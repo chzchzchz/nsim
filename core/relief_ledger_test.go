@@ -38,8 +38,8 @@ func TestPlant_ReliefVesselLatches(t *testing.T) {
 	// thousands of gallons uncapped.
 	p := MakePlant()
 	cm := GetControlMap(&p)
-	require.NoError(t, cm["ReactorBuilding/Pressurizer/PORVStuckOpen"].Set("1"))
-	require.NoError(t, cm["ReactorBuilding/SafetyValve/Open"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/PORVStuckOpen"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/PressurizerSafetyValve"].Set("1"))
 	require.NoError(t, cm["ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock"].Set("1"))
 	p.ReactorBuilding.Pressurizer.Pressure = PressurizerSafetySetpoint + 50
 
@@ -153,7 +153,7 @@ func TestPrzr_ReliefLedgerCap(t *testing.T) {
 	// then stop growing.
 	p := MakePlant()
 	cm := GetControlMap(&p)
-	require.NoError(t, cm["ReactorBuilding/Pressurizer/PORVStuckOpen"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/PORVStuckOpen"].Set("1"))
 	require.NoError(t, cm["ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock"].Set("1"))
 	p.ReactorBuilding.ReactorPressureVessel.BreakDischarged = Volume{
 		Val: RCSDrainableInventoryGal - 5, Unit: u.Gallon}
@@ -174,7 +174,7 @@ func TestPrzr_ReliefLedgerCap(t *testing.T) {
 	// At-cap control: further relief steps leave the ledger pinned.
 	p2 := MakePlant()
 	cm2 := GetControlMap(&p2)
-	require.NoError(t, cm2["ReactorBuilding/Pressurizer/PORVStuckOpen"].Set("1"))
+	require.NoError(t, cm2["ReactorBuilding/Faults/PORVStuckOpen"].Set("1"))
 	p2.ReactorBuilding.ReactorPressureVessel.BreakDischarged = Volume{
 		Val: RCSDrainableInventoryGal, Unit: u.Gallon}
 	p2.ReactorBuilding.Pressurizer.Pressure = PressurizerSafetySetpoint + 50
@@ -194,7 +194,7 @@ func TestPlant_ReliefSharesHotLegLedgerOnce(t *testing.T) {
 
 	breakOnly := MakePlant()
 	cm1 := GetControlMap(&breakOnly)
-	require.NoError(t, cm1["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0.01"))
+	require.NoError(t, cm1["ReactorBuilding/Faults/HotLegBreak"].Set("0.01"))
 	for i := 0; i < int(window/dt); i++ {
 		breakOnly.Step(dt)
 		breakOnly.Update()
@@ -208,8 +208,8 @@ func TestPlant_ReliefSharesHotLegLedgerOnce(t *testing.T) {
 
 	both := MakePlant()
 	cm2 := GetControlMap(&both)
-	require.NoError(t, cm2["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0.01"))
-	require.NoError(t, cm2["ReactorBuilding/Pressurizer/PORVStuckOpen"].Set("1"))
+	require.NoError(t, cm2["ReactorBuilding/Faults/HotLegBreak"].Set("0.01"))
+	require.NoError(t, cm2["ReactorBuilding/Faults/PORVStuckOpen"].Set("1"))
 	require.NoError(t, cm2["ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock"].Set("1"))
 	both.ReactorBuilding.Pressurizer.Pressure = PressurizerSafetySetpoint + 50
 	for i := 0; i < int(window/dt); i++ {

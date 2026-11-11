@@ -34,6 +34,10 @@ export interface CatalogEntry {
     enum?: string[];
     value: string;
     simTimeMs?: number;
+    // fault is set only on GET /sim/faults entries: those controls
+    // are fault injectors (<System>/Faults/*), simulator malfunction
+    // latches rather than operator actions.
+    fault?: boolean;
 }
 
 export interface SensorEntry extends CatalogEntry {
@@ -254,6 +258,10 @@ export class RemoteClient {
 
     controls(): Promise<ControlEntry[]> {
         return this.json<ControlEntry[]>("/controls");
+    }
+
+    faults(): Promise<ControlEntry[]> {
+        return this.json<ControlEntry[]>("/sim/faults");
     }
 
     async alarms(): Promise<AlarmEntryRemote[]> {

@@ -825,7 +825,7 @@ var scenarioCatalog = []Scenario{
 		DurationHint: "a few minutes simulated",
 		Script: []ScriptCommand{
 			{AtMs: scenarioTriggerDelayMs,
-				ControlKey: "ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open",
+				ControlKey: "ReactorBuilding/Faults/MainSteamLineBreak",
 				Value:      "1"},
 		},
 	},
@@ -843,7 +843,7 @@ var scenarioCatalog = []Scenario{
 		Apply: func(p *Plant) { *p = fullPowerLineup() },
 		Script: []ScriptCommand{
 			{AtMs: scenarioTriggerDelayMs,
-				ControlKey: "ReactorBuilding/Pressurizer/PORVStuckOpen",
+				ControlKey: "ReactorBuilding/Faults/PORVStuckOpen",
 				Value:      "1"},
 		},
 	},
@@ -862,7 +862,7 @@ var scenarioCatalog = []Scenario{
 		DurationHint: "~1 min simulated",
 		Script: []ScriptCommand{
 			{AtMs: scenarioTriggerDelayMs,
-				ControlKey: "ReactorBuilding/ReactorPressureVessel/ControlRods/DroppedBank",
+				ControlKey: "ReactorBuilding/Faults/DroppedBank",
 				Value:      "1"},
 		},
 	},
@@ -881,7 +881,7 @@ var scenarioCatalog = []Scenario{
 		DurationHint: "45-50 min simulated",
 		Script: []ScriptCommand{
 			{AtMs: scenarioTriggerDelayMs,
-				ControlKey: "ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open",
+				ControlKey: "ReactorBuilding/Faults/HotLegBreak",
 				Value:      "1"},
 		},
 	},
@@ -1058,7 +1058,7 @@ var scenarioCatalog = []Scenario{
 		// signal (page_088.txt:25-30).
 		Script: []ScriptCommand{
 			{AtMs: 300000,
-				ControlKey: "AuxiliaryBuilding/BoronRecycleSystem/Carryover",
+				ControlKey: "AuxiliaryBuilding/Faults/EvaporatorCarryover",
 				Value:      "1"},
 		},
 	},
@@ -1124,7 +1124,7 @@ var scenarioCatalog = []Scenario{
 		DurationHint: "tens of minutes simulated",
 		Script: []ScriptCommand{
 			{AtMs: scenarioTriggerDelayMs,
-				ControlKey: "ReactorBuilding/SteamGenerator/SGTubeRupture/Open",
+				ControlKey: "ReactorBuilding/Faults/SGTubeRupture",
 				Value:      "1"},
 		},
 	},

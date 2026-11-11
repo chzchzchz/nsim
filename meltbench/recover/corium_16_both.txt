@@ -9,8 +9,9 @@
 # non-creditable; uncovery tracks the hot-leg-only run (~0.28% at
 # 10 s, 1.5% at 60 s) and the vessel stays covered at these windows.
 # This is a no-closing probe, not a stable recovery.
-0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 1
-0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
+# Faults injected: ReactorBuilding/Faults/HotLegBreak, ReactorBuilding/Faults/SGTubeRupture
+0 ReactorBuilding/Faults/HotLegBreak 1
+0 ReactorBuilding/Faults/SGTubeRupture 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
 10000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 0
 10000 ReactorBuilding/ReactorProtectionSystem/Reset Reset

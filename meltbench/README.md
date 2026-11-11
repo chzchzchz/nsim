@@ -43,8 +43,14 @@ lines before the first command:
    anchor-driven vs ledger-driven, or negative-control status.
 4. **Lineup caveats** — commands that merely pin `MakePlant` defaults
    (call them out as such).
+5. **Faults injected** — whenever any command in the file resolves to
+   a `/Faults/` key (`<System>/Faults/<FaultName>`), the header must
+   carry a `# Faults injected: <comma-separated keys>` line naming
+   every such key, as the last `#` line before the first command.
+   `meltbench/parse_test.go` fails the file otherwise. Files with no
+   `/Faults/` command omit the line.
 
-Keep each header to ~3–6 lines; the one-line catalogue entries below
+Keep each header to ~3–7 lines; the one-line catalogue entries below
 stay summaries, the cmdfile owns the explanation. See
 `disaster/corium_05_makeup_shut_porv.txt` for the template.
 
@@ -91,7 +97,7 @@ done
 - `disaster/corium_01_hotleg_si_block.txt` — corium_01: large-break LOCA with safety injection blocked
 - `disaster/corium_02_trip_then_break.txt` — corium_02: manual trip, then large-break LOCA with SI blocked
 - `disaster/corium_03_fukushima_stripped_sbo.txt` — corium_03: SBO-style stripped injection (Fukushima class)
-- `disaster/corium_04_porv_stuck_open.txt` — corium_04: PORV stuck open + safety valves + SI blocked
+- `disaster/corium_04_porv_stuck_open.txt` — corium_04: PORV stuck open + stuck safety valve + SI blocked (both relief paths share the block-valve line-up)
 - `disaster/corium_05_makeup_shut_porv.txt` — corium_05: charging isolated + PORV stuck open + SI blocked; makeup shut removes the RCS refill leg while relief drains steam (avoided outcome: corium via `VesselFailed` latch; see cmdfile header)
 - `disaster/corium_06_pressurizer_night_drain.txt` — corium_06: pressurizer night drain (heaters off, spray open, PORV stuck open)
 - `disaster/corium_07_cold_shutdown_lockout.txt` — corium_07: cold-shutdown cavity lockout (negative control)
@@ -126,10 +132,12 @@ done
 
 ## Files in `contamination/`
 
-- `contamination/contamination_01_sgtr_secondary_release.txt` — Path A (primary→secondary): SGTR + MSLB contaminates steamline, charcoal-delayed venting
+- `contamination/contamination_01_sgtr_secondary_release.txt` — Path A (primary→secondary): SGTR + MSLB contaminates steamline, gas decay in holdup (charcoal-delayed)
 - `contamination/contamination_02_hotleg_containment_release.txt` — Path B (primary→containment): hot-leg break entrains activity, CSS scrub to sump
-- `contamination/contamination_03_containment_failure_release.txt` — Path B→C approach: relief overfill, PrimaryActivity enormous, containment holds
+- `contamination/contamination_03_containment_failure_release.txt` — Path B approach: stuck PORV + stuck safety valve, PRT bursts at 12,700 gal, CSS holds, containment never fails (Path C unreachable at any horizon)
 - `contamination/contamination_04_charcoal_delay.txt` — waste-gas holdup vs vented Bq (60-day delay observable)
+- `contamination/contamination_05_sgtr_adv.txt` — Path A via stuck ADV: SGTR + ADV dump valve, same inert-bypass class as 01 in current build
+- `contamination/contamination_06_sgtr_sav.txt` — Path A via stuck SG safety valve: SGTR + SGSafetyValve fault, same inert-bypass class as 01 in current build
 
 Three-barrier framing: `specs/the_westinghouse_pressurized_water_react/chapter_6/page_107.txt:13-24` (zircaloy / RCS pressure boundary / containment vessel).
 Path C (containment → environment, charcoal bypass) requires the `ContainmentFailed` latch; none of the
@@ -154,7 +162,7 @@ spec page and the `nsimrun` window used to validate it:
 | Pair | Disaster entry | Recover action @10 s | Verdict |
 |---|---|---|---|
 | `01` hot-leg | Large-break LOCA, SI blocked | SI restore + Reset (no-closing probe) | Creep; uncovery keeps growing (120 gal/s > ECCS) |
-| `04` PORV | PORV stuck + safety, SI blocked | BlockValve isolate | True recovery: PRT pins 6,370 gal, P -> 2,250 psia |
+| `04` PORV | PORV stuck + safety valve, SI blocked | BlockValve isolate | True recovery: PRT pins ~6,390 gal, P -> 2,250 psia |
 | `16` combined | Hot-leg + SGTR both, SI blocked | SI restore (no-closing probe) | Tracks hot-leg-only run; not stable |
 | `17` letdown | Letdown w/o charging, SI blocked | Letdown close + charging + trip | Pins 750 gal |
 | `18` SGTR | Tube rupture alone, SI blocked | SI restore @10 s, depressurize @30 s | Slows draw; still open |

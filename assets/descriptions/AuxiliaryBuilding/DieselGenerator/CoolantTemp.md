@@ -4,7 +4,7 @@ Standby diesels are kept warm deliberately: a cold block thermal-shocks under in
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:16-19
 
-Related controls: [RunningFraction](AuxiliaryBuilding/DieselGenerator/RunningFraction)
+Related controls: [RunningFraction](AuxiliaryBuilding/Faults/DieselARunningFraction)
 Related sensors: [Flow](Outside/ServiceWaterSystem/Flow)
 
 Source: $W/chapter_12/page_169.txt:16-19

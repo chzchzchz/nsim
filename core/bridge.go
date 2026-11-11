@@ -116,8 +116,8 @@ func addPlantOperationControls(p *Plant, m bridge.ControlMap) {
 	//    action initiated by the reactor control system ... However,
 	//    the reactor shutdown system (SDS) is always poised to act"
 	//   specs/pwr_sim/chapter_4/page_051.txt:5-9
-	m["PlantOperation/StepbackFailed"] = &bridge.Control{
-		Part:  "PlantOperation",
+	m["PlantOperation/Faults/StepbackFailed"] = &bridge.Control{
+		Part:  "PlantOperation/Faults",
 		Label: "StepbackFailed",
 		Kind:  "bool",
 		Get: func() string {

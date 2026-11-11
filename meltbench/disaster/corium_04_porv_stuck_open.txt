@@ -1,11 +1,13 @@
-# corium_04: PORV stuck open + safety valves + SI blocked
-# Purpose: secondary-source malfunction. Relief path jammed open
-# drains steam to the PRT; safety valves add a second relief path
-# and SI block removes the refill credit. Tests whether relief
-# drain alone uncovers the core.
+# corium_04: PORV stuck open + safety valve + SI blocked
+# Purpose: secondary-source malfunction. Two relief paths (stuck PORV
+# and mechanically latched spring safety valve) drain steam to the
+# PRT; SI block removes the refill credit. Both paths share the
+# block-valve line-up, so one BlockValve==0 isolates both. Tests
+# whether relief drain alone uncovers the core.
 # Avoided outcome: corium, i.e. clad past the zircaloy melting
 # regime until VesselFailed latches (CladTempF >= 3,410 F while
 # uncovered). The block valve terminates the loss, not introduced here.
-0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
-0 ReactorBuilding/SafetyValve/Open 1
+# Faults injected: ReactorBuilding/Faults/PORVStuckOpen, ReactorBuilding/Faults/PressurizerSafetyValve
+0 ReactorBuilding/Faults/PORVStuckOpen 1
+0 ReactorBuilding/Faults/PressurizerSafetyValve 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

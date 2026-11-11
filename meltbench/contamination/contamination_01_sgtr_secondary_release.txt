@@ -1,10 +1,15 @@
 # contamination_01: SG tube rupture + main steam line break, SI blocked
 # Path A (primary-to-secondary): leaked primary water boils into the
 # header, contaminating the secondary (SteamlineRadiation) and feeding
-# the waste-gas holdup. Validated via nsimrun -seconds 600/1800:
-# PrimaryActivityFrac 0.995/0.984, SteamlineRadiation 1.0 (trip),
-# GasHoldupActivity 45,810 at 600 s but GasReleasedBq only 1.7
-# (charcoal-delayed, page_190.txt:101-108).
-0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
-0 ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open 1
+# the waste-gas holdup. MSLB depressurizes the SG, accelerating the
+# rupture. GasReleasedBq stays negligible through the 60-day Xe-133
+# first-order lag (see plans/p78_1.txt); the direct bypass is not yet
+# wired. Measured nsimrun -seconds 600/1800 -timestep 10ms:
+# PrimaryActivityFrac 0.995/0.984; SteamlineRadiation 1.0 (trip);
+# GasHoldupActivity 7.1/20.8; GasReleasedBq 4.3e-4/3.8e-3;
+# LiquidReleasedBq 0; the prior header's "45,810 / 1.7" figures do
+# not reproduce on the current build (stale).
+# Faults injected: ReactorBuilding/Faults/SGTubeRupture, ReactorBuilding/Faults/MainSteamLineBreak
+0 ReactorBuilding/Faults/SGTubeRupture 1
+0 ReactorBuilding/Faults/MainSteamLineBreak 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

@@ -4,7 +4,7 @@ The standby machine is kept warm deliberately - a cold block thermal-shocks unde
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:16-19
 
-Related controls: [RunningFraction](AuxiliaryBuilding/DieselGeneratorB/RunningFraction)
+Related controls: [RunningFraction](AuxiliaryBuilding/Faults/DieselBRunningFraction)
 Related sensors: [CoolantTemp](AuxiliaryBuilding/DieselGenerator/CoolantTemp)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_12/page_169.txt:16-19

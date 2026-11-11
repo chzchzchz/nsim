@@ -6,5 +6,6 @@
 # regime until VesselFailed latches (CladTempF >= 3,410 F while
 # uncovered). Chain: blowdown uncovery, decay-heat heatup,
 # Baker-Just self-sustaining oxidation, Zr melt.
-0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 1
+# Faults injected: ReactorBuilding/Faults/HotLegBreak
+0 ReactorBuilding/Faults/HotLegBreak 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

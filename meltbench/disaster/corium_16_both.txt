@@ -9,6 +9,7 @@
 # Disaster twin for recover/corium_16_both.txt: neither path can be
 # closed, so the combined 122.5 gal/s drain (120 hot-leg + 2.5 SGTR)
 # is the fault side of the no-closing probe.
-0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 1
-0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
+# Faults injected: ReactorBuilding/Faults/HotLegBreak, ReactorBuilding/Faults/SGTubeRupture
+0 ReactorBuilding/Faults/HotLegBreak 1
+0 ReactorBuilding/Faults/SGTubeRupture 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

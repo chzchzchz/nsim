@@ -13,7 +13,8 @@
 # 920→flow termination curve during the window, and the leak
 # is non-creditable so SI never retires it. Not a full close;
 # same class as corium_15.
-0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
+# Faults injected: ReactorBuilding/Faults/SGTubeRupture
+0 ReactorBuilding/Faults/SGTubeRupture 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
 10000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 0
 10000 ReactorBuilding/ReactorProtectionSystem/Reset Reset

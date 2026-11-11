@@ -25,6 +25,30 @@ Base: `http://127.0.0.1:8080` (or `-addr`).
 | `-paused` (flag) | Start paused; `POST /sim/step` only advances while paused (409 otherwise). |
 | `-resume <file>` (flag) | Load complete server state at startup and atomically rewrite it on clean shutdown; startup `-cmd` work is not rescheduled because the saved queue/journal/log carry it. |
 
+## Fault injectors
+
+Fault controls (`<System>/Faults/<FaultName>`, e.g.
+`ReactorBuilding/Faults/HotLegBreak`) are deliberate malfunction
+latches, not operator actions. They are excluded from `GET /controls`
+and from `GET /controls/{key...}` (404), so the operator surface never
+carries them.
+
+| Method & path | Body / response |
+|---|---|
+| `GET /sim/faults` | Same wire shape as `/controls` entries, restricted to fault controls and with `"fault":true` on each. Read-only; always registered. Dot-spelling is not accepted on this route; use the canonical slash form. |
+| `PUT /controls/{key}` with a fault key | `403 {"error":"fault control <resolved-key> requires -allowFaultCommands","code":403}` in default mode; nothing applied, journaled, or logged. Resolution runs before the gate, so `ReactorBuilding.Faults.HotLegBreak` is rejected the same as the slash form. |
+| `POST /commands` with any fault key in the batch | `403` in default mode; the whole batch is rejected atomically - nothing is scheduled, journaled, or logged. |
+
+- `-allowFaultCommands` (flag, default off): when set, fault commands
+  flow through apply/queue/journal/log exactly like any other command.
+  With the flag on, fault commands are journaled/logged normally.
+- `-cmd` startup files and scenario scripting apply in-process via
+  `ApplyScript` and are not gated; the gate guards only the network
+  surface.
+- `-resume` snapshots written before a fault key was renamed silently
+  drop the unknown key (`ApplyScript` degrades without stopping);
+  re-record saved lineups after such a rename.
+
 ## Clock and pacing
 
 - `-timestep 1ms` at `-stepsPerSecond 1000` is real-time; smaller

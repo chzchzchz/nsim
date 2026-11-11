@@ -61,6 +61,12 @@ type Server struct {
 	// clients (-read-only-remote); loopback always retains write
 	// access.
 	readOnlyRemote bool
+	// allowFaultCommands gates the fault-injection controls
+	// (-allowFaultCommands, default off). Fault controls are
+	// malfunction injectors, not operator actions, so the network
+	// surface refuses them unless explicitly enabled. Read paths
+	// (/sim/faults) are never gated.
+	allowFaultCommands bool
 
 	simTimeNs      int64
 	runId          int64
@@ -92,7 +98,7 @@ type Server struct {
 // The returned struct publishes the initial progress state. Only
 // runtime construction needs it; run-loop progress and journal
 // entries are established here before the server is published.
-func NewServer(siteName, scenarioID, plantPath, cmdPath string, paused bool, stepsPerSecond int, dt time.Duration, readOnlyRemote ...bool) (*Server, error) {
+func NewServer(siteName, scenarioID, plantPath, cmdPath string, paused bool, stepsPerSecond int, dt time.Duration, allowFaultCommands bool, readOnlyRemote ...bool) (*Server, error) {
 	if stepsPerSecond <= 0 {
 		return nil, fmt.Errorf("stepsPerSecond must be positive, got %d", stepsPerSecond)
 	}
@@ -127,17 +133,18 @@ func NewServer(siteName, scenarioID, plantPath, cmdPath string, paused bool, ste
 	}
 	ro := len(readOnlyRemote) > 0 && readOnlyRemote[0]
 	s := &Server{
-		plant:          &p,
-		siteName:       siteName,
-		plantPath:      plantPath,
-		scenarioID:     effective,
-		cmdPath:        cmdPath,
-		script:         script,
-		scenario:       sc,
-		paused:         paused,
-		stepsPerSecond: stepsPerSecond,
-		dt:             dt,
-		readOnlyRemote: ro,
+		plant:              &p,
+		siteName:           siteName,
+		plantPath:          plantPath,
+		scenarioID:         effective,
+		cmdPath:            cmdPath,
+		script:             script,
+		scenario:           sc,
+		paused:             paused,
+		stepsPerSecond:     stepsPerSecond,
+		dt:                 dt,
+		readOnlyRemote:     ro,
+		allowFaultCommands: allowFaultCommands,
 		initialPlant:   mustClonePlant(&p),
 		initialBytes:   mustMarshalPlant(&p),
 		queue:          &cmdfile.Queue{},
@@ -348,6 +355,7 @@ type sensorEntry struct {
 }
 
 // controlEntry is the JSON shape for one control definition/value.
+// Fault is set only on GET /sim/faults entries; /controls never emits it.
 type controlEntry struct {
 	Key   string   `json:"key"`
 	Part  string   `json:"part"`
@@ -355,6 +363,7 @@ type controlEntry struct {
 	Kind  string   `json:"kind"`
 	Enum  []string `json:"enum,omitempty"`
 	Value string   `json:"value"`
+	Fault bool     `json:"fault,omitempty"`
 }
 
 func sensorValue(s *bridge.Sensor) (string, error) {

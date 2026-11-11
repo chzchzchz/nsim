@@ -100,13 +100,14 @@ func main() {
 	resumePath := flag.String("resume", "", "state file for resume: load an existing file on startup, otherwise start fresh; overwrite on SIGINT/SIGTERM or POST /sim/shutdown")
 	logLevel := flag.String("logLevel", "info", "log verbosity: debug|info|warn|error")
 	readOnlyRemote := flag.Bool("read-only-remote", false, "reject mutable endpoints (POST/PUT/DELETE) from non-loopback clients; GET/HEAD and loopback retain full access")
+	allowFaultCommands := flag.Bool("allowFaultCommands", false, "allow fault-injection controls (*/Faults/*) on PUT /controls/{key} and POST /commands; default rejects them with 403")
 	flag.Parse()
 
 	SetLogLevel(*logLevel)
 
 	// NewServer performs the canonical flag validation (steps-per-
 	// second and timestep bounds); main only surfaces its error.
-	server, err := NewServer(*siteName, *scenarioID, *plantPath, *cmdPath, *paused, *stepsPerSecond, *timestep, *readOnlyRemote)
+	server, err := NewServer(*siteName, *scenarioID, *plantPath, *cmdPath, *paused, *stepsPerSecond, *timestep, *allowFaultCommands, *readOnlyRemote)
 	if err != nil {
 		slog.Error("failed to create server", "error", err)
 		os.Exit(1)

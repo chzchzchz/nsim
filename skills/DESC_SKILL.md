@@ -174,6 +174,51 @@ hrefs may target any documented entity.
 - Never invent numbers. If the spec does not state a value, either derive
   it transparently or drop it.
 
+## Simulator constructs (faults and model-hidden state)
+
+Some documented ids have no counterpart in the plant. Two kinds, both
+existing to train against accidents rather than to operate the plant:
+
+1. **Fault injectors** — controls filed under
+   `<System>/Faults/<FaultName>` (e.g.
+   `[PORVStuckOpen](ReactorBuilding/Faults/PORVStuckOpen)`). They model
+   deliberate malfunctions, inserted to probe accident response. No
+   operator may legitimately command one and no plant hardware
+   implements one.
+   - Paragraph 1 must say plainly that this is a simulator construct
+     with no plant control, and name the malfunction it inserts.
+   - `Source:` lines cite the malfunction event when one exists (the
+     pwr_sim malfunction-insert pages are the vocabulary; e.g.
+     `specs/pwr_sim/chapter_4/page_053.txt:14-16`). When no cached
+     spec page describes the malfunction, say so explicitly in a
+     model note — never invent a Westinghouse citation for it.
+   - `Related sensors:` names the signals that give the injector away
+     (pressure, valve-position, level, temperature responses). Related
+     lines point at the alarms it trips and the controls an operator
+     drives in response — for an injector the "response" is the
+     mitigation lineup, not the injector itself.
+   - These files serve the fault-inventory and training audiences. The
+     operator surface hides fault injectors by default; write them as
+     reference material, not as normal-operations help.
+2. **Model-hidden state readouts** — sensors whose value exists only
+   inside the model (e.g. `CoreDamageFrac`, the fatigue/damage ledger
+   outputs). No spec instrument can sense them; they are model
+   bookkeeping, not plant telemetering.
+   - A model note is mandatory: the file must say the signal is
+     model-internal. If the spec names real instruments watching the
+     same phenomenon (excore detectors, fuel-assembly outlet
+     thermocouples, hydrogen analyzers), cite them as context for the
+     phenomenon — never as the source of the lumped model value.
+   - `Source:` lines either cite the spec page that grounds the
+     phenomenon, or carry an explicit "no spec citation exists" note;
+     do not attribute a model constant or ledger to the spec.
+   - Label simulator-derived plates as such ("simulator-derived
+     typical value" style), exactly as for any other divergent model.
+
+Never let either kind read as operator-issuable equipment. Never hide a
+declared-but-unwired element; never fabricate a citation to make one
+look spec-grounded.
+
 ## Editing workflow
 
 1. Locate the file(s); read the current body fully.
@@ -242,4 +287,6 @@ hrefs may target any documented entity.
 - [ ] Related controls/sensors classified and non-empty sections only.
 - [ ] Source lines verified on disk; model notes present for divergence
       and unwired elements.
+- [ ] Simulator constructs (fault injectors, model-hidden readouts)
+      declared as such; no fabricated spec citation.
 - [ ] `make descriptions` run; link scan clean.

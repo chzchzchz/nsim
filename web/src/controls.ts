@@ -4,6 +4,7 @@
 // that reads "Part.Label".
 
 import { isAlarmControl, makeHelpButton, type Entry, type PartBinding, type PartDisplay } from "./bindings";
+import { isFaultEntry, showFaultInjectors } from "./faults";
 import type { PlantHandle } from "./plant";
 import { helpFor } from "./descriptions";
 import { rangeFor, unitFor } from "./units";
@@ -18,10 +19,15 @@ export function renderPanel(
     display: PartDisplay,
 ): void {
     host.innerHTML = "";
+    // Fault injectors are hidden by default; the header toggle
+    // (shared with the remote console) rebuilds this panel.
+    const showFaults = showFaultInjectors();
     const controlParts = bindings
         .map((b) => ({
             part: b.part,
-            controls: b.controls.filter((e) => !isAlarmControl(e.id)),
+            controls: b.controls.filter(
+                (e) => !isAlarmControl(e.id) && (showFaults || !isFaultEntry(e)),
+            ),
             sensors: b.sensors,
         }))
         .filter((b) => b.controls.length > 0);

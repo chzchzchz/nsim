@@ -29,7 +29,7 @@ func TestScenario28_HotLegBreakBlowsDownTripsAndActuatesSI(t *testing.T) {
 
 	p := MakePlant()
 	cm := GetControlMap(&p)
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
 
 	sawTripPressure := 0.0
 	for i := 0; i < int(10*time.Second/DefaultTimeStep); i++ {
@@ -114,7 +114,7 @@ func TestScenario28_BreakDebitsInventoryVoidsAndPressurizesContainment(t *testin
 
 	p := baseline
 	cm := GetControlMap(&p)
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
 	for i := 0; i < int(45*time.Second/DefaultTimeStep); i++ {
 		p.Step(DefaultTimeStep)
 		p.Update()
@@ -164,7 +164,7 @@ func TestScenario28_RefloodCreditedAfterBreakIsolation(t *testing.T) {
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.ChargingPumpRunning = false
 	p.AuxiliaryBuilding.ChemicalVolumeControlSystem.AutoLevelControl = false
 	cm := GetControlMap(&p)
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
 	for i := 0; i < int(45*time.Second/DefaultTimeStep); i++ {
 		p.Step(DefaultTimeStep)
 		p.Update()
@@ -176,7 +176,7 @@ func TestScenario28_RefloodCreditedAfterBreakIsolation(t *testing.T) {
 	require.True(t, p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning,
 		"precondition: HHSI must be delivering")
 
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0"))
+	require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("0"))
 	require.NoError(t, cm["ReactorBuilding/Pressurizer/HeatersOn"].Set("0"))
 	water0 := p.ReactorBuilding.Pressurizer.Water.Float()
 	drawn0 := rpv.BreakDischarged.Float()
@@ -324,7 +324,7 @@ func TestScenario28_BlowdownCoolsCoolantPastProgramEnvelope(t *testing.T) {
 
 	p := MakePlant()
 	cm := GetControlMap(&p)
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
 	startF := p.ReactorBuilding.ReactorPressureVessel.Outlet.Float()
 
 	const window = 45 * time.Second
@@ -427,12 +427,12 @@ func TestScenario28_ECCSCreditCoolsRefilledPrimary(t *testing.T) {
 				Volume{Val: 0, Unit: u.Gallon}
 		}
 		cm := GetControlMap(&p)
-		require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+		require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
 		for i := 0; i < int(15*time.Second/testDt); i++ {
 			p.Step(testDt)
 			p.Update()
 		}
-		require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0"))
+		require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("0"))
 		for i := 0; i < int(120*time.Second/testDt); i++ {
 			p.Step(testDt)
 			p.Update()
@@ -488,7 +488,7 @@ func TestScenario28_SumpSpillsDrawsAndStarves(t *testing.T) {
 	// tick while it discharges, and freeze at isolation.
 	p := MakePlant()
 	cm := GetControlMap(&p)
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
 	spilled, drawn := 0.0, 0.0
 	testDt := 10 * time.Millisecond
 	for i := 0; i < int(45*time.Second/testDt); i++ {
@@ -507,7 +507,7 @@ func TestScenario28_SumpSpillsDrawsAndStarves(t *testing.T) {
 	assert.InDelta(t, spilled-drawn, sumpAfterSpill, 5.0,
 		"sump level must close against spill minus recirculation draw")
 
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0"))
+	require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("0"))
 	for i := 0; i < int(10*time.Second/testDt); i++ {
 		p.Step(testDt)
 		p.Update()

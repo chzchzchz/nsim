@@ -239,7 +239,7 @@ func TestPlant_HDS_SmallBreakSIZero(t *testing.T) {
 	t.Parallel()
 	p := MakePlant()
 	cm := GetControlMap(&p)
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0.1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("0.1"))
 	p.AuxiliaryBuilding.DieselGenerator.StartSignal = DieselStartSafetyInjection
 	stepN(&p, int(10*time.Minute/DefaultTimeStep), DefaultTimeStep)
 	inv := p.ReactorBuilding.ReactorPressureVessel.BreakDischarged.Float() / RCSDrainableInventoryGal
@@ -267,15 +267,15 @@ func TestPlant_HDS_TwinPlantOpenBreakGenerates(t *testing.T) {
 	assert.Zero(t, b.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent)
 	cmA := GetControlMap(&a)
 	cmB := GetControlMap(&b)
-	require.NoError(t, cmA["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
-	require.NoError(t, cmB["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	require.NoError(t, cmA["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
+	require.NoError(t, cmB["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
 	stepN(&a, int(3*time.Minute/dt), dt)
 	stepN(&b, int(3*time.Minute/dt), dt)
 	// Identical up to the break commit.
 	h2A := a.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent
 	h2B := b.ReactorBuilding.ContainmentBuilding.HydrogenDetectionSuppression.HydrogenVolumePercent
 	assert.InDelta(t, h2A, h2B, 1e-9, "pre-divergence plants identical")
-	require.NoError(t, cmB["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("0"))
+	require.NoError(t, cmB["ReactorBuilding/Faults/HotLegBreak"].Set("0"))
 	// Stuck-open plant `a` crosses oxidation onset on the slow drain
 	// (plans/p65_2.txt: generation now requires oxidation, not merely
 	// inventory). The 4x sgW rescale (plans/p77_1.txt) makes secondary

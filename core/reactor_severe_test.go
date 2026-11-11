@@ -172,7 +172,7 @@ func TestPlant_SevereAccidentClassWalker(t *testing.T) {
 	prevented := MakePlant()
 	cm := GetControlMap(&prevented)
 	prevented.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
 	for i := 0; i < int(10*time.Minute/dt); i++ {
 		prevented.Step(dt)
 		prevented.Update()
@@ -189,7 +189,7 @@ func TestPlant_SevereAccidentClassWalker(t *testing.T) {
 	// melt-regime trajectory.
 	beyond := MakePlant()
 	cm2 := GetControlMap(&beyond)
-	require.NoError(t, cm2["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	require.NoError(t, cm2["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
 	for i := 0; i < int(4*time.Hour/dt); i++ {
 		beyond.Step(dt)
 		beyond.Update()
@@ -257,7 +257,7 @@ func TestPlant_HydrogenSourceReachesExplosiveLimitWithoutSeeding(t *testing.T) {
 	dt := 50 * time.Millisecond
 	p := MakePlant()
 	cm := GetControlMap(&p)
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
 	p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
 	for i := 0; i < int(12*time.Hour/dt); i++ {
 		p.Step(dt)
@@ -278,7 +278,7 @@ func TestPlant_HydrogenSourceReachesExplosiveLimitWithoutSeeding(t *testing.T) {
 	{
 		probe := MakePlant()
 		cm2 := GetControlMap(&probe)
-		require.NoError(t, cm2["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+		require.NoError(t, cm2["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
 		probe.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
 		probe.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = false
 		probe.ReactorBuilding.SafetyInjectionSystem.Accumulator.Level = Volume{Val: 0, Unit: u.Gallon}
@@ -322,7 +322,7 @@ func TestPlant_HydrogenDeflagrationDrivesContainmentFailure(t *testing.T) {
 	dt := 50 * time.Millisecond
 	p := MakePlant()
 	cm := GetControlMap(&p)
-	require.NoError(t, cm["ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open"].Set("1"))
+	require.NoError(t, cm["ReactorBuilding/Faults/HotLegBreak"].Set("1"))
 	p.ReactorBuilding.ReactorProtectionSystem.ReactorTripped = true
 	p.ReactorBuilding.SafetyInjectionSystem.HHSIPumpRunning = false
 	p.ReactorBuilding.SafetyInjectionSystem.Accumulator.Level = Volume{Val: 0, Unit: u.Gallon}

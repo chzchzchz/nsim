@@ -144,7 +144,7 @@ func TestThrustBearingFailureTripsTurbineAndScrams(t *testing.T) {
 	p := fullPowerLineup()
 	cm := p.GetControlMap()
 	require.NoError(t,
-		cm["TurbineBuilding/Turbine/ThrustBearingWorn"].Set("1"))
+		cm["TurbineBuilding/Faults/ThrustBearingWorn"].Set("1"))
 
 	turbineTrippedAt := -1
 	scrammedAt := -1

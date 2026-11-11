@@ -188,7 +188,7 @@ func (p *Pressurizer) Step(dt time.Duration, rcsTemp Temperature, porv, safety, 
 	}
 	if safety != nil {
 		v := *safety
-		if ret.Pressure > PressurizerSafetySetpoint {
+		if ret.SafetyValveStuckOpen || ret.Pressure > PressurizerSafetySetpoint {
 			v.Open = max(v.Open, 1)
 		} else if v.Open > 0 {
 			v.Open = 0
@@ -309,6 +309,17 @@ type Pressurizer struct {
 	// specs/pwr_sim/chapter_4/page_049.txt:26-31 (secondary)
 	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:23-29
 	PORVStuckOpen bool
+
+	// SafetyValveStuckOpen models the spring-loaded ASME-code
+	// safety valve stuck mechanically open: while latched the
+	// valve ignores its reseat below the setpoint and holds the
+	// aggregate Open state. No stuck-open safety-valve exercise
+	// exists in the cached pwr_sim text; this is a simulator
+	// construct, symmetric with PORVStuckOpen. The spec
+	// establishes the valve exists and self-actuates on
+	// overpressure.
+	// specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:30-34
+	SafetyValveStuckOpen bool
 
 	// PrevRCSTemp is the hot-leg temperature seen by the previous
 	// step; its finite difference drives thermal-expansion surge.

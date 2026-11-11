@@ -5,7 +5,7 @@ Each train's diesel exists because its safe-shutdown loads cannot tolerate an ou
 Source: specs/the_westinghouse_pressurized_water_react/chapter_11/page_165.txt:133-136
 Source: specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:1-8
 
-Related controls: [RunningFraction](AuxiliaryBuilding/DieselGeneratorB/RunningFraction), [StartSignal](AuxiliaryBuilding/DieselGenerator/StartSignal)
+Related controls: [RunningFraction](AuxiliaryBuilding/Faults/DieselBRunningFraction), [StartSignal](AuxiliaryBuilding/DieselGenerator/StartSignal)
 Related sensors: [Energized](Electrical/ESFBusB/Energized)
 
 Source: specs/the_westinghouse_pressurized_water_react/chapter_11/page_166.txt:1-8

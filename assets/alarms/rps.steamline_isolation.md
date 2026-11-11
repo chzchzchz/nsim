@@ -6,5 +6,3 @@ Source: specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8
 
 Related controls: [AtmosphericDumpValve](ReactorBuilding/SteamGenerator/AtmosphericDumpValve/Open)
 Related sensors: [MainSteamIsolationValve](ReactorBuilding/SteamGenerator/MainSteamIsolationValve/Open), [Pressure](ReactorBuilding/SteamGenerator/Pressure), [Water](ReactorBuilding/SteamGenerator/Water)
-
-Source: specs/the_westinghouse_pressurized_water_react/chapter_15/page_215.txt:8-10

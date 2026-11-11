@@ -7,9 +7,10 @@
 # uncovered).
 # Direct-pressurizer AND hot-leg paths both open: belt-and-braces
 # depressurization feed to the uncovery ledger.
+# Faults injected: ReactorBuilding/Faults/PORVStuckOpen
 0 ReactorBuilding/BlockValve/Open 0
 0 ReactorBuilding/Pressurizer/HeatersOn 0
 0 ReactorBuilding/Pressurizer/HeaterAutoControl 0
 0 ReactorBuilding/Pressurizer/SprayOpen 1
-0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/Faults/PORVStuckOpen 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

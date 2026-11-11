@@ -88,6 +88,17 @@
             user-select: none;
         }
         header#sim-bar #sps-indicator { margin-left: 0; }
+        header#sim-bar #fault-toggle {
+            font-size: 12px;
+            color: #f0c674;
+            user-select: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        header#sim-bar #fault-toggle input {
+            vertical-align: middle;
+            margin-right: 4px;
+        }
         main {
             display: flex;
             flex-direction: column;

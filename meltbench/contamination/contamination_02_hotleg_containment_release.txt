@@ -1,9 +1,10 @@
 # contamination_02: large-break LOCA, SI blocked (Path B)
 # Path B (primary-to-containment): break discharge carries activity
-# into containment air; CSS scrub moves it to the sump. Validated via
-# nsimrun -seconds 600/1800: PrimaryActivityFrac 0.84/0.59,
-# ContainmentAirActivity 0.0005/0.0003 (scrubbed), SumpActivity
-# 0.30/0.77, LiquidReleasedBq 26.4/75.2 (monitor-gated), GasReleasedBq
+# into containment air; CSS scrubs it into the sump. Measured nsimrun
+# -seconds 600/1800 -timestep 10ms: PrimaryActivityFrac 0.84/0.59;
+# ContainmentAirActivity 4.7e-3/3.2e-3 (scrubbed); SumpActivity
+# 0.31/0.78; LiquidReleasedBq 26.4/75.2 (monitor-gated); GasReleasedBq
 # 0 (containment holds under CIS operation).
-0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 1
+# Faults injected: ReactorBuilding/Faults/HotLegBreak
+0 ReactorBuilding/Faults/HotLegBreak 1
 0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
