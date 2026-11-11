@@ -1,14 +1,12 @@
-# Corium production via nsimrun cmdfile — sequence catalogue
+# meltbench — nsimrun simulation catalogue
 
-The simulator has **no corium state**. "Production of corium" is therefore
-operationalized as: **driving the lumped clad past the zircaloy melting
-regime until the `VesselFailed` latch fires** (`core/reactor.go`, set when
-uncovered clad reaches `ZrMeltF`). Per Kuan/Haskin
-(`specs/wiki/Nuclear_meltdown.txt`), molten zircaloy plus dissolved UO₂
-flowing down and freezing forms the debris bed (stage 5, ~1,700 K);
-relocation to the lower plenum (stage 6) is corium itself. `VesselFailed`
-latches at 2,150 K (3,410 °F) while uncovered, the model's stage-6
-boundary.
+Hand-authored command files for the nuclear-plant simulator, run with
+`nsimrun` against plant JSON. Five scenario families are covered:
+core damage (`disaster/`, `recover/`), component wear/failure
+(`damage/`), environmental release paths (`contamination/`), and
+design-basis envelope exercises (`envelope/`). Every file declares the
+fault(s) it injects, the avoided outcome, and its measured verdict;
+see the header convention below.
 
 Directory layout:
 
@@ -19,8 +17,10 @@ Directory layout:
   disaster twin, then an operator action at 10 s (BlockValve isolate,
   letdown close, trip + SI restore, spool depressurize). True recoveries
   ledger-pin; no-closing probes keep draining.
-- `damage/` — non-corium pump damage sequences (RCP seal, EFWS deadhead)
-- `contamination/` — environmental pathway sequences (Paths A/B/C, charcoal delay)
+- `damage/` — non-corium damage sequences (RCP seal overheat, pump
+  dead-head overheat).
+- `contamination/` — environmental pathway sequences (Paths A/B/C,
+  charcoal delay).
 - `envelope/` — design-basis envelope scenarios: one actuation or failure
   mode per file (CV22 fail-open, dropped rod, RCP seal, mid-loop drain,
   rod ejection), with success/failure twins sharing a numeric prefix.
@@ -35,10 +35,9 @@ lines before the first command:
 
 1. **Purpose** — which fault/drain/interlock it tests and how it
    attacks the RCS inventory/heat-removal balance.
-2. **Avoided outcome** — for `disaster/`, the corium definition above
-   (`CladTempF >= 3,410 F` while uncovered → `VesselFailed`); for
-   `recover/`, which disaster-twin fault each timed action terminates
-   or mitigates.
+2. **Avoided outcome** — for `disaster/`, the corium definition in the
+   `disaster/` section below; for `recover/`, which disaster-twin fault
+   each timed action terminates or mitigates.
 3. **Verdict / mechanism** — e.g. relief drains to PRT, ledger pins,
    anchor-driven vs ledger-driven, or negative-control status.
 4. **Lineup caveats** — commands that merely pin `MakePlant` defaults
@@ -79,6 +78,9 @@ done
   (break open, SI blocked, ...) have been applied but before any physics.
 - Prefer `< 3600` s per snapshot: at 1 tick/ms, 1 simulated hour costs
   ~1 min wall-clock (the full corium runs are hours long).
+- For long horizons, prefer `-timestep 10ms` (10x stepsize): at 10 ms
+  per step, 1 simulated hour costs ~6 s wall-clock and yields
+  essentially the same trajectory as 1 ms.
 - Regenerate the 1 s snapshots with `bash meltbench/generate.sh`, which
   writes `meltbench/plantjson/{disaster,damage,contamination,envelope}/<name>.1s.plant.json`.
   The script snapshots initial plant setup only; `recover/` is skipped
@@ -92,7 +94,17 @@ done
 - Validate a snapshot by re-ingesting it:
   `go run ./cmd/nsimrun/ -plant state_t0000.json -seconds 0 > /dev/null`.
 
-## Files in `disaster/`
+## disaster/ — core damage and corium production
+
+The simulator has **no corium state**. "Production of corium" is therefore
+operationalized as: **driving the lumped clad past the zircaloy melting
+regime until the `VesselFailed` latch fires** (`core/reactor.go`, set when
+uncovered clad reaches `ZrMeltF`). Per Kuan/Haskin
+(`specs/wiki/Nuclear_meltdown.txt`), molten zircaloy plus dissolved UO₂
+flowing down and freezing forms the debris bed (stage 5, ~1,700 K);
+relocation to the lower plenum (stage 6) is corium itself. `VesselFailed`
+latches at 2,150 K (3,410 °F) while uncovered, the model's stage-6
+boundary.
 
 - `disaster/corium_01_hotleg_si_block.txt` — corium_01: large-break LOCA with safety injection blocked
 - `disaster/corium_02_trip_then_break.txt` — corium_02: manual trip, then large-break LOCA with SI blocked
@@ -112,7 +124,7 @@ done
 - `disaster/corium_26_porv_sgtr_si_block.txt` — corium_26: stuck PORV + SG tube rupture, SI blocked
 - `disaster/corium_27_auxspray_porv_si_block.txt` — corium_27: aux spray + stuck PORV, SI blocked
 
-## Files in `recover/`
+## recover/ — recovery twins
 
 - `recover/corium_01_hotleg_si_block.txt` — corium_01: hot-leg break (recover: SI restore at 10 s)
 - `recover/corium_04_porv_stuck_open.txt` — corium_04: PORV stuck open (recover: BlockValve isolate at 10 s)
@@ -125,13 +137,13 @@ done
 - `recover/corium_26_porv_sgtr_si_block.txt` — corium_26: PORV + SGTR (recover: BlockValve + SI at 10 s, depressurize at 30 s)
 - `recover/corium_27_auxspray_porv_si_block.txt` — corium_27: aux spray + PORV (recover: spray close + BlockValve + trip at 10 s)
 
-## Files in `damage/`
+## damage/ — non-corium damage
 
 - `damage/damage_01_rcp_seal_overheat.txt` — damage_01: RCP seal overheat (charging lost while RCPs running)
 - `damage/damage_02_efws_turbine_deadhead.txt` — damage_02: EFWS turbine-pump deadhead (recirculation isolated)
 - `damage/damage_03_hhsi_deadhead_rwst_lost.txt` — damage_03: HHSI pump dead-head overheat after RWST depletion (large break, SI actuates, switchover)
 
-## Files in `contamination/`
+## contamination/ — environmental release paths
 
 - `contamination/contamination_01_sgtr_secondary_release.txt` — Path A (primary→secondary): SGTR + MSLB contaminates steamline, gas decay in holdup (charcoal-delayed)
 - `contamination/contamination_02_hotleg_containment_release.txt` — Path B (primary→containment): hot-leg break entrains activity, CSS scrub to sump
@@ -144,7 +156,7 @@ Three-barrier framing: `specs/the_westinghouse_pressurized_water_react/chapter_6
 Path C (containment → environment, charcoal bypass) requires the `ContainmentFailed` latch; none of the
 cmdfile windows reach it — it is Go-test-only (`TestPlant_HydrogenDeflagrationDrivesContainmentFailure`).
 
-## Files in `envelope/`
+## envelope/ — design-basis envelope scenarios
 
 Design-basis envelope scenarios: one actuation or failure mode per file,
 with success/failure twins sharing a numeric prefix. Each header cites its
@@ -178,7 +190,7 @@ Disaster-only (no recover twin by design): `02` (order-matters trip),
 `07` (cold-shutdown negative control), `08` (block+drain),
 `20` (tripped letdown, negative control).
 
-## Damage (`damage/`, non-corium pump damage)
+## Damage (`damage/`)
 
 | File | Mechanism | t -> damage = 1 | Rate |
 |---|---|---|---|
