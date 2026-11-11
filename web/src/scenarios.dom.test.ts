@@ -128,6 +128,33 @@ describe("renderScenarioPicker", () => {
         ).toBeNull();
     });
 
+    it("Escape on the list view closes without choosing", () => {
+        const started: (string | null)[] = [];
+        renderScenarioPicker(host, catalog, {
+            onStart: (id) => started.push(id),
+        });
+        expect(host.querySelector(".overlay-backdrop")).not.toBeNull();
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+        expect(started).toEqual([]);
+        expect(host.querySelector(".overlay-backdrop")).toBeNull();
+    });
+
+    it("Escape on the acknowledgement dialog also closes without resetting", () => {
+        const started: (string | null)[] = [];
+        renderScenarioPicker(host, catalog, {
+            onStart: (id) => started.push(id),
+        });
+        (
+            host.querySelector<HTMLElement>(
+                '[data-scenario-id="beta"]',
+            ) as HTMLElement
+        ).click();
+        expect(picker().querySelector(".scenario-detail")).not.toBeNull();
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+        expect(started).toEqual([]);
+        expect(host.querySelector(".overlay-backdrop")).toBeNull();
+    });
+
     it("back returns to the list without choosing", () => {
         const started: (string | null)[] = [];
         renderScenarioPicker(host, catalog, {

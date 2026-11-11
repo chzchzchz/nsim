@@ -67,7 +67,6 @@ async function main(): Promise<void> {
     const scenarioNameEl = document.getElementById("scenario-name") as HTMLElement;
     const statusEl = document.getElementById("sim-status") as HTMLElement;
     const spsEl = document.getElementById("sps-indicator") as HTMLElement;
-    const serverBtn = document.getElementById("btn-server") as HTMLButtonElement;
     const writeModeBtn = document.getElementById("btn-write-mode") as HTMLButtonElement;
     const logsEl = document.getElementById("logs") as HTMLElement;
 
@@ -282,9 +281,10 @@ async function main(): Promise<void> {
         scenarioNameEl.textContent = title;
         sim.reset();
     }
-    // openServerPicker is shared by the header button and the
-    // scenario dialog's footer entry point. The server dialog has
-    // its own overlay, so scenario list -> server pick never stacks.
+    // openServerPicker is reached from the scenario dialog's
+    // footer entry point (the header Server button was removed).
+    // The server dialog has its own overlay, so scenario list ->
+    // server pick never stacks.
     function openServerPicker(): void {
         const current = remote.connected ? remote.client?.base ?? null : null;
         renderServerPicker(document.body, current, {
@@ -476,12 +476,9 @@ async function main(): Promise<void> {
 
     // ---- Remote helpers (thin glue; state lives in RemoteController) ----
 
-    if (serverBtn) {
-        serverBtn.addEventListener("click", openServerPicker);
-        writeModeBtn.addEventListener("click", () => {
-            remote.toggleWritable();
-        });
-    }
+    writeModeBtn.addEventListener("click", () => {
+        remote.toggleWritable();
+    });
 
     // Header lifecycle: capture handlers run before Sim's
     // bubble listeners (attached by attachUI), so stopping

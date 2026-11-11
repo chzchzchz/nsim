@@ -101,7 +101,21 @@ export function renderScenarioPicker(
     backdrop.appendChild(panel);
     host.appendChild(backdrop);
 
-    const close = (): void => { backdrop.remove(); };
+    // Escape anywhere on the overlay returns to the current game.
+    // The picker never resets the simulation except through an
+    // explicit Begin/Free-play click, so closing it is a no-op
+    // against the running sim.
+    const onKey = (ev: KeyboardEvent): void => {
+        if (ev.key === "Escape") {
+            ev.preventDefault();
+            close();
+        }
+    };
+    const close = (): void => {
+        document.removeEventListener("keydown", onKey);
+        backdrop.remove();
+    };
+    document.addEventListener("keydown", onKey);
 
     function showList(): void {
         panel.innerHTML = "";
