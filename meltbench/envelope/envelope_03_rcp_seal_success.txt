@@ -1,0 +1,5 @@
+# envelope_03: RCP seal injection failure but standby aux cooling saves seals (success)
+# Gap closed by bdf8cc6: charging lost but AuxSealCoolingStandby freezes
+# SealHeatDamageFrac=0.
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning 0
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/AuxSealCoolingStandby 1

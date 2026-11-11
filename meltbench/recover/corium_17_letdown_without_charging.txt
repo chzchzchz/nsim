@@ -1,0 +1,26 @@
+# corium_17: letdown without charging (recover: letdown close + charging + trip at 10 s)
+# corium: letdown without charging, then trip + close at 10 s
+# The avoid-corium sequence for corium_17: unlike the hot-leg
+# break or SGTR, the letdown path is closable (a valve an
+# operator can shut), so the recovery is a true recovery, not a
+# no-closing probe. At 10 s close letdown, restore charging,
+# unblock SI + Reset, and trip (fission off: the lumped clad
+# anchor drops to decay heat). Validated via nsimrun -seconds
+# 60/300/600: BreakDischarged pins at 750 gal (UncoveryFrac
+# 0.0018), clad 1,001/1,065/1,107 F, OxidizedFrac 0,
+# VesselFailed=false. The SI-block-only recovery without trip
+# still latches at 300 s (untripped fission rides the clad
+# anchor to 8,889 F); the trip is the decisive step. Contrast
+# corium_14/16, where SI restore alone cannot outrun the break.
+# Spec: "Under steady-state operation, pressurizer level
+# represents a balance of injection water flow into the RCS and
+# water letdown flow into the Chemical and Volume Control
+# System." specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen 1
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning 0
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
+10000 ReactorBuilding/ReactorPressureVessel/Trip 1
+10000 AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen 0
+10000 AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning 1
+10000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 0
+10000 ReactorBuilding/ReactorProtectionSystem/Reset Reset

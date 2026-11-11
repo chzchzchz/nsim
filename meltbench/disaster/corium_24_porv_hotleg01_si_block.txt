@@ -1,0 +1,18 @@
+# corium_24: stuck PORV + small hot-leg break (0.1-open), SI blocked
+# Purpose: dual-drain route. Relief path jammed open drains steam
+# to the PRT while the 0.1-open break drains 12 gal/s creditable.
+# Both share the drainable-inventory budget with SI blocked and
+# untripped fission riding the clad anchor.
+# Avoided outcome: corium, i.e. clad past the zircaloy melting
+# regime until VesselFailed latches (CladTempF >= 3,410 F while
+# uncovered). Validated VesselFailed=true at 300 s.
+# Dual-drain route: relief path jammed open drains steam to the PRT
+# while the 0.1-open break drains 12 gal/s creditable. Both share the
+# drainable-inventory budget (core/reactor.go debit), and with SI
+# blocked untripped fission rides the clad anchor. Validated via
+# nsimrun -seconds 300/600: BreakDischarged 4,200/8,400 gal (BNC
+# 600/1,200, UncoveryFrac 0.010/0.020), clad 8,889 F at 300 s,
+# Oxidation at the 0.17 cap, VesselFailed=true.
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 0.1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

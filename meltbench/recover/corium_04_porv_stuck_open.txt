@@ -1,0 +1,12 @@
+# corium_04: PORV stuck open (recover: BlockValve isolate at 10 s)
+# corium: stuck PORV then isolate 10 s later
+# The avoid-corium sequence: stuck PORV vents for 10 s, then
+# BlockValve closes to isolate the path. The stuck latch keeps
+# `PORV.Open=1` but discharge stops at BlockValve=0; PRT level
+# pins at 6370 gal, pressure recovers to 2250 psia, no vessel
+# failure. Validated forward from the default plant in
+# /tmp/nsim-nsim-alt2/recover60_2.json
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/SafetyValve/Open 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
+10000 ReactorBuilding/BlockValve/Open 0

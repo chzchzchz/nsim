@@ -1,0 +1,20 @@
+# corium_25: letdown without charging + stuck PORV, SI blocked
+# Purpose: stacked drain. Circulation drain (corium_17) plus relief
+# drain: CVCS netCVCS < 0 debits to the non-creditable floor while
+# the stuck PORV vents to the PRT, SI blocked.
+# Avoided outcome: corium, i.e. clad past the zircaloy melting
+# regime until VesselFailed latches (CladTempF >= 3,410 F while
+# uncovered). Validated VesselFailed=true at 300 s, anchor-driven.
+# Circulation drain (corium_17: netCVCS deficit debited to the
+# non-creditable ledger, bounded by pressurizer usable water)
+# stacked with the
+# relief drain: CVCS netCVCS < 0 debits to the non-creditable floor
+# while the stuck PORV vents to the PRT. Validated via nsimrun
+# -seconds 300/600: BreakDischarged 1,500/2,100 gal (all BNC,
+# UncoveryFrac 0.0036/0.0050), clad 8,889 F at 300 s, Oxidation at
+# the 0.17 cap, VesselFailed=true. Anchor-driven, not ledger
+# fullness (contrast corium_17).
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen 1
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning 0
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

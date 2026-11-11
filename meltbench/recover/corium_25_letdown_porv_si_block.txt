@@ -1,0 +1,18 @@
+# corium_25: letdown + PORV (recover: letdown close + BlockValve + trip at 10 s)
+# corium: letdown+PORV recovery: close letdown, isolate relief, trip, restore SI at 10 s
+# True recovery for corium_25: both drains are closable (letdown
+# valve, BlockValve), and the trip removes the fission anchor
+# (corium_21 class). Validated via nsimrun -seconds 60/300/600:
+# BreakDischarged pins at 770 gal (UncoveryFrac 0.0018), clad
+# 1,001/1,065/1,107 F, Oxidation 0, VesselFailed=false. Without
+# the trip the run latches at 300 s like corium_25.
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen 1
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning 0
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
+10000 AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen 0
+10000 AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning 1
+10000 ReactorBuilding/BlockValve/Open 0
+10000 ReactorBuilding/ReactorPressureVessel/Trip 1
+10000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 0
+10000 ReactorBuilding/ReactorProtectionSystem/Reset Reset

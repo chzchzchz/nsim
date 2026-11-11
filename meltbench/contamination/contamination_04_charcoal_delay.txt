@@ -1,0 +1,9 @@
+# contamination_04: SGTR alone, SI blocked (charcoal-delay probe)
+# The waste-gas holdup is the observable: GasHoldupActivity grows
+# 45,810 at 600 s to 455,160 at 1,800 s to 1,854,418 at 3,600 s while
+# GasReleasedBq stays 1.7/54.2/447.8 — the 60-day Xe-133 charcoal delay
+# (page_190.txt:101-108, "Xenon-133 is delayed for 60 days") holds
+# the release orders of magnitude below the holdup. PlantVentActivityBq
+# tracks 0.009/0.092/0.377 — the vent monitor stays below trip.
+0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

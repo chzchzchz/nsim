@@ -1,0 +1,8 @@
+# damage_01: RCP seal overheat (charging lost while RCPs running)
+# Seal-face injection (charging pump path) lost while all four RCPs
+# stay running: SealHeatRatePerSec (core/parts.go) integrates
+# SealHeatDamageFrac linearly to 1.0 in 1,000 s. Validated via
+# nsimrun -seconds 300/600/1200: all four loops 0.30/0.60/1.00,
+# SealOverheatAlarm true, core untouched (no uncovery, no damage
+# to RPV because pressure/flow hold).
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning 0

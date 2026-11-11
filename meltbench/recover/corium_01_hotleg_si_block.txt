@@ -1,0 +1,19 @@
+# corium_01: hot-leg break (recover: SI restore at 10 s)
+# corium: hot-leg break then restore SI at 10 s
+# The large-break LOCA cannot be closed: HotLegBreak is the
+# malfunction path (core/reactor.go), not a valve an operator can
+# shut. The only executable recovery is to unblock safety injection
+# (SafetyInjectionBlock 0 + Reset) so HHSI and accumulator refill
+# retire the creditable break loss via creditSafetyInjection.
+# At 10 s the gross draw is ~1,200 gal (0.3% of drainable
+# inventory). ECCS delivery (~47 gal/s model total) cannot outrun
+# the open 120 gal/s break, so net uncovery keeps creeping: 0.28%
+# at 10 s, ~1.5% at 60 s. At 1 h uncovery is ~90% but the vessel
+# is still intact, because the break floors pressure at
+# containment pressure and clad stays near 1,430 F.
+# This is a no-closing probe, not a stable recovery; the
+# un-recovered twin is corium_01 (SI stays blocked).
+0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
+10000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 0
+10000 ReactorBuilding/ReactorProtectionSystem/Reset Reset

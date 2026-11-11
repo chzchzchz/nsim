@@ -1,0 +1,13 @@
+# damage_02: EFWS turbine-pump deadhead (recirculation isolated)
+# Both subsystem turbine-driven pumps running with their
+# recirculation valves shut: DeadHeadHeatRatePerSec (core/parts.go)
+# integrates PumpHeatDamageFrac to 1.0 in 2,000 s. Validated via
+# nsimrun -seconds 300/1200/2400: both subsystems 0.15/0.60/1.00,
+# PumpOverheatAlarm true, motor pumps unaffected (their
+# Enable/DriveReady path is bus-gated differently).
+# Motor-pump variant is unreachable from cmdfile (DriveReady
+# readback needs bus energizing, no control write needed yet).
+0 AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePumpRunning 1
+0 AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePumpRunning 1
+0 AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemA/TurbinePump/RecirculationValve/Open 0
+0 AuxiliaryBuilding/EmergencyFeedwaterSystem/SubsystemB/TurbinePump/RecirculationValve/Open 0

@@ -1,0 +1,24 @@
+# corium_20: tripped letdown without charging + SI blocked (negative control)
+# Purpose: negative control, tripped twin of corium_17. Same
+# letdown-without-charging circulation drain and SI block, but
+# reactor tripped first so only decay heat remains. Proves the
+# circulation drain alone cannot reach the melt regime.
+# Avoided outcome (by design it should NOT occur): corium, i.e. clad
+# past the zircaloy melting regime until VesselFailed latches
+# (CladTempF >= 3,410 F while uncovered). Validated VesselFailed=
+# false at 300/1,800 s; decay heat cannot lift the covered anchor.
+# Tripped twin of corium_17: same letdown-without-charging
+# circulation drain and SI block, but reactor tripped first so
+# only decay heat remains. Validated via nsimrun -seconds 300
+# and 1800: BreakDischarged 899 gal (UncoveryFrac 0.002),
+# clad 793 F at 300 s and 1,004 F at 1800 s, OxidizedFrac 0,
+# VesselFailed=false. The decay pool exh austs; the covered
+# clad anchor never lifts off saturation. Negative control
+# proving the circulation drain alone cannot reach the melt
+# regime without fission power still on (contrast corium_17,
+# which latches in ~300 s). Same boundary as the tripped
+# small-break leg in TestPlant_TMIClassWalker.
+0 ReactorBuilding/ReactorPressureVessel/Trip 1
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen 1
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning 0
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

@@ -1,0 +1,15 @@
+# corium_05: charging isolated + PORV stuck open + SI blocked
+# Disaster sequence testing whether loss of the RCS makeup/refill leg
+# (makeup valve shut, auto off) plus stuck-open PORV relief plus
+# blocked safety injection uncovers the core. What is being avoided
+# is corium: clad driven past the zircaloy melting regime until the
+# VesselFailed latch fires (CladTempF >= 3,410 F while uncovered).
+# Makeup path shut removes the RCS refill leg while relief drains
+# steam; combined lethality matches corium_04.
+# Note: MakePlant already defaults this valve to Open=0/Auto=false,
+# so the two makeup commands pin the lineup explicitly; the active
+# faults are PORVStuckOpen + SIBlock.
+0 ReactorBuilding/ReactorMakeupControlValve/Open 0
+0 ReactorBuilding/ReactorMakeupControlValve/Auto 0
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1

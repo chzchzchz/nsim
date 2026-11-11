@@ -1,0 +1,12 @@
+# envelope_02: dropped control-rod bank (upset, success case)
+# Implements chapter_7/page_137 (dropped rod / rod ejection) via the
+# DroppedBank control: one bank jams at RodDroppedBankInsertion (0.85)
+# and the reactor folds (Trip=True). The simulator also expresses the
+# dropped-rod runback (LoadRunback=True) per chip 15 page 207.
+#
+# Success case: the trip shuts the reactor down promptly (TripSignalCount=0
+# because the trip is driven directly by DroppedBank, not a vote),
+# no clad damage, no vessel failure. Clad stays at saturation.
+#
+# Validated via nsimrun -seconds 60: ReactorTripped=true, Damage=0.
+0 ReactorBuilding/ReactorPressureVessel/ControlRods/DroppedBank 1

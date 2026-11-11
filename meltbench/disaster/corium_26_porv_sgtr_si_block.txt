@@ -1,0 +1,21 @@
+# corium_26: stuck PORV + SG tube rupture, SI blocked
+# Purpose: dual non-creditable drain. Relief to the PRT plus
+# primary leaked into the SG shell (2.5 gal/s). Neither path is
+# closable and neither ledger share is retired by ECCS refill,
+# SI blocked.
+# Avoided outcome: corium, i.e. clad past the zircaloy melting
+# regime until VesselFailed latches (CladTempF >= 3,410 F while
+# uncovered). Validated high-damage but NOT corium-positive
+# (VesselFailed=false at 1,800 s), same class as corium_18.
+# Dual non-creditable drain: relief to the PRT plus primary leaked
+# into the SG shell (core/steam_generator.go applyTubeRupture, 2.5
+# gal/s). Neither path is closable and neither ledger share is
+# retired by ECCS refill (creditSafetyInjection floor). Validated
+# via nsimrun -seconds 300/600/1,800: BreakDischarged 1,343/2,690/
+# 8,079 gal (all BNC, UncoveryFrac 0.0032/0.0064/0.0193), clad
+# 2,487/2,530/2,698 F (above ballooning, oxidation capped),
+# VesselFailed=false. High-damage but NOT corium-positive, same
+# class as corium_18; the melt tail needs ~47 h at constant rate.
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

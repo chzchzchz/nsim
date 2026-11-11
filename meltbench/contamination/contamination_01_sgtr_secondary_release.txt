@@ -1,0 +1,10 @@
+# contamination_01: SG tube rupture + main steam line break, SI blocked
+# Path A (primary-to-secondary): leaked primary water boils into the
+# header, contaminating the secondary (SteamlineRadiation) and feeding
+# the waste-gas holdup. Validated via nsimrun -seconds 600/1800:
+# PrimaryActivityFrac 0.995/0.984, SteamlineRadiation 1.0 (trip),
+# GasHoldupActivity 45,810 at 600 s but GasReleasedBq only 1.7
+# (charcoal-delayed, page_190.txt:101-108).
+0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
+0 ReactorBuilding/SteamGenerator/MainSteamLineBreak/Open 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

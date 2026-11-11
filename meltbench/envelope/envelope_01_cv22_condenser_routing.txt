@@ -1,0 +1,5 @@
+# envelope_01: CV22 relief routed to the letdown condenser (success)
+# Gap closed by bdf8cc6: ReliefRoutingToLetdownCondenser true; venting
+# depressurizes but does not fill the PRT.
+0 ReactorBuilding/ReliefRoutingToLetdownCondenser 1
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1

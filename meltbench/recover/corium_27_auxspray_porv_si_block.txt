@@ -1,0 +1,16 @@
+# corium_27: aux spray + PORV (recover: spray close + BlockValve + trip at 10 s)
+# corium: aux spray+PORV recovery: close spray, isolate relief, trip, restore SI at 10 s
+# True recovery for corium_27: both paths are closable (spray valve,
+# BlockValve), and the trip removes the fission anchor. Validated
+# via nsimrun -seconds 60/300/600: BreakDischarged pins at 20 gal
+# (UncoveryFrac 0.0000), clad 1,001/1,065/1,107 F, Oxidation 0,
+# VesselFailed=false. Without the trip the run latches at 300 s
+# like corium_27.
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/AuxSprayValve/Open 1
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
+10000 AuxiliaryBuilding/ChemicalVolumeControlSystem/AuxSprayValve/Open 0
+10000 ReactorBuilding/BlockValve/Open 0
+10000 ReactorBuilding/ReactorPressureVessel/Trip 1
+10000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 0
+10000 ReactorBuilding/ReactorProtectionSystem/Reset Reset

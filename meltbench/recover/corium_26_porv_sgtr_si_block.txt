@@ -1,0 +1,20 @@
+# corium_26: PORV + SGTR (recover: BlockValve + SI at 10 s, depressurize at 30 s)
+# corium: PORV+SGTR recovery: isolate relief at 10 s, restore SI, depressurize at 30 s
+# Recovery twin for corium_26 (corium_22 class): BlockValve stops
+# the relief leg at 10 s, SI restore runs in parallel, and heater
+# secure / setpoint 800 at 30 s drops RCS toward the SG shell
+# pressure (920 psia, core/steam_generator.go) to slow the SGTR.
+# Validated via nsimrun -seconds 60/300/1,800: BreakDischarged
+# 166/570/2,604 gal (BNC same, UncoveryFrac 0.0004/0.0014/0.0062),
+# clad 2,314/2,487/2,698 F, Oxidation at the 0.17 cap,
+# VesselFailed=false. Not a full close: the leak is non-creditable
+# and pressure stays above the termination curve in the window.
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
+10000 ReactorBuilding/BlockValve/Open 0
+10000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 0
+10000 ReactorBuilding/ReactorProtectionSystem/Reset Reset
+30000 ReactorBuilding/Pressurizer/HeatersOn 0
+30000 ReactorBuilding/Pressurizer/HeaterAutoControl 0
+30000 ReactorBuilding/Pressurizer/PressureSetpoint 800

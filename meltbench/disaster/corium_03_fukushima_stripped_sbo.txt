@@ -1,0 +1,15 @@
+# corium_03: SBO-style stripped injection (Fukushima class)
+# Purpose: station-blackout class with all injection stripped:
+# HHSI forced off and the accumulator kept empty. Tests whether
+# large-break blowdown without any ECCS credit still drives the
+# core to melt.
+# Avoided outcome: corium, i.e. clad past the zircaloy melting
+# regime until VesselFailed latches (CladTempF >= 3,410 F while
+# uncovered).
+# HHSI forced off and the accumulator kept empty each tick equivalent:
+# no cmdfile line can re-strip after every tick, so the run is
+# validated with a plant JSON whose SIS state is already stripped,
+# plus these controls.
+0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 1
+0 ReactorBuilding/SafetyInjectionSystem/HHSIPumpRunning 0
+0 ReactorBuilding/SafetyInjectionSystem/AccumulatorIsolation/Shut 1

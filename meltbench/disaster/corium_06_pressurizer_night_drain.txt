@@ -1,0 +1,15 @@
+# corium_06: pressurizer night drain (heaters off, spray open, PORV stuck open)
+# Purpose: night-drain cascade. Heaters secured and spray open drive
+# pressure toward the saturation floor; PORV stuck open bleeds the
+# remaining bubble. Cascade: RCS depressurizes toward saturation
+# with SI blocked, removing the refill credit.
+# Avoided outcome: corium, i.e. clad past the zircaloy melting
+# regime until VesselFailed latches (CladTempF >= 3,410 F while
+# uncovered).
+# Spray drives pressure toward the saturation floor; PORV bleeds the
+# remaining bubble. Cascade: RCS depressurizes toward saturation.
+0 ReactorBuilding/Pressurizer/HeatersOn 0
+0 ReactorBuilding/Pressurizer/HeaterAutoControl 0
+0 ReactorBuilding/Pressurizer/SprayOpen 1
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

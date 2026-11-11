@@ -1,0 +1,11 @@
+# corium_02: manual trip, then large-break LOCA with SI blocked
+# Purpose: order-matters variant of corium_01. Trip first isolates
+# fission to decay heat; the break then uncovers the core and the
+# same heatup chain follows. Tests whether decay heat alone (no
+# fission anchor) still reaches the melt regime.
+# Avoided outcome: corium, i.e. clad past the zircaloy melting
+# regime until VesselFailed latches (CladTempF >= 3,410 F while
+# uncovered).
+0 ReactorBuilding/ReactorPressureVessel/Trip 1
+5000 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 1
+5000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

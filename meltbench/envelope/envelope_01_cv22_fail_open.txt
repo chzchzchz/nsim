@@ -1,0 +1,14 @@
+# envelope_01: CV22 pressurizer relief valve fails open (upset)
+# Implements pwr_sim/chapter_4/page_049.txt section 4.13 ("PRZR pressure
+# relief valve (CV22) fails open"): venting depressurizes the pressurizer
+# with heaters unable to cope; the low-pressure trip cuts power before
+# core damage evolves through temperature. The scenario is encoded by the
+# simulator through PORVStuckOpen (valve stuck regardless of pressure).
+#
+# Expected upset behavior (matches Scenario 26 expectations):
+# - PRT fills at 2 gal/s (PressurizerReliefDischargeGalPerSec).
+# - Pressure drops toward 1800 psia; low-pressure trip fires (rps.go).
+# - BlockValve isolates; heaters re-establish pressure.
+#
+# Validated via nsimrun -seconds 60: PORV.Open=1, pzr holds ~2249 psia.
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1

@@ -1,0 +1,18 @@
+# corium_27: aux spray + stuck PORV, SI blocked
+# Purpose: spray-driven depressurization stacked with the relief
+# drain. AuxSprayValve accelerates the pressurizer cooldown while
+# the stuck PORV bleeds the bubble to the PRT, SI blocked.
+# Avoided outcome: corium, i.e. clad past the zircaloy melting
+# regime until VesselFailed latches (CladTempF >= 3,410 F while
+# uncovered). Validated VesselFailed=true at 300 s, anchor-driven
+# on a thin ledger like corium_17.
+# Spray-driven depressurization stacked with the relief drain:
+# AuxSprayValve accelerates the pressurizer cooldown toward the
+# saturation floor while the stuck PORV bleeds the bubble to the
+# PRT. Validated via nsimrun -seconds 60/300/600: BreakDischarged
+# 120/600/1,200 gal (all BNC, UncoveryFrac 0.0003/0.0014/0.0029),
+# clad 8,889 F at 300 s, Oxidation at the 0.17 cap,
+# VesselFailed=true. Anchor-driven on a thin ledger, like corium_17.
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/AuxSprayValve/Open 1
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

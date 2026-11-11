@@ -1,0 +1,19 @@
+# corium_19: small break 0.1 (recover: trip + SI restore at 10 s)
+# corium: small break, trip + SI restore at 10 s
+# The avoid-corium sequence for corium_19: the 0.1-open break
+# cannot be closed, but the TMI-class melt in corium_19 is
+# anchor-driven (untripped fission), not ledger-driven, so a
+# trip at 10 s removes the fission leg and SI restore retires
+# the creditable draw. Validated via nsimrun -seconds 60/300/
+# 600: BreakDischarged 720/417/2,600 gal (UncoveryFrac 0.0017/
+# 0.0010/0.0062), clad 1,001/1,065/1,107 F, OxidizedFrac 0,
+# VesselFailed=false. The SI-restore-without-trip probe still
+# latches at 300 s (8,889 F), exactly like corium_14; the trip
+# is what recovers. Contrast corium_14 (full break 120 gal/s
+# outruns ECCS even after trip): at 12 gal/s ECCS wins once
+# fission is off (see TestPlant_TMIClassWalker covered leg).
+0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 0.1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
+10000 ReactorBuilding/ReactorPressureVessel/Trip 1
+10000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 0
+10000 ReactorBuilding/ReactorProtectionSystem/Reset Reset

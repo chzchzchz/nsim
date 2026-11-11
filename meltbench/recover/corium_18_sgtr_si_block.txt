@@ -1,0 +1,22 @@
+# corium_18: SG tube rupture (recover: SI restore at 10 s, depressurize at 30 s)
+# SGTR recovery twin for corium_18: the rupture itself frosts
+# below the SG shell pressure (920 psia), so the executable
+# recovery is SI restore at 10 s + heater secure / setpoint 800
+# at 30 s (same lineup as corium_15). Validated via nsimrun
+# -seconds 60/300/1800: BreakDischarged 146/549/2,583 gal
+# (UncoveryFrac 0.0003/0.0013/0.0062, falling SGTR flow
+# 0.0022 to 0.0011 gal/step as RCS pressure drops toward the
+# shell setpoint), clad 2,314/2,487/2,698 F (still above
+# ballooning, oxidation capped), VesselFailed=false. The
+# depressurization slows the draw (2,583 vs 4,479 gal at 1,800 s
+# in corium_18) but pressure at 800 psia is still above the
+# 920→flow termination curve during the window, and the leak
+# is non-creditable so SI never retires it. Not a full close;
+# same class as corium_15.
+0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
+10000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 0
+10000 ReactorBuilding/ReactorProtectionSystem/Reset Reset
+30000 ReactorBuilding/Pressurizer/HeatersOn 0
+30000 ReactorBuilding/Pressurizer/HeaterAutoControl 0
+30000 ReactorBuilding/Pressurizer/PressureSetpoint 800

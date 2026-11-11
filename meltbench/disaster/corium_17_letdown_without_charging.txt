@@ -1,0 +1,31 @@
+# corium_17: CVCS letdown without charging + SI blocked
+# Purpose: circulation drain. Letdown open with
+# charging pump off runs netCVCS negative; the deficit is
+# circulation to the VCT, debited to the non-creditable ledger
+# share each tick (bounded by pressurizer usable water), so the
+# loss is visible to the same UncoveryFrac ledger as a break.
+# Avoided outcome: corium, i.e. clad past the zircaloy melting
+# regime until VesselFailed latches (CladTempF >= 3,410 F while
+# uncovered). Validated VesselFailed=true at 300 s via the clad
+# anchor (not ledger fullness; see below).
+# Circulation drain: letdown open with charging
+# pump off runs netCVCS negative, debiting the primary ledger
+# to the non-creditable floor at |netCVCS|/dt per tick. At
+# 75 gpm model letdown (spec is qualitative; values in
+# core/parts.go) the ledger caps at ~900 gal (pressurizer
+# usable water bound), but the covered clad anchor lifts
+# immediately: untripped (fission still on) the lumped clad
+# rides to ZrMeltF within ~300 s (2,314 F at 60 s, 8,889 F and
+# VesselFailed=true at 300 s, OxidizedFrac at the 0.17 cap).
+# Validated via nsimrun -seconds 60/300/600; verdict is
+# VesselFailed=true at 300 s. Only the pressurizer-bound
+# fraction (~900 gal, UncoveryFrac 0.002) is spent; unlike the
+# break paths the run is corium-positive via the lumped clad
+# anchor, not ledger fullness.
+# Spec: "Under steady-state operation, pressurizer level
+# represents a balance of injection water flow into the RCS and
+# water letdown flow into the Chemical and Volume Control
+# System." specs/the_westinghouse_pressurized_water_react/chapter_3/page_068.txt:62-65
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/LetdownValveOpen 1
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning 0
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

@@ -16,5 +16,7 @@ web/js/*.js
 web/web.tgz
 web/web-debug.tgz
 
+meltbench/plantjson/
+
 # stray cross-build artifact from `GOOS=js go build ./web/...`
 /wasm

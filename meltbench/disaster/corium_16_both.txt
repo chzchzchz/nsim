@@ -1,0 +1,14 @@
+# corium_16: hot-leg break + SGTR both at t=0, SI blocked (combined fault)
+# Purpose: combined-fault no-closing probe. Hot-leg break (120 gal/s)
+# plus SG tube rupture (2.5 gal/s) drain 122.5 gal/s combined with
+# SI blocked. Neither path can be closed, so this is the fault side
+# of recover/corium_16_both.txt.
+# Avoided outcome: corium, i.e. clad past the zircaloy melting
+# regime until VesselFailed latches (CladTempF >= 3,410 F while
+# uncovered).
+# Disaster twin for recover/corium_16_both.txt: neither path can be
+# closed, so the combined 122.5 gal/s drain (120 hot-leg + 2.5 SGTR)
+# is the fault side of the no-closing probe.
+0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 1
+0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

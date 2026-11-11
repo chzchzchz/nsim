@@ -1,0 +1,5 @@
+# envelope_04: mid-loop refueling drain (overpressurization disabled,
+# RCS inventory lowered with pumps running)
+# Gap closed by bdf8cc6: RefuelingOperations.MidLoop true lowers RCS
+# inventory.
+0 ReactorBuilding/RefuelingOperations/MidLoop 1

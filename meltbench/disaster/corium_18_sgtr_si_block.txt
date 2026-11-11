@@ -1,0 +1,27 @@
+# corium_18: SG tube rupture alone + SI blocked (no depressurization)
+# Purpose: SGTR-only melt-approach control for corium_15. Same
+# non-creditable 2.5 gal/s leak with SI blocked per the TMI-2-style
+# BDB assumption, but NO depressurization, so the leak runs at full
+# dP indefinitely.
+# Avoided outcome: corium, i.e. clad past the zircaloy melting
+# regime until VesselFailed latches (CladTempF >= 3,410 F while
+# uncovered). Validated high-damage but NOT corium-positive
+# (VesselFailed=false at 1,800 s; see below).
+# SGTR-only melt-approach control for corium_15: same non-creditable
+# 2.5 gal/s (150 gpm) leak, SI blocked per the TMI-2-style BDB
+# assumption, but NO depressurization (no heater secure, no setpoint
+# drop), so the leak runs at full dP indefinitely. Validated via
+# nsimrun -seconds 60/300/1800: BreakDischarged 150/743/4,479 gal
+# (UncoveryFrac 0.0004/0.0018/0.0107), clad 2,314/2,487/2,698 F
+# (above ballooning, oxidation capped at 0.17), VesselFailed=false.
+# High-damage but NOT corium-positive: 2.5 gal/s cannot uncover
+# fast enough on testable horizons; the melt-regime tail needs
+# ~47 h at constant rate. Its corium-positive twin is corium_01
+# (hot-leg break at 120 gal/s) or corium_16 (combined).
+# Recovery: depressurize below the SG shell pressure (920 psia) as
+# in corium_15, or restore SI (still only slows the draw).
+# Spec: leaked primary becomes secondary inventory; ECCS refill
+# cannot retire the non-creditable share (creditSafetyInjection
+# floor, core/reactor.go).
+0 ReactorBuilding/SteamGenerator/SGTubeRupture/Open 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

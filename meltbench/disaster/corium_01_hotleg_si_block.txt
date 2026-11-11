@@ -1,0 +1,10 @@
+# corium_01: large-break LOCA with safety injection blocked
+# Purpose: reference beyond-design-basis LOCA. Full hot-leg break
+# with SI blocked removes the ECCS refill credit so blowdown
+# uncovers the core.
+# Avoided outcome: corium, i.e. clad past the zircaloy melting
+# regime until VesselFailed latches (CladTempF >= 3,410 F while
+# uncovered). Chain: blowdown uncovery, decay-heat heatup,
+# Baker-Just self-sustaining oxidation, Zr melt.
+0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

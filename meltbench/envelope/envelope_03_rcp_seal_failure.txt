@@ -1,0 +1,11 @@
+# envelope_03: RCP seal injection instead of auxiliary cooling (failure case)
+# Chapter 4 page_073 seal injection failure: charging pump is the seal
+# injection source; losing it while RCPs keep running overheats the
+# seal faces. SealHeatRatePerSec integrates SealHeatDamageFrac to
+# 1.0 in ~1000 s, when the pumps trip on overheat.
+#
+# Failure case: charging pump secured, no standby seal cooling.
+# Validated via nsimrun -seconds 1200: all four loops Damage=1.
+#
+# Success twin: envelope_03_rcp_seal_standby_success.txt (AuxSealCoolingStandby).
+0 AuxiliaryBuilding/ChemicalVolumeControlSystem/ChargingPumpRunning 0

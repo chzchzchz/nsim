@@ -1,0 +1,15 @@
+# corium_08: hot-leg block valve + pressurizer proportional drain
+# Purpose: belt-and-braces depressurization. Direct-pressurizer
+# and hot-leg paths both feed the uncovery ledger: heaters secured,
+# spray open, PORV stuck open, block valve shut, SI blocked.
+# Avoided outcome: corium, i.e. clad past the zircaloy melting
+# regime until VesselFailed latches (CladTempF >= 3,410 F while
+# uncovered).
+# Direct-pressurizer AND hot-leg paths both open: belt-and-braces
+# depressurization feed to the uncovery ledger.
+0 ReactorBuilding/BlockValve/Open 0
+0 ReactorBuilding/Pressurizer/HeatersOn 0
+0 ReactorBuilding/Pressurizer/HeaterAutoControl 0
+0 ReactorBuilding/Pressurizer/SprayOpen 1
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

@@ -1,0 +1,16 @@
+# corium_24: PORV stuck + small break 0.1 (recover: BlockValve + trip + SI at 10 s)
+# corium: PORV + small-break recovery: isolate relief, trip, restore SI at 10 s
+# Recovery twin for corium_24: the relief path is closable
+# (BlockValve), the 0.1-open break is not, but at 12 gal/s ECCS
+# wins once fission is off (corium_23 class). Validated via nsimrun
+# -seconds 60/300/600: BreakDischarged 740/3,620/7,220 gal (BNC
+# pins at 20, UncoveryFrac 0.0018/0.0086/0.0172), clad 1,001/1,065/
+# 1,107 F, Oxidation 0, VesselFailed=false. Without the trip the
+# run latches like corium_24; the trip is the decisive step.
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/ReactorPressureVessel/HotLegBreak/Open 0.1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
+10000 ReactorBuilding/BlockValve/Open 0
+10000 ReactorBuilding/ReactorPressureVessel/Trip 1
+10000 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 0
+10000 ReactorBuilding/ReactorProtectionSystem/Reset Reset

@@ -1,0 +1,13 @@
+# corium_07: cold-shutdown cavity lockout (negative control)
+# Purpose: negative control. Trip, block cavity flooding, block SI:
+# proves the lockout path and shows the covered clad anchor cannot
+# reach the melt regime.
+# Avoided outcome (by design it should NOT occur): corium, i.e. clad
+# past the zircaloy melting regime until VesselFailed latches
+# (CladTempF >= 3,410 F while uncovered). Here the covered clad
+# anchor stays at saturation, so VesselFailed stays false.
+# Trip, block cavity flooding, block SI: proves the lockout path and
+# shows the covered clad anchor cannot reach the melt regime.
+0 ReactorBuilding/ReactorPressureVessel/Trip 1
+0 ReactorBuilding/RefuelingOperations/CavityFlooding 0
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1

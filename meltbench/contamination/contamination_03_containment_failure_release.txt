@@ -1,0 +1,12 @@
+# contamination_03: stuck PORV + safety + SI blocked, untripped
+# Path B -> C sequence: relief overfills the PRT, activity entrains
+# into the primary (PrimaryActivityFrac 55,602 at 600 s, 175,178 at
+# 1,800 s, CoreDamageFrac 1), containment air accumulates; on
+# ContainmentFailed the retained inventory drains via Path C (charcoal
+# bypass). Validated via nsimrun -seconds 600/1800: VF=true,
+# ContainmentFailed=false within the window (CSS holds), GasReleasedBq
+# 0 — the Path C release itself requires the containment latch, which
+# the window does not reach; this is the approach control.
+0 ReactorBuilding/Pressurizer/PORVStuckOpen 1
+0 ReactorBuilding/SafetyValve/Open 1
+0 ReactorBuilding/ReactorProtectionSystem/SafetyInjectionBlock 1
